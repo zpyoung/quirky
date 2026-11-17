@@ -45,6 +45,8 @@ export type HistoryLogOptions = {
   rows: number
   maxSegmentBytes?: number
   log?: (message: string) => void
+  /** Live check before creating the log directory or rotating a segment. */
+  canWrite?: () => boolean
 }
 
 export type LogRecord = {
@@ -798,6 +800,7 @@ export class HistoryLog {
   private readonly rotatedPath: string
   private readonly maxSegmentBytes: number
   private readonly report: (message: string) => void
+  private readonly canWrite?: () => boolean
 
   private constructor(
     private readonly dir: string,
@@ -809,6 +812,7 @@ export class HistoryLog {
     this.rows = options.rows
     this.maxSegmentBytes = options.maxSegmentBytes ?? DEFAULT_SEGMENT_BYTES
     this.report = options.log ?? ((message) => console.error(message))
+    this.canWrite = options.canWrite
   }
 
   /** Starts a fresh history at offset 0, discarding any segments a previous run left behind. */
@@ -821,7 +825,7 @@ export class HistoryLog {
       log.previousIndex = null
       log.previousUnreadable = false
       log.startSegment(0)
-    })
+    }, true)
     return log
   }
 
@@ -856,7 +860,7 @@ export class HistoryLog {
       const previous = scanFile(log.rotatedPath)
       log.position = previous?.ok ? previous.endOffset : 0
       log.startSegment(log.position)
-    })
+    }, true)
     return log
   }
 
@@ -867,6 +871,14 @@ export class HistoryLog {
 
   get disabled(): boolean {
     return this.failed
+  }
+
+  /** Closes this log and makes all later appends no-ops. */
+  disable(reason: string): void {
+    if (this.failed) return
+    this.failed = true
+    this.close()
+    this.report(`pty-host: history disabled for ${this.dir}: ${reason}`)
   }
   /** A snapshot of the segments written by this log. */
   reader(): LogReader {
@@ -1012,7 +1024,7 @@ export class HistoryLog {
   }
 
   private rotateIfFull(): void {
-    if (this.segmentBytes > this.maxSegmentBytes) this.guard(() => this.rotate())
+    if (this.segmentBytes > this.maxSegmentBytes) this.guard(() => this.rotate(), true)
   }
 
   private rotate(): void {
@@ -1096,15 +1108,17 @@ export class HistoryLog {
   }
 
   /** Runs one I/O step; the first failure disables the log and is reported once. */
-  private guard(step: () => void): boolean {
+  private guard(step: () => void, checkCanWrite = false): boolean {
     if (this.failed) return false
     try {
+      if (checkCanWrite && this.canWrite && !this.canWrite()) {
+        this.disable('write guard denied path operation')
+        return false
+      }
       step()
       return true
     } catch (err) {
-      this.failed = true
-      this.close()
-      this.report(`pty-host: history disabled for ${this.dir}: ${err instanceof Error ? err.message : String(err)}`)
+      this.disable(err instanceof Error ? err.message : String(err))
       return false
     }
   }

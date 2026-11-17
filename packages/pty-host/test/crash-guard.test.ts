@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PtyClient } from '../src/client'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
@@ -7,9 +7,17 @@ import { waitFor } from './helpers'
 
 const MAIN = join(import.meta.dir, '..', 'src', 'main.ts')
 const scopes: ProcessScope[] = []
+const cleanups: Array<() => void> = []
 
 afterEach(async () => {
   let firstError: unknown
+  for (const cleanup of cleanups.splice(0).reverse()) {
+    try {
+      cleanup()
+    } catch (error) {
+      firstError ??= error
+    }
+  }
   for (const scope of scopes.splice(0).reverse()) {
     try {
       await scope.cleanup()
@@ -19,6 +27,17 @@ afterEach(async () => {
   }
   if (firstError !== undefined) throw firstError
 })
+
+function onCleanup(cleanup: () => void): void {
+  cleanups.push(cleanup)
+}
+
+function restoreHomePermissions(home: string): void {
+  onCleanup(() => {
+    if (existsSync(home)) chmodSync(home, 0o700)
+  })
+  chmodSync(home, 0o500)
+}
 
 function scopedHome(): { home: string; scope: ProcessScope } {
   const scope = createProcessScope()
@@ -51,6 +70,7 @@ async function hostClient(home: string): Promise<PtyClient> {
   for (let attempt = 0; ; attempt++) {
     try {
       const client = await PtyClient.connect(socketPath)
+      onCleanup(() => client.close())
       try {
         await client.hello(token)
         return client
@@ -139,42 +159,53 @@ describe('quirky-pty crash guards', () => {
   }, 30000)
 
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
-    test(`${signal} logs a stop failure, removes pty.pid and exits 1`, async () => {
+    test(`${signal} preserves a replaced socket directory and exits 0`, async () => {
+      const { home, scope } = scopedHome()
+      const proc = scope.spawn([process.execPath, MAIN], { stdout: 'pipe', stderr: 'pipe' })
+      const client = await hostClient(home)
+      client.close()
+
+      const socketPath = join(home, 'pty.sock')
+      rmSync(socketPath)
+      mkdirSync(socketPath)
+      if (proc.exitCode === null) proc.kill(signal)
+
+      expect(await exitCode(proc, `${signal} shutdown exit`)).toBe(0)
+      expect(statSync(socketPath).isDirectory()).toBe(true)
+      expect(existsSync(join(home, 'pty.pid'))).toBe(false)
+    }, 30000)
+  }
+
+  for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+    test(`${signal} logs an EACCES stop failure and exits 1`, async () => {
       const { home, scope } = scopedHome()
       const proc = scope.spawn([process.execPath, MAIN], { stdout: 'pipe', stderr: 'pipe' })
       const stderr = capture(proc.stderr)
       const client = await hostClient(home)
       client.close()
-
-      rmSync(join(home, 'pty.sock'))
-      mkdirSync(join(home, 'pty.sock'))
+      restoreHomePermissions(home)
       proc.kill(signal)
 
       expect(await exitCode(proc, `${signal} shutdown exit`)).toBe(1)
       await stderr.done
       expect(stderr.text()).toContain('[quirky-pty] shutdown failed:')
-      expect(stderr.text()).toContain('EISDIR')
+      expect(stderr.text()).toContain('EACCES')
       expect(stderr.text()).not.toContain('[quirky-pty] unhandledRejection:')
-      expect(existsSync(join(home, 'pty.pid'))).toBe(false)
     }, 30000)
   }
 
-  test('shutdown replies before a stop failure is logged and exits 1 after removing pty.pid', async () => {
+  test('shutdown replies before an EACCES stop failure is logged and exits 1', async () => {
     const { home, scope } = scopedHome()
     const proc = scope.spawn([process.execPath, MAIN], { stdout: 'pipe', stderr: 'pipe' })
     const stderr = capture(proc.stderr)
     const client = await hostClient(home)
+    restoreHomePermissions(home)
 
-    rmSync(join(home, 'pty.sock'))
-    mkdirSync(join(home, 'pty.sock'))
     expect(await client.request('shutdown', {})).toEqual({})
-
     expect(await exitCode(proc, 'shutdown request exit')).toBe(1)
     await stderr.done
     expect(stderr.text()).toContain('[quirky-pty] shutdown failed:')
-    expect(stderr.text()).toContain('EISDIR')
+    expect(stderr.text()).toContain('EACCES')
     expect(stderr.text()).not.toContain('[quirky-pty] unhandledRejection:')
-    expect(existsSync(join(home, 'pty.pid'))).toBe(false)
-    client.close()
   }, 30000)
 })
