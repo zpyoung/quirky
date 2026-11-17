@@ -53,6 +53,8 @@ export type SessionManagerOptions = {
   processRunner?: Pick<ProcessRunner, 'run'>
   /** Maximum wait for kills, forgets and stops before shutdown closes the scan source. */
   shutdownDrainMs?: number
+  /** Live check run immediately before path writes and removals. */
+  ownsHome?: () => boolean
 }
 
 export type CreateParams = Omit<Extract<PtyRequest, { type: 'create' }>, 'id' | 'type'>
@@ -138,6 +140,7 @@ const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const PTY_CLOSE_GRACE_MS = 500
 const META_WRITE_DELAY_MS = 250
 const SHUTTING_DOWN = 'Terminal host is shutting down'
+export const HOME_LOST = 'Terminal host lost its home'
 
 /**
  * Owns every PTY session: the process, its on-disk history, the hot tail and the screen emulator,
@@ -161,12 +164,15 @@ export class SessionManager {
   private readonly checkpointIntervalMs: number
   private readonly shellReadyTimeoutMs: number
   private readonly home: string
+  private readonly ownsHome?: () => boolean
+  private homeIsLost = false
   private stopping = false
   /** Descendants retained across a failed stop attempt so a retry can still verify teardown. */
   private readonly stoppingDescendants = new Map<string, Set<number>>()
 
   constructor(options: SessionManagerOptions) {
     this.home = options.home
+    this.ownsHome = options.ownsHome
     this.maxSegmentBytes = options.logMaxBytes ?? DEFAULT_SEGMENT_BYTES
     this.tailBytes = options.tailBytes ?? DEFAULT_TAIL_BYTES
     this.checkpointIntervalMs = options.checkpointIntervalMs ?? DEFAULT_CHECKPOINT_INTERVAL_MS
@@ -180,6 +186,12 @@ export class SessionManager {
       this.processTables = createProcessTables(runner)
     }
     this.stored = new StoredSessions(options.home, options.storedIndex)
+  }
+  /** Permanently disables history writes after the manager loses its home. */
+  homeLost(): void {
+    if (this.homeIsLost) return
+    this.homeIsLost = true
+    for (const session of this.sessions.values()) session.log.disable(HOME_LOST)
   }
 
   /** Calls `listener` whenever a session has ended and its history is on disk. */
@@ -204,11 +216,13 @@ export class SessionManager {
     if (!Array.isArray(argv) || argv.length === 0 || argv.some((a) => typeof a !== 'string')) throw new Error('argv must be a non-empty string array')
     assertSize(cols, rows)
     if (this.stopping) throw new Error(SHUTTING_DOWN)
+    this.assertCanWrite()
     const pendingForget = this.forgetting.get(sessionId)
     if (pendingForget) {
       await pendingForget
       if (this.stopping) throw new Error(SHUTTING_DOWN)
     }
+    this.assertCanWrite()
     if (params.restore) return this.restore(params)
     if (this.sessions.has(sessionId) || this.starting.has(sessionId)) throw new Error(`session already exists: ${sessionId}`)
     return this.createFresh(params)
@@ -290,6 +304,7 @@ export class SessionManager {
 
   private async stopWithHistoryOperation(sessionId: string): Promise<void> {
     if (this.stopping) throw new Error(SHUTTING_DOWN)
+    this.assertCanWrite()
     const { live, stored } = this.locate(sessionId)
     if (stored) {
       if (stored.state === 'restorable') return
@@ -330,6 +345,7 @@ export class SessionManager {
       throw new Error(`session ${sessionId} descendants did not stop: ${survivors.join(', ')}`)
     }
 
+    this.assertCanWrite()
     writeMeta(live.dir, this.metaOf(live))
     this.stored.reload(sessionId, live.log.offset)
     const saved = this.stored.get(sessionId)
@@ -346,16 +362,20 @@ export class SessionManager {
     const pending = this.forgetting.get(sessionId)
     if (pending) return pending
     try {
+      this.assertCanWrite()
       const { live, stored } = this.locate(sessionId)
       if (stored) {
+        this.assertCanWrite()
         this.stored.forget(sessionId)
         return Promise.resolve()
       }
       live.forgotten = true
       for (const pendingSub of live.pendingSubs) pendingSub.cancelled = true
       if (!live.alive) {
+        this.assertCanWrite()
         this.sessions.delete(sessionId)
         this.teardown(live)
+        this.assertCanWrite()
         rmSync(live.dir, { recursive: true, force: true })
         return Promise.resolve()
       }
@@ -364,8 +384,10 @@ export class SessionManager {
         try {
           const table = await this.processTables.fresh()
           signalTree(live, 'SIGKILL', table)
+          this.assertCanWrite()
           this.sessions.delete(sessionId)
           this.teardown(live)
+          this.assertCanWrite()
           rmSync(live.dir, { recursive: true, force: true })
         } finally {
           this.forgetting.delete(sessionId)
@@ -485,6 +507,7 @@ export class SessionManager {
   async clear(sessionId: string): Promise<void> {
     const session = this.inMemory(sessionId)
     await this.atRest(session, () => {
+      this.assertCanWrite()
       session.screen.clear()
       const screen = session.screen.snapshot()
       const bytes = concatBytes(ERASE_SCREEN_AND_SCROLLBACK, new TextEncoder().encode(screen.ansi))
@@ -506,6 +529,7 @@ export class SessionManager {
   async resetModes(sessionId: string): Promise<void> {
     const session = this.inMemory(sessionId)
     await this.atRest(session, () => {
+      this.assertCanWrite()
       session.screen.write(MODE_RESET)
       this.withLog(session, (log) => log.appendOutput(MODE_RESET))
       session.tail.append(MODE_RESET)
@@ -608,7 +632,14 @@ export class SessionManager {
       write(session.log)
       return
     }
-    const log = HistoryLog.openForAppend(session.dir, { cols: session.cols, rows: session.rows, maxSegmentBytes: this.maxSegmentBytes })
+    this.assertCanWrite()
+    const log = HistoryLog.openForAppend(session.dir, {
+      cols: session.cols,
+      rows: session.rows,
+      maxSegmentBytes: this.maxSegmentBytes,
+      canWrite: () => this.canWriteHome()
+    })
+    this.assertCanWrite()
     session.log = log
     try {
       write(log)
@@ -620,6 +651,7 @@ export class SessionManager {
   /** Writes a checkpoint of `screen` at the current output position, unless the parser is mid-sequence there. */
   private checkpointNow(session: Session, screen: { ansi: string; cols: number; rows: number }): void {
     if (!session.scanner.atBoundary) return
+    this.assertCanWrite()
     try {
       writeCheckpoint(session.dir, {
         version: 1,
@@ -650,12 +682,21 @@ export class SessionManager {
   private createFresh(params: CreateParams): PtyResults['create'] {
     const { sessionId, cwd, argv, env, cols, rows } = params
     const dir = this.dirOf(sessionId)
+    this.assertCanWrite()
     this.stored.forget(sessionId)
+    this.assertCanWrite()
     rmSync(dir, { recursive: true, force: true })
     const route: ReplyRoute = {}
     const screen = this.openScreen(cols, rows, route)
-    const log = HistoryLog.create(dir, { cols, rows, maxSegmentBytes: this.maxSegmentBytes })
+    this.assertCanWrite()
+    const log = HistoryLog.create(dir, {
+      cols,
+      rows,
+      maxSegmentBytes: this.maxSegmentBytes,
+      canWrite: () => this.canWriteHome()
+    })
     try {
+      this.assertCanWrite()
       const session = this.start({
         sessionId,
         argv,
@@ -679,6 +720,7 @@ export class SessionManager {
     } catch (error) {
       log.close()
       screen.dispose()
+      this.assertCanWrite()
       rmSync(dir, { recursive: true, force: true })
       throw error
     }
@@ -702,7 +744,14 @@ export class SessionManager {
       if (this.stopping) throw new Error(SHUTTING_DOWN)
       if (this.stored.get(sessionId) !== stored) throw new Error(`session ${sessionId} is not restorable`)
       const cwd = isDirectory(rebuilt.cwd) ? rebuilt.cwd : params.cwd
-      log = HistoryLog.openForAppend(stored.dir, { cols: rebuilt.cols, rows: rebuilt.rows, maxSegmentBytes: this.maxSegmentBytes })
+      this.assertCanWrite()
+      log = HistoryLog.openForAppend(stored.dir, {
+        cols: rebuilt.cols,
+        rows: rebuilt.rows,
+        maxSegmentBytes: this.maxSegmentBytes,
+        canWrite: () => this.canWriteHome()
+      })
+      this.assertCanWrite()
       const session = this.start({
         sessionId,
         argv,
@@ -817,6 +866,7 @@ export class SessionManager {
         offset: () => created.tail.total,
         log: (message) => console.error(message),
         writeCheckpoint: (dir, checkpoint) => {
+          if (!this.canWriteHome()) return
           writeCheckpoint(dir, checkpoint)
           this.persistMeta(created)
         }
@@ -1084,6 +1134,18 @@ export class SessionManager {
     }
   }
 
+  private canWriteHome(): boolean {
+    if (this.homeIsLost) return false
+    if (this.ownsHome && !this.ownsHome()) {
+      this.homeLost()
+      return false
+    }
+    return true
+  }
+
+  private assertCanWrite(): void {
+    if (!this.canWriteHome()) throw new Error(HOME_LOST)
+  }
   private dirOf(sessionId: string): string {
     return join(this.home, 'sessions', sessionId)
   }
@@ -1109,6 +1171,7 @@ export class SessionManager {
   /** Meta is best effort: a disk error is reported once and the terminal goes on. */
   private persistMeta(session: Session): void {
     if (session.forgotten) return
+    if (!this.canWriteHome()) return
     try {
       writeMeta(session.dir, this.metaOf(session))
     } catch (error) {
