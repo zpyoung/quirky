@@ -10,6 +10,7 @@ export type SoakLimits = {
 export type PanelKey = 'changes' | 'checks' | 'explorer' | 'tasks' | 'session-info' | 'feedback'
 export type PanelRequestRecord = { at: number; index: number; panel: PanelKey }
 export type GitProbeRecord = { at: number; ms: number; ownLagMs: number; timedOut: boolean; failed: boolean; worktree: string }
+export type TerminalProbeRecord = { at: number; ms: number; ownLagMs: number; timedOut: boolean; failed: boolean }
 export type DayInputs = { enabled: boolean; windows: { index: number; worktree: string }[]; worktrees: string[] }
 export type SwitchRecord = {
   at: number; seq: number; index: number; from: string; requested: string; settled: string
@@ -25,7 +26,7 @@ export type TaskInteractionRecord = {
   ok: boolean; proof: { at: number; method: string } | null; error: string | null
 }
 
-export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood'] as const
+export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood', 'pty-pause'] as const
 export type FaultKind = (typeof FAULT_KINDS)[number]
 export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls' | 'refreshes' | 'requests'
 export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
@@ -36,13 +37,14 @@ export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   'slow-git': 'calls',
   feedback: 'refreshes',
   flood: 'requests',
+  'pty-pause': 'stalls',
 }
 export const FAULT_MIN_MINUTES = 0.25
 export const DEFAULT_WINDOWS = 3
 export const MAX_WINDOWS = 7
 export const WINDOW_SILENCE_SECONDS = 30
 
-/** `pids` is leaked children, zombie holders, or slow-git process groups; empty otherwise. */
+/** `pids` holds leaked children, zombie holders, slow-git process groups, or the paused PTY host. */
 export type FaultDetail = {
   pids: number[]
   refreshes: number
@@ -173,6 +175,11 @@ export type SoakReport = {
         worst: { at: number; ms: number; worktree: string }[]
         byWorktree: { worktree: string; probes: number; maxMs: number }[]
       }
+      terminal: {
+        probes: number; stalls: number; failed: number; hostBusy: number
+        p50Ms: number; p95Ms: number; maxMs: number
+        worst: { at: number; ms: number }[]
+      }
     }
     day: {
       ok: boolean; enabled: boolean; expectedSwitches: number; expectedPhases: number
@@ -191,6 +198,7 @@ export type SoakReport = {
   windowRequestSeconds: number[][]
   panelRequests: PanelRequestRecord[]
   gitProbes: GitProbeRecord[]
+  terminalProbes: TerminalProbeRecord[]
   day: DayInputs | null
   switches: SwitchRecord[]
   taskInteractions: TaskInteractionRecord[]

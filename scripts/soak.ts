@@ -245,6 +245,7 @@ export async function main(argv: string[]): Promise<number> {
       signal: runAbort.signal,
       maxStallMs: config.limits.maxStallMs,
       gitProbe: { worktrees: world.fixtures.worktrees.map(({ id }) => id) },
+      ...(world.workers[0] ? { terminalProbe: { session: world.workers[0].session } } : {}),
       isDaemonDead: () => daemonMissing || world!.control.isClosed || readRuntime(world!.home) === null || !isPidAlive(world!.daemonPid),
       onDaemonLost: () => {
         samplingStopped = true
@@ -256,6 +257,8 @@ export async function main(argv: string[]): Promise<number> {
       fault = startFault({
         kind: config.fault,
         home: world.home,
+        repoRoot,
+        ptyHostPid: () => world!.ptyHostPid(),
         control: world.control,
         projects: world.fixtures.worktrees.filter(({ isMain }) => isMain).map(({ path }) => path),
         out: config.out,
@@ -349,6 +352,7 @@ export async function main(argv: string[]): Promise<number> {
       panelRefreshes,
       probes: probe.probes,
       gitProbes: probe.gitProbes,
+      terminalProbes: probe.terminalProbes,
       windowRequestSeconds,
       panelRequests,
       day,
@@ -381,6 +385,7 @@ export async function main(argv: string[]): Promise<number> {
       windowRequests: windowEvidence.requests,
       panelRefreshes,
       gitProbes: probe.gitProbes,
+      terminalProbes: probe.terminalProbes,
       windowRequestSeconds,
       panelRequests,
       day: day ?? null,
@@ -407,6 +412,11 @@ export async function main(argv: string[]): Promise<number> {
   } finally {
     probe?.stop()
     fault?.stop()
+    try {
+      await fault?.settled()
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error))
+    }
     try {
       try {
         await dayDriver?.stop()

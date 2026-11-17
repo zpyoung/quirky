@@ -25,7 +25,7 @@ export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>] [
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
                     [--max-events-per-5s <n>] [--max-stall-ms <n>]
                     [--max-unanswered <n>] [--max-window-requests-per-minute <n>] [--slow-git <ms>]
-                    [--fault leak|zombies|storm|block|slow-git|feedback|flood] [--help]`
+                    [--fault leak|zombies|storm|block|slow-git|feedback|flood|pty-pause] [--help]`
 
 function parsePositiveInteger(value: string | undefined, flag: string, fallback: number | null): number | null {
   if (value === undefined) return fallback

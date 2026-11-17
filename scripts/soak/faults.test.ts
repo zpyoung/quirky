@@ -1,14 +1,18 @@
-import { expect, test, vi } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { afterEach, beforeEach, expect, test, vi } from 'bun:test'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { QuirkyClient, PluginContext } from '@quirky/protocol'
 import { validateValue } from '@quirky/protocol'
 import { startChild, type StartedChild } from '../../packages/process/src/child.ts'
 import { parseManifest } from '../../packages/daemon/src/plugins/manifest.ts'
-import { buildFaultUi, faultPlan, installFaultPlugin, installSlowGit, setGitDelay, startFault } from './faults.ts'
+import { buildFaultUi, faultPlan, inspectPtyHost, installFaultPlugin, installSlowGit, ownsPtyHost, ptyHostEntry, sameHost, setGitDelay, startFault } from './faults.ts'
 import { FAULT_CHECK } from './contracts.ts'
 import { activate } from './faults/main.ts'
+import { createProcessScope, type ProcessScope } from '../test-support/process-scope.ts'
+import type { PtyHostInspection } from './faults.ts'
+import type { PtyPauseDependencies, RunningFault } from './faults.ts'
+
 const timerControls = vi as typeof vi & { advanceTimersByTime(milliseconds: number): void }
 
 test('spreads eighty leaks over the first sixty percent of a short or long run', () => {
@@ -893,3 +897,1045 @@ for (const phase of ['start', 'report'] as const) {
     }
   })
 }
+type TestChild = Bun.Subprocess<'ignore', 'ignore', 'ignore'>
+type FakeHost = { root: string; home: string; entry: string; child: TestChild }
+type PauseOverrides = PtyPauseDependencies
+type StartedFault = RunningFault
+
+const ptyChildren: TestChild[] = []
+const ptyScopes: ProcessScope[] = []
+const ptyFaults: StartedFault[] = []
+const ptyScratch: string[] = []
+
+function makePtyScratch(prefix: string): string {
+  const path = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+  ptyScratch.push(path)
+  return path
+}
+
+function createFakePtyHost(options: {
+  scope?: ProcessScope
+  home?: string
+  cwd?: string
+  envHome?: string
+  extraEnv?: Record<string, string>
+} = {}): FakeHost {
+  const root = makePtyScratch('quirky-soak-pty-root-')
+  const home = options.home ?? options.scope?.home ?? makePtyScratch('quirky-soak-pty-home-')
+  const entry = join(root, 'packages', 'pty-host', 'src', 'main.ts')
+  mkdirSync(join(root, 'packages', 'pty-host', 'src'), { recursive: true })
+  writeFileSync(entry, 'await Bun.sleep(60_000)\n')
+  const childOptions = {
+    cwd: options.cwd ?? home,
+    env: { ...process.env, ...(options.scope?.env ?? {}), ...options.extraEnv, QUIRKY_HOME: options.envHome ?? home },
+    stdin: 'ignore' as const,
+    stdout: 'ignore' as const,
+    stderr: 'ignore' as const
+  }
+  const child = options.scope
+    ? options.scope.spawn([process.execPath, entry], childOptions)
+    : Bun.spawn([process.execPath, entry], childOptions)
+  ptyChildren.push(child)
+  return { root, home, entry, child }
+}
+
+function startPtyFault(host: FakeHost, dependencies: PauseOverrides = {}, options: {
+  home?: string
+  repoRoot?: string
+  reportedPid?: number
+  trackedPid?: number
+} = {}): StartedFault {
+  const control = {
+    callAny: async (method: string) => {
+      if (method !== 'status.get') throw new Error(`unexpected pty-pause control call: ${method}`)
+      return { ptyHost: { pid: options.reportedPid ?? host.child.pid } }
+    }
+  } as unknown as QuirkyClient
+  const fault = startFault({
+    kind: 'pty-pause',
+    repoRoot: options.repoRoot ?? host.root,
+    home: options.home ?? host.home,
+    ptyHostPid: () => options.trackedPid ?? host.child.pid,
+    control,
+    projects: [],
+    out: host.home,
+    runSeconds: 24,
+    startedAt: performance.now() - 2100,
+    signal: new AbortController().signal,
+    ptyPause: { holdMs: 300, ...dependencies }
+  })
+  ptyFaults.push(fault)
+  return fault
+}
+
+function processState(pid: number, home: string): string | null {
+  try {
+    const result = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)], {
+      timeout: 2000,
+      env: { ...process.env, QUIRKY_HOME: home }
+    })
+    return result.exitCode === 0 ? result.stdout.toString().trim() : null
+  } catch {
+    return null
+  }
+}
+
+// Process state changes asynchronously, so these checks poll the OS instead of faking timers.
+async function waitForState(pid: number, home: string, stopped: boolean, timeoutMs = 5000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const state = processState(pid, home)
+    if (stopped ? state?.startsWith('T') : state !== null && !state.startsWith('T')) return state
+    await Bun.sleep(20)
+  }
+  throw new Error(`process ${pid} did not become ${stopped ? 'stopped' : 'running'}`)
+}
+
+async function waitForHostIdentity(host: FakeHost): Promise<Extract<PtyHostInspection, { kind: 'present' }>['identity']> {
+  const deadline = Date.now() + 5000
+  while (Date.now() < deadline) {
+    const result = inspectPtyHost(host.child.pid)
+    if (result.kind === 'present') return result.identity
+    await Bun.sleep(20)
+  }
+  throw new Error(`could not inspect fake PTY host ${host.child.pid}`)
+}
+
+async function expectNotApplied(fault: StartedFault): Promise<void> {
+  const error = await fault.finish().then(() => undefined, (caught: unknown) => caught)
+  expect(error).toBeInstanceOf(Error)
+  expect((error as Error).message).toMatch(/^pty-pause fault not applied:/)
+  expect(await fault.settled()).toBe('not-applied')
+}
+
+async function expectChildGoneOrRunning(host: FakeHost): Promise<void> {
+  const deadline = Date.now() + 1000
+  while (Date.now() < deadline) {
+    try {
+      process.kill(host.child.pid, 0)
+    } catch (error) {
+      expect((error as NodeJS.ErrnoException).code).toBe('ESRCH')
+      return
+    }
+    const state = processState(host.child.pid, host.home)
+    if (state !== null) {
+      expect(state.startsWith('T')).toBe(false)
+      return
+    }
+    await Bun.sleep(20)
+  }
+  throw new Error(`could not verify whether process ${host.child.pid} is gone or running`)
+}
+
+function stoppedProcessesWithHome(home: string): string[] {
+  const command = process.platform === 'darwin'
+    ? ['ps', 'eww', '-A', '-o', 'pid=,stat=,command=']
+    : ['ps', 'e', '-A', '-o', 'pid=,stat=,command=']
+  const result = Bun.spawnSync(command, { timeout: 2000, env: { ...process.env, QUIRKY_HOME: home } })
+  expect(result.exitCode).toBe(0)
+  return result.stdout.toString().split(/\r?\n/).filter((line) => {
+    const columns = line.trim().split(/\s+/, 3)
+    return line.includes(`QUIRKY_HOME=${home}`) && columns[1]?.startsWith('T')
+  })
+}
+
+let previousQuirkyHome: string | undefined
+
+beforeEach(() => {
+  previousQuirkyHome = process.env.QUIRKY_HOME
+  process.env.QUIRKY_HOME = makePtyScratch('quirky-soak-pty-test-home-')
+})
+afterEach(async () => {
+  const faults = ptyFaults.splice(0)
+  for (const fault of faults) fault.stop()
+  await Promise.all(faults.map((fault) => fault.settled().catch(() => null)))
+  for (const child of ptyChildren.splice(0)) {
+    try { child.kill('SIGCONT') } catch {}
+    try { child.kill('SIGKILL') } catch {}
+    await child.exited
+  }
+  for (const scope of ptyScopes.splice(0)) await scope.cleanup()
+  for (const path of ptyScratch.splice(0)) rmSync(path, { recursive: true, force: true })
+  if (previousQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+  else process.env.QUIRKY_HOME = previousQuirkyHome
+  previousQuirkyHome = undefined
+})
+
+test('plans the PTY pause fault as a 3-second stalls injection', () => {
+  expect(faultPlan('pty-pause', 24)).toEqual({ kind: 'pty-pause', ms: 3000 })
+  expect(FAULT_CHECK['pty-pause']).toBe('stalls')
+})
+
+test('settled resolves immediately with null for non-PTY faults', async () => {
+  const fault = startFault({
+    kind: 'block',
+    home: makePtyScratch('quirky-soak-pty-settled-'),
+    control: {} as QuirkyClient,
+    projects: [],
+    out: '/unused',
+    runSeconds: 24,
+    startedAt: performance.now() + 60_000,
+    signal: new AbortController().signal
+  })
+  ptyFaults.push(fault)
+  try {
+    expect(await fault.settled()).toBeNull()
+  } finally {
+    fault.stop()
+  }
+})
+
+test('inspects an owned fake-checkout host synchronously and reports it absent after reaping', async () => {
+  const host = createFakePtyHost()
+  try {
+    const identity = await waitForHostIdentity(host)
+    expect(identity).toMatchObject({
+      pid: host.child.pid,
+      cwd: host.home,
+      home: host.home
+    })
+    expect(identity.started.length).toBeGreaterThan(0)
+    expect(identity.command.endsWith(` ${host.entry}`)).toBe(true)
+    expect(ptyHostEntry(host.root)).toBe(realpathSync(host.entry))
+    const current = inspectPtyHost(host.child.pid)
+    expect(current.kind).toBe('present')
+    if (current.kind === 'present') expect(sameHost(identity, current.identity)).toBe(true)
+
+    process.kill(host.child.pid, 'SIGKILL')
+    await host.child.exited
+    expect(inspectPtyHost(host.child.pid)).toEqual({ kind: 'absent' })
+  } finally {
+    try { host.child.kill('SIGCONT') } catch {}
+    try { host.child.kill('SIGKILL') } catch {}
+    await host.child.exited
+  }
+})
+
+test('owns only the exact live PTY host identity and compares host identity without state', async () => {
+  const host = createFakePtyHost()
+  try {
+    const identity = await waitForHostIdentity(host)
+    const owner = { home: host.home, entry: ptyHostEntry(host.root) }
+    expect(ownsPtyHost(identity, owner)).toBeNull()
+    expect(sameHost(identity, { ...identity, state: 'T' })).toBe(true)
+    expect(sameHost(identity, { ...identity, pid: identity.pid + 1 })).toBe(false)
+    expect(sameHost(identity, { ...identity, started: `${identity.started} changed` })).toBe(false)
+    expect(sameHost(identity, { ...identity, command: `${identity.command} changed` })).toBe(false)
+    expect(sameHost(identity, { ...identity, cwd: `${identity.cwd}/other` })).toBe(false)
+    expect(sameHost(identity, { ...identity, home: `${identity.home}/other` })).toBe(false)
+
+    expect(ownsPtyHost({ ...identity, pid: process.pid }, owner)).toMatch(/pid/i)
+    expect(ownsPtyHost({ ...identity, pid: 0 }, owner)).toMatch(/pid/i)
+    expect(ownsPtyHost({ ...identity, state: 'T' }, owner)).toMatch(/state|stopped/i)
+    expect(ownsPtyHost({ ...identity, command: `${identity.command} extra` }, owner)).toMatch(/command/i)
+    expect(ownsPtyHost({ ...identity, cwd: `${identity.cwd}/other` }, owner)).toMatch(/cwd/i)
+    expect(ownsPtyHost({ ...identity, home: `${identity.home}2` }, owner)).toMatch(/home/i)
+  } finally {
+    try { host.child.kill('SIGCONT') } catch {}
+    try { host.child.kill('SIGKILL') } catch {}
+    await host.child.exited
+  }
+})
+type RefusalSetup = {
+  host: FakeHost
+  options?: { home?: string; repoRoot?: string; reportedPid?: number }
+}
+
+const refusalCases: [string, () => Promise<RefusalSetup>][] = [
+  ['wrong home', async () => {
+    const host = createFakePtyHost()
+    return { host, options: { home: makePtyScratch('quirky-soak-pty-other-home-') } }
+  }],
+  ['home prefix', async () => {
+    const home = makePtyScratch('quirky-soak-pty-home-prefix-')
+    return { host: createFakePtyHost({ home, envHome: `${home}2` }) }
+  }],
+  ['wrong cwd', async () => {
+    const home = makePtyScratch('quirky-soak-pty-cwd-home-')
+    return { host: createFakePtyHost({ home, cwd: makePtyScratch('quirky-soak-pty-cwd-') }) }
+  }],
+  ['wrong entry', async () => {
+    const host = createFakePtyHost()
+    const repoRoot = makePtyScratch('quirky-soak-pty-wrong-entry-')
+    mkdirSync(join(repoRoot, 'packages', 'pty-host', 'src'), { recursive: true })
+    writeFileSync(join(repoRoot, 'packages', 'pty-host', 'src', 'main.ts'), 'await Bun.sleep(60_000)\n')
+    return { host, options: { repoRoot } }
+  }],
+  ['already stopped child', async () => {
+    const host = createFakePtyHost()
+    process.kill(host.child.pid, 'SIGSTOP')
+    await waitForState(host.child.pid, host.home, true)
+    return { host }
+  }],
+  ['status pid mismatch', async () => {
+    const host = createFakePtyHost()
+    return { host, options: { reportedPid: host.child.pid + 1 } }
+  }]
+]
+
+for (const [label, prepare] of refusalCases) {
+  test(`refuses the PTY pause without signalling an unowned host: ${label}`, async () => {
+    const { host, options } = await prepare()
+    const signals: string[] = []
+    const fault = startPtyFault(host, {
+      kill: (_pid, signal) => { signals.push(signal) }
+    }, options)
+    await expectNotApplied(fault)
+    expect(signals).toEqual([])
+  })
+}
+
+for (const resultKind of ['absent', 'unreadable', 'replaced', 'stopped'] as const) {
+  test(`refuses to stop a host whose second inspection is ${resultKind}`, async () => {
+    const host = createFakePtyHost()
+    const real = await waitForHostIdentity(host)
+    let inspections = 0
+    let firstInspection: PtyHostInspection | undefined
+    let secondInspection: PtyHostInspection | undefined
+    const signals: string[] = []
+    const injected: PtyHostInspection = resultKind === 'absent'
+      ? { kind: 'absent' }
+      : resultKind === 'unreadable'
+        ? { kind: 'unreadable', reason: 'injected inspection failure' }
+        : { kind: 'present', identity: { ...real, started: `${real.started} replaced` } }
+    const fault = startPtyFault(host, {
+      inspect: (pid) => {
+        inspections += 1
+        if (inspections === 1) {
+          const current = inspectPtyHost(pid)
+          firstInspection = current
+          return current
+        }
+        if (inspections === 2) {
+          const current = resultKind === 'stopped' && firstInspection?.kind === 'present'
+            ? { kind: 'present', identity: { ...firstInspection.identity, state: 'T' } } as const
+            : injected
+          secondInspection = current
+          return current
+        }
+        return inspectPtyHost(pid)
+      },
+      kill: (_pid, signal) => { signals.push(signal) }
+    })
+    await expectNotApplied(fault)
+    expect(inspections).toBe(2)
+    expect(signals).toEqual([])
+    if (resultKind === 'stopped') {
+      expect(firstInspection?.kind).toBe('present')
+      if (firstInspection?.kind === 'present') {
+        expect(firstInspection.identity.state.startsWith('T')).toBe(false)
+        expect(secondInspection).toEqual({
+          kind: 'present',
+          identity: { ...firstInspection.identity, state: 'T' }
+        })
+      }
+    }
+  })
+}
+
+test('does not resume a pause when SIGSTOP itself fails', async () => {
+  const host = createFakePtyHost()
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    kill: (_pid, signal) => {
+      signals.push(signal)
+      if (signal === 'SIGSTOP') throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+    }
+  })
+  const error = await fault.finish().then(() => undefined, (caught: unknown) => caught)
+  expect(error).toBeInstanceOf(Error)
+  expect((error as Error).message).toContain('SIGSTOP failed: EPERM')
+  expect(await fault.settled()).toBe('not-applied')
+  expect(signals).toEqual(['SIGSTOP'])
+  expect(processState(host.child.pid, host.home)?.startsWith('T')).not.toBe(true)
+})
+
+test('shares one two-second budget among synchronous process inspections', async () => {
+  const host = createFakePtyHost()
+  await waitForHostIdentity(host)
+  const originalSpawnSync = Bun.spawnSync
+  const calls: { command: string[]; timeout: number | undefined }[] = []
+  Bun.spawnSync = new Proxy(originalSpawnSync, {
+    apply(target, receiver, args: unknown[]) {
+      const command = args[0] as string[]
+      const options = args[1] as { timeout?: number } | undefined
+      calls.push({ command: [...command], timeout: options?.timeout })
+      if (calls.length === 1) {
+        // Consume real synchronous time so later reads must receive only the remaining budget.
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1100)
+      }
+      return Reflect.apply(target, receiver, args)
+    }
+  })
+  try {
+    expect(inspectPtyHost(host.child.pid).kind).toBe('present')
+    expect(calls[0]?.timeout).toBe(2000)
+    if (process.platform === 'darwin') {
+      expect(calls.length).toBeGreaterThan(1)
+      expect(calls.slice(1).every(({ timeout }) => timeout !== undefined && timeout < 1000)).toBe(true)
+    } else {
+      expect(calls).toHaveLength(1)
+    }
+  } finally {
+    Bun.spawnSync = originalSpawnSync
+  }
+})
+test('holds, resumes, records the pause and re-inspects the same host immediately before every signal', async () => {
+  const host = createFakePtyHost()
+  const operations: string[] = []
+  const fault = startPtyFault(host, {
+    inspect: (pid) => {
+      operations.push('inspect')
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => {
+      operations.push(`signal:${signal}`)
+      process.kill(pid, signal)
+    }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('resumed')
+  await waitForState(host.child.pid, host.home, false)
+
+  const record = await fault.finish()
+  expect(record).toMatchObject({
+    kind: 'pty-pause',
+    check: 'stalls',
+    detail: { pids: [host.child.pid], refreshes: 0 }
+  })
+  expect(record.detail.blockedMs).toBeGreaterThanOrEqual(290)
+  const signals = operations.flatMap((operation, index) =>
+    operation.startsWith('signal:') ? [{ operation, before: operations[index - 1] }] : [])
+  expect(signals.map(({ operation }) => operation)).toEqual(['signal:SIGSTOP', 'signal:SIGCONT'])
+  expect(signals.every(({ before }) => before === 'inspect')).toBe(true)
+})
+
+test('stop begins async resume and settled waits for the final outcome', async () => {
+  const host = createFakePtyHost()
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 3000,
+    kill: (pid, signal) => { signals.push(signal); process.kill(pid, signal) }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  fault.stop()
+  expect(await fault.settled()).toBe('resumed')
+  await waitForState(host.child.pid, host.home, false)
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT'])
+})
+
+test('finish during the hold waits for cleanup and returns the applied pause record', async () => {
+  const host = createFakePtyHost()
+  const fault = startPtyFault(host, { holdMs: 3000 })
+  await waitForState(host.child.pid, host.home, true)
+  const record = await fault.finish()
+  expect(await fault.settled()).toBe('resumed')
+  expect(record.kind).toBe('pty-pause')
+  await waitForState(host.child.pid, host.home, false)
+})
+
+test('retries unreadable resume inspections without signalling until identity is readable', async () => {
+  const host = createFakePtyHost()
+  let inspections = 0
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    inspect: (pid) => {
+      inspections += 1
+      if (inspections >= 3 && inspections <= 5) return { kind: 'unreadable', reason: 'injected failure' }
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => { signals.push(signal); process.kill(pid, signal) }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('resumed')
+  expect(inspections).toBeGreaterThanOrEqual(6)
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT'])
+  await waitForState(host.child.pid, host.home, false)
+})
+
+test('continues polling a delivered CONT through scheduler delay without retrying or killing', async () => {
+  const host = createFakePtyHost()
+  let continueSignals = 0
+  let delayedPolls = 0
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    inspect: (pid) => {
+      const result = inspectPtyHost(pid)
+      if (continueSignals > 0 && delayedPolls < 4 && result.kind === 'present') {
+        delayedPolls += 1
+        return { kind: 'present', identity: { ...result.identity, state: 'T' } }
+      }
+      return result
+    },
+    kill: (pid, signal) => {
+      signals.push(signal)
+      if (signal === 'SIGCONT') continueSignals += 1
+      process.kill(pid, signal)
+    }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('resumed')
+  expect(delayedPolls).toBe(4)
+  expect(signals.filter((signal) => signal === 'SIGCONT')).toHaveLength(1)
+  expect(signals).not.toContain('SIGKILL')
+  await waitForState(host.child.pid, host.home, false)
+})
+
+test('retries a CONT that fails with EPERM once', async () => {
+  const host = createFakePtyHost()
+  let failed = false
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    kill: (pid, signal) => {
+      signals.push(signal)
+      if (signal === 'SIGCONT' && !failed) {
+        failed = true
+        throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+      }
+      process.kill(pid, signal)
+    }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('resumed')
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT', 'SIGCONT'])
+  await waitForState(host.child.pid, host.home, false)
+})
+
+test('kills a verified host after three failed CONT attempts and rejects finish', async () => {
+  const host = createFakePtyHost()
+  const signals: string[] = []
+  const operations: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    inspect: (pid) => {
+      operations.push('inspect')
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => {
+      signals.push(signal)
+      operations.push(`signal:${signal}`)
+      if (signal === 'SIGCONT') throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+      process.kill(pid, signal)
+    }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('killed')
+  await expect(fault.finish()).rejects.toThrow('pty-pause resume failed; host killed')
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT', 'SIGCONT', 'SIGCONT', 'SIGKILL'])
+  const signalReads = operations.flatMap((operation, index) =>
+    operation.startsWith('signal:') ? [{ operation, before: operations[index - 1] }] : [])
+  expect(signalReads.every(({ before }) => before === 'inspect')).toBe(true)
+  await host.child.exited
+})
+
+test('keeps confirming KILL while the same host is a zombie until it is absent', async () => {
+  const host = createFakePtyHost()
+  const identity = await waitForHostIdentity(host)
+  const signals: string[] = []
+  let killSent = false
+  let zombieInspections = 0
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    inspect: (pid) => {
+      if (killSent && zombieInspections < 3) {
+        zombieInspections += 1
+        return { kind: 'present', identity: { ...identity, state: 'Z' } }
+      }
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => {
+      signals.push(signal)
+      if (signal === 'SIGCONT') throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+      if (signal === 'SIGKILL') killSent = true
+      process.kill(pid, signal)
+    }
+  })
+  try {
+    await waitForState(host.child.pid, host.home, true)
+    expect(await fault.settled()).toBe('killed')
+    await expect(fault.finish()).rejects.toThrow('pty-pause resume failed; host killed')
+    expect(zombieInspections).toBe(3)
+    expect(signals).toEqual(['SIGSTOP', 'SIGCONT', 'SIGCONT', 'SIGCONT', 'SIGKILL'])
+  } finally {
+    fault.stop()
+    await fault.settled()
+    try { host.child.kill('SIGCONT') } catch {}
+    try { host.child.kill('SIGKILL') } catch {}
+    await host.child.exited
+  }
+}, 15_000)
+test('does not SIGKILL a pid replaced before the escalation identity check', async () => {
+  const host = createFakePtyHost()
+  const identity = await waitForHostIdentity(host)
+  let continueAttempts = 0
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 100,
+    inspect: (pid) => {
+      if (continueAttempts === 3) {
+        return { kind: 'present', identity: { ...identity, state: 'T', started: `${identity.started} replacement` } }
+      }
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => {
+      signals.push(signal)
+      if (signal === 'SIGCONT') {
+        continueAttempts += 1
+        throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+      }
+      process.kill(pid, signal)
+    }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('lost')
+  await expect(fault.finish()).rejects.toThrow('pty-pause host changed or exited during the pause')
+  expect(signals).toEqual(['SIGSTOP', 'SIGCONT', 'SIGCONT', 'SIGCONT'])
+})
+async function waitForChildGone(host: FakeHost, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      process.kill(host.child.pid, 0)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return
+      throw error
+    }
+    await Bun.sleep(20)
+  }
+  throw new Error(`process ${host.child.pid} did not exit`)
+}
+
+function createDecoyProcess(): FakeHost {
+  const root = makePtyScratch('quirky-soak-pty-decoy-')
+  const home = makePtyScratch('quirky-soak-pty-decoy-home-')
+  const entry = join(root, 'sleeper.ts')
+  writeFileSync(entry, 'await Bun.sleep(60_000)\n')
+  const child = Bun.spawn([process.execPath, entry], {
+    cwd: home,
+    env: { ...process.env, QUIRKY_HOME: home },
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore'
+  })
+  ptyChildren.push(child)
+  return { root, home, entry, child }
+}
+
+test('reports lost without CONT when the host exits during the hold', async () => {
+  const host = createFakePtyHost()
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    kill: (pid, signal) => { signals.push(signal); process.kill(pid, signal) }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  process.kill(host.child.pid, 'SIGKILL')
+  await host.child.exited
+  expect(await fault.settled()).toBe('lost')
+  await expect(fault.finish()).rejects.toThrow('pty-pause host changed or exited during the pause')
+  expect(signals).toEqual(['SIGSTOP'])
+})
+
+test('reports lost without CONT when the host identity changes during the hold', async () => {
+  const host = createFakePtyHost()
+  const identity = await waitForHostIdentity(host)
+  let inspections = 0
+  const signals: string[] = []
+  const fault = startPtyFault(host, {
+    inspect: (pid) => {
+      inspections += 1
+      if (inspections >= 3) {
+        return { kind: 'present', identity: { ...identity, started: `${identity.started} replaced` } }
+      }
+      return inspectPtyHost(pid)
+    },
+    kill: (pid, signal) => { signals.push(signal); process.kill(pid, signal) }
+  })
+  await waitForState(host.child.pid, host.home, true)
+  expect(await fault.settled()).toBe('lost')
+  await expect(fault.finish()).rejects.toThrow('pty-pause host changed or exited during the pause')
+  expect(signals).toEqual(['SIGSTOP'])
+})
+
+test('bounds unreadable resume retries and reports pid and start time to stderr', async () => {
+  const host = createFakePtyHost()
+  const identity = await waitForHostIdentity(host)
+  let inspections = 0
+  let stderr = ''
+  const originalWrite = process.stderr.write
+  const resumeInspections: number[] = []
+  const signals: string[] = []
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString()
+    return true
+  }) as typeof process.stderr.write
+  try {
+    const fault = startPtyFault(host, {
+      resumeDeadlineMs: 500,
+      inspect: (pid) => {
+        inspections += 1
+        if (inspections >= 3) {
+          resumeInspections.push(Date.now())
+          return { kind: 'unreadable', reason: 'injected inspection failure' }
+        }
+        return inspectPtyHost(pid)
+      },
+      kill: (pid, signal) => { signals.push(signal); process.kill(pid, signal) }
+    })
+    await waitForState(host.child.pid, host.home, true)
+    expect(await fault.settled()).toBe('unverified')
+    await expect(fault.finish()).rejects.toThrow('pty-pause resume could not be verified')
+    expect(resumeInspections.length).toBeGreaterThan(0)
+    expect(resumeInspections.at(-1)! - resumeInspections[0]!).toBeLessThanOrEqual(500)
+    expect(stderr).toContain(String(host.child.pid))
+    expect(stderr).toContain(identity.started)
+    expect(signals).toEqual(['SIGSTOP'])
+  } finally {
+    process.stderr.write = originalWrite
+  }
+})
+
+const exitRunnerModes = ['success', 'replaced', 'absent', 'unreadable'] as const
+const exitRunnerNames = {
+  success: 'synchronously resumes the same stopped host from the process exit handler',
+  replaced: 'does not signal a replaced PTY host from the process exit handler',
+  absent: 'does not signal an absent PTY host from the process exit handler',
+  unreadable: 'does not signal an unreadable PTY host from the process exit handler'
+} as const
+
+for (const mode of exitRunnerModes) {
+  test(exitRunnerNames[mode], async () => {
+    const host = createFakePtyHost()
+    let runner: TestChild | undefined
+    try {
+      const runnerHome = makePtyScratch('quirky-soak-pty-exit-runner-home-')
+      const runnerRoot = makePtyScratch('quirky-soak-pty-exit-runner-')
+      const runnerPath = join(runnerRoot, 'exit-runner.ts')
+      const signalPath = join(runnerHome, 'signals.log')
+      const inspectionPath = join(runnerHome, 'inspections.log')
+      writeFileSync(runnerPath, `
+import { appendFileSync } from 'node:fs'
+import { inspectPtyHost, startFault } from ${JSON.stringify(new URL('./faults.ts', import.meta.url).href)}
+const repoRoot = process.argv[2]!
+const home = process.argv[3]!
+const pid = Number(process.argv[4])
+const mode = process.argv[5]!
+const signalPath = process.argv[6]!
+const inspectionPath = process.argv[7]!
+const control = { callAny: async (method: string) => {
+  if (method !== 'status.get') throw new Error('unexpected control call: ' + method)
+  return { ptyHost: { pid } }
+} }
+let inspections = 0
+startFault({
+  kind: 'pty-pause',
+  repoRoot,
+  home,
+  ptyHostPid: () => pid,
+  control: control as never,
+  projects: [],
+  out: home,
+  runSeconds: 24,
+  startedAt: performance.now() - 2100,
+  signal: new AbortController().signal,
+  ptyPause: {
+    holdMs: 3000,
+    inspect: (targetPid) => {
+      inspections += 1
+      if (inspections <= 2 || mode === 'success') return inspectPtyHost(targetPid)
+      if (mode === 'absent') {
+        appendFileSync(inspectionPath, inspections + ':absent\\n')
+        return { kind: 'absent' }
+      }
+      if (mode === 'unreadable') {
+        appendFileSync(inspectionPath, inspections + ':unreadable\\n')
+        return { kind: 'unreadable', reason: 'injected exit inspection failure' }
+      }
+      const current = inspectPtyHost(targetPid)
+      if (current.kind !== 'present') return current
+      appendFileSync(inspectionPath, inspections + ':replaced\\n')
+      return { kind: 'present', identity: { ...current.identity, started: current.identity.started + ' replaced', state: 'T' } }
+    },
+    kill: (targetPid, signal) => {
+      appendFileSync(signalPath, targetPid + ':' + signal + '\\n')
+      if (targetPid === pid) process.kill(targetPid, signal)
+    }
+  }
+})
+const deadline = Date.now() + 5000
+while (Date.now() < deadline) {
+  const result = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)], {
+    timeout: 2000,
+    env: { ...process.env, QUIRKY_HOME: home }
+  })
+  if (result.exitCode === 0 && result.stdout.toString().trim().startsWith('T')) {
+    // Exit synchronously while the real hold is active; do not wait for async resume.
+    await Bun.sleep(100)
+    process.exit(1)
+  }
+  await Bun.sleep(10)
+}
+process.exit(2)
+`)
+      runner = Bun.spawn([process.execPath, runnerPath, host.root, host.home, String(host.child.pid), mode, signalPath, inspectionPath], {
+        cwd: runnerHome,
+        env: { ...process.env, QUIRKY_HOME: runnerHome },
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore'
+      })
+      ptyChildren.push(runner)
+      expect(await runner.exited).toBe(1)
+      const signals = readFileSync(signalPath, 'utf8').trim().split(/\r?\n/)
+      if (mode === 'success') {
+        expect(signals).toEqual([`${host.child.pid}:SIGSTOP`, `${host.child.pid}:SIGCONT`])
+        await waitForState(host.child.pid, host.home, false, 1000)
+      } else {
+        expect(signals).toEqual([`${host.child.pid}:SIGSTOP`])
+        await waitForState(host.child.pid, host.home, true, 1000)
+      }
+      if (mode === 'replaced') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/)).toEqual(['3:replaced'])
+      }
+      if (mode === 'absent') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/)).toEqual(['3:absent'])
+      }
+      if (mode === 'unreadable') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/))
+          .toEqual(['3:unreadable', '4:unreadable', '5:unreadable'])
+      }
+    } finally {
+      const children = runner ? [runner, host.child] : [host.child]
+      for (const child of children) {
+        try { child.kill('SIGCONT') } catch {}
+        try { child.kill('SIGKILL') } catch {}
+      }
+      await Promise.all(children.map((child) => child.exited))
+    }
+  }, 15_000)
+}
+const scopeCleanupVariants = [
+  { name: 'plain', outcome: 'resumed', mustExit: false },
+  { name: 'unreadable first three rounds', outcome: 'resumed', mustExit: false },
+  { name: 'unreadable through the deadline', outcome: 'unverified', mustExit: true },
+  { name: 'CONT always fails', outcome: 'killed', mustExit: false },
+  { name: 'CONT and KILL fail', outcome: 'unverified', mustExit: true },
+  { name: 'measurement clock throws after STOP', outcome: 'resumed', mustExit: false }
+] as const
+
+// These cases exercise real OS stop/continue delivery and process-scope cleanup.
+for (const variant of scopeCleanupVariants) {
+  test(`scope finally cleanup owns a stopped host with an unrelated decoy: ${variant.name}`, async () => {
+    const scope = createProcessScope()
+    ptyScopes.push(scope)
+    const host = createFakePtyHost({ scope })
+    const decoy = createDecoyProcess()
+    const signalTargets: { pid: number; signal: string }[] = []
+    let inspections = 0
+    const stopSent = Promise.withResolvers<void>()
+    let throwClockOnNextNow = false
+    const dependencies: PauseOverrides = {
+      holdMs: 3000,
+      kill: (pid, signal) => {
+        signalTargets.push({ pid, signal })
+        if (pid === decoy.child.pid) return
+        if (variant.name === 'CONT always fails' && signal === 'SIGCONT') {
+          throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+        }
+        if (variant.name === 'CONT and KILL fail' && (signal === 'SIGCONT' || signal === 'SIGKILL')) {
+          throw Object.assign(new Error('permission denied'), { code: 'EPERM' })
+        }
+        process.kill(pid, signal)
+        if (signal === 'SIGSTOP') {
+          throwClockOnNextNow = variant.name === 'measurement clock throws after STOP'
+          stopSent.resolve()
+        }
+      }
+    }
+    if (variant.name === 'unreadable first three rounds') {
+      dependencies.inspect = (pid) => {
+        inspections += 1
+        if (inspections >= 3 && inspections <= 5) return { kind: 'unreadable', reason: 'injected failure' }
+        return inspectPtyHost(pid)
+      }
+    }
+    if (variant.name === 'unreadable through the deadline') {
+      dependencies.resumeDeadlineMs = 500
+      dependencies.inspect = (pid) => {
+        inspections += 1
+        return inspections >= 3
+          ? { kind: 'unreadable', reason: 'injected failure' }
+          : inspectPtyHost(pid)
+      }
+    }
+    if (variant.name === 'measurement clock throws after STOP') {
+      dependencies.now = () => {
+        if (throwClockOnNextNow) {
+          throwClockOnNextNow = false
+          throw new Error('measurement clock failed')
+        }
+        return performance.now()
+      }
+    }
+    const fault = startPtyFault(host, dependencies)
+    let caught: unknown
+    let outcome: string | null = null
+    let cleanupMs = 0
+    try {
+      try {
+        if (variant.name === 'measurement clock throws after STOP') await stopSent.promise
+        else await waitForState(host.child.pid, scope.home, true)
+        throw new Error('ps failed for 9 of 10 samples')
+      } finally {
+        const cleanupStarted = performance.now()
+        fault.stop()
+        outcome = await fault.settled()
+        await scope.cleanup()
+        cleanupMs = performance.now() - cleanupStarted
+      }
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toBe('ps failed for 9 of 10 samples')
+    expect(outcome).toBe(variant.outcome)
+    expect(signalTargets).toContainEqual({ pid: host.child.pid, signal: 'SIGSTOP' })
+    expect(signalTargets.some(({ pid }) => pid === decoy.child.pid)).toBe(false)
+    if (variant.name === 'unreadable through the deadline') {
+      expect(signalTargets.some(({ signal }) => signal === 'SIGCONT')).toBe(false)
+    }
+    if (variant.name === 'CONT and KILL fail') {
+      expect(signalTargets.some(({ signal }) => signal === 'SIGKILL')).toBe(true)
+    }
+    expect(signalTargets.every(({ pid }) => pid === host.child.pid)).toBe(true)
+    expect(stoppedProcessesWithHome(scope.home)).toEqual([])
+    expect(processState(decoy.child.pid, decoy.home)?.startsWith('T')).toBe(false)
+    expect(() => process.kill(decoy.child.pid, 0)).not.toThrow()
+    if (variant.mustExit) await waitForChildGone(host)
+    else await expectChildGoneOrRunning(host)
+    if (variant.name === 'unreadable through the deadline' || variant.name === 'CONT and KILL fail') {
+      expect(cleanupMs).toBeLessThan(7000)
+    }
+    if (variant.name === 'measurement clock throws after STOP') {
+      const error = await fault.finish().then(() => undefined, (caught: unknown) => caught)
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toContain('measurement clock failed')
+    }
+  }, 15_000)
+}
+test('returns unreadable rather than absent when synchronous inspection fails for a live pid', async () => {
+  const host = createFakePtyHost()
+  await waitForHostIdentity(host)
+  const originalSpawnSync = Bun.spawnSync
+  Bun.spawnSync = new Proxy(originalSpawnSync, {
+    apply() {
+      throw new Error('injected process inspection failure')
+    }
+  })
+  try {
+    const result = inspectPtyHost(host.child.pid)
+    expect(result.kind).toBe('unreadable')
+    if (result.kind === 'unreadable') expect(result.reason.length).toBeGreaterThan(0)
+    expect(() => process.kill(host.child.pid, 0)).not.toThrow()
+  } finally {
+    Bun.spawnSync = originalSpawnSync
+  }
+})
+test('resumes in the hold finally when the measurement clock throws just after SIGSTOP', async () => {
+  const host = createFakePtyHost()
+  let throwOnNextNow = false
+  const operations: string[] = []
+  const fault = startPtyFault(host, {
+    holdMs: 3000,
+    now: () => {
+      operations.push(throwOnNextNow ? 'now-after-stop' : 'now')
+      if (throwOnNextNow) {
+        throwOnNextNow = false
+        throw new Error('measurement clock failed')
+      }
+      return performance.now()
+    },
+    kill: (pid, signal) => {
+      operations.push(`signal:${signal}`)
+      process.kill(pid, signal)
+      if (signal === 'SIGSTOP') throwOnNextNow = true
+    }
+  })
+  expect(await fault.settled()).toBe('resumed')
+  expect(operations.indexOf('signal:SIGSTOP')).toBeLessThan(operations.indexOf('now-after-stop'))
+  await waitForState(host.child.pid, host.home, false)
+  await expect(fault.finish()).rejects.toThrow('measurement clock failed')
+})
+for (const output of ['', 'malformed command output']) {
+  test(`treats ${output || 'empty'} Darwin environment output as unreadable for a live host`, async () => {
+    if (process.platform !== 'darwin') return
+    const host = createFakePtyHost()
+    await waitForHostIdentity(host)
+    const originalSpawnSync = Bun.spawnSync
+    Bun.spawnSync = new Proxy(originalSpawnSync, {
+      apply(target, receiver, args: unknown[]) {
+        const command = args[0] as string[]
+        if (command[0] === 'ps' && command[1] === 'eww') {
+          return {
+            exitCode: 0,
+            stdout: Buffer.from(output),
+            stderr: Buffer.alloc(0),
+            success: true,
+            signalCode: null,
+            pid: process.pid
+          }
+        }
+        return Reflect.apply(target, receiver, args)
+      }
+    })
+    try {
+      expect(inspectPtyHost(host.child.pid).kind).toBe('unreadable')
+      expect(() => process.kill(host.child.pid, 0)).not.toThrow()
+    } finally {
+      Bun.spawnSync = originalSpawnSync
+    }
+  })
+}
+test('reads QUIRKY_HOME when another inherited environment value contains spaces', async () => {
+  const host = createFakePtyHost({ extraEnv: { SOAK_LABEL: 'two words' } })
+  try {
+    const identity = await waitForHostIdentity(host)
+    expect(identity.home).toBe(host.home)
+  } finally {
+    try { host.child.kill('SIGCONT') } catch {}
+    try { host.child.kill('SIGKILL') } catch {}
+    await host.child.exited
+  }
+})
+test('returns a null home for valid Darwin command output without QUIRKY_HOME', async () => {
+  if (process.platform !== 'darwin') return
+  const host = createFakePtyHost()
+  const identity = await waitForHostIdentity(host)
+  const originalSpawnSync = Bun.spawnSync
+  Bun.spawnSync = new Proxy(originalSpawnSync, {
+    apply(target, receiver, args: unknown[]) {
+      const command = args[0] as string[]
+      if (command[0] === 'ps' && command[1] === 'eww') {
+        return {
+          exitCode: 0,
+          stdout: Buffer.from(`${identity.command} SOAK_LABEL=two words`),
+          stderr: Buffer.alloc(0),
+          success: true,
+          signalCode: null,
+          pid: process.pid
+        }
+      }
+      return Reflect.apply(target, receiver, args)
+    }
+  })
+  try {
+    const inspection = inspectPtyHost(host.child.pid)
+    expect(inspection.kind).toBe('present')
+    if (inspection.kind === 'present') expect(inspection.identity.home).toBeNull()
+  } finally {
+    Bun.spawnSync = originalSpawnSync
+  }
+})
