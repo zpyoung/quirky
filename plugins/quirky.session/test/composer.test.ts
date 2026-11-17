@@ -206,7 +206,7 @@ describe('screens: idle', () => {
     await typeText('go')
     await press({ key: 'Enter' })
     await settle()
-    expect(byLabel('Attachments')!.textContent).toContain('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('a.png')
     expect(byLabel('Attachments')!.textContent).toContain('Pasted text')
   })
 })
@@ -698,14 +698,52 @@ describe('attachments (SC-7, SC-8, SC-9)', () => {
     await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
     await transfer('paste', [image('clip.png')])
     expect(fake.callsTo('quirky.session/pasteImage')[0]!.params).toEqual({ session: 's1', mime: 'image/png', data: btoa('x') })
-    expect(byLabel('Attachments')!.textContent).toContain('clip.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('clip.png')
   })
 
   test('a dropped image with a path attaches, and the same image dropped twice appears once', async () => {
     await mount()
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
-    expect(byLabel('Attachments')!.querySelectorAll('.ui-scope-chip')).toHaveLength(1)
+    expect(byLabel('Attachments')!.querySelectorAll('img')).toHaveLength(1)
+  })
+
+  test('a pasted image shows as a thumbnail named by its file, and its remove button drops it', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    await transfer('paste', [image('clip.png')])
+    const thumbnail = byLabel('Attachments')!.querySelector('img')!
+    expect(thumbnail.alt).toBe('clip.png')
+    expect(thumbnail.getAttribute('src')).toStartWith('blob:')
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip')).toBeNull()
+    await click(buttonNamed('Remove clip.png'))
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('an image alone enables Send and goes out with empty text', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    expect(buttonNamed('Send')!.disabled).toBe(true)
+    await transfer('paste', [image('clip.png')])
+    expect(buttonNamed('Send')!.disabled).toBe(false)
+    await click(buttonNamed('Send'))
+    await settle()
+    expect(sent()[0]).toMatchObject({ session: 's1', text: '', images: ['/data/pasted/s1/x.png'] })
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('Enter sends an image with no text too', async () => {
+    await mount()
+    await transfer('drop', [image('shot.png', '/tmp/shot.png')])
+    await press({ key: 'Enter' })
+    await settle()
+    expect(sent()[0]).toMatchObject({ text: '', images: ['/tmp/shot.png'] })
+  })
+
+  test('a picker-added image keeps the name chip, with no thumbnail', async () => {
+    await mount({ 'desktop.file.pick': () => ({ cancelled: false, paths: ['/tmp/a.png'] }) })
+    await click(buttonNamed('Attach images'))
+    await settle()
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip__label')!.textContent).toBe('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')).toBeNull()
   })
 
   test('an image is refused inline with the reason when the agent takes none', async () => {
