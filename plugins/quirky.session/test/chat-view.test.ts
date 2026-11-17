@@ -104,6 +104,15 @@ describe('turn grouping', () => {
     expect(groupTurns(items, { showAll: true })[0]!.blocks.map((block) => block.kind)).toEqual(['status', 'legacy'])
   })
 
+  test('a user item journaled from content the agent added itself neither shows nor starts a turn', () => {
+    // older journals stored the SKILL.md the Claude CLI injects after a Skill call as a user item
+    const injected = msg(3, { kind: 'user', text: 'Base directory for this skill: /s' }, { role: 'user', data: { type: 'user', isSynthetic: true } })
+    const turns = groupTurns([user(1, 'go'), act1(2, 's1', 'Skill', 'probe'), injected, prose(4, 'done')])
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.user?.text).toBe('go')
+    expect(turns[0]!.blocks.map((block) => block.kind)).toEqual(['activity', 'prose'])
+  })
+
   test('a message with no item becomes a legacy block', () => {
     const turns = groupTurns([msg(1, undefined, { role: 'user', text: 'old' }), msg(2, undefined, { text: 'old reply' })])
     expect(turns).toHaveLength(1)
