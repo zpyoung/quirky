@@ -155,6 +155,8 @@ export type TurnSettings = {
   modeLabel: (mode: string) => string
   /** Whether a permission mode lets the agent act without asking. */
   isDangerous: (mode: string) => boolean
+  /** One line on what a permission mode lets the agent do, or undefined when there is none to say. */
+  modeDescription: (mode: string) => string | undefined
   modelReason: string | undefined
   effortReason: string | undefined
   modeReason: string | undefined
@@ -185,6 +187,22 @@ function useLiveMode(context: UiPluginContext, session: Session, capabilities: A
   return mode
 }
 
+const MODE_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  claude: {
+    default: 'Ask before edits and commands',
+    acceptEdits: 'Edit files; ask before commands',
+    auto: 'A classifier approves safe actions',
+    dontAsk: 'Deny anything not pre-approved',
+    bypassPermissions: 'Run every tool without asking'
+  },
+  codex: {
+    default: 'Work in the workspace; ask before leaving it',
+    'read-only': 'Read only; ask before any change',
+    'auto-review': 'A reviewer approves requests to leave the workspace',
+    'full-access': 'Run anything with no sandbox or approvals'
+  }
+}
+
 /** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
 export function useTurnSettings(
   context: UiPluginContext,
@@ -203,7 +221,8 @@ export function useTurnSettings(
   const choices = options ? effortChoices(options, model) : []
   const effort = picks.effort ?? launched.effort ?? ''
   const permissionModes = capabilities?.permissionModes
-  const modes = permissionModes?.ok ? permissionModes.modes : []
+  // the runner sends plan as the permission mode whenever planMode is on, so the Plan switch alone owns it
+  const modes = permissionModes?.ok ? permissionModes.modes.filter((name) => name !== 'plan') : []
   const defaultMode = modes[0] ?? null
   const mode = picks.mode ?? (liveMode !== null && modes.includes(liveMode) ? liveMode : null) ?? defaultMode ?? ''
   const labels = permissionModes?.ok ? permissionModes.labels : undefined
@@ -225,6 +244,7 @@ export function useTurnSettings(
     defaultMode,
     modeLabel: (name) => labels?.[name] ?? modeLabel(name),
     isDangerous: (name) => dangerous.includes(name),
+    modeDescription: (name) => MODE_DESCRIPTIONS[session.agent]?.[name],
     modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
     effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
     modeReason: reasonOf(permissionModes),

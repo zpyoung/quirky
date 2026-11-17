@@ -36,3 +36,5 @@
 .qt-menu-search { margin-block-end: var(--ui-space-4); }
 .qt-submenu { position: absolute; inset-block-start: calc(var(--ui-space-4) * -1); inset-inline-start: 100%; z-index: 61; }
 .qt-swatch { display: inline-block; width: var(--ui-space-12); height: var(--ui-space-12); border-radius: 50%; }
+.qt-menu-item:focus-visible { outline: var(--ui-focus-width) solid var(--ui-accent); outline-offset: calc(var(--ui-focus-width) * -1); }
+.ui-menu-panel > .qt-menu { min-width: 0; padding: 0; border: 0; background: var(--ui-transparent); }
