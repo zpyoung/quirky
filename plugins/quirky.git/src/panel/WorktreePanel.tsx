@@ -2491,9 +2491,12 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     viewMode,
     historyOpen
   })
+  const reportPending = polled === null
+    ? data.error === null && data.unavailable === null
+    : review.pending || compareData.pending
   useEffect(() => {
-    if (!review.pending && !compareData.pending) report(JSON.parse(reportJson) as ScmReport)
-  }, [reportJson, report, review.pending, compareData.pending])
+    if (!reportPending) report(JSON.parse(reportJson) as ScmReport)
+  }, [reportJson, report, reportPending])
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape' && ticks !== null) {

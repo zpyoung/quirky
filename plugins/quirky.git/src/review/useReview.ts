@@ -12,10 +12,10 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
  * slow response still lands; notifications during it retain one follow-up read.
  * An unchanged result keeps the previous object, a failure keeps the last good model, and a
  * response that lands after a worktree switch or unmount is dropped.
- * With a status snapshot, `pending` keeps reports from combining it with an earlier model read.
+ * With a status snapshot, `pending` withholds reports until its read settles, even on failure.
  */
 export function useReview(context: UiPluginContext, worktree: string, snapshot: GitStatus | null | undefined): { model: ReviewModel | null; error: string | null; pending: boolean; refresh(): void } {
-  const [loaded, setLoaded] = useState<{ model: ReviewModel; snapshot: GitStatus | null | undefined } | null>(null)
+  const [loaded, setLoaded] = useState<{ model: ReviewModel | null; snapshot: GitStatus | null | undefined } | null>(null)
   const model = loaded?.model ?? null
   const [error, setError] = useState<string | null>(null)
   const currentSnapshot = useRef(snapshot)
@@ -50,7 +50,10 @@ export function useReview(context: UiPluginContext, worktree: string, snapshot: 
           })
           setError(null)
         }),
-      (e: unknown) => settle(() => setError(messageOf(e)))
+      (e: unknown) => settle(() => {
+        setLoaded((prev) => ({ model: prev?.model ?? null, snapshot: requestedSnapshot }))
+        setError(messageOf(e))
+      })
     )
   }, [context, worktree])
 
