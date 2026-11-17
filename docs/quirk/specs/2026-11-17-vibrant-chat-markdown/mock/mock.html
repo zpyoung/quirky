@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock review</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --border: #d6d6d0;
+  --text: #1c1c1a;
+  --muted: #62625c;
+  --accent: #2f5fd0;
+  --accent-text: #ffffff;
+  --accent-soft: #e4ebfb;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d6;
+  --danger: #b3261e;
+  --ok: #1f7a3d;
+  --change: #c2410c;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --surface-2: #2a2a27;
+    --border: #3d3d38;
+    --text: #ececE8;
+    --muted: #a5a59d;
+    --accent: #7ba0ff;
+    --accent-text: #0d1424;
+    --accent-soft: #232c45;
+    --warn: #f0c36a;
+    --warn-soft: #3a2f14;
+    --danger: #ff8a80;
+    --ok: #6fd08c;
+    --change: #fb923c;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+[hidden] { display: none !important; }
+
+.app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); position: relative; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.status { color: var(--muted); font-size: 13px; margin-left: auto; min-height: 1.4em; }
+.status.error { color: var(--danger); }
+
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+.rail {
+  overflow: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 10px 10px 16px;
+}
+.rail h2 { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 6px; }
+.rail h2:first-child { margin-top: 2px; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.screen-item { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.screen-item.current { background: var(--accent-soft); }
+.screen-item > button.go {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+}
+.screen-item .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; border: 2px solid var(--muted); align-self: center; }
+.dot.visited { background: var(--ok); border-color: var(--ok); }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.mark { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); padding-right: 6px; cursor: pointer; }
+.note { color: var(--muted); font-size: 12px; margin: 2px 8px 4px; }
+.skipped li { margin: 2px 8px; font-size: 12px; color: var(--muted); }
+.pin-row { border: 1px solid var(--border); border-radius: 8px; margin: 0 2px 6px; background: var(--surface); }
+.pin-row.selected { border-color: var(--accent); }
+.pin-row > button.head { width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; display: block; }
+.pin-row .meta { color: var(--muted); font-size: 12px; }
+.badge { font-size: 11px; border-radius: 999px; padding: 0 7px; background: var(--surface-2); border: 1px solid var(--border); margin-left: 4px; white-space: nowrap; }
+.badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge.ok { color: var(--ok); }
+.thread { padding: 0 8px 8px; }
+.msg { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.agent { background: var(--accent-soft); }
+.msg .who { display: block; font-size: 11px; color: var(--muted); }
+.msg.last-reply { outline: 2px solid var(--ok); }
+
+.stage { position: relative; min-width: 0; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 12px; background: var(--surface-2); }
+.frame-box { position: relative; width: 100%; max-width: 100%; height: 100%; min-height: 360px; background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--border), 0 1px 4px rgba(0,0,0,0.12); }
+.frame-box.mobile { width: 390px; }
+.frame-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 6px; }
+.box { position: absolute; pointer-events: none; border-radius: 2px; }
+.box.hover { outline: 2px solid var(--accent); outline-offset: 0; background: rgba(47, 95, 208, 0.08); }
+.box.changed { outline: 2px dashed var(--change); outline-offset: 1px; }
+.box .tag { position: absolute; left: 0; top: -20px; background: var(--accent); color: var(--accent-text); font-size: 11px; line-height: 16px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.box.changed .tag { background: var(--change); color: #fff; }
+.pin {
+  position: absolute;
+  pointer-events: auto;
+  width: 26px; height: 26px; padding: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent); color: var(--accent-text); border: 2px solid #fff;
+  font-weight: 700; font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.pin:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+.pin.resolved { background: var(--ok); color: #fff; }
+.pin.selected { outline: 3px solid var(--text); }
+.pop {
+  position: absolute;
+  pointer-events: auto;
+  width: min(300px, calc(100% - 16px));
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 10px;
+  z-index: 5;
+}
+.pop h3 { margin: 0 0 6px; font-size: 13px; }
+.pop textarea { width: 100%; min-height: 76px; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.pop .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; align-items: center; }
+.pop .err { color: var(--danger); font-size: 12px; margin-right: auto; }
+
+.verdict { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.verdict .spacer { flex: 1; }
+.verdict .panel { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.verdict .panel textarea { width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.verdict .panel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.verdict .err { color: var(--danger); }
+.verdict .info { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .stage { padding: 6px; }
+  .frame-box.mobile { width: 390px; max-width: 100%; }
+  .status { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="banner" id="banner" hidden></div>
+  <header class="bar" id="toolbar">
+    <span class="chip" id="version-chip"></span>
+    <label id="version-wrap" hidden>Version <select id="version-picker" aria-label="Mock version"></select></label>
+    <div class="seg" role="group" aria-label="Mode">
+      <button type="button" id="mode-interact" aria-pressed="true">Interact</button>
+      <button type="button" id="mode-comment" aria-pressed="false">Comment</button>
+    </div>
+    <div class="seg" role="group" aria-label="Viewport">
+      <button type="button" id="vp-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="vp-mobile" aria-pressed="false">Mobile 390px</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="show-changes"> Show changes</label>
+    <div class="seg" role="group" aria-label="State" id="state-switch" hidden></div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </header>
+  <div class="body">
+    <nav class="rail" id="rail" aria-label="Screens"></nav>
+    <main class="stage">
+      <div class="frame-box" id="frame-box">
+        <iframe id="mock-frame" title="Mock under review"></iframe>
+        <div class="overlay" id="overlay">
+          <div id="layer-changes"></div>
+          <div id="layer-hover"></div>
+          <div id="layer-pins"></div>
+          <div id="layer-pop"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="verdict" id="verdict" hidden></footer>
+</div>
+<script id="quirk-mock-boot" type="application/json">{"mode":"offline","version":1,"latest":1,"versions":[1],"revision":"bf319800c8be532f","screens":{"ui_layer":true,"screens":[{"id":"transcript","title":"Chat transcript","purpose":"An agent reply that uses every supported block, finished, mid-stream, scrolled up, with render errors, and in light theme.","states":["default","streaming","scrolled-up","render-error","light"],"skipped_states":[{"state":"empty","reason":"an empty chat has no prose; the empty transcript is unchanged by this work"},{"state":"loading","reason":"loading before the first token is the existing turn spinner; streaming covers the rest"}],"elements":[{"pin":"user-bubble","label":"User bubble (unchanged)","component":"Turn (renderUserMarkdown)"},{"pin":"h1","label":"Heading 1","component":"Streamdown components map"},{"pin":"h2","label":"Heading 2","component":"Streamdown components map"},{"pin":"h3","label":"Heading 3","component":"Streamdown components map"},{"pin":"para-chips","label":"Paragraph with chips","component":"Streamdown components map"},{"pin":"path-chip","label":"File path chip","component":null},{"pin":"inline-code","label":"Inline code","component":"Streamdown components map"},{"pin":"link","label":"Link","component":"Prose openLink + context.confirm"},{"pin":"alert-warning","label":"Warning alert","component":null},{"pin":"alert-tip","label":"Tip alert with kbd","component":null},{"pin":"task-list","label":"Task list","component":"Streamdown components map"},{"pin":"code-block","label":"Code block with line numbers","component":"@streamdown/code (Shiki)"},{"pin":"code-header","label":"Code header filename","component":"@streamdown/code (Shiki)"},{"pin":"copy-btn","label":"Copy button","component":"@streamdown/code (Shiki)"},{"pin":"diff-block","label":"Diff fence","component":null},{"pin":"long-code","label":"Collapsed long block","component":null},{"pin":"show-all","label":"Show all bar","component":null},{"pin":"table","label":"Zebra table","component":"Streamdown components map"},{"pin":"mermaid","label":"Mermaid diagram","component":"@streamdown/mermaid"},{"pin":"mermaid-source","label":"Diagram source toggle","component":null},{"pin":"math-inline","label":"Inline math","component":"@streamdown/math (KaTeX)"},{"pin":"math-block","label":"Block math","component":"@streamdown/math (KaTeX)"},{"pin":"details","label":"Collapsible section","component":null},{"pin":"csv-fence","label":"CSV fence as table","component":null},{"pin":"json-fence","label":"JSON tree","component":null},{"pin":"chart-fence","label":"Chart fence","component":"quirky.view render/charts.tsx"},{"pin":"local-image","label":"Worktree image","component":"Streamdown components map"},{"pin":"remote-image","label":"Remote image as link chip","component":null},{"pin":"footnotes","label":"Footnotes","component":"Streamdown components map"},{"pin":"repaired-bold","label":"Repaired partial bold","component":"Streamdown (remend)"},{"pin":"open-fence","label":"Open fence while streaming","component":"Streamdown (remend)"},{"pin":"caret","label":"Streaming caret","component":"Prose caret"},{"pin":"jump-pill","label":"Jump to latest","component":null},{"pin":"mermaid-error","label":"Diagram render error","component":null},{"pin":"math-error","label":"Math render error","component":null},{"pin":"link-confirm","label":"Open link prompt","component":"context.confirm"}]},{"id":"view-card","title":"Agent-drawn view","purpose":"A quirky.view markdown node rendered by the same renderer with chat's strict rules.","states":["default"],"skipped_states":[{"state":"empty","reason":"an empty markdown node renders nothing, as today"},{"state":"loading","reason":"view nodes arrive whole, not streamed"},{"state":"error","reason":"block errors look the same as in the transcript's render-error state"}],"elements":[{"pin":"view-card","label":"View card","component":"ViewCard"},{"pin":"view-alert","label":"Important alert","component":null},{"pin":"view-html-escaped","label":"Escaped raw HTML","component":"Streamdown (skipHtml / allowedTags)"}]},{"id":"editor-preview","title":"Editor preview","purpose":"The editor's markdown preview for a file you opened, same look, with cleaned raw HTML allowed.","states":["default"],"skipped_states":[{"state":"empty","reason":"an empty file previews as an empty pane, as today"},{"state":"loading","reason":"the preview renders synchronously from the open buffer"},{"state":"error","reason":"block errors look the same as in the transcript's render-error state"}],"elements":[{"pin":"editor-source","label":"Source pane","component":"MarkdownSurface"},{"pin":"editor-output","label":"Preview pane","component":"preview.tsx"},{"pin":"editor-raw-html","label":"Raw HTML from file","component":"Streamdown raw + DOMPurify"}]}]},"changed":[],"mock_html":"\u003c!doctype html>\n\u003chtml lang=\"en\">\n\u003chead>\n\u003cmeta charset=\"utf-8\">\n\u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\u003ctitle>Vibrant markdown mock\u003c/title>\n\u003cstyle>\n  .qk{--rail:#0c0d0f;--surface:#16171b;--sel:#22242b;--border:#24262c;--text:#eceef2;--muted:#7c828d;--accent:#7c8cff;\n      --blue:#6fb3ff;--violet:#c79bff;--teal:#5fd0d6;--coral:#ff9d7a;--mint:#6dd6b4;--rose:#f29bb6;--sand:#d6b58c;\n      --amber:#e0b341;--red:#ff7b72;--green:#56d364;--codebg:#101114;--headbg:#1b1c21;--accent-ink:#a9b3ff;\n      --add-bg:#3fb95024;--add-ink:#a6f0b0;--del-bg:#e5534b24;--del-ink:#ffb3ad;--zebra:#ffffff07;\n      --syn-kw:#c79bff;--syn-fn:#6fb3ff;--syn-str:#6dd6b4;--syn-num:#ff9d7a;--syn-com:#6b7280;--syn-type:#5fd0d6;}\n  .qk.light{--rail:#eef0f3;--surface:#ffffff;--sel:#e7e9ef;--border:#e3e5ea;--text:#1b1d22;--muted:#6b7079;--accent:#5b6cff;\n      --blue:#2f74c0;--violet:#7f4fc9;--teal:#14808a;--coral:#c9562f;--mint:#1a8a6b;--rose:#c04a70;--sand:#8f6a3a;\n      --amber:#9a6a00;--red:#c4302b;--green:#1f7a34;--codebg:#f6f7f9;--headbg:#eceef2;--accent-ink:#3f4fd6;\n      --add-bg:#2da44e1f;--add-ink:#116329;--del-bg:#cf222e1a;--del-ink:#82071e;--zebra:#00000005;\n      --syn-kw:#7f4fc9;--syn-fn:#2f74c0;--syn-str:#1a7a5c;--syn-num:#b4532f;--syn-com:#6e7781;--syn-type:#0f6f78;}\n  *{box-sizing:border-box}\n  body{margin:0;font:12px/1.55 -apple-system,BlinkMacSystemFont,\"Segoe UI\",system-ui,sans-serif;background:#0c0d0f}\n  .qk{background:var(--rail);color:var(--text);min-height:100vh}\n  nav.top{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap}\n  nav.top a{color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:7px;font-size:11px}\n  nav.top a.on{background:var(--sel);color:var(--text)}\n  [data-screen]{display:none}\n  [data-screen].active{display:block}\n  .win{max-width:760px;margin:0 auto;padding:16px 12px 60px;position:relative}\n  .turn-user{margin:0 0 14px auto;max-width:70%;background:var(--sel);padding:6px 10px;border-radius:10px;width:fit-content}\n  .who{font-size:10.5px;color:var(--muted);margin-bottom:4px;letter-spacing:.02em}\n  .prose{font-size:12.5px}\n  .prose p{margin:0 0 8px}\n  .prose h1{font-size:16px;font-weight:650;color:var(--accent-ink);margin:4px 0 8px;line-height:1.3}\n  .prose h2{font-size:14px;font-weight:650;color:var(--accent-ink);margin:14px 0 6px}\n  .prose h3{font-size:12.5px;font-weight:650;margin:12px 0 4px}\n  .prose h4{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px}\n  .prose a{color:var(--accent);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--accent) 35%,transparent);cursor:pointer}\n  .prose code.inl{font:11.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-ink);padding:1px 4px;border-radius:5px}\n  .chip{display:inline-flex;gap:4px;align-items:center;font:11px ui-monospace,Menlo,monospace;background:var(--sel);border:1px solid var(--border);color:var(--accent-ink);padding:0 6px;border-radius:5px;cursor:pointer;vertical-align:baseline}\n  .chip:hover{border-color:var(--accent)}\n  .chip.remote{color:var(--muted)}\n  .prose ul,.prose ol{margin:0 0 8px;padding-left:20px}\n  .prose li::marker{color:var(--muted)}\n  ul.tasks{list-style:none;padding-left:4px}\n  ul.tasks li{display:flex;gap:6px;align-items:baseline}\n  .cb{width:12px;height:12px;border-radius:3px;border:1px solid var(--muted);display:inline-grid;place-items:center;font-size:9px;flex:none;transform:translateY(2px)}\n  .cb.on{background:var(--accent);border-color:var(--accent);color:#fff}\n  li.done span.t{color:var(--muted);text-decoration:line-through}\n  .alert{border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 9%,transparent);padding:5px 10px;border-radius:0 7px 7px 0;margin:0 0 10px}\n  .alert b{color:var(--c);display:block;font-size:11px;margin-bottom:1px}\n  .a-note{--c:var(--accent)}.a-tip{--c:var(--green)}.a-imp{--c:var(--violet)}.a-warn{--c:var(--amber)}.a-caut{--c:var(--red)}\n  .code{border:1px solid var(--border);border-radius:7px;overflow:hidden;margin:0 0 10px;background:var(--codebg)}\n  .code .hd{display:flex;justify-content:space-between;align-items:center;background:var(--headbg);padding:3px 8px;font:10.5px ui-monospace,Menlo,monospace;color:var(--muted);border-bottom:1px solid var(--border)}\n  .code .hd button{all:unset;cursor:pointer;color:var(--muted);font:10.5px system-ui;padding:0 4px;border-radius:4px}\n  .code .hd button:hover{color:var(--text);background:var(--sel)}\n  .code pre{margin:0;padding:6px 0;font:11.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto;counter-reset:ln}\n  .code pre .l{display:block;padding:0 10px;white-space:pre}\n  .code.nums pre .l::before{counter-increment:ln;content:counter(ln);display:inline-block;width:22px;margin-right:10px;text-align:right;color:var(--muted);opacity:.55;user-select:none}\n  .code pre .l.add{background:var(--add-bg);color:var(--add-ink)}\n  .code pre .l.del{background:var(--del-bg);color:var(--del-ink)}\n  .k{color:var(--syn-kw)}.f{color:var(--syn-fn)}.s{color:var(--syn-str)}.n{color:var(--syn-num)}.c{color:var(--syn-com);font-style:italic}.ty{color:var(--syn-type)}\n  .collapsible{position:relative}\n  .collapsible.closed pre{max-height:172px;overflow:hidden}\n  .collapsible.closed .fade{position:absolute;left:0;right:0;bottom:24px;height:40px;background:linear-gradient(transparent,var(--codebg));pointer-events:none}\n  .showall{display:block;width:100%;border:0;border-top:1px solid var(--border);background:var(--headbg);color:var(--muted);font:11px system-ui;padding:4px;cursor:pointer}\n  .showall:hover{color:var(--text)}\n  .collapsible:not(.closed) .fade{display:none}\n  .tbl{overflow-x:auto;margin:0 0 10px;border:1px solid var(--border);border-radius:7px}\n  .tbl table{border-collapse:collapse;width:100%;font-size:12px}\n  .tbl th{text-align:left;background:var(--sel);padding:4px 10px;font-weight:600;white-space:nowrap}\n  .tbl td{padding:4px 10px;border-top:1px solid var(--border);white-space:nowrap}\n  .tbl tr:nth-child(even) td{background:var(--zebra)}\n  .pass{color:var(--green)}.fail{color:var(--red)}\n  .fig{border:1px solid var(--border);border-radius:7px;margin:0 0 10px;background:var(--codebg)}\n  .fig .hd{display:flex;justify-content:space-between;padding:3px 8px;font:10.5px ui-monospace,Menlo,monospace;color:var(--muted);border-bottom:1px solid var(--border);background:var(--headbg)}\n  .fig .hd button{all:unset;cursor:pointer;font:10.5px system-ui;padding:0 4px}\n  .fig .hd button:hover{color:var(--text)}\n  .fig .body{padding:10px;display:flex;justify-content:center;overflow-x:auto}\n  .fig .src{display:none;margin:0;padding:8px 10px;font:11.5px ui-monospace,Menlo,monospace;white-space:pre;color:var(--text)}\n  .fig.showsrc .body{display:none}.fig.showsrc .src{display:block}\n  .math-b{text-align:center;font:italic 15px \"Times New Roman\",serif;margin:2px 0 10px;padding:6px;letter-spacing:.02em}\n  .math-i{font:italic 13.5px \"Times New Roman\",serif}\n  sup.fn a{font-size:9.5px;border:0;padding:0 1px}\n  .footnotes{border-top:1px solid var(--border);margin-top:12px;padding-top:6px;font-size:11px;color:var(--muted)}\n  .footnotes ol{margin:0;padding-left:18px}\n  details.disc{border:1px solid var(--border);border-radius:7px;margin:0 0 10px;padding:0 10px}\n  details.disc summary{cursor:pointer;padding:5px 0;font-weight:600;color:var(--text)}\n  details.disc summary::marker{color:var(--accent)}\n  details.disc[open]{padding-bottom:6px}\n  kbd{font:10.5px ui-monospace,Menlo,monospace;background:var(--surface);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 4px}\n  mark{background:color-mix(in srgb,var(--amber) 28%,transparent);color:inherit;padding:0 2px;border-radius:3px}\n  .json{font:11.5px/1.6 ui-monospace,Menlo,monospace;padding:6px 10px}\n  .json details{margin-left:14px}.json>details{margin-left:0}\n  .json summary{cursor:pointer;list-style:none}\n  .json summary::before{content:\"▸ \";color:var(--muted)}\n  .json details[open]>summary::before{content:\"▾ \"}\n  .json .kk{color:var(--syn-fn)}\n  .json .row{margin-left:14px}\n  .img{border:1px solid var(--border);border-radius:7px;overflow:hidden;margin:0 0 4px;max-width:360px}\n  .cap{font-size:10.5px;color:var(--muted);margin-bottom:10px}\n  .caret{color:var(--accent);animation:blink 1s steps(1) infinite}\n  @keyframes blink{50%{opacity:0}}\n  .rerr{border:1px dashed color-mix(in srgb,var(--red) 55%,transparent);border-radius:7px;margin:0 0 10px;overflow:hidden}\n  .rerr .msg{font-size:11px;color:var(--red);padding:4px 10px;background:color-mix(in srgb,var(--red) 8%,transparent)}\n  .rerr pre{margin:0;padding:6px 10px;font:11.5px ui-monospace,Menlo,monospace;white-space:pre}\n  .pill{position:sticky;bottom:12px;display:block;margin:10px auto 0;width:fit-content;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:5px 12px;font:600 11px system-ui;box-shadow:0 4px 14px #0007;cursor:pointer}\n  .scrollbox{height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface);position:relative}\n  .panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}\n  .note-strip{font-size:10.5px;color:var(--muted);margin:0 0 10px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface)}\n  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--sel);color:var(--text);border:1px solid var(--border);padding:6px 12px;border-radius:7px;font-size:11px;display:none;z-index:9}\n  .dlg-back{position:fixed;inset:0;background:#0009;display:none;place-items:center;z-index:8}\n  .dlg{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:14px;width:300px}\n  .dlg h3{margin:0 0 6px;font-size:13px}\n  .dlg .url{font:11px ui-monospace,Menlo,monospace;color:var(--muted);word-break:break-all;margin-bottom:12px}\n  .dlg .btns{display:flex;gap:6px;justify-content:flex-end}\n  .dlg button{border:1px solid var(--border);background:var(--sel);color:var(--text);border-radius:7px;padding:4px 10px;font:11px system-ui;cursor:pointer}\n  .dlg button.primary{background:var(--accent);border-color:var(--accent);color:#fff}\n  .viewcard{border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden}\n  .viewcard .vh{padding:6px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}\n  .viewcard .vb{padding:12px}\n  .editor{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);border-radius:10px;overflow:hidden}\n  .editor .src{background:var(--codebg);padding:10px;font:11.5px/1.6 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--muted);border-right:1px solid var(--border)}\n  .editor .out{background:var(--surface);padding:12px}\n  @media (max-width:600px){.editor{grid-template-columns:1fr}.editor .src{border-right:0;border-bottom:1px solid var(--border)}.turn-user{max-width:90%}}\n\u003c/style>\n\u003c/head>\n\u003cbody>\n\u003cdiv class=\"qk\" id=\"root\">\n\u003cnav class=\"top\">\n  \u003ca href=\"#/transcript\" data-nav=\"transcript\">Chat transcript\u003c/a>\n  \u003ca href=\"#/view-card\" data-nav=\"view-card\">Agent-drawn view\u003c/a>\n  \u003ca href=\"#/editor-preview\" data-nav=\"editor-preview\">Editor preview\u003c/a>\n\u003c/nav>\n\n\u003c!-- ============ Chat transcript ============ -->\n\u003csection data-screen=\"transcript\">\n \u003cdiv data-state=\"default\">\u003cdiv class=\"win\" id=\"showcase\">\n  \u003cdiv class=\"turn-user\" data-pin=\"user-bubble\">Why does reloading a session drop the half-finished reply? Fix it and show me what changed.\u003c/div>\n  \u003cdiv class=\"who\">Claude Code · opus\u003c/div>\n  \u003cdiv class=\"prose\">\n   \u003ch1 data-pin=\"h1\">Session reload drops partial replies\u003c/h1>\n   \u003cp data-pin=\"para-chips\">The reload path in \u003cspan class=\"chip\" data-pin=\"path-chip\" data-file>&#128196; chat/turns.ts:119\u003c/span> replaces partial prose items instead of merging them, so \u003ccode class=\"inl\" data-pin=\"inline-code\">mergeProse()\u003c/code> never sees the tail. See the \u003ca data-pin=\"link\" data-href=\"https://github.com/zpyoung/quirky/pull/637\">original chat PR\u003c/a> for how partial items were meant to work.\u003csup class=\"fn\">\u003ca href=\"#fn1\">1\u003c/a>\u003c/sup>\u003c/p>\n   \u003cdiv class=\"alert a-warn\" data-pin=\"alert-warning\">\u003cb>&#9888; Warning\u003c/b>Sessions saved before this fix still have the truncated reply on disk. Reloading won't recover them.\u003c/div>\n   \u003cdiv class=\"alert a-tip\" data-pin=\"alert-tip\">\u003cb>&#10022; Tip\u003c/b>Press \u003ckbd>&#8984;\u003c/kbd> \u003ckbd>R\u003c/kbd> in the transcript to reload and check the fix yourself.\u003c/div>\n\n   \u003ch2 data-pin=\"h2\">What changed\u003c/h2>\n   \u003cul class=\"tasks\" data-pin=\"task-list\">\n    \u003cli class=\"done\">\u003cspan class=\"cb on\">&#10003;\u003c/span>\u003cspan class=\"t\">Merge partial items on reload\u003c/span>\u003c/li>\n    \u003cli class=\"done\">\u003cspan class=\"cb on\">&#10003;\u003c/span>\u003cspan class=\"t\">Add a regression test for mid-stream reloads\u003c/span>\u003c/li>\n    \u003cli>\u003cspan class=\"cb\">\u003c/span>\u003cspan class=\"t\">Backfill sessions saved before the fix\u003c/span>\u003c/li>\n   \u003c/ul>\n\n   \u003cdiv class=\"code nums\" data-pin=\"code-block\">\n    \u003cdiv class=\"hd\">\u003cspan data-pin=\"code-header\">turns.ts\u003c/span>\u003cbutton data-copy data-pin=\"copy-btn\">&#10697; Copy\u003c/button>\u003c/div>\n    \u003cpre>\u003cspan class=\"l\">\u003cspan class=\"k\">export function\u003c/span> \u003cspan class=\"f\">mergeProse\u003c/span>(prev: \u003cspan class=\"ty\">ProseItem\u003c/span>[], next: \u003cspan class=\"ty\">ProseItem\u003c/span>) {\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"k\">const\u003c/span> last = prev.\u003cspan class=\"f\">at\u003c/span>(\u003cspan class=\"n\">-1\u003c/span>)\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"c\">// a partial item is replaced only by its own completion\u003c/span>\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"k\">if\u003c/span> (last?.partial &amp;&amp; last.id === next.id) {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"k\">return\u003c/span> [...prev.\u003cspan class=\"f\">slice\u003c/span>(\u003cspan class=\"n\">0\u003c/span>, \u003cspan class=\"n\">-1\u003c/span>), next]\u003c/span>\u003cspan class=\"l\">  }\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"k\">if\u003c/span> (last?.partial) \u003cspan class=\"k\">return\u003c/span> [...prev, next]\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"k\">return\u003c/span> [...prev, { ...next, partial: \u003cspan class=\"k\">false\u003c/span> }]\u003c/span>\u003cspan class=\"l\">}\u003c/span>\u003cspan class=\"l\">\u003cspan class=\"k\">export const\u003c/span> RELOAD_GRACE_MS = \u003cspan class=\"n\">250\u003c/span>\u003c/span>\u003c/pre>\n   \u003c/div>\n\n   \u003cdiv class=\"code\" data-pin=\"diff-block\">\n    \u003cdiv class=\"hd\">\u003cspan>diff\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\n    \u003cpre>\u003cspan class=\"l\">  const items = loadTurns(session)\u003c/span>\u003cspan class=\"l del\">- return items.filter(i =&gt; !i.partial)\u003c/span>\u003cspan class=\"l add\">+ return items.reduce(mergeProse, [])\u003c/span>\u003c/pre>\n   \u003c/div>\n\n   \u003cdiv class=\"code nums collapsible closed\" data-pin=\"long-code\">\n    \u003cdiv class=\"hd\">\u003cspan>reload.test.ts\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\n    \u003cpre>\u003cspan class=\"l\">\u003cspan class=\"k\">import\u003c/span> { describe, expect, test } \u003cspan class=\"k\">from\u003c/span> \u003cspan class=\"s\">'bun:test'\u003c/span>\u003c/span>\u003cspan class=\"l\">\u003cspan class=\"k\">import\u003c/span> { mergeProse } \u003cspan class=\"k\">from\u003c/span> \u003cspan class=\"s\">'../src/window/chat/turns'\u003c/span>\u003c/span>\u003cspan class=\"l\">\u003c/span>\u003cspan class=\"l\">\u003cspan class=\"f\">describe\u003c/span>(\u003cspan class=\"s\">'reload mid-stream'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"f\">test\u003c/span>(\u003cspan class=\"s\">'keeps the partial tail'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"k\">const\u003c/span> prev = [{ id: \u003cspan class=\"s\">'p1'\u003c/span>, text: \u003cspan class=\"s\">'The bug is'\u003c/span>, partial: \u003cspan class=\"k\">true\u003c/span> }]\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"k\">const\u003c/span> out = \u003cspan class=\"f\">mergeProse\u003c/span>(prev, { id: \u003cspan class=\"s\">'p1'\u003c/span>, text: \u003cspan class=\"s\">'The bug is in turns.ts'\u003c/span> })\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"f\">expect\u003c/span>(out).\u003cspan class=\"f\">toHaveLength\u003c/span>(\u003cspan class=\"n\">1\u003c/span>)\u003c/span>\u003cspan class=\"l\">  })\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"f\">test\u003c/span>(\u003cspan class=\"s\">'appends a new item after a partial one'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"c\">// ...\u003c/span>\u003c/span>\u003cspan class=\"l\">  })\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"f\">test\u003c/span>(\u003cspan class=\"s\">'marks completed items final'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"c\">// ...\u003c/span>\u003c/span>\u003cspan class=\"l\">  })\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"f\">test\u003c/span>(\u003cspan class=\"s\">'survives a reload during a tool call'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"c\">// ...\u003c/span>\u003c/span>\u003cspan class=\"l\">  })\u003c/span>\u003cspan class=\"l\">  \u003cspan class=\"f\">test\u003c/span>(\u003cspan class=\"s\">'drops nothing when the session is idle'\u003c/span>, () =&gt; {\u003c/span>\u003cspan class=\"l\">    \u003cspan class=\"c\">// ...\u003c/span>\u003c/span>\u003cspan class=\"l\">  })\u003c/span>\u003cspan class=\"l\">})\u003c/span>\u003c/pre>\n    \u003cdiv class=\"fade\">\u003c/div>\n    \u003cbutton class=\"showall\" data-showall data-pin=\"show-all\">Show all 23 lines\u003c/button>\n   \u003c/div>\n\n   \u003ch3 data-pin=\"h3\">Test results\u003c/h3>\n   \u003cdiv class=\"tbl\" data-pin=\"table\">\u003ctable>\n    \u003ctr>\u003cth>Test\u003c/th>\u003cth>Result\u003c/th>\u003cth>Time\u003c/th>\u003c/tr>\n    \u003ctr>\u003ctd>keeps the partial tail\u003c/td>\u003ctd class=\"pass\">&#10003; pass\u003c/td>\u003ctd>4 ms\u003c/td>\u003c/tr>\n    \u003ctr>\u003ctd>appends a new item after a partial one\u003c/td>\u003ctd class=\"pass\">&#10003; pass\u003c/td>\u003ctd>2 ms\u003c/td>\u003c/tr>\n    \u003ctr>\u003ctd>survives a reload during a tool call\u003c/td>\u003ctd class=\"pass\">&#10003; pass\u003c/td>\u003ctd>31 ms\u003c/td>\u003c/tr>\n    \u003ctr>\u003ctd>drops nothing when the session is idle\u003c/td>\u003ctd class=\"fail\">&#10007; fail\u003c/td>\u003ctd>6 ms\u003c/td>\u003c/tr>\n   \u003c/table>\u003c/div>\n\n   \u003ch2>How a reload flows now\u003c/h2>\n   \u003cdiv class=\"fig\" data-pin=\"mermaid\">\n    \u003cdiv class=\"hd\">\u003cspan>mermaid\u003c/span>\u003cspan>\u003cbutton data-src data-pin=\"mermaid-source\">Source\u003c/button> \u003cbutton data-copy>Copy\u003c/button>\u003c/span>\u003c/div>\n    \u003cdiv class=\"body\">\u003csvg width=\"440\" height=\"70\" viewBox=\"0 0 440 70\" font-family=\"system-ui\" font-size=\"11\">\n     \u003cg fill=\"none\" stroke=\"var(--accent)\" stroke-width=\"1.2\">\u003crect x=\"4\" y=\"20\" width=\"90\" height=\"30\" rx=\"6\" fill=\"color-mix(in srgb,var(--accent) 12%,transparent)\"/>\u003crect x=\"128\" y=\"20\" width=\"90\" height=\"30\" rx=\"6\" fill=\"color-mix(in srgb,var(--teal) 12%,transparent)\" stroke=\"var(--teal)\"/>\u003crect x=\"252\" y=\"20\" width=\"90\" height=\"30\" rx=\"6\" fill=\"color-mix(in srgb,var(--violet) 12%,transparent)\" stroke=\"var(--violet)\"/>\u003crect x=\"376\" y=\"20\" width=\"60\" height=\"30\" rx=\"6\" fill=\"color-mix(in srgb,var(--green) 12%,transparent)\" stroke=\"var(--green)\"/>\n     \u003cpath d=\"M94 35h30M218 35h30M342 35h30\" stroke=\"var(--muted)\" marker-end=\"url(#ar)\"/>\u003c/g>\n     \u003cdefs>\u003cmarker id=\"ar\" viewBox=\"0 0 6 6\" refX=\"5\" refY=\"3\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto\">\u003cpath d=\"M0 0L6 3L0 6z\" fill=\"var(--muted)\"/>\u003c/marker>\u003c/defs>\n     \u003cg fill=\"var(--text)\" text-anchor=\"middle\">\u003ctext x=\"49\" y=\"39\">loadTurns\u003c/text>\u003ctext x=\"173\" y=\"39\">mergeProse\u003c/text>\u003ctext x=\"297\" y=\"39\">Prose blocks\u003c/text>\u003ctext x=\"406\" y=\"39\">render\u003c/text>\u003c/g>\u003c/svg>\u003c/div>\n    \u003cpre class=\"src\">flowchart LR\n  A[loadTurns] --&gt; B[mergeProse]\n  B --&gt; C[Prose blocks]\n  C --&gt; D[render]\u003c/pre>\n   \u003c/div>\n\n   \u003cp data-pin=\"math-inline\">Merging is a single fold, so reload cost is \u003cspan class=\"math-i\">O(n)\u003c/span> in the number of items, and a $5 or $10 price in prose stays text.\u003c/p>\n   \u003cdiv class=\"math-b\" data-pin=\"math-block\">T\u003csub>reload\u003c/sub> = &Sigma;\u003csub>i=1\u003c/sub>\u003csup>n\u003c/sup> c\u003csub>merge\u003c/sub>(item\u003csub>i\u003c/sub>) &asymp; n &middot; 0.4 &micro;s\u003c/div>\n\n   \u003cdetails class=\"disc\" data-pin=\"details\">\u003csummary>Why not keep partial items out of the saved file?\u003c/summary>\n    \u003cp style=\"margin:4px 0 0\">Saving them is what lets a crash mid-reply recover the text. Dropping them would trade one data-loss bug for another. \u003cmark>The merge keeps both.\u003c/mark>\u003c/p>\u003c/details>\n\n   \u003ch4>Session sizes\u003c/h4>\n   \u003cdiv class=\"tbl\" data-pin=\"csv-fence\">\u003ctable>\n    \u003ctr>\u003cth>session\u003c/th>\u003cth>items\u003c/th>\u003cth>partial\u003c/th>\u003cth>reload_ms\u003c/th>\u003c/tr>\n    \u003ctr>\u003ctd>brain-chat\u003c/td>\u003ctd>1,284\u003c/td>\u003ctd>3\u003c/td>\u003ctd>11\u003c/td>\u003c/tr>\n    \u003ctr>\u003ctd>avatar-pr\u003c/td>\u003ctd>402\u003c/td>\u003ctd>1\u003c/td>\u003ctd>4\u003c/td>\u003c/tr>\n    \u003ctr>\u003ctd>qa-loop\u003c/td>\u003ctd>6,910\u003c/td>\u003ctd>12\u003c/td>\u003ctd>58\u003c/td>\u003c/tr>\n   \u003c/table>\u003c/div>\n\n   \u003cdiv class=\"code\" data-pin=\"json-fence\">\n    \u003cdiv class=\"hd\">\u003cspan>json\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\n    \u003cdiv class=\"json\">\u003cdetails open>\u003csummary>{ 3 keys }\u003c/summary>\n     \u003cdiv class=\"row\">\u003cspan class=\"kk\">\"id\"\u003c/span>: \u003cspan class=\"s\">\"p1\"\u003c/span>,\u003c/div>\n     \u003cdiv class=\"row\">\u003cspan class=\"kk\">\"partial\"\u003c/span>: \u003cspan class=\"k\">true\u003c/span>,\u003c/div>\n     \u003cdetails>\u003csummary>\u003cspan class=\"kk\">\"chunks\"\u003c/span>: [ 4 items ]\u003c/summary>\u003cdiv class=\"row\">\u003cspan class=\"s\">\"The bug\"\u003c/span>, \u003cspan class=\"s\">\" is in\"\u003c/span>, \u003cspan class=\"s\">\" turns\"\u003c/span>, \u003cspan class=\"s\">\".ts\"\u003c/span>\u003c/div>\u003c/details>\n    \u003c/details>\u003c/div>\n   \u003c/div>\n\n   \u003cdiv class=\"fig\" data-pin=\"chart-fence\">\n    \u003cdiv class=\"hd\">\u003cspan>chart · reload time by session\u003c/span>\u003cspan>\u003cbutton data-src>Source\u003c/button>\u003c/span>\u003c/div>\n    \u003cdiv class=\"body\">\u003csvg width=\"380\" height=\"110\" viewBox=\"0 0 380 110\" font-family=\"system-ui\" font-size=\"10.5\">\n     \u003cg fill=\"var(--muted)\">\u003ctext x=\"0\" y=\"24\">brain-chat\u003c/text>\u003ctext x=\"0\" y=\"54\">avatar-pr\u003c/text>\u003ctext x=\"0\" y=\"84\">qa-loop\u003c/text>\u003c/g>\n     \u003crect x=\"70\" y=\"14\" width=\"56\" height=\"14\" rx=\"3\" fill=\"var(--accent)\"/>\u003crect x=\"70\" y=\"44\" width=\"20\" height=\"14\" rx=\"3\" fill=\"var(--teal)\"/>\u003crect x=\"70\" y=\"74\" width=\"290\" height=\"14\" rx=\"3\" fill=\"var(--violet)\"/>\n     \u003cg fill=\"var(--text)\">\u003ctext x=\"132\" y=\"25\">11 ms\u003c/text>\u003ctext x=\"96\" y=\"55\">4 ms\u003c/text>\u003ctext x=\"300\" y=\"85\" fill=\"#fff\">58 ms\u003c/text>\u003c/g>\u003c/svg>\u003c/div>\n    \u003cpre class=\"src\">{\"type\":\"bar\",\"x\":\"session\",\"y\":\"reload_ms\",\"data\":\"session-sizes\"}\u003c/pre>\n   \u003c/div>\n\n   \u003cp>Screenshot from the reload check, and the upstream \u003cspan class=\"chip remote\" data-pin=\"remote-image\">&#128279; image: status.example.com/badge.png\u003c/span>:\u003c/p>\n   \u003cdiv class=\"img\" data-pin=\"local-image\">\u003csvg width=\"360\" height=\"120\" viewBox=\"0 0 360 120\">\u003crect width=\"360\" height=\"120\" fill=\"var(--rail)\"/>\u003crect x=\"12\" y=\"12\" width=\"336\" height=\"18\" rx=\"4\" fill=\"var(--sel)\"/>\u003crect x=\"12\" y=\"40\" width=\"220\" height=\"10\" rx=\"3\" fill=\"var(--border)\"/>\u003crect x=\"12\" y=\"58\" width=\"280\" height=\"10\" rx=\"3\" fill=\"var(--border)\"/>\u003crect x=\"12\" y=\"76\" width=\"160\" height=\"10\" rx=\"3\" fill=\"var(--border)\"/>\u003ctext x=\"20\" y=\"25\" font-size=\"10\" fill=\"var(--muted)\" font-family=\"system-ui\">reload-check.png\u003c/text>\u003c/svg>\u003c/div>\n   \u003cdiv class=\"cap\">.quirk/screenshots/reload-check.png\u003c/div>\n\n   \u003cp>H\u003csub>2\u003c/sub>O-style sub and x\u003csup>2\u003c/sup> superscript work too, and :rocket: becomes &#128640;.\u003c/p>\n\n   \u003cdiv class=\"footnotes\" data-pin=\"footnotes\">\u003col>\u003cli id=\"fn1\">Partial items were added so a crash mid-reply keeps its text. &#8617;\u003c/li>\u003c/ol>\u003c/div>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\n \u003cdiv data-state=\"streaming\">\u003cdiv class=\"win\">\n  \u003cdiv class=\"turn-user\">Why does reloading a session drop the half-finished reply?\u003c/div>\n  \u003cdiv class=\"who\">Claude Code · opus · writing&#8230;\u003c/div>\n  \u003cdiv class=\"prose\">\n   \u003ch1>Session reload drops partial replies\u003c/h1>\n   \u003cp data-pin=\"repaired-bold\">The reload path replaces partial prose items, which is \u003cstrong>the root cau\u003c/strong>\u003c/p>\n   \u003cdiv class=\"note-strip\">Above: the reply so far ends inside \u003ccode class=\"inl\">**the root cau\u003c/code>. It already shows bold, with no stray asterisks.\u003c/div>\n   \u003cdiv class=\"code\" data-pin=\"open-fence\">\n    \u003cdiv class=\"hd\">\u003cspan>turns.ts\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\n    \u003cpre>\u003cspan class=\"l\">export function mergeProse(prev: ProseItem[], next: ProseItem) {\u003c/span>\u003cspan class=\"l\">  const last = prev.at(-1)\u003c/span>\u003cspan class=\"l\">  if (last?.partial &amp;&amp; last.id === next.id) {\u003cspan class=\"caret\" data-pin=\"caret\">&#9613;\u003c/span>\u003c/span>\u003c/pre>\n   \u003c/div>\n   \u003cdiv class=\"note-strip\">An open fence already has its header and stays plain; colour fades in when the closing fence arrives. Line numbers appear once it passes 8 lines.\u003c/div>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\n \u003cdiv data-state=\"scrolled-up\">\u003cdiv class=\"win\">\n  \u003cdiv class=\"note-strip\">You scrolled up to reread while the agent keeps writing. The view holds still; the pill jumps to the newest text.\u003c/div>\n  \u003cdiv class=\"scrollbox\" id=\"scrollbox\">\n   \u003cdiv class=\"prose\">\n    \u003ch2>What changed\u003c/h2>\n    \u003cul class=\"tasks\">\u003cli class=\"done\">\u003cspan class=\"cb on\">&#10003;\u003c/span>\u003cspan class=\"t\">Merge partial items on reload\u003c/span>\u003c/li>\u003cli>\u003cspan class=\"cb\">\u003c/span>\u003cspan class=\"t\">Backfill old sessions\u003c/span>\u003c/li>\u003c/ul>\n    \u003cdiv class=\"alert a-note\">\u003cb>&#9432; Note\u003c/b>Your reading position is held here even as the code block below grows.\u003c/div>\n    \u003cp style=\"height:500px;color:var(--muted)\">&#8942; earlier output &#8942;\u003c/p>\n    \u003cp id=\"latest\">Now running the reload test suite\u003cspan class=\"caret\">&#9613;\u003c/span>\u003c/p>\n   \u003c/div>\n   \u003cbutton class=\"pill\" data-jump data-pin=\"jump-pill\">&#8595; Jump to latest\u003c/button>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\n \u003cdiv data-state=\"render-error\">\u003cdiv class=\"win\">\n  \u003cdiv class=\"who\">Claude Code · opus\u003c/div>\n  \u003cdiv class=\"prose\">\n   \u003cp>Here's the flow, though the diagram has a syntax error:\u003c/p>\n   \u003cdiv class=\"rerr\" data-pin=\"mermaid-error\">\u003cdiv class=\"msg\">Couldn't draw this diagram: line 2, unexpected \"--&gt;&gt;\". Showing the source.\u003c/div>\n    \u003cpre>flowchart LR\n  A[loadTurns] --&gt;&gt; B[mergeProse]\u003c/pre>\u003c/div>\n   \u003cp>And the cost formula:\u003c/p>\n   \u003cdiv class=\"rerr\" data-pin=\"math-error\">\u003cdiv class=\"msg\">Couldn't typeset: undefined control sequence \\sume\u003c/div>\u003cpre>T = \\sume_{i=1}^n c_i\u003c/pre>\u003c/div>\n   \u003cp>An unknown fence language still gets the header and copy, just without colour:\u003c/p>\n   \u003cdiv class=\"code\">\u003cdiv class=\"hd\">\u003cspan>zig-ish\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\u003cpre>\u003cspan class=\"l\">pub fn merge(prev: []Item) !void {}\u003c/span>\u003c/pre>\u003c/div>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\n \u003cdiv data-state=\"light\">\u003cdiv class=\"win qk light\" id=\"lightwrap\" style=\"min-height:auto;border-radius:10px\">\u003c/div>\u003c/div>\n\u003c/section>\n\n\u003c!-- ============ Agent-drawn view ============ -->\n\u003csection data-screen=\"view-card\">\n \u003cdiv data-state=\"default\">\u003cdiv class=\"win\">\n  \u003cdiv class=\"note-strip\">A quirky.view card the agent drew. Its markdown node uses the same renderer and strict rules as chat.\u003c/div>\n  \u003cdiv class=\"viewcard\" data-pin=\"view-card\">\n   \u003cdiv class=\"vh\">\u003cspan>Release checklist · drawn by Codex\u003c/span>\u003cspan>view\u003c/span>\u003c/div>\n   \u003cdiv class=\"vb prose\">\n    \u003ch2>v2026.11.17 release\u003c/h2>\n    \u003cdiv class=\"alert a-imp\" data-pin=\"view-alert\">\u003cb>&#10070; Important\u003c/b>Signing is still manual until the m7 cert lands.\u003c/div>\n    \u003cul class=\"tasks\">\u003cli class=\"done\">\u003cspan class=\"cb on\">&#10003;\u003c/span>\u003cspan class=\"t\">Changelog written\u003c/span>\u003c/li>\u003cli>\u003cspan class=\"cb\">\u003c/span>\u003cspan class=\"t\">Notarize the .app\u003c/span>\u003c/li>\u003c/ul>\n    \u003cdiv class=\"code\">\u003cdiv class=\"hd\">\u003cspan>bash\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\u003cpre>\u003cspan class=\"l\">bun run release \u003cspan class=\"s\">--channel\u003c/span> stable\u003c/span>\u003c/pre>\u003c/div>\n    \u003cp data-pin=\"view-html-escaped\">Raw HTML from the agent shows as text: \u003ccode class=\"inl\">&lt;img src=\"https://x.io/p.gif\"&gt;\u003c/code>\u003c/p>\n   \u003c/div>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\u003c/section>\n\n\u003c!-- ============ Editor preview ============ -->\n\u003csection data-screen=\"editor-preview\">\n \u003cdiv data-state=\"default\">\u003cdiv class=\"win\" style=\"max-width:980px\">\n  \u003cdiv class=\"note-strip\">The editor's markdown preview for a file you opened. Same look; your own file's HTML is allowed after cleaning.\u003c/div>\n  \u003cdiv class=\"editor\">\n   \u003cdiv class=\"src\" data-pin=\"editor-source\">&lt;p align=\"center\"&gt;&lt;img src=\"docs/logo.svg\" width=\"80\"&gt;&lt;/p&gt;\n\n# quirky\n\n&gt; [!NOTE]\n&gt; Requires macOS 15.\n\n```ts\nimport { start } from './app'\n```\n\n$$E = mc^2$$\u003c/div>\n   \u003cdiv class=\"out prose\" data-pin=\"editor-output\">\n    \u003cp style=\"text-align:center\" data-pin=\"editor-raw-html\">\u003csvg width=\"80\" height=\"40\" viewBox=\"0 0 80 40\">\u003crect width=\"80\" height=\"40\" rx=\"8\" fill=\"var(--accent)\"/>\u003ctext x=\"40\" y=\"25\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"13\" font-family=\"system-ui\">quirky\u003c/text>\u003c/svg>\u003c/p>\n    \u003ch1>quirky\u003c/h1>\n    \u003cdiv class=\"alert a-note\">\u003cb>&#9432; Note\u003c/b>Requires macOS 15.\u003c/div>\n    \u003cdiv class=\"code\">\u003cdiv class=\"hd\">\u003cspan>ts\u003c/span>\u003cbutton data-copy>&#10697; Copy\u003c/button>\u003c/div>\u003cpre>\u003cspan class=\"l\">\u003cspan class=\"k\">import\u003c/span> { start } \u003cspan class=\"k\">from\u003c/span> \u003cspan class=\"s\">'./app'\u003c/span>\u003c/span>\u003c/pre>\u003c/div>\n    \u003cdiv class=\"math-b\">E = mc\u003csup>2\u003c/sup>\u003c/div>\n   \u003c/div>\n  \u003c/div>\n \u003c/div>\u003c/div>\n\u003c/section>\n\n\u003cdiv class=\"dlg-back\" id=\"dlg\">\u003cdiv class=\"dlg\" data-pin=\"link-confirm\">\u003ch3>Open link?\u003c/h3>\u003cdiv class=\"url\" id=\"dlg-url\">\u003c/div>\u003cdiv class=\"btns\">\u003cbutton id=\"dlg-no\">Cancel\u003c/button>\u003cbutton class=\"primary\" id=\"dlg-yes\">Open in browser\u003c/button>\u003c/div>\u003c/div>\u003c/div>\n\u003cdiv class=\"toast\" id=\"toast\">\u003c/div>\n\u003c/div>\n\u003cscript>\n(function(){\n  const lw=document.getElementById('lightwrap');\n  lw.innerHTML=document.getElementById('showcase').innerHTML;\n  lw.querySelectorAll('[data-pin]').forEach(e=>e.setAttribute('data-pin','light-'+e.getAttribute('data-pin')));\n  function toast(t){const el=document.getElementById('toast');el.textContent=t;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',1800)}\n  function route(){\n    const id=(location.hash.replace(/^#\\//,'')||'transcript').split('/')[0];\n    const screens=[...document.querySelectorAll('[data-screen]')];\n    const known=screens.some(s=>s.dataset.screen===id);\n    screens.forEach(s=>s.classList.toggle('active',s.dataset.screen===(known?id:'transcript')));\n    document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('on',a.dataset.nav===(known?id:'transcript')));\n    if(!known) toast('Not in this mock');\n  }\n  addEventListener('hashchange',route);route();\n  document.addEventListener('click',e=>{\n    const t=e.target.closest('[data-copy],[data-showall],[data-src],[data-jump],a[data-href],.chip');\n    if(!t) return;\n    if(t.matches('[data-copy]')){const o=t.innerHTML;t.textContent='✓ Copied';setTimeout(()=>t.innerHTML=o,1200)}\n    else if(t.matches('[data-showall]')){const c=t.closest('.collapsible');const closed=c.classList.toggle('closed');t.textContent=closed?'Show all 23 lines':'Show less'}\n    else if(t.matches('[data-src]')){const f=t.closest('.fig');const on=f.classList.toggle('showsrc');t.textContent=on?'Diagram':'Source'}\n    else if(t.matches('[data-jump]')){const b=document.getElementById('scrollbox');b.scrollTo({top:b.scrollHeight,behavior:'smooth'})}\n    else if(t.matches('a[data-href]')){e.preventDefault();document.getElementById('dlg-url').textContent=t.dataset.href;document.getElementById('dlg').style.display='grid'}\n    else if(t.matches('.chip.remote')){toast('Remote images never load; this opens the URL after the link prompt')}\n    else if(t.matches('.chip')){toast('Not in this mock: opens chat/turns.ts at line 119 in the editor')}\n  });\n  document.getElementById('dlg-no').onclick=()=>document.getElementById('dlg').style.display='none';\n  document.getElementById('dlg-yes').onclick=()=>{document.getElementById('dlg').style.display='none';toast('Not in this mock: opens in your browser')};\n})();\n\u003c/script>\n\u003c/body>\n\u003c/html>\n"}</script>
+<script>/**
+ * Pure logic for the mock review harness. Loaded two ways: inlined as a classic script in
+ * mock-harness.html (exposes `QuirkMockCore`) and `require`d by app/scripts/check-harness.ts.
+ * No DOM access, no network, so every rule here is testable from Node.
+ */
+(function (root) {
+  'use strict'
+
+  var PIN_ID = /^mock:v([1-9][0-9]{0,3})\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})\/([a-z0-9][a-z0-9._-]{0,79})\/x([0-9]{1,3})-y([0-9]{1,3})$/
+
+  function clampPct(n) {
+    var v = Math.round(Number(n))
+    if (!isFinite(v)) return 0
+    return Math.max(0, Math.min(100, v))
+  }
+
+  /** Parses a pin block id into its parts, or returns null for anything that is not exactly a pin id. */
+  function parsePinId(id) {
+    if (typeof id !== 'string') return null
+    var m = PIN_ID.exec(id)
+    if (!m) return null
+    var x = Number(m[5])
+    var y = Number(m[6])
+    if (x > 100 || y > 100) return null
+    return { version: Number(m[1]), screen: m[2], state: m[3], pin: m[4], x: x, y: y }
+  }
+
+  /** Builds a pin block id; offsets are rounded and clamped to 0-100, anything else invalid throws. */
+  function formatPinId(p) {
+    var id = 'mock:v' + p.version + '/' + p.screen + '/' + p.state + '/' + p.pin + '/x' + clampPct(p.x) + '-y' + clampPct(p.y)
+    if (!parsePinId(id)) throw new Error('invalid pin id parts: ' + id)
+    return id
+  }
+
+  /**
+   * Decides how a pin is shown while `viewed` is on screen.
+   *   draw        its own version: drawn at the element plus offset
+   *   reanchored  older version and the element key still exists: drawn there with a "from vN" badge
+   *   orphaned    older version and the key is gone: listed, never drawn on another element
+   *   hidden      newer than the version viewed (or than the latest)
+   * `keys` is the set (or array) of data-pin keys present in the pin's screen and state in the viewed version.
+   */
+  function placePin(pin, viewed, latest, keys) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var present = keys instanceof Set ? keys.has(pin.pin) : Array.isArray(keys) && keys.indexOf(pin.pin) !== -1
+    return present ? 'reanchored' : 'orphaned'
+  }
+
+  /**
+   * Placement of a pin from the viewed version's own screen inventory. A pin of an older version whose
+   * screen or state the viewed version no longer lists is orphaned. When the screen and state exist,
+   * `keysFor(screen, state)` returns the data-pin keys rendered there (array or Set), or null when that
+   * screen is not rendered right now, which leaves the pin `unknown`: neither orphaned nor drawn.
+   */
+  function classifyPin(pin, viewed, latest, doc, keysFor) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var screen = screenList(doc).filter(function (s) { return s.id === pin.screen })[0]
+    if (!screen || !Array.isArray(screen.states) || screen.states.indexOf(pin.state) === -1) return 'orphaned'
+    var keys = keysFor(pin.screen, pin.state)
+    if (keys === null || keys === undefined) return 'unknown'
+    return placePin(pin, viewed, latest, keys)
+  }
+
+  /**
+   * The data-pin keys a pin's screen and state offers for classification, as a Set, or null for "cannot
+   * tell yet". `keys` is the array of keys found in the viewed document, or null when no element for the
+   * screen exists there. A missing screen element is only evidence of absence once the viewed document
+   * has loaded and the pin's screen is the one on show; before that, or for another screen, it is unknown.
+   */
+  function viewedKeys(loaded, currentScreen, screenId, keys) {
+    if (keys !== null && keys !== undefined) return new Set(keys)
+    return loaded && currentScreen === screenId ? new Set() : null
+  }
+
+  /**
+   * The elements of a screen that carry data-pin for `state`: the screen element itself (when it has a
+   * data-pin) followed by its descendants. `descendants` is every `[data-pin]` node inside `scr`.
+   */
+  function pinNodes(scr, state, descendants) {
+    var all = [scr].concat(Array.prototype.slice.call(descendants))
+    return all.filter(function (p) {
+      if (p.getAttribute('data-pin') === null) return false
+      var st = p.closest('[data-state]')
+      if (!st || st === scr || !scr.contains(st)) return true
+      return !state || st.getAttribute('data-state') === state
+    })
+  }
+
+  function screenList(doc) {
+    if (Array.isArray(doc)) return doc
+    return doc && Array.isArray(doc.screens) ? doc.screens : []
+  }
+
+  function isKnownScreen(doc, id) {
+    return screenList(doc).some(function (s) { return s.id === id })
+  }
+
+  /** Inventory screen ids not yet visited, in inventory order. */
+  function unvisitedScreens(doc, visited) {
+    var seen = visited instanceof Set ? visited : new Set(visited || [])
+    return screenList(doc)
+      .map(function (s) { return s.id })
+      .filter(function (id) { return !seen.has(id) })
+  }
+
+  /** Elements with no repo component while the repo has a UI layer. */
+  function deriveGaps(doc) {
+    if (!doc || doc.ui_layer !== true) return []
+    var gaps = []
+    screenList(doc).forEach(function (s) {
+      ;(s.elements || []).forEach(function (e) {
+        if (e.component === null) gaps.push({ screen: s.id, pin: e.pin, label: e.label })
+      })
+    })
+    return gaps
+  }
+
+  /** Screen id named by `#/<id>`; an empty hash is the first screen, an unknown id is returned as is. */
+  function currentScreenId(hash, doc) {
+    var h = String(hash || '').replace(/^#/, '').replace(/^\//, '')
+    var id = h.split(/[/?]/)[0]
+    try {
+      id = decodeURIComponent(id)
+    } catch (e) {
+      // keep the raw text
+    }
+    if (id) return id
+    var screens = screenList(doc)
+    return screens.length ? screens[0].id : null
+  }
+
+  var RAW_TEXT = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1 }
+
+  /**
+   * Inserts <base href="about:srcdoc"> as the first child of the mock's real <head>. Comments, raw-text
+   * elements (script, style, ...) and quoted attribute values are skipped, so `<head>` text inside them is
+   * never mistaken for the head. With no head before the body, one is created right after <html>, else
+   * after the doctype, else at the start.
+   */
+  function withBase(html) {
+    var base = '<base href="about:srcdoc">'
+    var len = html.length
+    var i = 0
+    var doctypeEnd = 0
+    var htmlEnd = -1
+    var sawTag = false
+    while (i < len) {
+      var lt = html.indexOf('<', i)
+      if (lt === -1) break
+      var next = html.charAt(lt + 1)
+      if (html.substr(lt, 4) === '<!--') {
+        var close = html.indexOf('-->', lt + 2)
+        i = close === -1 ? len : close + 3
+        continue
+      }
+      if (next === '!' || next === '?' || next === '/') {
+        var gt = html.indexOf('>', lt + 2)
+        if (next === '!' && !sawTag && gt !== -1 && /^<!doctype/i.test(html.substr(lt, 9))) doctypeEnd = gt + 1
+        i = gt === -1 ? len : gt + 1
+        continue
+      }
+      if (!/[a-zA-Z]/.test(next)) {
+        i = lt + 1
+        continue
+      }
+      var j = lt + 1
+      while (j < len && !/[\s/>]/.test(html.charAt(j))) j += 1
+      var name = html.slice(lt + 1, j).toLowerCase()
+      while (j < len && html.charAt(j) !== '>') {
+        if (html.charAt(j) === '=') {
+          j += 1
+          while (j < len && /\s/.test(html.charAt(j))) j += 1
+          var q = html.charAt(j)
+          if (q === '"' || q === "'") {
+            var endQuote = html.indexOf(q, j + 1)
+            j = endQuote === -1 ? len : endQuote + 1
+          }
+          continue
+        }
+        j += 1
+      }
+      var tagEnd = j < len ? j + 1 : len
+      sawTag = true
+      if (name === 'head') return html.slice(0, tagEnd) + base + html.slice(tagEnd)
+      if (name === 'body' || name === 'frameset') break
+      if (name === 'html' && htmlEnd === -1) htmlEnd = tagEnd
+      i = tagEnd
+      if (RAW_TEXT[name] === 1) {
+        var closer = new RegExp('</' + name + '(?=[\\s/>])', 'ig')
+        closer.lastIndex = tagEnd
+        var found = closer.exec(html)
+        i = found ? found.index : len
+      }
+    }
+    var pos = htmlEnd !== -1 ? htmlEnd : doctypeEnd
+    return html.slice(0, pos) + '<head>' + base + '</head>' + html.slice(pos)
+  }
+
+  /**
+   * Whether the version registered under `boot.version` was replaced after this page was served. Only
+   * app mode compares, and only when both sides carry a revision.
+   */
+  function isStale(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.mocks || !snap.mocks.revisions) return false
+    var current = snap.mocks.revisions[String(boot.version)]
+    return typeof boot.revision === 'string' && typeof current === 'string' && current !== boot.revision
+  }
+
+  /** Whether comment mode and the verdict bar are allowed for this boot and snapshot. */
+  function canReview(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.step) return false
+    if (isStale(boot, snap)) return false
+    if (snap.step_state !== 'open') return false
+    if (snap.step.kind !== 'mock-review' || snap.step.version !== boot.version) return false
+    return !!snap.mocks && snap.mocks.latest === boot.version
+  }
+
+  /** Integer percentage offset of a point inside a box, clamped to 0-100. */
+  function offsetPct(rect, clientX, clientY) {
+    if (!rect.width || !rect.height) return { x: 0, y: 0 }
+    return {
+      x: clampPct(((clientX - rect.left) / rect.width) * 100),
+      y: clampPct(((clientY - rect.top) / rect.height) * 100),
+    }
+  }
+
+  function lastAgentMessage(thread) {
+    var msgs = (thread && thread.messages) || []
+    for (var i = msgs.length - 1; i >= 0; i -= 1) if (msgs[i].from === 'agent') return msgs[i]
+    return null
+  }
+
+  var api = {
+    parsePinId: parsePinId,
+    formatPinId: formatPinId,
+    placePin: placePin,
+    classifyPin: classifyPin,
+    viewedKeys: viewedKeys,
+    pinNodes: pinNodes,
+    isStale: isStale,
+    isKnownScreen: isKnownScreen,
+    unvisitedScreens: unvisitedScreens,
+    deriveGaps: deriveGaps,
+    currentScreenId: currentScreenId,
+    withBase: withBase,
+    canReview: canReview,
+    offsetPct: offsetPct,
+    lastAgentMessage: lastAgentMessage,
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  else root.QuirkMockCore = api
+})(typeof globalThis !== 'undefined' ? globalThis : this)
+</script>
+<script>
+(function () {
+  'use strict'
+  var Core = window.QuirkMockCore
+  var bootNode = document.querySelector('script[type="application/json"]')
+  var boot = null
+  try { boot = JSON.parse(bootNode.textContent) } catch (e) { boot = null }
+  var $ = function (id) { return document.getElementById(id) }
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag)
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k]
+      if (v === null || v === undefined || v === false) return
+      if (k === 'class') n.className = v
+      else if (k === 'text') n.textContent = v
+      else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), v)
+      else n.setAttribute(k, v === true ? '' : v)
+    })
+    ;(kids || []).forEach(function (c) {
+      if (c === null || c === undefined || c === false) return
+      n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c)
+    })
+    return n
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild) }
+
+  if (!boot || !boot.screens) {
+    document.body.insertBefore(el('p', { text: 'This page needs a mock to review. It was opened without one.', style: 'padding:16px' }), document.body.firstChild)
+    return
+  }
+
+  var appMode = boot.mode === 'app' && !!boot.token
+  var screens = boot.screens.screens || []
+  var uiLayer = boot.screens.ui_layer === true
+  var changed = new Set(boot.changed || [])
+  var gaps = Core.deriveGaps(boot.screens)
+  var frame = $('mock-frame')
+  var frameBox = $('frame-box')
+
+  var S = {
+    mode: 'interact',
+    viewport: 'desktop',
+    showChanges: false,
+    screenId: Core.currentScreenId('', boot.screens),
+    states: {},
+    visited: new Set(),
+    marks: new Set(),
+    snap: null,
+    paused: false,
+    openThread: null,
+    note: null,
+    panel: null,
+    changesText: '',
+    submitting: false,
+    verdictError: '',
+    notice: '',
+    noticeError: false,
+  }
+  var inner = null
+  var hoverEl = null
+  var dotPos = {}
+  var noticeTimer = null
+  var frameTick = 0
+
+  var visitedKey = 'quirk-mock-visited-v' + boot.version
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(visitedKey) || '[]')
+    if (Array.isArray(saved)) saved.forEach(function (id) { S.visited.add(id) })
+  } catch (e) { /* storage can be unavailable; visited then lives for this page only */ }
+  function saveVisited() {
+    try { sessionStorage.setItem(visitedKey, JSON.stringify(Array.from(S.visited))) } catch (e) { /* see above */ }
+  }
+
+  // ---- derived values -------------------------------------------------------
+  function screenById(id) {
+    for (var i = 0; i < screens.length; i += 1) if (screens[i].id === id) return screens[i]
+    return null
+  }
+  function currentState() {
+    var s = screenById(S.screenId)
+    if (!s || !s.states || !s.states.length) return null
+    return S.states[s.id] || s.states[0]
+  }
+  function latestVersion() {
+    return S.snap && S.snap.mocks && S.snap.mocks.latest ? S.snap.mocks.latest : boot.latest
+  }
+  function versionList() {
+    var v = S.snap && S.snap.mocks && S.snap.mocks.versions ? S.snap.mocks.versions : boot.versions
+    return v && v.length ? v : [boot.version]
+  }
+  function canReview() { return Core.canReview(boot, S.snap) }
+  function staleVersion() { return Core.isStale(boot, S.snap) }
+  function readOnlyVersion() { return appMode && S.snap !== null && boot.version !== latestVersion() }
+
+  // ---- inner document lookups (attribute compares avoid selector escaping) ----
+  function findAttr(nodes, attr, value) {
+    for (var i = 0; i < nodes.length; i += 1) if (nodes[i].getAttribute(attr) === value) return nodes[i]
+    return null
+  }
+  function screenEl(id) {
+    return inner ? findAttr(inner.doc.querySelectorAll('[data-screen]'), 'data-screen', id) : null
+  }
+  function stateEls(scr) {
+    return Array.prototype.filter.call(scr.querySelectorAll('[data-state]'), function (e) { return e.closest('[data-screen]') === scr })
+  }
+  /** Elements keyed with data-pin in a screen and state, or null when the screen is not in the DOM. */
+  function pinEls(screenId, state) {
+    var scr = screenEl(screenId)
+    if (!scr) return null
+    var states = stateEls(scr)
+    if (states.length && state && !findAttr(states, 'data-state', state)) return []
+    return Core.pinNodes(scr, state, scr.querySelectorAll('[data-pin]'))
+  }
+  function visibleBox(node) {
+    var r = node.getBoundingClientRect()
+    return r.width > 0 || r.height > 0 ? r : null
+  }
+  function inventoryLabel(key) {
+    var s = screenById(S.screenId)
+    var elements = (s && s.elements) || []
+    for (var i = 0; i < elements.length; i += 1) {
+      if (elements[i].pin !== key) continue
+      if (uiLayer) return elements[i].component === null ? 'gap' : elements[i].component
+      return elements[i].label
+    }
+    return ''
+  }
+
+  // ---- pins -----------------------------------------------------------------
+  /** Every thread that is a pin, with its placement relative to the version on screen. */
+  function pinThreads() {
+    var out = []
+    var threads = (S.snap && S.snap.threads) || []
+    var n = 0
+    threads.forEach(function (t) {
+      var pin = Core.parsePinId(t.block_id)
+      if (!pin) return
+      n += 1
+      var placement = Core.classifyPin(pin, boot.version, latestVersion(), boot.screens, function (screenId, state) {
+        var els = pinEls(screenId, state)
+        return Core.viewedKeys(!!inner, S.screenId, screenId, els === null ? null : els.map(function (e) { return e.getAttribute('data-pin') }))
+      })
+      out.push({ n: n, thread: t, pin: pin, placement: placement })
+    })
+    return out.filter(function (p) { return p.placement !== 'hidden' })
+  }
+
+  function renderOverlay() {
+    var changesLayer = $('layer-changes')
+    var pinsLayer = $('layer-pins')
+    clear(changesLayer)
+    clear(pinsLayer)
+    dotPos = {}
+    if (!inner) return
+    if (S.showChanges) {
+      Array.prototype.forEach.call(inner.doc.querySelectorAll('[data-pin]'), function (node) {
+        if (!changed.has(node.getAttribute('data-pin'))) return
+        var r = visibleBox(node)
+        if (!r) return
+        changesLayer.appendChild(el('div', { class: 'box changed', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [el('span', { class: 'tag', text: 'changed' })]))
+      })
+    }
+    if (appMode) {
+      var state = currentState()
+      pinThreads().forEach(function (p) {
+        if (p.placement !== 'draw' && p.placement !== 'reanchored') return
+        if (p.pin.screen !== S.screenId || (state && p.pin.state !== state)) return
+        var els = pinEls(p.pin.screen, p.pin.state) || []
+        var target = null
+        for (var i = 0; i < els.length; i += 1) {
+          if (els[i].getAttribute('data-pin') === p.pin.pin && visibleBox(els[i])) { target = els[i]; break }
+        }
+        if (!target) return
+        var r = target.getBoundingClientRect()
+        var left = r.left + (p.pin.x / 100) * r.width
+        var top = r.top + (p.pin.y / 100) * r.height
+        dotPos[p.thread.id] = { left: left, top: top }
+        var cls = 'pin' + (p.thread.resolution ? ' resolved' : '') + (S.openThread === p.thread.id ? ' selected' : '')
+        pinsLayer.appendChild(el('button', {
+          type: 'button',
+          class: cls,
+          style: 'left:' + left + 'px;top:' + top + 'px',
+          'aria-label': 'Pin ' + p.n + (p.thread.resolution ? ' (resolved)' : ''),
+          onclick: function (ev) { ev.stopPropagation(); selectThread(p.thread.id, false) },
+          text: String(p.n),
+        }))
+      })
+    }
+    renderThreadPop()
+  }
+
+  function messageNode(m, isLastReply) {
+    return el('div', { class: 'msg ' + (m.from === 'agent' ? 'agent' : 'user') + (isLastReply ? ' last-reply' : '') }, [
+      el('span', { class: 'who', text: m.from === 'agent' ? 'Agent' : 'You' }),
+      el('span', { text: String(m.text) }),
+    ])
+  }
+  function threadBody(p) {
+    var reply = Core.lastAgentMessage(p.thread)
+    var wrap = el('div', { class: 'thread' })
+    if (p.thread.resolution) {
+      wrap.appendChild(el('div', { class: 'meta', text: 'Resolved' + (typeof p.thread.resolution === 'string' ? ': ' + p.thread.resolution : '') }))
+      if (reply) wrap.appendChild(messageNode(reply, true))
+      var rest = p.thread.messages.filter(function (m) { return m !== reply })
+      rest.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    } else {
+      p.thread.messages.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    }
+    return wrap
+  }
+
+  function renderThreadPop() {
+    var layer = $('layer-pop')
+    layer.querySelectorAll('.pop.thread-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    if (!S.openThread || !dotPos[S.openThread]) return
+    var p = pinThreads().filter(function (x) { return x.thread.id === S.openThread })[0]
+    if (!p) return
+    var at = dotPos[S.openThread]
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(at.left, boxW - 308))
+    var pop = el('div', { class: 'pop thread-pop', style: 'left:' + left + 'px;top:' + (at.top + 16) + 'px' }, [
+      el('h3', { text: 'Pin ' + p.n + ' on ' + p.pin.pin }),
+      el('div', { class: 'meta', text: p.placement === 'reanchored' ? 'Placed in v' + p.pin.version + ', shown on the same element here' : 'v' + p.pin.version }),
+      threadBody(p),
+      el('div', { class: 'row' }, [el('button', { type: 'button', text: 'Close', onclick: function () { S.openThread = null; renderOverlay(); renderRail() } })]),
+    ])
+    layer.appendChild(pop)
+  }
+
+  var noteShown = null
+  var noteUi = null
+  var NOTE_CLOSED_REASON = 'This review is no longer open for comments. Your text is kept so you can copy it.'
+
+  function syncNoteGate() {
+    if (!noteUi) return
+    var open = canReview()
+    noteUi.send.disabled = !open || noteUi.busy
+    if (!open) noteUi.err.textContent = NOTE_CLOSED_REASON
+    else if (noteUi.err.textContent === NOTE_CLOSED_REASON) noteUi.err.textContent = ''
+  }
+
+  function renderNote() {
+    var layer = $('layer-pop')
+    if (S.note && S.note === noteShown && layer.querySelector('.pop.note-pop')) { syncNoteGate(); return }
+    noteUi = null
+    layer.querySelectorAll('.pop.note-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    noteShown = S.note
+    if (!S.note) return
+    var note = S.note
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(note.x, boxW - 308))
+    var area = el('textarea', { 'aria-label': 'Comment', placeholder: 'What should change here?' })
+    var err = el('span', { class: 'err' })
+    var send = el('button', { type: 'button', class: 'primary', text: 'Send' })
+    var cancel = el('button', { type: 'button', text: 'Cancel', onclick: function () { S.note = null; renderNote() } })
+    var ui = { send: send, err: err, busy: false }
+    send.addEventListener('click', function () {
+      if (!canReview()) { syncNoteGate(); return }
+      var text = area.value.trim()
+      if (!text) { err.textContent = 'Write a comment first.'; return }
+      ui.busy = true
+      send.disabled = true
+      cancel.disabled = true
+      err.textContent = ''
+      postEvent('comment', { block_id: note.blockId, text: text }, {}).then(function (result) {
+        ui.busy = false
+        if (result === 'ok') {
+          S.note = null
+          renderNote()
+          setNotice('Comment sent.', false)
+          pollNow()
+        } else {
+          cancel.disabled = false
+          err.textContent = 'Could not send. Try again.'
+          syncNoteGate()
+        }
+      })
+    })
+    var pop = el('div', { class: 'pop note-pop', style: 'left:' + left + 'px;top:' + (note.y + 10) + 'px', role: 'dialog', 'aria-label': 'New comment' }, [
+      el('h3', { text: 'Comment on ' + note.label }),
+      area,
+      el('div', { class: 'row' }, [err, cancel, send]),
+    ])
+    layer.appendChild(pop)
+    noteUi = ui
+    syncNoteGate()
+    area.focus()
+  }
+
+  function selectThread(id, navigate) {
+    S.openThread = S.openThread === id && !navigate ? null : id
+    var p = pinThreads().filter(function (x) { return x.thread.id === id })[0]
+    if (navigate && p && inner && p.placement !== 'orphaned') {
+      var s = screenById(p.pin.screen)
+      if (s && s.states.indexOf(p.pin.state) !== -1) S.states[s.id] = p.pin.state
+      if (p.pin.screen !== S.screenId) {
+        goToScreen(p.pin.screen)
+        S.openThread = id
+      }
+    }
+    renderAll()
+  }
+
+  // ---- hover and click in the mock -----------------------------------------
+  function commentAllowed() { return S.mode === 'comment' && canReview() }
+
+  function onInnerMove(ev) {
+    if (!commentAllowed()) return clearHover()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (node === hoverEl) return
+    hoverEl = node
+    paintHover()
+  }
+  function clearHover() {
+    if (!hoverEl) return
+    hoverEl = null
+    paintHover()
+  }
+  function paintHover() {
+    var layer = $('layer-hover')
+    clear(layer)
+    if (!hoverEl || !hoverEl.isConnected) return
+    var r = visibleBox(hoverEl)
+    if (!r) return
+    var label = inventoryLabel(hoverEl.getAttribute('data-pin'))
+    layer.appendChild(el('div', { class: 'box hover', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [label ? el('span', { class: 'tag', text: label }) : null]))
+  }
+  function onInnerClick(ev) {
+    if (!commentAllowed()) return
+    ev.preventDefault()
+    ev.stopPropagation()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (!node) {
+      setNotice('This element has no pin key, so it cannot take a comment. Hover to see which elements can.', true)
+      return
+    }
+    var state = currentState()
+    if (!screenById(S.screenId) || !state) {
+      setNotice('Open a screen from the rail first. Comments need a screen and state from the inventory.', true)
+      return
+    }
+    var r = node.getBoundingClientRect()
+    var off = Core.offsetPct(r, ev.clientX, ev.clientY)
+    var blockId
+    try {
+      blockId = Core.formatPinId({ version: boot.version, screen: S.screenId, state: state, pin: node.getAttribute('data-pin'), x: off.x, y: off.y })
+    } catch (e) {
+      setNotice('This element\'s pin key is not valid, so it cannot take a comment.', true)
+      return
+    }
+    S.openThread = null
+    S.note = { blockId: blockId, x: ev.clientX, y: ev.clientY, label: inventoryLabel(node.getAttribute('data-pin')) || node.getAttribute('data-pin') }
+    renderOverlay()
+    renderNote()
+  }
+
+  // ---- inner frame wiring ---------------------------------------------------
+  function applyStates() {
+    var scr = screenEl(S.screenId)
+    if (!scr) return
+    var cur = currentState()
+    stateEls(scr).forEach(function (node) {
+      var hide = node.getAttribute('data-state') !== cur
+      if (node.hidden !== hide) node.hidden = hide
+    })
+  }
+  function refreshFrame() {
+    frameTick = 0
+    if (!inner) return
+    applyStates()
+    renderOverlay()
+    paintHover()
+    renderRail()
+  }
+  function scheduleRefresh() {
+    if (frameTick) return
+    frameTick = requestAnimationFrame(refreshFrame)
+  }
+  function onInnerHash() {
+    if (!inner) return
+    var nextId = Core.currentScreenId(inner.win.location.hash, boot.screens)
+    var moved = nextId !== S.screenId
+    S.screenId = nextId
+    if (Core.isKnownScreen(boot.screens, S.screenId) && !S.visited.has(S.screenId)) {
+      S.visited.add(S.screenId)
+      saveVisited()
+    }
+    if (moved) {
+      S.note = null
+      S.openThread = null
+    }
+    hoverEl = null
+    renderAll()
+  }
+  function goToScreen(id) {
+    if (!inner) return
+    inner.win.location.hash = '#/' + id
+    onInnerHash()
+  }
+  function attach() {
+    var win = frame.contentWindow
+    var doc = null
+    try { doc = frame.contentDocument } catch (e) { doc = null }
+    if (!doc || !doc.documentElement) {
+      inner = null
+      setNotice('The mock document could not be read, so review tools are unavailable.', true)
+      return
+    }
+    inner = { win: win, doc: doc }
+    var style = doc.createElement('style')
+    style.textContent = '[hidden]{display:none !important}'
+    ;(doc.head || doc.documentElement).appendChild(style)
+    win.addEventListener('hashchange', onInnerHash)
+    win.addEventListener('resize', scheduleRefresh)
+    doc.addEventListener('scroll', scheduleRefresh, true)
+    doc.addEventListener('click', onInnerClick, true)
+    doc.addEventListener('mousemove', onInnerMove, true)
+    doc.documentElement.addEventListener('mouseleave', clearHover)
+    if (win.MutationObserver && doc.body) new win.MutationObserver(scheduleRefresh).observe(doc.body, { childList: true, subtree: true })
+    onInnerHash()
+  }
+
+  // ---- rail -----------------------------------------------------------------
+  function pinCountFor(list, id) {
+    return list.filter(function (p) { return p.pin.screen === id }).length
+  }
+  function renderRail() {
+    var rail = $('rail')
+    var list = appMode ? pinThreads() : []
+    var reviewing = canReview()
+    clear(rail)
+    rail.appendChild(el('h2', { text: 'Screens' }))
+    var ul = el('ul')
+    screens.forEach(function (s) {
+      var seen = S.visited.has(s.id)
+      var count = pinCountFor(list, s.id)
+      var item = el('li', { class: 'screen-item' + (s.id === S.screenId ? ' current' : '') }, [
+        el('button', { type: 'button', class: 'go', 'aria-current': s.id === S.screenId ? 'page' : null, onclick: function () { goToScreen(s.id) } }, [
+          el('span', { class: 'dot' + (seen ? ' visited' : ''), title: seen ? 'Visited' : 'Not visited' }),
+          el('span', { class: 'title', text: s.title }),
+          el('span', { class: 'count', text: (seen ? 'visited' : 'not visited') + (appMode ? ', ' + count + (count === 1 ? ' pin' : ' pins') : '') }),
+        ]),
+      ])
+      if (reviewing) {
+        var box = el('input', { type: 'checkbox', 'aria-label': 'Mark ' + s.title + ' as reviewed' })
+        box.checked = S.marks.has(s.id)
+        box.addEventListener('change', function () { if (box.checked) S.marks.add(s.id); else S.marks.delete(s.id) })
+        item.appendChild(el('label', { class: 'mark', title: 'Mark this screen as reviewed' }, [box, 'ok']))
+      }
+      ul.appendChild(item)
+    })
+    rail.appendChild(ul)
+
+    var cur = screenById(S.screenId)
+    if (!cur && S.screenId) {
+      rail.appendChild(el('p', { class: 'note' }, [el('span', { class: 'chip warn', text: 'Screen "' + S.screenId + '" is not in the inventory' })]))
+    }
+    if (cur && cur.skipped_states && cur.skipped_states.length) {
+      rail.appendChild(el('h2', { text: 'Skipped states here' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, cur.skipped_states.map(function (k) { return el('li', { text: k.state + ': ' + k.reason }) })))
+    }
+    var gapsHere = gaps.filter(function (g) { return g.screen === S.screenId })
+    if (gapsHere.length) {
+      rail.appendChild(el('h2', { text: 'Gaps on this screen' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, gapsHere.map(function (g) { return el('li', { text: g.label + ': no matching component' }) })))
+    }
+
+    if (appMode && list.length) {
+      var orphaned = list.filter(function (p) { return p.placement === 'orphaned' })
+      var placed = list.filter(function (p) { return p.placement !== 'orphaned' })
+      if (placed.length) {
+        rail.appendChild(el('h2', { text: 'Pins' }))
+        placed.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+      if (orphaned.length) {
+        rail.appendChild(el('h2', { text: 'Orphaned pins' }))
+        orphaned.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+    }
+  }
+  function pinRow(p) {
+    var open = S.openThread === p.thread.id
+    var first = p.thread.messages[0]
+    var badges = []
+    if (p.thread.resolution) badges.push(el('span', { class: 'badge ok', text: 'resolved' }))
+    if (p.placement === 'reanchored') badges.push(el('span', { class: 'badge', text: 'from v' + p.pin.version }))
+    if (p.placement === 'orphaned') badges.push(el('span', { class: 'badge warn', text: 'element removed in v' + boot.version }))
+    var screen = screenById(p.pin.screen)
+    var head = el('button', { type: 'button', class: 'head', 'aria-expanded': open ? 'true' : 'false', onclick: function () { selectThread(p.thread.id, true) } }, [
+      el('strong', { text: 'Pin ' + p.n }),
+      ' ',
+      el('span', { class: 'meta', text: (screen ? screen.title : p.pin.screen) + ' / ' + p.pin.state + ' / ' + p.pin.pin }),
+      ...badges,
+      el('div', { text: first ? String(first.text).slice(0, 90) : '' }),
+    ])
+    var row = el('div', { class: 'pin-row' + (open ? ' selected' : '') }, [head])
+    var reply = p.thread.resolution ? Core.lastAgentMessage(p.thread) : null
+    if (open) row.appendChild(threadBody(p))
+    else if (reply) row.appendChild(el('div', { class: 'thread' }, [messageNode(reply, true)]))
+    return row
+  }
+
+  // ---- toolbar, banner, verdict bar ----------------------------------------
+  function setNotice(text, isError) {
+    S.notice = text
+    S.noticeError = !!isError
+    clearTimeout(noticeTimer)
+    renderStatus()
+    if (text) noticeTimer = setTimeout(function () { S.notice = ''; renderStatus() }, 6000)
+  }
+  function renderStatus() {
+    var node = $('status')
+    var text = S.paused ? 'Lost contact with the companion, retrying' : S.notice
+    node.textContent = text
+    node.className = 'status' + (S.paused || S.noticeError ? ' error' : '')
+  }
+  function pressed(id, on) { $(id).setAttribute('aria-pressed', on ? 'true' : 'false') }
+
+  function renderToolbar() {
+    $('version-chip').textContent = 'Mock v' + boot.version + (!appMode || boot.version === latestVersion() ? '' : ' (not latest)')
+    var wrap = $('version-wrap')
+    var picker = $('version-picker')
+    if (appMode) {
+      wrap.hidden = false
+      clear(picker)
+      var latest = latestVersion()
+      versionList().forEach(function (v) {
+        var o = el('option', { value: String(v), text: 'v' + v + (v === latest ? ' (latest)' : '') })
+        if (v === boot.version) o.selected = true
+        picker.appendChild(o)
+      })
+    }
+    var reviewing = canReview()
+    if (!reviewing && S.mode === 'comment') { S.mode = 'interact'; clearHover() }
+    pressed('mode-interact', S.mode === 'interact')
+    pressed('mode-comment', S.mode === 'comment')
+    var cm = $('mode-comment')
+    cm.hidden = !appMode
+    cm.disabled = !reviewing
+    cm.title = reviewing ? 'Click an element to pin a comment' : (readOnlyVersion() ? 'Only the latest version takes comments' : 'Comments are open while a review is waiting on you')
+    pressed('vp-desktop', S.viewport === 'desktop')
+    pressed('vp-mobile', S.viewport === 'mobile')
+    frameBox.className = 'frame-box' + (S.viewport === 'mobile' ? ' mobile' : '')
+    var sw = $('state-switch')
+    clear(sw)
+    var s = screenById(S.screenId)
+    if (s && s.states && s.states.length > 1) {
+      sw.hidden = false
+      s.states.forEach(function (st) {
+        sw.appendChild(el('button', { type: 'button', 'aria-pressed': currentState() === st ? 'true' : 'false', onclick: function () { S.states[s.id] = st; S.note = null; renderAll() }, text: st }))
+      })
+    } else sw.hidden = true
+    renderStatus()
+  }
+
+  function renderBanner() {
+    var b = $('banner')
+    clear(b)
+    if (!appMode) {
+      b.hidden = false
+      b.appendChild(el('span', { text: 'Mock v' + boot.version + ' · not the product' }))
+    } else if (staleVersion()) {
+      b.hidden = false
+      b.appendChild(el('span', { role: 'alert', text: 'This version was updated \u2014 reload to review it' }))
+      b.appendChild(el('button', { type: 'button', text: 'Reload', onclick: function () { window.location.reload() } }))
+    } else if (readOnlyVersion()) {
+      b.hidden = false
+      var latest = latestVersion()
+      b.appendChild(el('span', { text: 'v' + boot.version + ' is read-only. New comments go on v' + latest + '.' }))
+      b.appendChild(el('button', { type: 'button', text: 'Go to v' + latest, onclick: function () { goToVersion(latest) } }))
+    } else b.hidden = true
+  }
+  function goToVersion(v) {
+    window.location.href = '/_quirk/mock/' + encodeURIComponent(String(v)) + '?t=' + encodeURIComponent(boot.token)
+  }
+
+  var verdictSig = ''
+  function renderVerdict() {
+    var bar = $('verdict')
+    if (!appMode) { bar.hidden = true; return }
+    var reviewing = canReview()
+    var unvisited = Core.unvisitedScreens(boot.screens, S.visited)
+    var sig = JSON.stringify([reviewing, S.panel, S.submitting, S.verdictError, unvisited])
+    if (sig === verdictSig) return
+    verdictSig = sig
+    var typing = document.activeElement && bar.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'
+      ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }
+      : null
+    clear(bar)
+    if (!reviewing) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    bar.appendChild(el('strong', { text: 'Your verdict' }))
+    var busy = S.submitting
+    bar.appendChild(el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Looks right', onclick: onLooksRight }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Needs changes', onclick: function () { S.panel = 'changes'; S.verdictError = ''; renderVerdict() } }))
+    bar.appendChild(el('span', { class: 'spacer' }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Skip review', onclick: function () { submitVerdict('skip', null) } }))
+    if (S.verdictError) bar.appendChild(el('span', { class: 'err', role: 'alert', text: S.verdictError }))
+    if (S.panel === 'confirm') {
+      var names = unvisited.map(function (id) { var s = screenById(id); return s ? s.title : id })
+      bar.appendChild(el('div', { class: 'panel' }, [
+        el('div', { text: 'You have not opened ' + names.join(', ') + '. Sign off anyway?' }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Confirm: looks right', onclick: function () { submitVerdict('looks-right', null) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Keep reviewing', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+    if (S.panel === 'changes') {
+      var area = el('textarea', { 'aria-label': 'Overall comment (optional)', placeholder: 'Overall comment (optional)' })
+      area.value = S.changesText
+      area.addEventListener('input', function () { S.changesText = area.value })
+      if (typing) {
+        queueMicrotask(function () {
+          area.focus()
+          area.setSelectionRange(typing.start, typing.end)
+        })
+      }
+      bar.appendChild(el('div', { class: 'panel' }, [
+        area,
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Send: needs changes', onclick: function () { submitVerdict('needs-changes', S.changesText.trim()) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Cancel', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+  }
+  function onLooksRight() {
+    S.verdictError = ''
+    if (Core.unvisitedScreens(boot.screens, S.visited).length) { S.panel = 'confirm'; renderVerdict() } else submitVerdict('looks-right', null)
+  }
+  function submitVerdict(verdict, comment) {
+    if (S.submitting || !canReview()) return
+    var ids = screens.map(function (s) { return s.id })
+    var payload = {
+      verdict: verdict,
+      visited: ids.filter(function (id) { return S.visited.has(id) }),
+      marks: ids.filter(function (id) { return S.marks.has(id) }),
+    }
+    if (comment) payload.comment = comment
+    S.submitting = true
+    S.verdictError = ''
+    renderVerdict()
+    var step = S.snap.step
+    postEvent('submit', payload, { nonce: step.nonce, step: step.id }).then(function (result) {
+      S.submitting = false
+      if (result === 'ok') {
+        S.panel = null
+        setNotice('Verdict sent.', false)
+      } else if (result === 'superseded') {
+        S.panel = null
+        S.verdictError = 'That review was replaced by a newer one. Refreshing.'
+      } else S.verdictError = 'Could not send the verdict. Try again.'
+      renderVerdict()
+      pollNow()
+    })
+  }
+
+  function renderAll() {
+    renderToolbar()
+    renderBanner()
+    applyStates()
+    renderRail()
+    renderOverlay()
+    renderNote()
+    paintHover()
+    renderVerdict()
+  }
+
+  // ---- companion transport (same-origin app endpoints only) ------------------
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+    return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+  }
+  /** Posts one event, retrying network errors with the same client_id so the server can dedupe. */
+  function postEvent(type, payload, scope) {
+    var body = { client_id: uuid(), type: type, payload: payload }
+    if (scope.nonce) body.nonce = scope.nonce
+    if (scope.step) body.step = scope.step
+    var text = JSON.stringify(body)
+    function attempt(n) {
+      return fetch('/_quirk/app/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Quirk-Token': boot.token },
+        body: text,
+      }).then(function (r) {
+        if (r.status === 409) return 'superseded'
+        return r.ok ? 'ok' : 'error'
+      }, function () {
+        if (n >= 3) return 'error'
+        return new Promise(function (resolve) { setTimeout(resolve, 200 * (n + 1)) }).then(function () { return attempt(n + 1) })
+      })
+    }
+    return attempt(0)
+  }
+
+  var rev = ''
+  var failures = 0
+  var inflight = false
+  var pollTimer = null
+  function pollDelay() {
+    return failures < 3 ? 1000 : Math.min(5000, 1000 * Math.pow(2, failures - 2))
+  }
+  function poll() {
+    if (inflight) return
+    inflight = true
+    fetch('/_quirk/app/snapshot?rev=' + encodeURIComponent(rev), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 200) {
+          return r.json().then(function (snap) {
+            rev = String(snap.rev)
+            S.snap = snap
+            renderAll()
+          })
+        }
+        if (r.status !== 204) throw new Error('snapshot ' + r.status)
+        return null
+      })
+      .then(function () {
+        var recovered = failures > 0
+        failures = 0
+        if (S.paused || recovered) { S.paused = false; renderStatus() }
+      })
+      .catch(function () {
+        failures += 1
+        if (failures >= 3 && !S.paused) { S.paused = true; renderStatus() }
+      })
+      .then(function () {
+        inflight = false
+        clearTimeout(pollTimer)
+        pollTimer = setTimeout(poll, pollDelay())
+      })
+  }
+  function pollNow() {
+    if (!appMode) return
+    clearTimeout(pollTimer)
+    poll()
+  }
+
+  // ---- controls ------------------------------------------------------------
+  $('mode-interact').addEventListener('click', function () { S.mode = 'interact'; clearHover(); renderToolbar() })
+  $('mode-comment').addEventListener('click', function () { if (canReview()) { S.mode = 'comment'; renderToolbar() } })
+  $('vp-desktop').addEventListener('click', function () { S.viewport = 'desktop'; renderToolbar(); scheduleRefresh() })
+  $('vp-mobile').addEventListener('click', function () { S.viewport = 'mobile'; renderToolbar(); scheduleRefresh() })
+  $('show-changes').addEventListener('change', function (ev) {
+    S.showChanges = ev.target.checked
+    if (S.showChanges && !changed.size) setNotice('Nothing was recorded as changed in this version.', false)
+    renderOverlay()
+  })
+  $('version-picker').addEventListener('change', function (ev) {
+    var v = Number(ev.target.value)
+    if (v !== boot.version) goToVersion(v)
+  })
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && (S.note || S.openThread)) { S.note = null; S.openThread = null; renderNote(); renderOverlay(); renderRail() }
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pollNow() })
+
+  frame.addEventListener('load', attach)
+  frame.srcdoc = Core.withBase(String(boot.mock_html || ''))
+  renderAll()
+  if (appMode) poll()
+})()
+</script>
+</body>
+</html>
