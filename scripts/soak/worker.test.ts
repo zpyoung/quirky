@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { startChild } from '../../packages/process/src/child.ts'
-import { agentCycleChunks, DEFAULT_BEAT_MS } from './worker.ts'
+import { agentCycleChunks, DEFAULT_BEAT_MS, pongFor } from './worker.ts'
 
 const worker = resolve(import.meta.dir, 'worker.ts')
 
@@ -37,6 +37,79 @@ test('builds deterministic bounded agent-like terminal output', () => {
   )
   expect(new TextEncoder().encode(chunks.join('')).byteLength).toBeLessThanOrEqual(32_768)
 })
+
+test('validates soak ping tokens strictly', () => {
+  expect(pongFor('soak-ping ab12cd34-7')).toBe('\nsoak-pong ab12cd34-7\n')
+  expect(pongFor('soak-ping 00000000-123456789')).toBe('\nsoak-pong 00000000-123456789\n')
+
+  for (const line of [
+    'soak-ping ab12cd34-0',
+    'soak-ping ab12cd34-1234567890',
+    'soak-ping AB12cd34-7',
+    'soak-ping ab12cd34-7 trailing text'
+  ]) {
+    expect(pongFor(line)).toBeNull()
+  }
+})
+
+test('answers pings from stdin while running as main', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'soak-worker-home-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'soak-worker-repo-'))
+  const expected = '\nsoak-pong 0123abcd-1\n'
+
+  try {
+    const initialized = Bun.spawnSync(['git', 'init', '-q'], {
+      cwd,
+      env: { ...process.env, QUIRKY_HOME: home, PATH: `${home}:/usr/bin:/bin` },
+      stdout: 'ignore',
+      stderr: 'ignore'
+    })
+    expect(initialized.exitCode).toBe(0)
+
+    const child = Bun.spawn([process.execPath, worker, '0'], {
+      cwd,
+      env: {
+        ...process.env,
+        QUIRKY_HOME: home,
+        QUIRKY_SOAK_BEAT_MS: '600000',
+        PATH: `${home}:/usr/bin:/bin`
+      },
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'ignore'
+    })
+    const timeout = Promise.withResolvers<null>()
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+    const output = (async () => {
+      let text = ''
+      const decoder = new TextDecoder()
+      for await (const chunk of child.stdout) {
+        text += decoder.decode(chunk, { stream: true })
+        if (text.includes(expected)) return text
+      }
+      return text + decoder.decode()
+    })()
+
+    try {
+      child.stdin.write('soak-ping 0123abcd-1\n')
+      await child.stdin.flush()
+      // A real child must answer against the wall clock; fake timers cannot advance its event loop.
+      timeoutHandle = setTimeout(() => timeout.resolve(null), 2_000)
+      const result = await Promise.race([output, timeout.promise])
+      if (result === null) throw new Error('worker did not answer the ping within 2 seconds')
+      expect(result).toContain(expected)
+    } finally {
+      clearTimeout(timeoutHandle)
+      try { child.kill('SIGCONT') } catch {}
+      try { child.kill('SIGKILL') } catch {}
+      await child.exited
+      await output
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+    rmSync(cwd, { recursive: true, force: true })
+  }
+}, 5_000)
 
 test('skips missed beats instead of replaying hooks after slow git', async () => {
   const home = mkdtempSync(join(tmpdir(), 'soak-worker-'))
