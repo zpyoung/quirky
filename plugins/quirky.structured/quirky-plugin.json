@@ -372,8 +372,8 @@
         "result": {
           "type": "object",
           "properties": {
-            "model": { "type": ["string", "null"] },
-            "effort": { "type": ["string", "null"] }
+            "model": { "description": "The model id, or null." },
+            "effort": { "description": "The effort level, or null." }
           },
           "required": ["model", "effort"]
         }
