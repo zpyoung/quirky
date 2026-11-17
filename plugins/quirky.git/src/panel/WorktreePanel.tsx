@@ -22,6 +22,7 @@ import { useCompare, useSettings, useStatus, useWorktreePath } from './data'
 import { ConfirmDialog } from './Dialog'
 import { applyFilter, matchesFilter } from './filter'
 import { dataOf, hasMoreDetail, messageOf, reasonOf, splitPath, splitQuestion } from './format'
+import { withStatusConflicts } from './conflict-files'
 import { BranchRow, CountLine, Header } from './Header'
 import { HistoryDock } from './HistoryDock'
 import { shouldForcePushWithLease } from './ladder'
@@ -285,7 +286,12 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const worktreePath = useWorktreePath(context, worktree)
   const review = useReview(context, worktree, polled)
   const model = review.model
-  const files = useMemo(() => model?.files ?? NO_FILES, [model])
+  const files = useMemo(() => {
+    const reviewFiles = model?.files ?? NO_FILES
+    // a settled review may be newer than the bounded status read
+    if (polled === null || (!review.pending && review.error === null)) return reviewFiles
+    return withStatusConflicts(reviewFiles, polled.entries)
+  }, [model, polled, review.pending, review.error])
   const refreshReview = useCallback(function refreshReview(): void {
     try {
       review.refresh()

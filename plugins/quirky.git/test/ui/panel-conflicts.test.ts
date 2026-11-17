@@ -1,11 +1,12 @@
 import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
+import type { GitCompare, ReviewModel } from '@quirky/protocol'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, buttonText, click, compareOf, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, settleAfter, statusOf } = s
+const { act, buttonText, click, compareOf, entry, fakeContext, layoutFor, mountPanel, press, q, qa, reviewOf, rowOf, settle, settleAfter, statusOf } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -42,6 +43,65 @@ async function stageEnabled(element: HTMLElement, path: string): Promise<boolean
   await press(q(document.body, '[role="menu"]')!, 'Escape')
   return enabled
 }
+
+test('live conflict rows and operation actions stay coherent while review and compare are pending', async () => {
+  jest.useFakeTimers()
+  const fake = fakeContext(layoutFor('feat'))
+  const initial = statusOf([entry('existing.ts')], { head: 'a'.repeat(40) })
+  fake.noteCounts['existing.ts'] = 2
+  fake.status = initial
+  fake.compare = compareOf({ headOid: initial.head })
+  const currentReview = Promise.withResolvers<ReviewModel>()
+  const resolvedReview = Promise.withResolvers<ReviewModel>()
+  const currentCompare = Promise.withResolvers<GitCompare>()
+  const mounted = mountPanel(fake)
+  try {
+    await settle()
+    fake.on('quirky.git/review', () => currentReview.promise)
+    fake.on('quirky.git/compare', () => currentCompare.promise)
+    fake.status = statusOf([conflict('a.ts'), conflict('existing.ts')], { head: 'b'.repeat(40), operation: 'merge' })
+    const compared = compareOf({ headOid: fake.status.head })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settle()
+    await settleAfter(3_000)
+    expect(buttonText(mounted.element, 'Review conflicts')).toBeDefined()
+    expect(rowOf(mounted.element, 'a.ts')).not.toBeNull()
+    expect(q(rowOf(mounted.element, 'a.ts')!, '[aria-label="Unresolved conflict (Both modified)"]')).not.toBeNull()
+    expect(q(rowOf(mounted.element, 'existing.ts')!, '[aria-label="Unresolved conflict (Both modified)"]')).not.toBeNull()
+    expect(q(rowOf(mounted.element, 'existing.ts')!, '[aria-label="2 notes"]')).not.toBeNull()
+    expect(buttonText(mounted.element, 'Abort merge')).toBeDefined()
+    expect(fake.reports.at(-1)?.operation).toBe('none')
+    await click(rowOf(mounted.element, 'a.ts'))
+    expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'conflict-file', path: 'a.ts' })
+
+    await act(async () => currentReview.resolve(reviewOf(fake.status, compared)))
+    await settle()
+    expect(fake.reports.at(-1)?.operation).toBe('none')
+    await act(async () => currentCompare.resolve(compared))
+    await settle()
+    expect(fake.reports.at(-1)).toMatchObject({ operation: 'merge', sections: [{ id: 'conflicts', count: 2 }] })
+
+    fake.on('quirky.git/review', () => resolvedReview.promise)
+    fake.status = statusOf([conflict('a.ts', 'both_modified', 'resolved_locally'), entry('existing.ts', 'staged')], {
+      head: 'b'.repeat(40), operation: 'merge'
+    })
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settle()
+    await settleAfter(3_000)
+    expect(buttonText(mounted.element, 'Continue merge')).toBeDefined()
+    expect(buttonText(mounted.element, 'Abort merge')).toBeDefined()
+    expect(q(rowOf(mounted.element, 'a.ts')!, '[aria-label^="Resolved locally conflict"]')).not.toBeNull()
+    expect(q(rowOf(mounted.element, 'existing.ts')!, '[aria-label^="Unresolved conflict"]')).toBeNull()
+  } finally {
+    await act(async () => {
+      currentReview.resolve(reviewOf(fake.status, fake.compare))
+      resolvedReview.resolve(reviewOf(fake.status, fake.compare))
+      currentCompare.resolve(fake.compare)
+    })
+    mounted.unmount()
+    jest.useRealTimers()
+  }
+})
 
 describe('SC-41: conflicts lead to Continue', () => {
   test('the ship bar is replaced by the conflict card with Review conflicts and Abort merge', async () => {
@@ -208,4 +268,25 @@ describe('SC-46: a cherry-pick has no Abort', () => {
     expect(qa(element, '[role="status"] .ui-inline-agent-card button').map((b) => b.textContent)).toEqual(['Review conflicts'])
     unmount()
   })
+})
+
+test('a failed initial review leaves status conflict rows and Abort available', async () => {
+  jest.useFakeTimers()
+  const fake = fakeContext(layoutFor('feat'))
+  fake.status = statusOf([conflict('a.ts')], { operation: 'merge' })
+  fake.on('quirky.git/review', () => { throw new Error('review broke') })
+  const mounted = mountPanel(fake)
+  try {
+    await settle()
+    expect(mounted.element.textContent).toContain('review broke')
+    expect(buttonText(mounted.element, 'Review conflicts')).toBeDefined()
+    expect(buttonText(mounted.element, 'Abort merge')).toBeDefined()
+    expect(rowOf(mounted.element, 'a.ts')).not.toBeNull()
+    await click(rowOf(mounted.element, 'a.ts'))
+    expect(fake.views.at(-1)?.input).toEqual({ worktree: 'feat', mode: 'conflict-file', path: 'a.ts' })
+    expect(fake.reports.at(-1)).toMatchObject({ operation: 'merge', sections: [{ id: 'conflicts', count: 1 }] })
+  } finally {
+    mounted.unmount()
+    jest.useRealTimers()
+  }
 })
