@@ -1052,7 +1052,9 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
             {githubCheck.envTokenInProcess && <p>Environment credentials are in use for this process. Credentials are never shown or stored by these settings.</p>}
           </>}
           {githubCheck && <p>Required account scope: <code>{githubCheck.requiredHost ?? 'github.com'}</code>{githubCheck.requiredScopes.length ? ` · ${githubCheck.requiredScopes.join(', ')}` : ''}</p>}
+          <div className="ui-cluster">
           <Button disabled={!canRecheckProvider} onClick={() => { void hostingControl.request('provider-recheck') }}>{loadingProvider ? 'Re-checking…' : 'Re-check GitHub'}</Button>
+          </div>
         </> : <p>GitHub is not selected for this repository.</p>}
       </article>
 
@@ -1073,7 +1075,9 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
           {gitlabScopesUnknown && <p>Scopes unknown</p>}
           {gitlabCheck?.activeAccount && <p>Active account: {gitlabCheck.activeAccount.user} @ {gitlabCheck.activeAccount.host}</p>}
           {gitlabCheck && <p>Required account scope: <code>{gitlabCheck.requiredHost}</code>{gitlabCheck.requiredScopes.length ? ` · ${gitlabCheck.requiredScopes.join(', ')}` : ''}</p>}
+          <div className="ui-cluster">
           <Button disabled={!canRecheckProvider} onClick={() => { void hostingControl.request('provider-recheck') }}>{loadingProvider ? 'Re-checking…' : 'Re-check GitLab'}</Button>
+          </div>
         </> : <p>GitLab is not selected for this repository.</p>}
       </article>
       <article className="ui-stack" aria-label="Bitbucket">
