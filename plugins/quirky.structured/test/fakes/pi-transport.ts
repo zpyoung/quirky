@@ -1,6 +1,6 @@
 import type { PiExit, PiFrame, PiTransport, PiTransportFactory, PiTransportHandlers, PiTransportSpec } from '../../pi-rpc'
 
-type Reply = { success: boolean; data?: unknown; error?: string }
+export type Reply = { success: boolean; data?: unknown; error?: string }
 
 /**
  * A pi or omp child the test drives by hand: it records every frame the runner writes,
@@ -70,7 +70,7 @@ type FakePiTransports = {
 }
 
 /** A transport factory that records every child the runner starts. */
-export function fakePiTransports(options: { silent?: string[] } = {}): FakePiTransports {
+export function fakePiTransports(options: { silent?: string[]; replies?: Record<string, (frame: PiFrame) => Reply> } = {}): FakePiTransports {
   const started: FakePiTransport[] = []
   const fakes: FakePiTransports = {
     started,
@@ -78,6 +78,7 @@ export function fakePiTransports(options: { silent?: string[] } = {}): FakePiTra
     factory: (spec, handlers) => {
       const transport = new FakePiTransport(spec, handlers)
       for (const command of options.silent ?? []) transport.silent.add(command)
+      for (const [command, reply] of Object.entries(options.replies ?? {})) transport.replies.set(command, reply)
       fakes.prepare?.(transport)
       started.push(transport)
       return transport

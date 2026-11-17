@@ -1,7 +1,7 @@
 import { constants, existsSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
-import type { AskEnvelope, AskSpec, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, Session } from '@quirky/protocol'
 import { capabilitiesFor } from './capabilities'
 import {
   CallTracker,
@@ -18,6 +18,7 @@ import {
 } from './items'
 import { approvalOutcome, approvalSpec, nativeQuestionPlan } from './native-questions'
 import { MAX_IMAGE_BYTES } from './queue'
+import { hoistCommand } from './slash-commands'
 import {
   PiRpc,
   MAX_WRITE_BYTES,
@@ -41,6 +42,7 @@ export type PiRunnerDeps = {
 
 const STARTUP_TIMEOUT_MS = 60_000
 const SEND_TIMEOUT_MS = 45_000
+const COMMANDS_TIMEOUT_MS = 10_000
 const ABORT_TIMEOUT_MS = 2_000
 const QUESTION_LIMIT = 300
 
@@ -98,6 +100,8 @@ type Running = {
   launch: { session: Session; executable: string; options: StructuredStartOptions }
   providerSessionId: string
   sessionFile: string
+  /** The list last reported, which decides how an outgoing message is rewritten. */
+  commands: AgentCommand[]
 }
 
 type Starting = { stopped: boolean; run?: Running }
@@ -114,6 +118,43 @@ function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, st
     else env[name] = value
   }
   return env
+}
+
+const PI_KINDS: Record<string, AgentCommand['kind']> = {
+  skill: 'skill',
+  prompt: 'command',
+  extension: 'command',
+  custom: 'command',
+  file: 'command',
+  mcp_prompt: 'mcp',
+  builtin: 'builtin'
+}
+
+/**
+ * Sorts pi's `get_commands` or omp's `get_available_commands` entries into the kinds Quirky shows.
+ * An entry a pi package ships is a plugin entry. omp's built-ins run only when they open the
+ * message, so they are start-only.
+ */
+export function piCommands(list: readonly unknown[]): AgentCommand[] {
+  return list.flatMap((value): AgentCommand[] => {
+    const entry = record(value)
+    const name = text(entry?.name)
+    const source = text(entry?.source)
+    const kind = PI_KINDS[source]
+    if (name === '' || kind === undefined) return []
+    const description = text(entry?.description).trim()
+    const hint = text(record(entry?.input)?.hint).trim()
+    const fromPackage = record(entry?.sourceInfo)?.origin === 'package' && kind !== 'builtin'
+    return [
+      {
+        name,
+        kind: fromPackage ? 'plugin' : kind,
+        ...(description === '' ? {} : { description }),
+        ...(hint === '' || hint === 'arguments' ? {} : { argumentHint: hint }),
+        ...(kind === 'builtin' ? { startOnly: true } : {})
+      }
+    ]
+  })
 }
 
 /** The allow and deny labels of a select that is a yes/no approval, or null when it is a real choice. */
@@ -180,6 +221,9 @@ class PiRunner implements StructuredRunner {
         if (this.variant === 'omp') await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
         if (startup.stopped) return
         this.requireLive(run)
+        await this.loadCommands(run)
+        if (startup.stopped) return
+        this.requireLive(run)
         this.running.set(session.id, run)
         run.ready = true
         if (prompt === undefined || prompt === '') this.context.setStatus(session.id, 'running')
@@ -193,6 +237,23 @@ class PiRunner implements StructuredRunner {
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
+  }
+
+  /** Reports the commands the child offers: pi's `get_commands`, or omp's `get_available_commands`. A failure leaves the list empty. */
+  private async loadCommands(run: Running): Promise<void> {
+    const command = this.variant === 'omp' ? 'get_available_commands' : 'get_commands'
+    try {
+      const data = record(await run.rpc.request(command, {}, COMMANDS_TIMEOUT_MS))
+      this.reportCommands(run, data?.commands)
+    } catch {
+      // an older child without the command offers no list
+    }
+  }
+
+  private reportCommands(run: Running, list: unknown): void {
+    if (!Array.isArray(list) || run.stopped) return
+    run.commands = piCommands(list)
+    this.context.reportCommands?.(run.sessionId, run.commands)
   }
 
   /** Fails startup when the child exited during an awaited step, so no session is reported running without a process. */
@@ -278,6 +339,7 @@ class PiRunner implements StructuredRunner {
     if (busy()) return discard(new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`))
     next.ready = true
     next.idleStatus = old.idleStatus
+    next.commands = old.commands
     this.running.set(old.sessionId, next)
     old.stopped = true
     await old.rpc.close()
@@ -363,6 +425,7 @@ class PiRunner implements StructuredRunner {
       pendingDialogs: 0,
       dialogCancels: new Map(),
       deniedReasons: [],
+      commands: [],
       settings: {
         ...(typeof options.model === 'string' ? { model: options.model } : {}),
         ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
@@ -446,7 +509,7 @@ class PiRunner implements StructuredRunner {
     })
     const steering = run.working
     if (!steering) this.beginTurn(run)
-    const params = { message, ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
+    const params = { message: hoistCommand(message, run.commands), ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
     try {
       const data = record(await run.rpc.request(steering ? 'steer' : 'prompt', params, SEND_TIMEOUT_MS))
       if (!steering && (data?.disposition === 'handled' || data?.agentInvoked === false)) this.finishTurn(run, 'done')
@@ -479,6 +542,9 @@ class PiRunner implements StructuredRunner {
 
   private handleFrame(run: Running, frame: PiFrame): void {
     switch (frame.type) {
+      case 'available_commands_update':
+        this.reportCommands(run, frame.commands)
+        return
       case 'agent_start':
         this.beginTurn(run)
         return

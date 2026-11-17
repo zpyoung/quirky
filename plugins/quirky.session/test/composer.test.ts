@@ -566,6 +566,44 @@ describe('screens: suggestions (SC-5, SC-6)', () => {
     expect(sent()).toHaveLength(0)
   })
 
+  const ALL_KINDS = {
+    commands: [
+      { name: 'review', kind: 'command', description: 'Review the diff', argumentHint: '[pr]' },
+      { name: 'brainstorming', kind: 'skill', description: 'Turn an idea into a design' },
+      { name: 'quirk:tdd', kind: 'plugin', description: 'Test first' },
+      { name: 'mcp__notion__page', kind: 'mcp', description: 'Make a Notion page' },
+      { name: 'compact', kind: 'builtin', description: 'Free up context', startOnly: true },
+      { name: 'model', kind: 'builtin', description: 'Set the model', startOnly: true }
+    ]
+  }
+
+  test('slash: every kind gets its own group with descriptions and argument hints; an agent row named like a Quirky command is hidden', async () => {
+    await mount({ 'quirky.structured/commands': () => ALL_KINDS })
+    await typeText('/')
+    await settle()
+    const groups = [...host!.querySelectorAll('[role="group"]')]
+    expect(groups.map((group) => group.getAttribute('aria-label'))).toEqual(['Quirky', 'Claude commands', 'Claude skills', 'Plugins', 'MCP prompts', 'Claude built-in'])
+    expect(groups[1]!.textContent).toContain('/review [pr]')
+    expect(groups[1]!.textContent).toContain('Review the diff')
+    expect(groups[5]!.textContent).toContain('/compact')
+    expect(groups[5]!.textContent).not.toContain('/model')
+  })
+
+  test('mid-message: / after a word opens the list without start-only entries, and a pick inserts a pill in place', async () => {
+    await mount({ 'quirky.structured/commands': () => ALL_KINDS })
+    await typeText('fix the login /')
+    await settle()
+    const labels = [...host!.querySelectorAll('[role="group"]')].map((group) => group.getAttribute('aria-label'))
+    expect(labels).toEqual(['Quirky', 'Claude commands', 'Claude skills', 'Plugins', 'MCP prompts'])
+    await typeText('fix the login /td')
+    await settle()
+    expect(options().map((option) => option.textContent)).toEqual([expect.stringContaining('/quirk:tdd')])
+    await click(options()[0])
+    expect(doc()).toBe('fix the login /quirk:tdd ')
+    expect(host!.querySelector('.cm-composer-pill-command')!.textContent).toBe('/quirk:tdd')
+    expect(sent()).toHaveLength(0)
+  })
+
   test('picking /plan acts at once, removes the typed query and toggles plan mode', async () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     await typeText('/plan')

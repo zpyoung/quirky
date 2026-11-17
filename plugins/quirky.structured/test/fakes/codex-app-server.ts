@@ -23,7 +23,7 @@ export type CodexAppServerFixture = {
  * Writes a deterministic native-protocol app-server executable under a test's temporary home.
  * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
  */
-export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean; rateLimitsUpdated?: Record<string, unknown>; rateLimitsRead?: Record<string, unknown> }): CodexAppServerFixture {
+export function createCodexAppServerFixture(home: string, options?: { heldPrefix?: string; uniqueThreads?: boolean; rateLimitsUpdated?: Record<string, unknown>; rateLimitsRead?: Record<string, unknown>; skills?: Record<string, unknown>[] }): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
   const logPath = join(home, 'codex-app-server.jsonl')
@@ -37,6 +37,7 @@ const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
 const uniqueThreads = ${JSON.stringify(options?.uniqueThreads ?? false)}
 const rateLimitsUpdated = ${JSON.stringify(options?.rateLimitsUpdated ?? null)}
 const rateLimitsRead = ${JSON.stringify(options?.rateLimitsRead ?? null)}
+const skills = ${JSON.stringify(options?.skills ?? [])}
 let input = ''
 let nextTurn = 1
 let nextApproval = 1
@@ -215,6 +216,9 @@ function receive(message) {
         if (active.get(message.params.threadId)?.text.includes('[ignore-interrupt]')) return
         send({ id: message.id, result: {} })
         if (active.has(message.params.threadId)) finish(message.params.threadId, active.get(message.params.threadId).turn, 'interrupted')
+        return
+      case 'skills/list':
+        send({ id: message.id, result: { data: (message.params.cwds ?? []).map((cwd) => ({ cwd, skills, errors: [] })) } })
         return
       case 'account/rateLimits/read':
         if (rateLimitsRead === null) {

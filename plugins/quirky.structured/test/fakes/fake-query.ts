@@ -1,5 +1,5 @@
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
-import type { ClaudeQuery, ClaudeQueryParams } from '../../claude-runner'
+import type { ClaudeQuery, ClaudeQueryParams, ClaudeSlashCommand } from '../../claude-runner'
 
 /** A scripted stand-in for the Agent SDK's `Query`: tests push messages and read what the runner wrote. */
 export class FakeQuery implements ClaudeQuery {
@@ -11,6 +11,8 @@ export class FakeQuery implements ClaudeQuery {
   permissionModes: string[] = []
   models: (string | undefined)[] = []
   flagSettings: Record<string, unknown>[] = []
+  /** Left unset to stand in for an SDK without `supportedCommands()`. */
+  supportedCommands?: () => Promise<ClaudeSlashCommand[]>
   private buffer: any[] = []
   private waiting: { resolve: (r: IteratorResult<any>) => void; reject: (e: Error) => void } | null = null
   private failure: Error | null = null

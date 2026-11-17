@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { AgentCommand, UiPluginContext } from '@quirky/protocol'
+import type { AgentCommand, AgentCommandKind, UiPluginContext } from '@quirky/protocol'
 import { EmptyState, FileIcon, InlineError, ListRow, SectionHeader } from '@quirky/ui'
 import { QUIRKY_COMMANDS, type QuirkyCommandName } from './commands'
 
@@ -35,18 +35,42 @@ export function useAgentCommands(context: UiPluginContext, session: string): Age
   return commands
 }
 
-/** The `/` rows matching `query`: Quirky's own commands, then the agent's commands, then its skills. */
-export function slashSuggestions(commands: AgentCommand[], query: string, agentLabel: string): Suggestion[] {
+const AGENT_GROUPS: readonly { kind: AgentCommandKind; group: (agentLabel: string) => string }[] = [
+  { kind: 'command', group: (agentLabel) => `${agentLabel} commands` },
+  { kind: 'skill', group: (agentLabel) => `${agentLabel} skills` },
+  { kind: 'plugin', group: () => 'Plugins' },
+  { kind: 'mcp', group: () => 'MCP prompts' },
+  { kind: 'builtin', group: (agentLabel) => `${agentLabel} built-in` }
+]
+
+/**
+ * The `/` rows matching `query`: Quirky's own commands, then the agent's entries grouped by kind.
+ * Mid-message (`atStart` false) the agent's start-only entries are left out, since the harness
+ * would not run them there. An agent entry sharing a name with a Quirky command is hidden, because
+ * picking that name acts in Quirky.
+ */
+export function slashSuggestions(commands: AgentCommand[], query: string, agentLabel: string, atStart = true): Suggestion[] {
   const wanted = query.toLowerCase()
   const matches = (name: string) => name.toLowerCase().includes(wanted)
+  const quirkyNames = new Set<string>(QUIRKY_COMMANDS.map((command) => command.name))
   const quirky = QUIRKY_COMMANDS.filter((command) => matches(command.name)).map(
     (command): Suggestion => ({ id: `quirky:${command.name}`, group: 'Quirky', label: `/${command.name}`, detail: command.description, tag: 'acts now', source: 'quirky', command: command.name })
   )
-  const fromAgent = (kind: AgentCommand['kind'], group: string) =>
-    commands
-      .filter((command) => command.kind === kind && matches(command.name))
-      .map((command): Suggestion => ({ id: `${kind}:${command.name}`, group, label: `/${command.name}`, detail: command.description, tag: 'sent', source: 'agent', name: command.name }))
-  return [...quirky, ...fromAgent('command', `${agentLabel} commands`), ...fromAgent('skill', `${agentLabel} skills`)]
+  const offered = commands.filter((command) => matches(command.name) && !quirkyNames.has(command.name) && (atStart || command.startOnly !== true))
+  const fromAgent = AGENT_GROUPS.flatMap(({ kind, group }) =>
+    offered
+      .filter((command) => command.kind === kind)
+      .map((command): Suggestion => ({
+        id: `${kind}:${command.name}`,
+        group: group(agentLabel),
+        label: command.argumentHint ? `/${command.name} ${command.argumentHint}` : `/${command.name}`,
+        detail: command.description,
+        tag: 'sent',
+        source: 'agent',
+        name: command.name
+      }))
+  )
+  return [...quirky, ...fromAgent]
 }
 
 export function fileSuggestions(paths: string[]): Suggestion[] {
@@ -67,6 +91,7 @@ const list = {
 } satisfies CSSProperties
 const option = { cursor: 'pointer', minWidth: 0 } satisfies CSSProperties
 const tagStyle = { color: 'var(--ui-muted)', whiteSpace: 'nowrap' } satisfies CSSProperties
+const oneLine = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } satisfies CSSProperties
 
 /**
  * The suggestion list attached above the composer card. `empty` is the line shown when nothing
@@ -111,7 +136,8 @@ export function SuggestionList({
                     {item.source === 'file' && <FileIcon path={item.path} />} {item.label}
                   </>
                 }
-                trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}
+                {...(item.source === 'agent' && item.detail ? { description: <span style={oneLine}>{item.detail}</span>, mainTitle: item.detail } : {})}
+                trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}
               />
             </div>
           ))}

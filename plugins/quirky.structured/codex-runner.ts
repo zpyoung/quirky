@@ -1,4 +1,4 @@
-import type { AskEnvelope, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import {
   CallTracker,
@@ -13,6 +13,7 @@ import {
   userItem,
   type ItemEntry
 } from './items'
+import { referencedCommands } from './slash-commands'
 import type {
   StructuredContext,
   StructuredLaunchOptions,
@@ -111,9 +112,32 @@ function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): Toke
   return Object.keys(delta).length === 0 ? null : delta
 }
 
+/** The enabled skills in a `skills/list` response; plugin skills (named `plugin:skill`) are marked as plugin entries. */
+export function codexSkills(response: unknown): Map<string, { command: AgentCommand; path: string }> {
+  const skills = new Map<string, { command: AgentCommand; path: string }>()
+  const data = typeof response === 'object' && response !== null ? (response as { data?: unknown }).data : undefined
+  for (const entry of Array.isArray(data) ? data : []) {
+    const list = typeof entry === 'object' && entry !== null ? (entry as { skills?: unknown }).skills : undefined
+    for (const skill of Array.isArray(list) ? list : []) {
+      if (typeof skill !== 'object' || skill === null) continue
+      const { name, description, shortDescription, path, enabled, pluginId } = skill as Record<string, unknown>
+      if (typeof name !== 'string' || name === '' || typeof path !== 'string' || enabled === false || skills.has(name)) continue
+      const summary = typeof shortDescription === 'string' && shortDescription !== '' ? shortDescription : typeof description === 'string' ? description : ''
+      skills.set(name, {
+        path,
+        command: { name, kind: typeof pluginId === 'string' && pluginId !== '' ? 'plugin' : 'skill', ...(summary === '' ? {} : { description: summary }) }
+      })
+    }
+  }
+  return skills
+}
+
 type Running = {
   sessionId: string
   threadId: string
+  cwd: string
+  /** The enabled skills `skills/list` reported, by name, with the path a `skill` input item needs. */
+  skills: Map<string, { command: AgentCommand; path: string }>
   connection: CodexConnection
   options: StructuredLaunchOptions
   /** The permission mode the next turn runs in. */
@@ -145,6 +169,8 @@ type Running = {
 }
 
 type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running }
+
+const SKILLS_TIMEOUT_MS = 5_000
 
 export type CodexRunnerDeps = {
   /** A per-run child environment for isolated process tests. Production inherits the daemon environment. */
@@ -220,6 +246,8 @@ class CodexRunner implements StructuredRunner {
       }
       if (startup.stopped) return
       if (run.startupFailure) throw run.startupFailure
+      await this.loadSkills(run)
+      if (startup.stopped) return
       this.running.set(session.id, run)
 
       if (prompt === undefined || prompt === '') {
@@ -384,6 +412,8 @@ class CodexRunner implements StructuredRunner {
     run = {
       sessionId: session.id,
       threadId,
+      cwd: session.cwd,
+      skills: new Map(),
       connection,
       options,
       permissionMode: DEFAULT_PERMISSION_MODE,
@@ -413,6 +443,21 @@ class CodexRunner implements StructuredRunner {
     return run
   }
 
+  /**
+   * Reports the skills Codex offers for the session's folder; Codex has no listing for its TUI
+   * slash commands or custom prompts, so skills are the whole list. A failure leaves the list as it was.
+   */
+  private async loadSkills(run: Running): Promise<void> {
+    try {
+      const response = await run.connection.request('skills/list', { cwds: [run.cwd] }, SKILLS_TIMEOUT_MS)
+      if (run.stopped || run.failed) return
+      run.skills = codexSkills(response)
+      this.context.reportCommands?.(run.sessionId, [...run.skills.values()].map((skill) => skill.command))
+    } catch {
+      // an app-server without skills/list offers no commands
+    }
+  }
+
   private threadIdFromResponse(response: unknown, method: string): string {
     if (typeof response !== 'object' || response === null || Array.isArray(response)) {
       throw new Error(`Codex app-server ${method} returned an invalid response`)
@@ -438,9 +483,11 @@ class CodexRunner implements StructuredRunner {
     if (run.pendingApprovalCount > 0 || run.pendingCompletion) throw new Error('session is waiting for approval')
     const expectedTurnId = run.activeTurnId
     const method = expectedTurnId === null ? 'turn/start' : 'turn/steer'
+    const commands = [...run.skills.values()].map((skill) => skill.command)
     const input = [
       ...(text === '' ? [] : [{ type: 'text', text }]),
-      ...(options.images ?? []).map((path) => ({ type: 'localImage', path }))
+      ...(options.images ?? []).map((path) => ({ type: 'localImage', path })),
+      ...referencedCommands(text, commands).map((name) => ({ type: 'skill', name, path: run.skills.get(name)!.path }))
     ]
     const sentPermissionMode = run.permissionMode
     const params =
@@ -552,6 +599,9 @@ class CodexRunner implements StructuredRunner {
     if (typeof params.threadId === 'string' && params.threadId !== run.threadId) return
 
     switch (method) {
+      case 'skills/changed':
+        void this.loadSkills(run)
+        return
       case 'thread/tokenUsage/updated': {
         const rawUsage = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
           ? (rawParams as Record<string, unknown>).tokenUsage

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
 import { createCodexRunner } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createCodexAppServerFixture, isolatedProviderEnvironment, type CodexAppServerFixture } from './fakes/codex-app-server'
@@ -33,13 +33,14 @@ type Setup = {
   context: StructuredContext
   processRunner: OwnedProcessRunner
   spawnCalls: { argv: readonly string[]; options: SpawnOptions }[]
+  reported: AgentCommand[][]
 }
 
 let setup: Setup
 
-function makeSetup(): Setup {
+function makeSetup(fixtureOptions?: Parameters<typeof createCodexAppServerFixture>[1]): Setup {
   const home = mkdtempSync(join(tmpdir(), 'codex-runner-'))
-  const fixture = createCodexAppServerFixture(home)
+  const fixture = createCodexAppServerFixture(home, fixtureOptions)
   const processRunner = createProcessRunner({ owner: 'codex-runner-test' })
   const spawnCalls: Setup['spawnCalls'] = []
   const process: ProcessSpawner = {
@@ -52,8 +53,12 @@ function makeSetup(): Setup {
   const statuses: SessionStatus[] = []
   const asks: AskWaiter[] = []
   const storedProviderSessions: Setup['storedProviderSessions'] = []
+  const reported: AgentCommand[][] = []
   const context: StructuredContext = {
     process,
+    reportCommands(_sessionId, commands) {
+      reported.push(commands)
+    },
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -103,7 +108,7 @@ function makeSetup(): Setup {
     restorable: false
   }
   const runner = createCodexRunner(context, { env: isolatedProviderEnvironment(home) })
-  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls }
+  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls, reported }
 }
 
 beforeEach(() => {
@@ -239,12 +244,12 @@ describe('Codex app-server runner', () => {
     await until(() => setup.statuses.includes('done'))
 
     const calls = setup.fixture.requests()
-    expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'turn/start'])
+    expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'skills/list', 'turn/start'])
     expect(calls[2].params).toMatchObject({
       cwd: setup.home,
       model: 'gpt-5.5'
     })
-    expect(calls[3].params).toEqual({
+    expect(calls[4].params).toEqual({
       threadId: 'scripted-thread',
       input: [{ type: 'text', text: 'summarize' }],
       model: 'gpt-5.5',
@@ -325,7 +330,8 @@ describe('Codex app-server runner', () => {
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
-      'thread/start'
+      'thread/start',
+      'skills/list'
     ])
     expect(setup.statuses).toEqual(['running'])
     expect(setup.messages).toEqual([])
@@ -422,7 +428,7 @@ describe('Codex app-server runner', () => {
   test('resumes an existing thread without a prompt and sends a later turn on it', async () => {
     const resumed = { ...setup.session, providerSession: { id: 'persisted-thread', transcriptPath: null } }
     await setup.runner.start(resumed, undefined, { providerSession: { id: 'persisted-thread', transcriptPath: null } })
-    expect(setup.fixture.requests().map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/resume'])
+    expect(setup.fixture.requests().map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/resume', 'skills/list'])
     expect(setup.statuses).toEqual(['running'])
     await setup.runner.send(resumed.id, 'continue later')
     await until(() => setup.statuses.includes('done'))
@@ -634,5 +640,42 @@ describe('Codex app-server runner', () => {
     const items = setup.messages.map((message) => message.item) as any[]
     expect(items.at(-2)).toMatchObject({ kind: 'turn-end', state: 'failed' })
     expect(items.at(-1)).toMatchObject({ kind: 'error', reason: 'exited', resumable: true })
+  })
+})
+
+describe('Codex skills', () => {
+  const SKILLS = [
+    { name: 'imagegen', description: 'Generate or edit raster images', path: '/codex/skills/imagegen/SKILL.md', scope: 'system', enabled: true, pluginId: null },
+    { name: 'pdf:pdf', description: 'Long PDF description', shortDescription: 'Work with PDFs', path: '/codex/plugins/pdf/SKILL.md', scope: 'user', enabled: true, pluginId: 'pdf@openai' },
+    { name: 'off', description: 'Disabled', path: '/codex/skills/off/SKILL.md', scope: 'user', enabled: false, pluginId: null }
+  ]
+
+  beforeEach(async () => {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup({ skills: SKILLS })
+  })
+
+  test('reports enabled skills from skills/list before the first message, plugin skills as plugin entries', async () => {
+    await setup.runner.start(setup.session, undefined)
+    expect(setup.fixture.requests().find((request) => request.method === 'skills/list')?.params).toEqual({ cwds: [setup.home] })
+    expect(setup.reported).toEqual([
+      [
+        { name: 'imagegen', kind: 'skill', description: 'Generate or edit raster images' },
+        { name: 'pdf:pdf', kind: 'plugin', description: 'Work with PDFs' }
+      ]
+    ])
+  })
+
+  test('a skill named anywhere in the message is attached as a skill input item; unknown names and paths are not', async () => {
+    await setup.runner.start(setup.session, undefined)
+    await setup.runner.send(setup.session.id, 'read /tmp/x and use /pdf:pdf then /off and /imagegen')
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().find((request) => request.method === 'turn/start')?.params?.input).toEqual([
+      { type: 'text', text: 'read /tmp/x and use /pdf:pdf then /off and /imagegen' },
+      { type: 'skill', name: 'pdf:pdf', path: '/codex/plugins/pdf/SKILL.md' },
+      { type: 'skill', name: 'imagegen', path: '/codex/skills/imagegen/SKILL.md' }
+    ])
   })
 })
