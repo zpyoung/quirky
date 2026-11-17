@@ -26,6 +26,8 @@ const ACCOUNTS_PROVIDER_IDS = VISIBLE_PROVIDER_IDS.map((provider) => `accounts-p
 type FixtureMode = 'usage' | 'settings' | 'usage-settings' | 'accessory' | 'switch'
 type FixtureOptions = {
   section?: 'appearance' | 'gemini'
+  provider?: 'codex'
+  open?: boolean
   direction?: 'used' | 'remaining'
   hidden?: boolean
   density?: 'normal' | 'icons'
@@ -75,7 +77,7 @@ type BrowserFixtureApi = {
   resolveAction(): void
   resolveSetting(): void
 }
-type WindowWithFixture = Window & { accountsBaseline: BrowserFixtureApi }
+type WindowWithFixture = typeof window & { accountsBaseline: BrowserFixtureApi }
 
 type CheckboxGeometry = {
   id: string
@@ -361,12 +363,12 @@ beforeAll(async () => {
     headless: true,
     args: process.platform === 'linux' ? ['--no-sandbox'] : [],
   })
-})
+}, 60_000)
 
 afterAll(async () => {
   await browser?.close()
   if (tempDirectory) await rm(tempDirectory, { recursive: true, force: true })
-})
+}, 60_000)
 
 async function pageFor(width = 1000, height = 900, theme: 'dark' | 'light' = 'dark'): Promise<Page> {
   if (!browser) throw new Error('Browser fixture was not initialized')

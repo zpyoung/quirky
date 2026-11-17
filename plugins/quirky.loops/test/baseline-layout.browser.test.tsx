@@ -266,7 +266,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close()
-})
+}, 60_000)
 
 async function pageFor(theme: string, viewport: { width: number; height: number }): Promise<Page> {
   const page = await browser.newPage({ viewport })
@@ -324,7 +324,7 @@ async function booleanGeometry(page: Page, labels: string[]) {
     const row = Array.from(document.querySelectorAll<HTMLElement>('.ui-form-row')).find((candidate) =>
       candidate.querySelector('.ui-form-row__label')?.textContent?.trim() === expectedLabel)
     const input = row?.querySelector<HTMLInputElement>('input[type="checkbox"]')
-    const label = row?.querySelector<HTMLElement>('.ui-form-row__label')
+    const label = row?.querySelector<HTMLLabelElement>('.ui-form-row__label')
     if (!row || !input || !label) return { present: false as const, label: expectedLabel }
     const range = document.createRange()
     range.selectNodeContents(label)

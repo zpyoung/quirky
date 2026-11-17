@@ -210,7 +210,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await browser?.close()
-})
+}, 60_000)
 
 async function pageFor(theme: 'dark' | 'light', width: number, height: number): Promise<Page> {
   const page = await browser.newPage({ viewport: { width, height } })
