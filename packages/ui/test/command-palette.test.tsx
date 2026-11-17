@@ -644,3 +644,16 @@ test('the palette scope tabs and results are inside the palette shell', async ()
   expect(tablist?.classList.contains('ui-tabs--underline')).toBe(true)
   expect(results).not.toBeNull()
 })
+
+test('long command text and its description remain searchable and execute the original command', async () => {
+  const title = 'VeryLongUnbrokenCommandName'.repeat(5)
+  const palette = await mount({
+    model: { ...MODEL, commands: [{ id: 'command:acme/long', plugin: 'acme', title, description: 'Full command detail', module: null }] }
+  })
+  await palette.chooseScope('Commands')
+  await palette.search('VeryLongUnbrokenCommandName')
+  expect(palette.titles()).toEqual([title])
+  expect(palette.descriptions()).toEqual(['Full command detail'])
+  await palette.click(title)
+  expect(palette.ran.commands).toEqual(['command:acme/long'])
+})
