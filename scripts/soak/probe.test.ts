@@ -4,13 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ConnectionLost, type QuirkyClient } from '@quirky/protocol'
 import { createPtyHostTracker } from './world'
-import { startProbe } from './probe'
-import type { EventRecord, GitProbeRecord, ProbeRecord } from './contracts'
+import { createPongMatcher, startProbe } from './probe'
+import type { EventRecord, GitProbeRecord, ProbeRecord, TerminalProbeRecord } from './contracts'
 
 type ProbeHandle = {
   events: EventRecord[]
   probes: ProbeRecord[]
   gitProbes: GitProbeRecord[]
+  terminalProbes: TerminalProbeRecord[]
   daemonExited(): boolean
   finish(): void
   stop(): void
@@ -22,11 +23,28 @@ type Deferred<T> = {
   reject(error: unknown): void
 }
 
+type TerminalBehavior = {
+  sessions?: () => unknown
+  attach?: (params: unknown) => unknown
+  send?: (params: unknown) => unknown
+  detach?: (params: unknown) => unknown
+}
+
+type TerminalSubscription = {
+  streamId: number
+  handler: (bytes: Uint8Array) => void
+  onLagged?: () => void
+  disposed: boolean
+}
+
 type FakeClient = QuirkyClient & {
   calls: string[]
   rpcCalls: { method: string; params: unknown; options: unknown }[]
   closeCalls: number
+  terminalSubscriptions: TerminalSubscription[]
   emitEvent(event: { type: string }): void
+  emitTerminal(streamId: number, bytes: Uint8Array | string): void
+  lagTerminal(streamId: number): void
   disconnect(): void
 }
 
@@ -143,11 +161,14 @@ function launch(overrides: Record<string, unknown> = {}): ProbeHandle {
 function fakeClient(
   status: () => unknown = () => ({ ptyHost: { pid: 42 } }),
   initiallyClosed = false,
-  gitStatus: (params: unknown) => unknown = () => undefined
+  gitStatus: (params: unknown) => unknown = () => undefined,
+  terminal: TerminalBehavior = {}
 ): FakeClient {
   let closed = initiallyClosed
+  let nextStreamId = 70
   const eventHandlers = new Set<(event: { type: string }) => void>()
   const closeHandlers = new Set<() => void>()
+  const terminalSubscriptions: TerminalSubscription[] = []
   const calls: string[] = []
   const rpcCalls: FakeClient['rpcCalls'] = []
   let closeCalls = 0
@@ -157,6 +178,7 @@ function fakeClient(
     },
     calls,
     rpcCalls,
+    terminalSubscriptions,
     get closeCalls() {
       return closeCalls
     },
@@ -166,6 +188,16 @@ function fakeClient(
       try {
         if (method === 'status.get') return Promise.resolve(status())
         if (method === 'quirky.git/status') return Promise.resolve(gitStatus(params))
+        if (method === 'quirky.terminal/sessions') {
+          return Promise.resolve(terminal.sessions?.() ?? {
+            sessions: [{ sessionId: 's1', cols: 132, rows: 40 }]
+          })
+        }
+        if (method === 'quirky.terminal/attach') {
+          return Promise.resolve(terminal.attach?.(params) ?? { streamId: ++nextStreamId, replay: '' })
+        }
+        if (method === 'quirky.terminal/send') return Promise.resolve(terminal.send?.(params))
+        if (method === 'quirky.terminal/detach') return Promise.resolve(terminal.detach?.(params))
         return Promise.resolve(undefined)
       } catch (error) {
         return Promise.reject(error)
@@ -179,12 +211,39 @@ function fakeClient(
       closeHandlers.add(handler)
       return () => closeHandlers.delete(handler)
     },
+    onTerminalOutput(
+      streamId: number,
+      handler: (bytes: Uint8Array) => void,
+      options?: { onLagged?: () => void }
+    ) {
+      const subscription: TerminalSubscription = {
+        streamId,
+        handler,
+        onLagged: options?.onLagged,
+        disposed: false
+      }
+      terminalSubscriptions.push(subscription)
+      return () => {
+        subscription.disposed = true
+      }
+    },
     close() {
       closeCalls++
       this.disconnect()
     },
     emitEvent(event: { type: string }) {
       for (const handler of eventHandlers) handler(event)
+    },
+    emitTerminal(streamId: number, bytes: Uint8Array | string) {
+      const chunk = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes
+      for (const subscription of terminalSubscriptions) {
+        if (subscription.streamId === streamId && !subscription.disposed) subscription.handler(chunk)
+      }
+    },
+    lagTerminal(streamId: number) {
+      for (const subscription of terminalSubscriptions) {
+        if (subscription.streamId === streamId && !subscription.disposed) subscription.onLagged?.()
+      }
     },
     disconnect() {
       if (closed) return
@@ -1624,4 +1683,372 @@ test('finish marks an in-flight git call timed out at its RPC deadline', async (
     await drainMicrotasks()
     expect(probe.gitProbes).toHaveLength(1)
   }, true)
+})
+test('createPongMatcher accepts only complete exact lines for its current token', () => {
+  const encode = (text: string) => new TextEncoder().encode(text)
+  const matcherFor = (token: string) => {
+    const matcher = createPongMatcher()
+    matcher.expect(token)
+    return matcher
+  }
+
+  expect(matcherFor('ab12cd34-1').push(encode('\r\nsoak-pong ab12cd34-1\r\n'))).toBe(true)
+
+  const split = matcherFor('ab12cd34-1')
+  expect(split.push(encode('\r\nsoak-po'))).toBe(false)
+  expect(split.push(encode('ng ab12cd34-1'))).toBe(false)
+  expect(split.push(encode('\r\n'))).toBe(true)
+
+  expect(matcherFor('ab12cd34-1').push(
+    encode(`\nsoak-pong ab12cd34-1\n${'x'.repeat(50_000)}\n`)
+  )).toBe(true)
+  expect(matcherFor('ab12cd34-1').push(
+    encode(`${'x'.repeat(10_000)}\nsoak-pong ab12cd34-1\n`)
+  )).toBe(true)
+
+  const mismatches = matcherFor('ab12cd34-1')
+  expect(mismatches.push(encode(
+    'soak-pong ab12cd34-10\nsoak-pong ab12cd34-2\nsoak-pong ab12cd34-0\n' +
+    'xsoak-pong ab12cd34-1\nsoak-pong ab12cd34-1 \nsoak-ping ab12cd34-1\n'
+  ))).toBe(false)
+
+  const nextAttempt = matcherFor('ab12cd34-2')
+  expect(nextAttempt.push(encode('soak-pong ab12cd34-0\nsoak-pong ab12cd34-1\n'))).toBe(false)
+  expect(nextAttempt.push(encode('soak-pong ab12cd34-2\n'))).toBe(true)
+
+  const terminated = matcherFor('ab12cd34-1')
+  expect(terminated.push(encode('soak-pong ab12cd34-1'))).toBe(false)
+  expect(terminated.push(encode('\n'))).toBe(true)
+})
+
+test('createPongMatcher bounds long tails and decodes split UTF-8 characters', () => {
+  const matcher = createPongMatcher()
+  const token = 'ab12cd34-1'
+  const encode = (text: string) => new TextEncoder().encode(text)
+  matcher.expect(token)
+
+  expect(matcher.push(encode(`${'x'.repeat(100_000)}soak-pong ${token}`))).toBe(false)
+  expect(matcher.push(encode('\n'))).toBe(false)
+  expect(matcher.push(encode(`\nsoak-pong ${token}\n`))).toBe(true)
+
+  const utf8 = createPongMatcher()
+  utf8.expect(token)
+  const bytes = encode(`⠿\nsoak-pong ${token}\n`)
+  expect(utf8.push(bytes.slice(0, 1))).toBe(false)
+  expect(utf8.push(bytes.slice(1, 2))).toBe(false)
+  expect(utf8.push(bytes.slice(2, 5))).toBe(false)
+  expect(utf8.push(bytes.slice(5))).toBe(true)
+})
+
+test('terminal probes register before send, wait for both results, and use session dimensions', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const sending = deferred<unknown>()
+    const client = fakeClient(undefined, false, undefined, { send: () => sending.promise })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => client.calls.includes('quirky.terminal/send'))
+
+    const sessions = client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/sessions')
+    const attaches = client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/attach')
+    const send = client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!
+    expect(sessions).toHaveLength(1)
+    expect(attaches.map(({ params }) => params)).toEqual([{
+      session: 's1',
+      cols: 132,
+      rows: 40,
+      historyLines: 0
+    }])
+    expect(client.terminalSubscriptions).toHaveLength(1)
+    expect(typeof client.terminalSubscriptions[0]!.onLagged).toBe('function')
+
+    const sendText = (send.params as { text: string }).text
+    const match = /^soak-ping ([0-9a-f]{8}-[1-9]\d{0,8})\n$/.exec(sendText)
+    expect(match).not.toBeNull()
+    const token = match![1]!
+    expect(token.endsWith('-1')).toBe(true)
+    expect(send.params).toEqual({ session: 's1', text: `soak-ping ${token}\n` })
+
+    await advanceProbeClock(clock, startedAt + 10, 10)
+    client.emitTerminal(client.terminalSubscriptions[0]!.streamId, `\nsoak-pong ${token}\n`)
+    await drainMicrotasks()
+    expect(probe.terminalProbes).toEqual([])
+
+    await advanceProbeClock(clock, startedAt + 30, 10)
+    sending.resolve(undefined)
+    await drainUntil(() => probe.terminalProbes.length === 1)
+    expect(probe.terminalProbes[0]).toEqual({
+      at: 0,
+      ms: 30,
+      ownLagMs: 0,
+      timedOut: false,
+      failed: false
+    })
+
+    await advanceProbeClock(clock, startedAt + 999, 50)
+    expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/send')).toHaveLength(1)
+    await advanceProbeClock(clock, startedAt + 1_000, 50)
+    await drainUntil(() => client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/send').length === 2)
+    expect(client.terminalSubscriptions).toHaveLength(1)
+    const secondText = (client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/send')[1]!.params as { text: string }).text
+    expect(secondText).toMatch(/^soak-ping [0-9a-f]{8}-2\n$/)
+  }, true)
+})
+
+test('terminal timeout detaches and reattaches, and the default timeout is 30 seconds', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const client = fakeClient()
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 40,
+      terminalProbe: { session: 's1', intervalMs: 80 }
+    })
+    await drainUntil(() => client.rpcCalls.some(({ method }) => method === 'quirky.terminal/send'))
+    await advanceProbeClock(clock, startedAt + 40, 10)
+    expect(probe.terminalProbes).toEqual([{
+      at: 0,
+      ms: 40,
+      ownLagMs: 0,
+      timedOut: true,
+      failed: false
+    }])
+    expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/detach').map(({ params }) => params))
+      .toEqual([{ streamId: client.terminalSubscriptions[0]!.streamId }])
+
+    await advanceProbeClock(clock, startedAt + 80, 10)
+    await drainUntil(() => client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/attach').length === 2)
+    expect(client.terminalSubscriptions).toHaveLength(2)
+    probe.stop()
+
+    const defaultStartedAt = clock.now()
+    const defaultClient = fakeClient()
+    const defaultProbe = launch({
+      startedAt: defaultStartedAt,
+      connect: () => Promise.resolve(defaultClient),
+      maxStallMs: 1,
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => defaultClient.calls.includes('quirky.terminal/send'))
+    await advanceProbeClock(clock, defaultStartedAt + 30_000, 50)
+    defaultProbe.finish()
+    expect(defaultProbe.terminalProbes).toEqual([{
+      at: 0,
+      ms: 30_000,
+      ownLagMs: 0,
+      timedOut: true,
+      failed: false
+    }])
+  }, true)
+})
+
+test('terminal send rejection records failure even after a pong and the loop continues', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const firstSend = deferred<unknown>()
+    let sendCount = 0
+    const client = fakeClient(undefined, false, undefined, {
+      send: () => ++sendCount === 1 ? firstSend.promise : undefined
+    })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      terminalProbe: { session: 's1', intervalMs: 20 },
+      probeTimeoutMs: 100
+    })
+    await drainUntil(() => client.rpcCalls.some(({ method }) => method === 'quirky.terminal/send'))
+    const firstText = (client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!.params as { text: string }).text
+    const token = /^soak-ping ([^\n]+)\n$/.exec(firstText)![1]!
+    await advanceProbeClock(clock, startedAt + 4, 4)
+    client.emitTerminal(client.terminalSubscriptions[0]!.streamId, `\nsoak-pong ${token}\n`)
+    await advanceProbeClock(clock, startedAt + 5, 1)
+    firstSend.reject(new Error('send failed'))
+    await drainUntil(() => probe.terminalProbes.length === 1)
+    expect(probe.terminalProbes[0]).toMatchObject({
+      ms: 5,
+      timedOut: false,
+      failed: true
+    })
+
+    await advanceProbeClock(clock, startedAt + 20, 5)
+    await drainUntil(() => client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/send').length === 2)
+    expect(probe.terminalProbes).toHaveLength(1)
+  }, true)
+})
+
+test('terminal session lookup and attach failures are recorded and retried', async () => {
+  await withProbeClock(async (clock) => {
+    for (const failure of ['missing-session', 'attach'] as const) {
+      const startedAt = clock.now()
+      let sessionLookups = 0
+      let attachCalls = 0
+      const client = fakeClient(undefined, false, undefined, {
+        sessions: () => {
+          sessionLookups++
+          return failure === 'missing-session' && sessionLookups === 1
+            ? { sessions: [] }
+            : { sessions: [{ sessionId: 's1', cols: 100, rows: 30 }] }
+        },
+        attach: () => {
+          attachCalls++
+          if (failure === 'attach' && attachCalls === 1) throw new Error('attach failed')
+          return { streamId: 70 + attachCalls }
+        }
+      })
+      const probe = launch({
+        startedAt,
+        connect: () => Promise.resolve(client),
+        terminalProbe: { session: 's1', intervalMs: 20 },
+        probeTimeoutMs: 100
+      })
+      await drainUntil(() => probe.terminalProbes.length === 1)
+      expect(probe.terminalProbes[0]).toMatchObject({ timedOut: false, failed: true })
+
+      await advanceProbeClock(clock, startedAt + 20, 5)
+      await drainUntil(() => client.rpcCalls.some(({ method }) => method === 'quirky.terminal/send'))
+      const secondSendText = (client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!.params as { text: string }).text
+      expect(secondSendText).toMatch(/^soak-ping [0-9a-f]{8}-2\n$/)
+      expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/attach')).toHaveLength(
+        failure === 'missing-session' ? 1 : 2
+      )
+      expect(client.terminalSubscriptions).toHaveLength(1)
+      probe.stop()
+    }
+  }, true)
+})
+test('terminal send rejection with an undefined reason is recorded as a failure', async () => {
+  const client = fakeClient(undefined, false, undefined, {
+    send: () => Promise.reject(undefined)
+  })
+  const probe = launch({
+    connect: () => Promise.resolve(client),
+    terminalProbe: { session: 's1', intervalMs: 20 }
+  })
+  await waitFor(() => probe.terminalProbes.length === 1)
+  expect(probe.terminalProbes[0]).toMatchObject({ timedOut: false, failed: true })
+  probe.stop()
+})
+
+
+test('terminal stream lag fails the attempt, detaches despite errors, and reattaches', async () => {
+  const client = fakeClient(undefined, false, undefined, {
+    detach: () => Promise.reject(new Error('detach failed'))
+  })
+  const probe = launch({
+    connect: () => Promise.resolve(client),
+    probeTimeoutMs: 500,
+    terminalProbe: { session: 's1', intervalMs: 20 }
+  })
+  await waitFor(() => client.terminalSubscriptions.length === 1)
+  const firstStream = client.terminalSubscriptions[0]!.streamId
+  client.lagTerminal(firstStream)
+  await waitFor(() => probe.terminalProbes.length === 1)
+  expect(probe.terminalProbes[0]).toMatchObject({ timedOut: false, failed: true })
+  await waitFor(() => client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/attach').length === 2)
+  expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/detach').map(({ params }) => params))
+    .toContainEqual({ streamId: firstStream })
+  expect(client.terminalSubscriptions[0]!.disposed).toBe(true)
+  probe.stop()
+})
+
+test('ConnectionLost from terminal lookup, attach, or send marks daemon loss without a record', async () => {
+  for (const failure of ['sessions', 'attach', 'send'] as const) {
+    let lostCalls = 0
+    const client = fakeClient(undefined, false, undefined, {
+      sessions: () => {
+        if (failure === 'sessions') throw new ConnectionLost()
+        return { sessions: [{ sessionId: 's1', cols: 132, rows: 40 }] }
+      },
+      attach: () => {
+        if (failure === 'attach') throw new ConnectionLost()
+        return { streamId: 71 }
+      },
+      send: () => failure === 'send' ? Promise.reject(new ConnectionLost()) : undefined
+    })
+    const probe = launch({
+      connect: () => Promise.resolve(client),
+      onDaemonLost: () => lostCalls++,
+      terminalProbe: { session: 's1' }
+    })
+    await waitFor(() => lostCalls === 1)
+    expect(probe.daemonExited()).toBe(true)
+    expect(probe.terminalProbes).toEqual([])
+    expect(lostCalls).toBe(1)
+    probe.stop()
+  }
+})
+
+test('terminal own lag uses the shared probe lateness timer', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const client = fakeClient()
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 2_000,
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => client.calls.includes('quirky.terminal/send'))
+    const token = /^soak-ping ([^\n]+)\n$/.exec(
+      (client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!.params as { text: string }).text
+    )![1]!
+
+    clock.jumpTo(startedAt + 600)
+    advanceTimersByTime(600)
+    await drainMicrotasks()
+    client.emitTerminal(client.terminalSubscriptions[0]!.streamId, `\nsoak-pong ${token}\n`)
+    await drainUntil(() => probe.terminalProbes.length === 1)
+    expect(probe.terminalProbes[0]!.ownLagMs).toBeGreaterThan(500)
+  }, true)
+})
+
+test('finish records only stalled terminal attempts, while stop discards them and unregisters output', async () => {
+  await withProbeClock(async (clock) => {
+    for (const end of ['finish', 'quick-finish', 'stop'] as const) {
+      const startedAt = clock.now()
+      const sending = deferred<unknown>()
+      const client = fakeClient(undefined, false, undefined, { send: () => sending.promise })
+      const probe = launch({
+        startedAt,
+        connect: () => Promise.resolve(client),
+        maxStallMs: 1_000,
+        probeTimeoutMs: 10_000,
+        terminalProbe: { session: 's1' }
+      })
+      await drainUntil(() => client.calls.includes('quirky.terminal/send'))
+      const elapsed = end === 'quick-finish' ? 900 : 1_200
+      await advanceProbeClock(clock, startedAt + elapsed, 50)
+      if (end === 'stop') probe.stop()
+      else probe.finish()
+
+      expect(probe.terminalProbes).toEqual(end === 'finish' ? [{
+        at: 0,
+        ms: 1_200,
+        ownLagMs: 0,
+        timedOut: false,
+        failed: false
+      }] : [])
+      expect(client.terminalSubscriptions[0]!.disposed).toBe(true)
+      expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/detach'))
+        .toContainEqual(expect.objectContaining({ params: { streamId: client.terminalSubscriptions[0]!.streamId } }))
+
+      sending.resolve(undefined)
+      client.emitTerminal(client.terminalSubscriptions[0]!.streamId, '\nsoak-pong 0123abcd-1\n')
+      await drainMicrotasks()
+      expect(probe.terminalProbes).toHaveLength(end === 'finish' ? 1 : 0)
+    }
+  }, true)
+})
+
+test('terminal option absent leaves terminal instrumentation and calls untouched', async () => {
+  const client = fakeClient()
+  const probe = launch({ connect: () => Promise.resolve(client) })
+  await waitFor(() => client.calls.includes('status.get'))
+  expect(probe.terminalProbes).toEqual([])
+  expect(client.calls.filter((method) => method.startsWith('quirky.terminal/'))).toEqual([])
+  expect(client.terminalSubscriptions).toEqual([])
 })
