@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Badge, Button, ControlIcon, ListRow, Popover, SectionHeader, TextField } from '@quirky/ui'
-import { modeLabel, type Picks, type TurnSettings } from './controls'
+import type { Picks, TurnSettings } from './controls'
 
 export type SettingsSection = 'model' | 'effort' | 'mode'
 
@@ -132,7 +132,8 @@ export function SettingsChip({
                 key={name}
                 compact
                 selected={name === settings.mode}
-                title={modeLabel(name)}
+                title={settings.modeLabel(name)}
+                trailing={settings.isDangerous(name) ? <Badge tone="failing">No approvals</Badge> : undefined}
                 onClick={() => onPicks({ ...picks, mode: name })}
               />
             ))}
@@ -161,10 +162,14 @@ export function SettingsChip({
   )
 }
 
-/** The badges for a permission mode or Plan that is not the default; each ✕ returns it to the default. */
+/**
+ * The badges for a permission mode or Plan that is not the default; each ✕ returns it to the default.
+ * A mode that lets the agent act without asking gets the failing tone and says so, so it is never missed.
+ */
 export function ModeBadges({ settings, picks, onPicks }: { settings: TurnSettings; picks: Picks; onPicks: (picks: Picks) => void }) {
   const mode = settings.mode
   const defaultMode = settings.defaultMode
+  const dangerous = settings.isDangerous(mode)
   return (
     <>
       {picks.plan && (
@@ -178,12 +183,17 @@ export function ModeBadges({ settings, picks, onPicks }: { settings: TurnSetting
         <button
           type="button"
           style={badgeButton}
-          aria-label={`Return permissions to ${modeLabel(defaultMode)}`}
-          title={`Click to go back to ${modeLabel(defaultMode)}`}
+          aria-label={`Return permissions to ${settings.modeLabel(defaultMode)}`}
+          title={
+            dangerous
+              ? `${settings.modeLabel(mode)} is on: the agent acts without asking for approval. Click to go back to ${settings.modeLabel(defaultMode)}`
+              : `Click to go back to ${settings.modeLabel(defaultMode)}`
+          }
+          data-dangerous={dangerous ? 'true' : undefined}
           onClick={() => onPicks({ ...picks, mode: defaultMode })}
         >
-          <Badge tone="needs-you">
-            <span style={badgeInner}>{modeLabel(mode)} <ControlIcon name="x" /></span>
+          <Badge tone={dangerous ? 'failing' : 'needs-you'}>
+            <span style={badgeInner}>{settings.modeLabel(mode)} <ControlIcon name="x" /></span>
           </Badge>
         </button>
       )}

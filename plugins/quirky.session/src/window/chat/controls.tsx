@@ -128,11 +128,38 @@ export type TurnSettings = {
   modes: string[]
   mode: string
   defaultMode: string | null
+  /** The display name of a permission mode id. */
+  modeLabel: (mode: string) => string
+  /** Whether a permission mode lets the agent act without asking. */
+  isDangerous: (mode: string) => boolean
   modelReason: string | undefined
   effortReason: string | undefined
   modeReason: string | undefined
   planReason: string | undefined
   imagesReason: string | undefined
+}
+
+/** Loads the permission mode a running session is in, which can differ from the agent's default when it opened in another. */
+function useLiveMode(context: UiPluginContext, session: Session, capabilities: AgentCapabilities | null): string | null {
+  const [mode, setMode] = useState<string | null>(null)
+  const wanted = capabilities?.permissionModes.ok === true
+  const started = session.status !== 'starting' && session.status !== 'exited'
+  useEffect(() => {
+    setMode(null)
+    if (!wanted || !started) return
+    let cancelled = false
+    context
+      .call('quirky.structured/settings', { session: session.id })
+      .then((loaded) => {
+        const found = (loaded as { settings?: { permissionMode?: unknown } } | undefined)?.settings?.permissionMode
+        if (!cancelled && typeof found === 'string') setMode(found)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [context, session.id, wanted, started])
+  return mode
 }
 
 /** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
@@ -145,6 +172,7 @@ export function useTurnSettings(
 ): TurnSettings {
   const launched = launchPicks(session)
   const live = useLiveModels(context, session, capabilities, options)
+  const liveMode = useLiveMode(context, session, capabilities)
   const liveList = live !== null && live !== 'failed' ? live.models : []
   const modelList: Choice[] = (options?.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })).concat(liveList)
   const liveCurrent = live !== null && live !== 'failed' ? live.current : null
@@ -154,7 +182,9 @@ export function useTurnSettings(
   const permissionModes = capabilities?.permissionModes
   const modes = permissionModes?.ok ? permissionModes.modes : []
   const defaultMode = modes[0] ?? null
-  const mode = picks.mode ?? defaultMode ?? ''
+  const mode = picks.mode ?? (liveMode !== null && modes.includes(liveMode) ? liveMode : null) ?? defaultMode ?? ''
+  const labels = permissionModes?.ok ? permissionModes.labels : undefined
+  const dangerous = permissionModes?.ok ? permissionModes.dangerous ?? [] : []
 
   const noModels =
     live === null ? (options !== null && modelList.length === 0 && capabilities?.model.ok ? 'Loading models' : undefined)
@@ -170,6 +200,8 @@ export function useTurnSettings(
     modes,
     mode,
     defaultMode,
+    modeLabel: (name) => labels?.[name] ?? modeLabel(name),
+    isDangerous: (name) => dangerous.includes(name),
     modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
     effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
     modeReason: reasonOf(permissionModes),
@@ -178,7 +210,7 @@ export function useTurnSettings(
   }
 }
 
-/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits". */
+/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits"; the fallback when the agent names none. */
 export function modeLabel(mode: string): string {
   const words = mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase()
   return words.charAt(0).toUpperCase() + words.slice(1)

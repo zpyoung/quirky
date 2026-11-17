@@ -325,6 +325,44 @@ describe('the chat view', () => {
     expect(fake.callsTo('quirky.structured/send')[0]!.params).toMatchObject({ text: 'next', when: 'idle' })
   })
 
+  test('a resumed chat shows the conversation from every session it was resumed from, oldest first', async () => {
+    // journals are per Quirky session, so both chains start at seq 1 and must not collide
+    const journals: Record<string, StructuredMessage[]> = {
+      first: [{ ...user(1, 'side panel?'), sessionId: 'first' }, { ...prose(2, 'Yes, there is one.'), sessionId: 'first' }],
+      second: [{ ...user(1, 'something simple'), sessionId: 'second' }, { ...prose(2, 'Done.'), sessionId: 'second' }],
+      chat: [user(1, 'what does resume do?'), prose(2, 'It picks the chat back up.')]
+    }
+    const records: Record<string, Session> = {
+      first: session({ id: 'first', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null }),
+      second: session({ id: 'second', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: 'first' })
+    }
+    await mountChat({
+      session: { resumedFrom: 'second' },
+      handlers: {
+        'quirky.structured/messages': ({ session: id }) => journals[id] ?? [],
+        'quirky.session/get': ({ session: id }) => records[id]
+      }
+    })
+    const said = [...host!.querySelectorAll('[aria-label="Your message"]')].map((element) => element.textContent)
+    expect(said).toEqual(['side panel?', 'something simple', 'what does resume do?'])
+    expect(text()).toContain('Yes, there is one.')
+    expect(text()).toContain('It picks the chat back up.')
+    expect([...host!.querySelectorAll('section[aria-label^="Turn "]')].map((element) => element.getAttribute('aria-label'))).toEqual([
+      'Turn 1',
+      'Turn 2',
+      'Turn 3'
+    ])
+  })
+
+  test('a resumed chat still shows its own messages when an earlier session cannot be read', async () => {
+    await mountChat({
+      messages: [user(1, 'still here')],
+      session: { resumedFrom: 'gone' },
+      handlers: { 'quirky.session/get': () => { throw new RpcError(RpcErrorCode.InvalidParams, 'no such session') } }
+    })
+    expect(byLabel('Your message')!.textContent).toBe('still here')
+  })
+
   test('Stop interrupts the turn instead of stopping the session', async () => {
     await mountChat({ messages: [user(1, 'go')], session: { status: 'working' }, handlers: { 'quirky.structured/interrupt': () => ({ ok: true }) } })
     await click(host!.querySelector('button[aria-label="Stop"]'))
@@ -741,15 +779,18 @@ describe('the agent picker', () => {
   })
 
   test('the composer picks reach the create call', async () => {
-    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: null, plan: true } })
+    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: 'yolo', plan: true } })
     await click(card('omp'))
     await settle()
+    // the permission and plan picks are structured create params, not catalog launch options
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
       agent: 'omp',
       worktree: 'wt-main',
       deferStart: true,
       model: 'opus',
-      options: { effort: 'high', plan: true }
+      options: { effort: 'high' },
+      permissionMode: 'yolo',
+      planMode: true
     })
   })
 

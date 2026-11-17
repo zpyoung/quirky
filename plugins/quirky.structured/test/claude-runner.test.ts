@@ -143,6 +143,67 @@ describe('configure', () => {
   test('a session that is not running refuses', async () => {
     await expect(runner.configure!('s_none', { planMode: true })).rejects.toThrow('session is not running')
   })
+
+  test('every Claude permission mode passes straight to the SDK', async () => {
+    const query = await begin()
+    for (const mode of ['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'default']) {
+      expect(await runner.configure!(session.id, { permissionMode: mode })).toMatchObject({ permissionMode: mode })
+    }
+    expect(query.permissionModes).toEqual(['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'default'])
+  })
+
+  test('a mode Claude refuses keeps the previous mode in force', async () => {
+    const query = await begin()
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
+    query.refusedPermissionMode = { mode: 'bypassPermissions', message: 'bypass permissions is disabled by settings' }
+    await expect(runner.configure!(session.id, { permissionMode: 'bypassPermissions' })).rejects.toThrow('bypass permissions is disabled by settings')
+    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'acceptEdits' })
+  })
+
+  test("auto mode is refused before the SDK call when Claude says the model can't use it", async () => {
+    await runner.start(session, 'hello', { model: 'haiku' })
+    const query = queries[0]
+    query.modelList = [{ value: 'haiku', displayName: 'Haiku', description: '', supportsAutoMode: false }]
+    await expect(runner.configure!(session.id, { permissionMode: 'auto' })).rejects.toThrow('Haiku does not support auto mode')
+    expect(query.permissionModes).toEqual([])
+  })
+
+  test('auto mode goes ahead when the model supports it or Claude does not say', async () => {
+    const query = await begin()
+    query.modelList = [{ value: 'default', displayName: 'Default', description: '', supportsAutoMode: true }]
+    await runner.configure!(session.id, { permissionMode: 'auto' })
+    await runner.configure!(session.id, { permissionMode: 'default' })
+    query.modelList = [{ value: 'other', displayName: 'Other', description: '', supportsAutoMode: false }]
+    await runner.configure!(session.id, { permissionMode: 'auto' })
+    expect(query.permissionModes).toEqual(['auto', 'default', 'auto'])
+  })
+
+  test('an empty configure reads the settings without calling the SDK', async () => {
+    const query = await begin()
+    expect(await runner.configure!(session.id, {})).toEqual({ permissionMode: 'default', planMode: false })
+    expect(query.permissionModes).toEqual([])
+  })
+})
+
+describe('start permission mode', () => {
+  test('a session opens in default and may later switch into bypass permissions', async () => {
+    const query = await begin()
+    expect(query.params.options?.permissionMode).toBe('default')
+    expect(query.params.options?.allowDangerouslySkipPermissions).toBe(true)
+  })
+
+  test('the opening permission mode reaches the query options and the reported settings', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'bypassPermissions' })
+    expect(queries[0].params.options?.permissionMode).toBe('bypassPermissions')
+    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'bypassPermissions', planMode: false })
+  })
+
+  test('opening in plan mode starts the query in plan and remembers the mode underneath', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'acceptEdits', planMode: true })
+    expect(queries[0].params.options?.permissionMode).toBe('plan')
+    await runner.configure!(session.id, { planMode: false })
+    expect(queries[0].permissionModes).toEqual(['acceptEdits'])
+  })
 })
 
 describe('start', () => {

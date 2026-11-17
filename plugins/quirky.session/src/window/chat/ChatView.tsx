@@ -125,10 +125,48 @@ function useCapabilities(context: UiPluginContext, agent: string): AgentCapabili
   return capabilities
 }
 
+type EarlierChat = { session: Session; messages: StructuredMessage[] }
+
+/**
+ * The messages of every session `session` was resumed from, oldest first. Resume starts a new
+ * Quirky session with its own journal, so without these a resumed chat would open empty. A
+ * session that cannot be read ends the walk and keeps what was found before it.
+ */
+function useEarlierChats(context: UiPluginContext, session: Session): EarlierChat[] {
+  const [earlier, setEarlier] = useState<EarlierChat[]>([])
+  useEffect(() => {
+    let cancelled = false
+    setEarlier([])
+    const walk = async () => {
+      const found: EarlierChat[] = []
+      const seen = new Set([session.id])
+      let next = session.resumedFrom
+      while (typeof next === 'string' && !seen.has(next)) {
+        seen.add(next)
+        try {
+          const record = (await context.call('quirky.session/get', { session: next })) as Session
+          const messages = (await context.call('quirky.structured/messages', { session: record.id })) as StructuredMessage[]
+          found.unshift({ session: record, messages })
+          next = record.resumedFrom
+        } catch {
+          break
+        }
+      }
+      if (!cancelled) setEarlier(found)
+    }
+    void walk()
+    return () => {
+      cancelled = true
+    }
+  }, [context, session.id, session.resumedFrom])
+  return earlier
+}
+
 /**
  * A structured session as a chat: turns with prose, folded activity, cards, asks and views, the
- * Views pane beside them and the composer below. Messages without a chat item still show as
- * plain rows, and the transcript follows new content only while it is scrolled to the end.
+ * Views pane beside them and the composer below. A resumed chat shows the turns of the sessions it
+ * was resumed from first. Messages without a chat item still show as plain rows, and the
+ * transcript follows new content only while it is scrolled to the end.
  */
 export function ChatView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
@@ -143,7 +181,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
   const paneViews = usePaneViews(context, session.id)
-  const turns = useMemo(() => groupTurns(stored, { showAll }), [stored, showAll])
+  const earlier = useEarlierChats(context, session)
+  const turns = useMemo(
+    () =>
+      [...earlier, { session, messages: stored }].flatMap((chat) =>
+        groupTurns(chat.messages, { showAll }).map((turn) => ({ owner: chat.session, key: `${chat.session.id}:${turn.key}`, turn }))
+      ),
+    [earlier, session, stored, showAll]
+  )
   const working = session.status === 'working' || session.status === 'waiting'
 
   const latest = useRef(0)
@@ -249,8 +294,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
               <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />
             )}
             {phase.status === 'ready' && turns.length === 0 && <EmptyState message="No messages yet." />}
-            {turns.map((turn, index) => (
-              <TurnView key={turn.key} context={context} session={session} capabilities={capabilities} data={turn} index={index} />
+            {turns.map(({ owner, key, turn }, index) => (
+              <TurnView key={key} context={context} session={owner} capabilities={capabilities} data={turn} index={index} />
             ))}
           </div>
         </div>

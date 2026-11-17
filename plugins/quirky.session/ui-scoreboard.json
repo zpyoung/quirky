@@ -1229,6 +1229,14 @@
     },
     {
       "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "trailing={settings.isDangerous(name) ? <Badge tone=\"failing\">No approvals</Badge> : undefined}"
+      },
+      "anchor": "settings.isDangerous(name) ?",
+      "reason": "Marks a permission mode that skips approvals; it labels a list row, not a loading, empty or failed read."
+    },
+    {
+      "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
         "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
       },
@@ -1629,7 +1637,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.effort === null ? {} : { options: { effort: picks.effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),\n    ...(picks.plan ? { planMode: true } : {})\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -1639,7 +1647,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.effort === null ? {} : { options: { effort: picks.effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),\n    ...(picks.plan ? { planMode: true } : {})\n  })) as Session\n}"
           }
         ]
       }
@@ -1862,7 +1870,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.effort === null ? {} : { options: { effort: picks.effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),\n    ...(picks.plan ? { planMode: true } : {})\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -1872,7 +1880,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.effort === null ? {} : { options: { effort: picks.effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),\n    ...(picks.plan ? { planMode: true } : {})\n  })) as Session\n}"
           }
         ]
       }

@@ -160,7 +160,7 @@ export function FileIcon({ path, size, label }: FileIconProps) {
       data-icon={name}
       data-flavor={flavor}
       {...accessibility(label)}
-      dangerouslySetInnerHTML={{ __html: FILE_ICON_MARKUP[flavor][name] }}
+      dangerouslySetInnerHTML={innerHtmlOf(FILE_ICON_MARKUP[flavor][name])}
     />
   )
 }
