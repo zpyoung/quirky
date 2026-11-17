@@ -7,7 +7,21 @@ type BlockParams = { ms: number }
 type FeedbackStartParams = { worktrees: [string, string] }
 type FeedbackRefreshParams = { owner: string }
 type FeedbackState = { worktrees: [string, string]; refreshes: number; active: boolean }
+type FloodStartParams = { worktree: string; requests: number }
+type FloodTickParams = { owner: string; sequence: number }
+type FloodState = { worktree: string; expected: number; requests: number; active: boolean; sequences: Set<number> }
 
+function validFloodCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= 10_000
+}
+
+function validFloodWorktree(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+function validFloodSequence(value: unknown, expected: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 1 && value <= expected
+}
 function validWorktrees(value: unknown): value is [string, string] {
   return Array.isArray(value) && value.length === 2
     && value.every((worktree) => typeof worktree === 'string' && worktree.trim() !== '')
@@ -26,6 +40,7 @@ export function activate(context: PluginContext): () => void {
   let blockedMs: number | null = null
   let refreshOwner = ''
   let feedback: FeedbackState | null = null
+  let flood: FloodState | null = null
   let deactivated = false
   const feedbackTimers = new Set<ReturnType<typeof setTimeout>>()
 
@@ -79,6 +94,43 @@ export function activate(context: PluginContext): () => void {
   })
 
   context.provide('method:soak.faults/report', () => ({ leaked, holders, refreshes, blockedMs }))
+
+  context.provide('method:soak.faults/floodStart', (params: FloodStartParams) => {
+    if (deactivated) throw new Error('flood fixture is deactivated')
+    if (flood) throw new Error('flood fixture can only be started once per activation')
+    if (!validFloodWorktree(params?.worktree)) throw new Error('flood fixture needs a nonempty worktree')
+    if (!validFloodCount(params?.requests)) throw new Error('flood fixture requests must be a safe integer from 1 through 10000')
+    flood = {
+      worktree: params.worktree,
+      expected: params.requests,
+      requests: 0,
+      active: true,
+      sequences: new Set()
+    }
+    context.emit('floodStarted', { worktree: flood.worktree, requests: flood.expected })
+    return { started: true }
+  })
+
+  context.provide('method:soak.faults/floodTick', (params: FloodTickParams) => {
+    if (deactivated) throw new Error('flood fixture is deactivated')
+    if (!flood?.active) throw new Error('flood fixture is not armed or has completed')
+    if (params?.owner !== flood.worktree) throw new Error(`flood owner must be ${flood.worktree}`)
+    if (!validFloodSequence(params?.sequence, flood.expected)) {
+      throw new Error(`flood sequence must be a unique integer from 1 through ${flood.expected}`)
+    }
+    if (flood.sequences.has(params.sequence)) throw new Error(`flood sequence ${params.sequence} was already accepted`)
+    flood.sequences.add(params.sequence)
+    flood.requests += 1
+    if (flood.requests === flood.expected) flood.active = false
+    return { owner: params.owner, sequence: params.sequence }
+  })
+
+  context.provide('method:soak.faults/floodReport', () => ({
+    worktree: flood?.worktree ?? null,
+    expected: flood?.expected ?? 0,
+    requests: flood?.requests ?? 0,
+    active: flood?.active ?? false
+  }))
 
   context.provide('method:soak.faults/feedbackStart', (params: FeedbackStartParams) => {
     if (deactivated) throw new Error('feedback fixture is deactivated')

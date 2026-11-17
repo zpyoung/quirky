@@ -126,6 +126,69 @@
           "required": ["worktrees", "refreshes", "active"],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "floodStart",
+        "description": "Arms one bounded renderer request flood for a worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "requests": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["worktree", "requests"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "started": { "type": "boolean" } },
+          "required": ["started"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodTick",
+        "description": "Accepts one unique sequence in an armed renderer request flood.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodReport",
+        "description": "Returns the bounded renderer flood fixture's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {},
+            "expected": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "requests": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "active": { "type": "boolean" }
+          },
+          "required": ["worktree", "expected", "requests", "active"],
+          "additionalProperties": false
+        }
       }
     ],
     "event": [
@@ -172,6 +235,20 @@
           "required": ["worktrees", "owner", "sequence"],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "floodStarted",
+        "description": "Routes the single flood arm event to its selected worktree panel.",
+        "worktree": "worktree",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "requests": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["worktree", "requests"],
+          "additionalProperties": false
+        }
       }
     ],
     "panel": [
@@ -179,6 +256,12 @@
         "id": "feedback",
         "title": "Feedback fixture",
         "description": "Passive two-worktree feedback detector fixture.",
+        "defaultSlot": "right-bottom"
+      },
+      {
+        "id": "flood",
+        "title": "Renderer flood fixture",
+        "description": "Passive bounded request flood diagnostic fixture.",
         "defaultSlot": "right-bottom"
       }
     ]

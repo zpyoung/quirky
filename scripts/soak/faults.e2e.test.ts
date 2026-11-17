@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { main } from '../soak.ts'
 import type { FaultCheck, FaultKind, Sample, SoakReport } from './contracts.ts'
 
-type LegacyFaultKind = Exclude<FaultKind, 'feedback'>
+type LegacyFaultKind = Exclude<FaultKind, 'feedback' | 'flood'>
 
 const FAULT_CHECK: Record<LegacyFaultKind, FaultCheck> = {
   leak: 'children',
