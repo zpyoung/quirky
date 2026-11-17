@@ -540,6 +540,15 @@ describe('Codex app-server runner', () => {
     expect(setup.messages.find((message) => message.role === 'user')?.item).toEqual({ kind: 'user', text: 'look at this', images: [image], queuedId: 'q1' })
   })
 
+  test('an image sent with no text goes to the app-server as the localImage input alone', async () => {
+    await setup.runner.start(setup.session, undefined)
+    const image = join(setup.home, 'shot.png')
+    writeFileSync(image, 'PNG')
+    await setup.runner.send(setup.session.id, '', { images: [image] })
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().find((request) => request.method === 'turn/start')?.params).toMatchObject({ input: [{ type: 'localImage', path: image }] })
+  })
+
   test('stopping mid-turn closes the running call as stopped, then ends the turn as stopped', async () => {
     await setup.runner.start(setup.session, '[approve] run it')
     await until(() => setup.asks.length === 1)

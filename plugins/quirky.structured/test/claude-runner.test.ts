@@ -552,6 +552,19 @@ describe('chat items', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  test('an image sent with no text goes out as the image alone, without an empty text block', async () => {
+    const query = await begin()
+    const dir = mkdtempSync(join(tmpdir(), 'claude-img-'))
+    const image = join(dir, 'a.png')
+    writeFileSync(image, 'PNG')
+    await runner.send('s_1', '', { images: [image] })
+    await until(() => query.written.length === 2)
+    expect(query.written[1].message.content).toEqual([
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from('PNG').toString('base64') } }
+    ])
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   test('an image path that became a FIFO is refused without blocking', async () => {
     const query = await begin()
     const dir = mkdtempSync(join(tmpdir(), 'claude-fifo-'))

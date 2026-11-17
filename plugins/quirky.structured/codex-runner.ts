@@ -389,7 +389,7 @@ class CodexRunner implements StructuredRunner {
     const expectedTurnId = run.activeTurnId
     const method = expectedTurnId === null ? 'turn/start' : 'turn/steer'
     const input = [
-      { type: 'text', text },
+      ...(text === '' ? [] : [{ type: 'text', text }]),
       ...(options.images ?? []).map((path) => ({ type: 'localImage', path }))
     ]
     const params =
