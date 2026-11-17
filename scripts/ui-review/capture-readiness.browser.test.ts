@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from 'bun:test'
-import { captureApplication, captureTargetCell, fixtureViewInput, inspectSurface, targetSlotSelector, withCaptureRuntime, type CaptureRuntime } from './capture'
+import { captureApplication, captureTargetCell, inspectSurface, targetSlotSelector, withCaptureRuntime, type CaptureRuntime } from './capture'
 import { captureBrowserExecutable } from './browser'
 import { pngDimensions, SCREENSHOT_SIZE } from './goldens'
 import type { CaptureEvidence, CaptureManifest, CaptureTarget, CaptureTheme } from './contracts'
@@ -166,6 +166,7 @@ type RendererRpcProxy = {
   setResponseHandler(handler: ResponseHandler | null): void
   waitForRequest(predicate: (request: JsonRpcMessage) => boolean): Promise<JsonRpcMessage>
   waitForResponse(predicate: (response: JsonRpcMessage, request: JsonRpcMessage) => boolean): Promise<JsonRpcMessage>
+  diagnostics(): { pending: string[]; git: Array<{ method: string; answered: boolean }> }
 }
 
 function parseJsonRpcMessage(message: string | Buffer): JsonRpcMessage | null {
@@ -261,10 +262,12 @@ async function installRendererRpcProxy(runtime: CaptureRuntime): Promise<Rendere
   const responseWaiters: MessageWaiter<RpcResponseEvent>[] = []
   let requestHandler: RequestHandler | null = null
   let responseHandler: ResponseHandler | null = null
+  let activeRequests = new Map<string | number, JsonRpcMessage>()
 
   await runtime.page.routeWebSocket(rpcUrl.href, (webSocketRoute) => {
     const server = webSocketRoute.connectToServer()
     const requestsById = new Map<string | number, JsonRpcMessage>()
+    activeRequests = requestsById
     webSocketRoute.onMessage((message) => {
       const request = parseJsonRpcMessage(message)
       if (!request || typeof request.method !== 'string' || request.id === undefined || request.id === null) {
@@ -284,7 +287,7 @@ async function installRendererRpcProxy(runtime: CaptureRuntime): Promise<Rendere
     server.onMessage((message) => {
       const response = parseJsonRpcMessage(message)
       const request = response?.id === undefined || response.id === null ? undefined : requestsById.get(response.id)
-      if (!response || !request) {
+      if (!response || typeof response.method === 'string' || !request) {
         webSocketRoute.send(message)
         return
       }
@@ -331,6 +334,14 @@ async function installRendererRpcProxy(runtime: CaptureRuntime): Promise<Rendere
         runtime.options.signal,
         'renderer RPC response'
       ).then(({ response }) => response)
+    },
+    diagnostics() {
+      const answered = new Set(responses.map((entry) => entry.request))
+      return {
+        pending: [...activeRequests.values()].map((request) => `${request.method ?? 'unknown'}#${request.id}`),
+        git: requests.filter((request) => request.method?.startsWith('quirky.git/')).slice(-12)
+          .map((request) => ({ method: request.method!, answered: answered.has(request) }))
+      }
     }
   }
 }
@@ -401,7 +412,7 @@ async function captureRuntimeCell(
 }
 
 function assertEvidenceImage(evidence: CaptureEvidence, status: 'captured' | 'failed'): void {
-  expect(evidence.status).toBe(status)
+  expect(evidence.status, evidence.error ?? evidence.targetId).toBe(status)
   expect(evidence.image).not.toBeNull()
   const image = evidence.image!
   const bytes = readFileSync(image.path)
@@ -697,9 +708,7 @@ test('full production inventory captures every target in dark then light with ve
   }
 }, overallDeadlineMs + 60_000)
 
-test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects unfinished expanded content in both themes', async () => {
-  await withPrivateCaptureRuntime('git-mounted-readiness-negatives', async (runtime) => {
-    const proxy = await installRendererRpcProxy(runtime)
+async function exerciseGitReadinessFaults(runtime: CaptureRuntime, proxy: RendererRpcProxy): Promise<void> {
     const target = targetFor(runtime, 'view:quirky.git/diff')
     const slot = targetSlotSelector(target)
     type GitMountSnapshot = {
@@ -711,25 +720,6 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
         alerts: string[]
       }>
       visibleLoading: string[]
-      predicateAccepted: boolean | null
-    }
-    const openMountedGitView = async () => {
-      const input = fixtureViewInput(
-        runtime.fixtures,
-        target,
-        runtime.editorBuffer,
-        runtime.terminalFixture,
-        runtime.structuredSessionId,
-        {
-          transcript: runtime.transcriptFixture,
-          loop: runtime.loopFixture,
-          remote: runtime.remoteFixtures,
-          cellTerminal: runtime.cellTerminalFixture,
-          view: runtime.viewFixture,
-          ask: runtime.cellAskFixture
-        }
-      )
-      await runtime.client.callAny('ui.view.open', { id: target.id, input })
     }
     const readMountedGitView = async (): Promise<GitMountSnapshot> => await runtime.page.evaluate((slotSelector) => {
       const root = document.querySelector(slotSelector)
@@ -757,14 +747,15 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
         visibleLoading: [...(root?.querySelectorAll('*') ?? [])]
           .filter((node) => node.children.length === 0 && (node.textContent ?? '').trim() === 'Loading diff...' && visible(node))
           .map((node) => (node.textContent ?? '').trim()),
-        predicateAccepted: null
       }
     }, slot)
-    const captureFaultedGitCell = async (
+    const captureMountedGitCell = async (
       theme: CaptureTheme,
       label: string,
-      assertMounted: (mounted: GitMountSnapshot) => void
+      assertMounted?: (mounted: GitMountSnapshot) => void
     ) => {
+      const closedScroll = runtime.page.locator(`${slot} [data-review-scroll]`)
+      await closedScroll.waitFor({ state: 'hidden', timeout: runtime.options.timeoutMs })
       const observation: { mounted?: GitMountSnapshot } = {}
       const screenshot = runtime.page.screenshot.bind(runtime.page)
       runtime.page.screenshot = async (captureOptions) => {
@@ -776,7 +767,10 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
         const result = await captureRuntimeCell(runtime, target.id, theme, label)
         const mounted = observation.mounted
         if (!mounted) throw new Error(`Git fault did not retain its mounted state: ${label}`)
-        assertMounted(mounted)
+        assertMounted?.(mounted)
+        if (result.isolation.ready) {
+          await closedScroll.waitFor({ state: 'hidden', timeout: runtime.options.timeoutMs })
+        }
         return { result, mounted }
       } finally {
         runtime.page.screenshot = screenshot
@@ -787,11 +781,9 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
     try {
       for (const theme of themes) {
         await activateTheme(runtime, theme)
-        await openMountedGitView()
-        await inspectSurface(runtime, target)
-        const baselineMount = await readMountedGitView()
-        baselineMount.predicateAccepted = true
-        const baseline = await captureRuntimeCell(runtime, target.id, theme, `git-folded-loading-${theme}`)
+        const baselineCapture = await captureMountedGitCell(theme, `git-folded-loading-${theme}`)
+        const baselineMount = baselineCapture.mounted
+        const baseline = baselineCapture.result
         expect(baseline.isolation).toEqual({ ready: true })
         assertEvidenceImage(baseline.capture, 'captured')
         expect(baselineMount.folded?.text).toContain('Loading diff...')
@@ -803,7 +795,6 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
         expect(baselineMount.expanded.some((body) =>
           body.since?.includes('Showing changes since you reviewed') === true
         )).toBe(true)
-        expect(baselineMount.predicateAccepted).toBe(true)
 
         const failThenRecover = async (
           label: string,
@@ -816,7 +807,20 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
           const originalError = failed.capture.error
           const originalImage = failed.capture.image
 
-          const next = await captureRuntimeCell(runtime, target.id, theme, `${label}-next-valid`)
+          const screenshot = runtime.page.screenshot.bind(runtime.page)
+          const trace: { value?: { pending: string[]; git: Array<{ method: string; answered: boolean }> } } = {}
+          runtime.page.screenshot = async (options) => {
+            const bytes = await screenshot(options)
+            trace.value = proxy.diagnostics()
+            return bytes
+          }
+          let next: CaptureCellResult
+          try {
+            next = (await captureMountedGitCell(theme, `${label}-next-valid`)).result
+          } finally {
+            runtime.page.screenshot = screenshot
+          }
+          if (next.capture.status === 'failed') console.error(`Git recovery transport ${label}: ${JSON.stringify(trace.value)}`)
           expect(next.isolation).toEqual({ ready: true })
           assertEvidenceImage(next.capture, 'captured')
           expect(failed.capture.status).toBe('failed')
@@ -831,7 +835,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
             content: `${slot} [data-path="src/app.ts"] [data-review-body][hidden] { display: block !important; }`
           })
           try {
-            const faulted = await captureFaultedGitCell(theme, `git-visible-loading-${theme}`, (mounted) => {
+            const faulted = await captureMountedGitCell(theme, `git-visible-loading-${theme}`, (mounted) => {
               expect(mounted.folded?.visible).toBe(true)
               expect(mounted.visibleLoading).toContain('Loading diff...')
             })
@@ -848,7 +852,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
             content: `${slot} [data-review-body]:not([hidden]) .cm-content { visibility: hidden !important; }`
           })
           try {
-            const faulted = await captureFaultedGitCell(theme, `git-hidden-expanded-content-${theme}`, (mounted) => {
+            const faulted = await captureMountedGitCell(theme, `git-hidden-expanded-content-${theme}`, (mounted) => {
               expect(mounted.expanded).toHaveLength(2)
               expect(mounted.expanded.every((body) => body.contents.length > 0)).toBe(true)
               const contents = mounted.expanded.flatMap((body) => body.contents)
@@ -883,7 +887,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
             return true
           })
           try {
-            const faulted = await captureFaultedGitCell(theme, `git-empty-expanded-diff-${theme}`, (mounted) => {
+            const faulted = await captureMountedGitCell(theme, `git-empty-expanded-diff-${theme}`, (mounted) => {
               expect(faultedDiffs).toBeGreaterThan(0)
               const body = mounted.expanded.find((entry) => entry.path === emptyPath)
               expect(body).toBeDefined()
@@ -913,7 +917,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
             return true
           })
           try {
-            const faulted = await captureFaultedGitCell(theme, `git-error-expanded-diff-${theme}`, (mounted) => {
+            const faulted = await captureMountedGitCell(theme, `git-error-expanded-diff-${theme}`, (mounted) => {
               expect(faultedDiffs).toBeGreaterThan(0)
               expect(mounted.expanded.flatMap((body) => body.alerts))
                 .toEqual(expect.arrayContaining([expect.stringContaining('Error loading diff: test-only Git diff transport fault')]))
@@ -930,12 +934,9 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Git rejects 
       proxy.setRequestHandler(null)
       proxy.setResponseHandler(null)
     }
-  })
-}, 900_000)
+}
 
-test('terminal/Git/Quick Open/New chat readiness negatives: terminal identity and attach faults close the acquired tab before recovery', async () => {
-  await withPrivateCaptureRuntime('terminal-readiness-negatives', async (runtime) => {
-    const proxy = await installRendererRpcProxy(runtime)
+async function exerciseTerminalReadinessFaults(runtime: CaptureRuntime, proxy: RendererRpcProxy): Promise<void> {
     const target = targetFor(runtime, 'view:quirky.session/worktree')
     const faults = [
       'missing-worktree', 'wrong-worktree', 'missing-session', 'wrong-session',
@@ -1078,12 +1079,9 @@ test('terminal/Git/Quick Open/New chat readiness negatives: terminal identity an
       proxy.setRequestHandler(null)
       proxy.setResponseHandler(null)
     }
-  })
-}, 900_000)
+}
 
-test('terminal/Git/Quick Open/New chat readiness negatives: mounted Quick Open loading and invalid results reject before valid recovery', async () => {
-  await withPrivateCaptureRuntime('quick-open-readiness-negatives', async (runtime) => {
-    const proxy = await installRendererRpcProxy(runtime)
+async function exerciseQuickOpenReadinessFaults(runtime: CaptureRuntime, proxy: RendererRpcProxy): Promise<void> {
     const target = targetFor(runtime, 'overlay:quirky.editor/quick-open')
     const overlay = targetSlotSelector(target)
     const originalOptions = runtime.options
@@ -1206,12 +1204,9 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted Quick Open l
       proxy.setResponseHandler(null)
       runtime.options = originalOptions
     }
-  })
-}, 900_000)
+}
 
-test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loading/error and stuck-close faults isolate before recovery', async () => {
-  await withPrivateCaptureRuntime('new-chat-readiness-negatives', async (runtime) => {
-    const proxy = await installRendererRpcProxy(runtime)
+async function exerciseNewChatReadinessFaults(runtime: CaptureRuntime, proxy: RendererRpcProxy): Promise<void> {
     const target = targetFor(runtime, 'overlay:quirky.session/chat-dialogs')
     const chatSlot = targetSlotSelector(target)
     const dialog = `${chatSlot} [role="dialog"]`
@@ -1222,6 +1217,31 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
       if (request.method === 'quirky.structured/create') createdSessions += 1
       if (request.method === 'quirky.terminal/adoptSession') adoptedSessions += 1
       return false
+    }
+    const holdAgentCatalog = () => {
+      const ready = Promise.withResolvers<JsonRpcMessage>()
+      const held: Array<() => void> = []
+      let holding = true
+      let intercepted = 0
+      proxy.setResponseHandler((_response, request, forward) => {
+        if (!holding || request.method !== 'quirky.agents/list') return false
+        held.push(forward)
+        intercepted += 1
+        ready.resolve(request)
+        return true
+      })
+      return {
+        ready: ready.promise,
+        get intercepted() { return intercepted },
+        stop() { holding = false },
+        release() {
+          holding = false
+          proxy.setResponseHandler(null)
+          for (const forward of held.splice(0)) {
+            try { forward() } catch {}
+          }
+        }
+      }
     }
     const recoverWithGit = async (
       label: string,
@@ -1254,17 +1274,15 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
         expect(await runtime.page.locator(dialog).count()).toBe(0)
 
         runtime.options = originalOptions
-        const agentBarrier: { respond?: RequestResponder } = {}
-        let listRequests = 0
-        const agentRequest = Promise.withResolvers<JsonRpcMessage>()
-        proxy.setRequestHandler((request, respond) => {
-          if (observeNoSessionCreation(request)) return true
-          if (request.method !== 'quirky.agents/list' || agentBarrier.respond !== undefined) return false
-          listRequests += 1
-          agentRequest.resolve(request)
-          agentBarrier.respond = respond
-          return true
-        })
+        const loadingCatalog = holdAgentCatalog()
+        proxy.setRequestHandler(observeNoSessionCreation)
+        const loadingScreenshot = runtime.page.screenshot.bind(runtime.page)
+        runtime.page.screenshot = async (options) => {
+          await expect(inspectSurface(runtime, target)).rejects.toThrow()
+          const bytes = await loadingScreenshot(options)
+          loadingCatalog.stop()
+          return bytes
+        }
         let loadingPromise: Promise<CaptureCellResult> | null = null
         let loadingResult: CaptureCellResult | null = null
         try {
@@ -1272,7 +1290,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
             captureRuntimeCell(runtime, target.id, theme, `new-chat-loading-${theme}`))
           void loadingPromise.catch(() => undefined)
           const request = await waitForBoundedPromise(
-            agentRequest.promise,
+            loadingCatalog.ready,
             Math.min(5_000, originalOptions.timeoutMs),
             runtime.options.signal,
             'New chat agent listing request'
@@ -1281,36 +1299,30 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
           await runtime.page.locator(dialog).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
           await runtime.page.getByText('Loading agents…', { exact: true })
             .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
-          await expect(inspectSurface(runtime, target)).rejects.toThrow()
           loadingResult = await loadingPromise
         } finally {
-          const release = agentBarrier.respond
-          delete agentBarrier.respond
-          if (release) {
-            try { release({ result: { agents: [] } }) } catch {}
-          }
+          loadingCatalog.release()
+          runtime.page.screenshot = loadingScreenshot
           proxy.setRequestHandler(null)
           await loadingPromise?.catch(() => undefined)
           runtime.options = originalOptions
         }
         if (!loadingResult) throw new Error('New chat loading state did not produce a capture result')
-        expect(listRequests).toBeGreaterThan(0)
+        expect(loadingCatalog.intercepted).toBeGreaterThan(0)
         await recoverWithGit(`new-chat-loading-${theme}`, loadingResult, 'New chat Agents group with four choices')
         proxy.setRequestHandler(observeNoSessionCreation)
 
-        runtime.options = { ...originalOptions, timeoutMs: 15_000 }
+        runtime.options = originalOptions
         const triggerState: { parameters?: Record<string, unknown> } = {}
+        const errorCatalog = holdAgentCatalog()
         const restoreErrorFault = wrapClientCalls(runtime, async (method, params, callOptions, forward) => {
           if (method !== 'ui.command.run' || params.id !== 'command:quirky.session/new-chat') {
             return await forward(method, params, callOptions)
           }
           triggerState.parameters = params
           const result = await forward(method, params, callOptions)
-          await runtime.page.waitForFunction((selector) => {
-            const group = document.querySelector(`${selector} [role="group"][aria-label="Agents"]`)
-            return group?.querySelectorAll('button').length === 4
-          }, dialog, { timeout: 10_000 })
-          runtime.options = { ...runtime.options, timeoutMs: 2_000 }
+          await waitForBoundedPromise(errorCatalog.ready, 5_000, runtime.options.signal, 'held New chat error catalog')
+          await runtime.page.locator(dialog).waitFor({ state: 'visible', timeout: 5_000 })
           const injectedAlert = 'test-only injected New chat alert fault'
           await runtime.page.locator(chatSlot).evaluate((node, message) => {
             const alert = document.createElement('div')
@@ -1320,9 +1332,14 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
             const alertRoot = node.querySelector('[role="dialog"]') ?? node
             alertRoot.append(alert)
           }, injectedAlert)
-          await expect(inspectSurface(runtime, target)).rejects.toThrow(injectedAlert)
+          errorCatalog.release()
           return result
         })
+        const errorScreenshot = runtime.page.screenshot.bind(runtime.page)
+        runtime.page.screenshot = async (options) => {
+          await expect(inspectSurface(runtime, target)).rejects.toThrow('test-only injected New chat alert fault')
+          return await errorScreenshot(options)
+        }
         let errorPromise: Promise<CaptureCellResult> | null = null
         let errorResult: CaptureCellResult | null = null
         try {
@@ -1330,7 +1347,9 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
           void errorPromise.catch(() => undefined)
           errorResult = await errorPromise
         } finally {
+          errorCatalog.release()
           restoreErrorFault()
+          runtime.page.screenshot = errorScreenshot
           proxy.setRequestHandler(null)
           await errorPromise?.catch(() => undefined)
           runtime.options = originalOptions
@@ -1346,15 +1365,14 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
 
         runtime.options = { ...originalOptions, timeoutMs: 15_000 }
         let closeBlockerInstalled = false
+        const blockedCatalog = holdAgentCatalog()
         const restoreCloseBlocker = wrapClientCalls(runtime, async (method, params, callOptions, forward) => {
           if (method !== 'ui.command.run' || params.id !== 'command:quirky.session/new-chat') {
             return await forward(method, params, callOptions)
           }
           const result = await forward(method, params, callOptions)
-          await runtime.page.waitForFunction((selector) => {
-            const group = document.querySelector(`${selector} [role="group"][aria-label="Agents"]`)
-            return group?.querySelectorAll('button').length === 4
-          }, dialog, { timeout: 10_000 })
+          await waitForBoundedPromise(blockedCatalog.ready, 5_000, runtime.options.signal, 'held New chat close catalog')
+          await runtime.page.locator(dialog).waitFor({ state: 'visible', timeout: 5_000 })
           await runtime.page.evaluate((selector) => {
             const button = document.querySelector<HTMLButtonElement>(selector)?.querySelector<HTMLButtonElement>(
               'button[aria-label="Close dialog"]'
@@ -1370,6 +1388,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
           }, dialog)
           closeBlockerInstalled = true
           runtime.options = { ...runtime.options, timeoutMs: 3_000 }
+          blockedCatalog.release()
           return result
         })
         let blockedClosePromise: Promise<CaptureCellResult> | null = null
@@ -1379,6 +1398,7 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
           void blockedClosePromise.catch(() => undefined)
           blockedCloseResult = await blockedClosePromise
         } finally {
+          blockedCatalog.release()
           await blockedClosePromise?.catch(() => undefined)
           restoreCloseBlocker()
           runtime.options = originalOptions
@@ -1405,6 +1425,15 @@ test('terminal/Git/Quick Open/New chat readiness negatives: mounted picker loadi
       proxy.setRequestHandler(null)
       proxy.setResponseHandler(null)
     }
+}
+
+test('terminal/Git/Quick Open/New chat readiness negatives: complete mounted matrix in both themes', async () => {
+  await withPrivateCaptureRuntime('readiness-negative-matrix', async (runtime) => {
+    const proxy = await installRendererRpcProxy(runtime)
+    await exerciseGitReadinessFaults(runtime, proxy)
+    await exerciseTerminalReadinessFaults(runtime, proxy)
+    await exerciseQuickOpenReadinessFaults(runtime, proxy)
+    await exerciseNewChatReadinessFaults(runtime, proxy)
   })
 }, 900_000)
 
