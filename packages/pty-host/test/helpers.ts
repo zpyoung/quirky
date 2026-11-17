@@ -1,6 +1,6 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { PtyClient } from '../src/client'
 import { type CreateParams, SessionManager } from '../src/session'
@@ -10,6 +10,25 @@ import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
 
 const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
+const PRIVATE_SOCKET_PRELOAD = new URL('./fixtures/observe-private-socket.ts', import.meta.url).pathname
+
+type PrivateSocketObservation = {
+  pid: number
+  unixPath: string
+  directory: string
+  dev: string
+  ino: string
+}
+
+function isPrivateSocketObservation(value: unknown): value is PrivateSocketObservation {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return typeof record.pid === 'number' && Number.isSafeInteger(record.pid) &&
+    typeof record.unixPath === 'string' && typeof record.directory === 'string' &&
+    typeof record.dev === 'string' && typeof record.ino === 'string'
+}
+
+type OwnedPrivateDirectory = Pick<PrivateSocketObservation, 'directory' | 'dev' | 'ino'>
 
 const cleanups: Array<() => Promise<void> | void> = []
 const scopes = new Map<string, ProcessScope>()
@@ -250,6 +269,59 @@ export function startProcess(home: string) {
     stdout: 'pipe',
     stderr: 'pipe'
   })
+}
+
+/** Starts the real host with a preload that records its bound private socket directory. */
+export async function startObservedProcess(home: string) {
+  const metadataDirectory = mkdtempSync(join(tmpdir(), 'qpty-observer-'))
+  const metadataPath = join(metadataDirectory, 'private-socket.json')
+  onCleanup(() => rmSync(metadataDirectory, { recursive: true, force: true }))
+
+  let privateDirectory: OwnedPrivateDirectory | undefined
+  onCleanup(() => {
+    const owned = privateDirectory
+    if (!owned) return
+    try {
+      const stat = lstatSync(owned.directory, { bigint: true })
+      if (!stat.isDirectory() || stat.dev.toString() !== owned.dev || stat.ino.toString() !== owned.ino) {
+        throw new Error(`private socket directory identity changed: ${owned.directory}`)
+      }
+      rmSync(owned.directory, { recursive: true, force: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+  })
+
+  const scope = scopeForHome(home)
+  const host = scope.spawn([process.execPath, '--preload', PRIVATE_SOCKET_PRELOAD, ENTRY], {
+    env: {
+      ...process.env,
+      QUIRKY_HOME: home,
+      QUIRKY_TEST_PRIVATE_SOCKET_RECORD: metadataPath
+    },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  const observation = await waitFor(() => {
+    if (!existsSync(metadataPath)) return undefined
+    const value: unknown = JSON.parse(readFileSync(metadataPath, 'utf8'))
+    if (!isPrivateSocketObservation(value)) throw new Error('invalid private socket observation')
+    return value
+  }, 10_000, 'private socket observation')
+
+  const expectedSocketDirectory = dirname(socketPath(home, 'pty.sock'))
+  if (observation.pid !== host.pid || dirname(observation.unixPath) !== observation.directory ||
+      basename(observation.unixPath) !== 's' || !basename(observation.directory).startsWith('.p') ||
+      dirname(observation.directory) !== expectedSocketDirectory) {
+    throw new Error(`unexpected private socket observation for ${home}`)
+  }
+  const stat = lstatSync(observation.directory, { bigint: true })
+  if (!stat.isDirectory() || stat.dev.toString() !== observation.dev || stat.ino.toString() !== observation.ino) {
+    throw new Error(`private socket directory identity changed: ${observation.directory}`)
+  }
+  privateDirectory = observation
+  return { host, privateDir: observation.directory }
 }
 
 /** Waits for the host on `home` to listen, then returns an authenticated client and the token. */

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { socketPath } from '@quirky/protocol/node'
 import { PtyClient } from '../src/client'
@@ -12,8 +12,10 @@ import {
   onCleanup,
   ready,
   runCleanups,
+  startObservedProcess,
   startProcess,
-  tempHome
+  tempHome,
+  waitFor
 } from './helpers'
 
 afterEach(runCleanups, 30_000)
@@ -46,7 +48,7 @@ describe('host process', () => {
     const resolvedSocket = socketPath(home, 'pty.sock')
     expect(Buffer.byteLength(join(home, 'pty.sock'))).toBeGreaterThan(100)
     expect(resolvedSocket).not.toBe(join(home, 'pty.sock'))
-    const host = startProcess(home)
+    const { host, privateDir } = await startObservedProcess(home)
     const { client } = await ready(home)
     const session = await createScopedSession(client, home, {
       sessionId: 's1',
@@ -57,11 +59,13 @@ describe('host process', () => {
       rows: 24
     })
     client.close()
+    expect(readdirSync(privateDir)).toEqual([])
 
     rmSync(home, { recursive: true, force: true })
     expect(await exitWithin(host, 12_000)).toBe(0)
     expect(groupGone(session.pid)).toBe(true)
     expect(existsSync(resolvedSocket)).toBe(false)
+    expect(existsSync(privateDir)).toBe(false)
     // Wait through another ownership-check interval to ensure the host did not recreate its home.
     await Bun.sleep(1000)
     expect(existsSync(home)).toBe(false)
@@ -123,11 +127,15 @@ describe('host process', () => {
     const sessionA = await createScopedSession(readyA.client, home, {
       sessionId: 's1',
       cwd: '/tmp',
-      argv: ['/bin/sh', '-c', '/bin/sleep 600 & wait'],
+      argv: ['/bin/sh', '-c', 'trap "" HUP; printf "host-a-ready\\n"; exec /bin/sleep 600'],
       env: { PATH: '/usr/bin:/bin' },
       cols: 80,
       rows: 24
     })
+    await waitFor(async () => {
+      const { lines } = await readyA.client.request('read', { sessionId: 's1', lines: 10 })
+      return lines.some((line) => line.includes('host-a-ready')) ? true : undefined
+    }, 5000, 'old host session readiness marker')
     readyA.client.close()
 
     rmSync(home, { recursive: true, force: true })
@@ -146,6 +154,7 @@ describe('host process', () => {
     const meta = readFileSync(join(home, 'sessions', 's1', 'meta.json'))
     const pidFile = readFileSync(join(home, 'pty.pid'), 'utf8')
     expect(Number(pidFile)).toBe(hostB.pid)
+    expect(hostA.exitCode).toBeNull()
 
     expect(await exitWithin(hostA, 12_000)).toBe(0)
     expect(groupGone(sessionA.pid)).toBe(true)
@@ -264,21 +273,59 @@ describe('host process', () => {
       expect(Buffer.byteLength(directSocket)).toBe(bytes)
       expect(resolvedSocket === directSocket).toBe(bytes === 100)
       const socketDirectory = dirname(resolvedSocket)
-      const before = readdirSync(socketDirectory).sort()
-      const host = startProcess(home)
+      const before = new Map<string, { dev: bigint; ino: bigint }>()
+      for (const entry of readdirSync(socketDirectory)) {
+        const stat = lstatSync(join(socketDirectory, entry), { bigint: true })
+        before.set(entry, { dev: stat.dev, ino: stat.ino })
+      }
+
+      const { host, privateDir } = await startObservedProcess(home)
       const { client } = await ready(home)
       client.close()
-
-      const privateDirs = readdirSync(socketDirectory).filter((entry) => entry.startsWith('.p') && !before.includes(entry))
-      expect(privateDirs).toHaveLength(1)
-      const privateDir = join(socketDirectory, privateDirs[0]!)
       expect(readdirSync(privateDir)).toEqual([])
+
+      let foreign: {
+        home: string
+        socket: string
+        host: { pid: number; exitCode: number | null; exited: Promise<number> }
+        privateDir: string
+        client: PtyClient
+      } | undefined
+      if (bytes === 101) {
+        const foreignHome = longTempHome()
+        const foreignSocket = socketPath(foreignHome, 'pty.sock')
+        const foreignProcess = await startObservedProcess(foreignHome)
+        const { client: foreignClient } = await ready(foreignHome)
+        foreign = {
+          home: foreignHome,
+          socket: foreignSocket,
+          host: foreignProcess.host,
+          privateDir: foreignProcess.privateDir,
+          client: foreignClient
+        }
+      }
 
       rmSync(resolvedSocket)
       expect(await exitWithin(host, 12_000)).toBe(0)
       expect(existsSync(resolvedSocket)).toBe(false)
       expect(existsSync(privateDir)).toBe(false)
-      if (bytes === 101) expect(readdirSync(socketDirectory).sort()).toEqual(before)
+      if (bytes === 101) {
+        for (const [entry, identity] of before) {
+          const path = join(socketDirectory, entry)
+          const stat = lstatSync(path, { bigint: true })
+          expect(stat.dev).toBe(identity.dev)
+          expect(stat.ino).toBe(identity.ino)
+        }
+      }
+
+      if (foreign) {
+        expect(foreign.host.exitCode).toBeNull()
+        foreign.client.close()
+        rmSync(foreign.home, { recursive: true, force: true })
+        expect(await exitWithin(foreign.host, 12_000)).toBe(0)
+        expect(existsSync(foreign.socket)).toBe(false)
+        expect(existsSync(foreign.privateDir)).toBe(false)
+      }
     }, 30_000)
   }
 })
