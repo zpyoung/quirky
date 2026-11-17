@@ -25,8 +25,8 @@ function sameConflict(a: ReviewFile['conflict'], b: ReviewFile['conflict']): boo
   return a?.kind === b?.kind && a?.state === b?.state
 }
 
-/** Projects live conflict rows while retaining review metadata for known files. */
-export function withStatusConflicts(files: readonly ReviewFile[], entries: readonly GitStatusEntry[]): readonly ReviewFile[] {
+/** Projects live conflict rows without clearing known conflicts from incomplete status. */
+export function withStatusConflicts(files: readonly ReviewFile[], entries: readonly GitStatusEntry[], capped = false): readonly ReviewFile[] {
   const hasReviewConflicts = files.some((file) => file.conflict !== undefined)
   const hasLiveConflicts = entries.some((entry) => entry.area === 'conflicts' && entry.conflict !== undefined)
   if (!hasReviewConflicts && !hasLiveConflicts) return files
@@ -73,6 +73,7 @@ export function withStatusConflicts(files: readonly ReviewFile[], entries: reado
     const facts = byPath.get(file.path)
     const liveConflict = facts?.conflict
     if (file.conflict === undefined && liveConflict === undefined) continue
+    if (capped && liveConflict === undefined) continue
 
     const conflict = sameConflict(file.conflict, liveConflict) ? file.conflict : liveConflict
     const uncommitted = facts !== undefined

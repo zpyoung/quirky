@@ -290,7 +290,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     const reviewFiles = model?.files ?? NO_FILES
     // a settled review may be newer than the bounded status read
     if (polled === null || (!review.pending && review.error === null)) return reviewFiles
-    return withStatusConflicts(reviewFiles, polled.entries)
+    return withStatusConflicts(reviewFiles, polled.entries, polled.capped)
   }, [model, polled, review.pending, review.error])
   const refreshReview = useCallback(function refreshReview(): void {
     try {
