@@ -96,6 +96,7 @@ test('background structured sessions stay journaled without changing terminal se
       context.appendMessage({ sessionId: session.id, role: 'result', text: 'scripted result' })
     },
     async send() {},
+    async interrupt() {},
     async stop() {}
   })
 

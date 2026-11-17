@@ -43,6 +43,9 @@ class FakeRunner implements StructuredRunner {
     this.sent.push({ sessionId, text })
     this.context.appendMessage({ sessionId, role: 'user', text, data: { n: 1 } })
   }
+  async interrupt(sessionId: string) {
+    this.context.setStatus(sessionId, 'done')
+  }
   async stop(sessionId: string) {
     this.stopped.push(sessionId)
   }
@@ -87,7 +90,7 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
-type StructuredAgent = 'claude' | 'codex'
+type StructuredAgent = 'claude' | 'codex' | 'pi' | 'omp'
 type StructuredCreateOverrides = {
   model?: string
   options?: Record<string, string | boolean>
@@ -392,6 +395,15 @@ try {
     expect((await pending).status).toBe('answered')
   })
 
+  test('the context cancels one pending ask', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const pending = runner.context.createAsk({ questions: [{ id: 'ok', type: 'confirm', question: 'Run rm?' }] }, session.id)
+    const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
+    await runner.context.cancelAsk(ask.id)
+    expect((await pending).status).toBe('declined')
+  })
+
   test('closing a session declines its pending asks', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
@@ -431,8 +443,19 @@ try {
     expect(runner.started).toEqual([])
   })
 
+  test('pi and omp sessions are accepted, titled by agent and started with the lease environment', async () => {
+    for (const [agent, title] of [['pi', 'Pi'], ['omp', 'OMP']] as const) {
+      const session = await createAgent(agent, 'look around')
+      expect(session).toMatchObject({ kind: 'structured', agent, title })
+      await waitFor(() => runner.started.some((entry) => entry.session.id === session.id))
+      const started = runner.started.find((entry) => entry.session.id === session.id)!
+      expect(started.prompt).toBe('look around')
+      expect((started.options as { env: Record<string, string> }).env.QUIRKY_SESSION_TOKEN).toBeTruthy()
+    }
+  })
+
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'pi', prompt: 'x' }))).toMatchObject({
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({
@@ -530,7 +553,7 @@ describe('the Claude runner inside the plugin', () => {
     })
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
     expect(ask.sessionId).toBe(session.id)
-    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'deny', 'always'])
+    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'always', 'deny'])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
     expect(await permission).toEqual({ behavior: 'allow', updatedInput: { command: 'ls' } })
 
@@ -550,12 +573,14 @@ describe('the Claude runner inside the plugin', () => {
     expect(messages.map((m) => [m.role, m.text.split('\n')[0]])).toEqual([
       ['user', 'fix it'],
       ['system', 'session started (m)'],
+      ['system', 'Approval needed'],
       ['assistant', 'done'],
       ['result', 'All good'],
       ['user', 'and tests']
     ])
+    expect(messages[2]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
     await waitFor(() => structuredEvents().length === messages.length)
-    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5])
+    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6])
   })
 
   test('persists Claude identity after native init and resumes that session idle', async () => {
@@ -1001,7 +1026,7 @@ describe('v1 journal import', () => {
 })
 
 describe('structured journal store upgrades', () => {
-  test('preserves an existing v1 journal while appending the receipt migration', async () => {
+  test('preserves an existing v1 journal while appending the receipt, item and queue migrations', async () => {
     const home = shortHome()
     const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
     mkdirSync(dirname(storePath), { recursive: true })
@@ -1032,12 +1057,15 @@ describe('structured journal store upgrades', () => {
 
     const upgraded = new Database(storePath, { readonly: true })
     try {
-      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
       expect(
         upgraded
           .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
           .all()
       ).toEqual([{ name: 'structured_send_receipts' }])
+      expect(
+        upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_queue'").all()
+      ).toEqual([{ name: 'structured_queue' }])
     } finally {
       upgraded.close()
     }

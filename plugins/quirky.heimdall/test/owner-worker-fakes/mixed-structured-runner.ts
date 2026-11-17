@@ -32,6 +32,9 @@ export function createOwnerWorkerStructuredRunnerFactory(scopeForProvider: () =>
       send(sessionId, text) {
         return runnerFor(sessionId).send(sessionId, text)
       },
+      interrupt(sessionId) {
+        return runnerFor(sessionId).interrupt(sessionId)
+      },
       async stop(sessionId) {
         const provider = providers.get(sessionId)
         if (!provider) return

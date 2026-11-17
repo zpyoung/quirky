@@ -35,4 +35,6 @@ export type CliContext = {
 /** The shape a plugin's CLI module must export; keys are `cli-command` contribution names. */
 export type CliModule = {
   commands: Record<string, (args: CliArgs, context: CliContext) => Promise<void>>
+  /** Text appended to a command's generated `--help` output; keyed like `commands`. */
+  help?: Record<string, string>
 }

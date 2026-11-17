@@ -250,13 +250,14 @@
             },
             "source": {
               "type": "string",
-              "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged. review needs `against`.",
+              "description": "Which sides to read; defaults to staged when `staged` is set, else unstaged. review needs `against`; trees needs `from` and `to`.",
               "enum": [
                 "unstaged",
                 "staged",
                 "branch",
                 "commit",
-                "review"
+                "review",
+                "trees"
               ]
             },
             "against": {
@@ -286,6 +287,14 @@
             "parent": {
               "type": "string",
               "description": "Parent commit for source commit (40 hex); omit for a root commit."
+            },
+            "from": {
+              "type": "string",
+              "description": "Tree oid of the left side for source trees (a `snapshotTree` result)."
+            },
+            "to": {
+              "type": "string",
+              "description": "Tree oid of the right side for source trees (a `snapshotTree` result)."
             }
           },
           "required": [
@@ -323,7 +332,8 @@
                 "staged",
                 "branch",
                 "commit",
-                "review"
+                "review",
+                "trees"
               ]
             },
             "kind": {
@@ -2435,8 +2445,109 @@
         }
       },
       {
+        "id": "snapshotTree",
+        "description": "Writes a tree object for the whole working tree, tracked and untracked files alike and honoring .gitignore, through a temporary index. The real index, HEAD and refs are untouched.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "tree": {
+              "type": "string",
+              "description": "The tree object's oid."
+            }
+          },
+          "required": [
+            "tree"
+          ]
+        }
+      },
+      {
+        "id": "treeChanges",
+        "description": "The files that differ between two trees, with line counts, renames and copies detected. An unknown tree oid is refused.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector (id, name, branch, path: or current); defaults to the caller's worktree."
+            },
+            "from": {
+              "type": "string",
+              "description": "Tree oid of the left side."
+            },
+            "to": {
+              "type": "string",
+              "description": "Tree oid of the right side."
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "changes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "oldPath": {
+                    "type": "string",
+                    "description": "Previous path of a renamed or copied file."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "modified",
+                      "added",
+                      "deleted",
+                      "renamed",
+                      "copied",
+                      "untracked"
+                    ]
+                  },
+                  "added": {
+                    "description": "Added lines; null for a binary file."
+                  },
+                  "removed": {
+                    "description": "Removed lines; null for a binary file."
+                  },
+                  "binary": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "path",
+                  "status",
+                  "added",
+                  "removed",
+                  "binary"
+                ]
+              }
+            }
+          },
+          "required": [
+            "changes"
+          ]
+        }
+      },
+      {
         "id": "noteTargets",
-        "description": "Where notes can go: the worktree's live agent sessions, each marked sendable or not with the reason, and the installed, enabled agents a new tab can start.",
+        "description": "Where notes can go: the worktree's live agent sessions (terminal and structured), each marked sendable or not with the reason, and the installed, enabled agents a new tab can start.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -2550,7 +2661,7 @@
             },
             "session": {
               "type": "string",
-              "description": "A running agent session of this worktree; give this or agent."
+              "description": "A running agent session of this worktree, terminal or structured; give this or agent. A structured session takes the notes as a message that waits for its turn to end when it is busy."
             },
             "agent": {
               "type": "string",
@@ -2591,7 +2702,7 @@
             },
             "delivery": {
               "type": "string",
-              "description": "pasted into a running session, or command-line / pasted for a new tab."
+              "description": "pasted into a running terminal session, command-line / pasted for a new tab, or sent to a structured session."
             }
           },
           "required": [
@@ -3167,6 +3278,10 @@
       {
         "id": "ai-settings",
         "title": "Source Control AI defaults"
+      },
+      {
+        "id": "turn-changes",
+        "title": "Turn changes"
       }
     ],
     "command": [

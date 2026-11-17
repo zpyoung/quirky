@@ -173,7 +173,8 @@ All of these apply to every milestone:
 - [Session info](../research/orca-features/session-info.md): Claude's statusline is set per launch
   through `--settings`, so the user's `~/.claude` is never edited.
 - [Terminal dock](../research/orca-features/terminal-dock.md):
-  - It needs a composer of its own, because Orca's comes from native chat, which Quirky dropped.
+  - It needs a composer of its own, because Orca's comes from native chat, which Quirky doesn't
+    port. The desktop chat view has its own composer.
   - Effort changes must not write to the user's global Claude settings.
   - Its slash-command and skill picker is in scope, though the standalone skills catalog stays
     dropped.

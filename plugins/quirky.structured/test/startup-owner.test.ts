@@ -30,6 +30,7 @@ test('a startup creator keeps its deferred structured session while a lazy plugi
         context.setStatus(session.id, 'running')
       },
       async send() { throw new Error('Deferred startup session unexpectedly received a provider turn') },
+      async interrupt() {},
       async stop(sessionId) { context.setStatus(sessionId, 'exited') }
     })
 

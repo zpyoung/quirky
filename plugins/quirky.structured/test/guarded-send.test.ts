@@ -48,6 +48,10 @@ class GuardedRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'done')
   }
 
+  async interrupt(sessionId: string): Promise<void> {
+    this.context.setStatus(sessionId, 'done')
+  }
+
   async stop(sessionId: string): Promise<void> {
     this.context.setStatus(sessionId, 'exited')
   }

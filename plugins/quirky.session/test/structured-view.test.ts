@@ -298,7 +298,7 @@ describe('the structured session view', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }))
     })
     await act(async () => void textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next' })
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next', when: 'now' })
   })
 
   test('re-reads the session when it changes, and ignores other sessions', async () => {

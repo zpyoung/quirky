@@ -7,19 +7,24 @@ type AgentInfo = { id: string; label: string; installed: boolean; enabled: boole
 
 export const AGENTS_VIEW_ID = 'view:quirky.agents/settings'
 
-export type MenuEntry = { kind: 'session'; label: string; request: NewSessionRequest } | { kind: 'manage'; label: string }
+export type MenuEntry =
+  | { kind: 'session'; label: string; request: NewSessionRequest }
+  | { kind: 'chat'; label: string }
+  | { kind: 'manage'; label: string }
 
 const SHELL: MenuEntry = { kind: 'session', label: 'Shell', request: { agent: 'shell', background: false, label: 'Shell' } }
+const CHAT: MenuEntry = { kind: 'chat', label: 'Chat' }
 const MANAGE: MenuEntry = { kind: 'manage', label: 'Manage agents' }
 
 /** What the menu shows before the agent list arrives, and when it cannot be read. */
-export const SHELL_ONLY_MENU: MenuEntry[] = [SHELL, MANAGE]
+export const SHELL_ONLY_MENU: MenuEntry[] = [SHELL, CHAT, MANAGE]
 
 const offered = (agent: AgentInfo) => agent.installed && agent.enabled
 
 /**
- * The menu for `listing`: Shell, the installed enabled agents (the default first, the rest in
- * listing order), "Claude (background)" when Claude is among them, then Manage agents.
+ * The menu for `listing`: Shell, Chat (which opens the agent picker), the installed enabled agents
+ * (the default first, the rest in listing order), "Claude (background)" when Claude is among
+ * them, then Manage agents.
  */
 export function menuEntries(listing: AgentListing): MenuEntry[] {
   const agents = listing.agents.filter(offered)
@@ -33,7 +38,7 @@ export function menuEntries(listing: AgentListing): MenuEntry[] {
   if (agents.some((agent) => agent.id === 'claude')) {
     entries.push({ kind: 'session', label: 'Claude (background)', request: { agent: 'claude', background: true, label: 'Claude (background)' } })
   }
-  return [SHELL, ...entries, MANAGE]
+  return [SHELL, CHAT, ...entries, MANAGE]
 }
 
 /** Reads the catalog and builds the menu; a failed read gives the shell-only menu. */

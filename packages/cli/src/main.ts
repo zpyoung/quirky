@@ -135,7 +135,8 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
   }
   const { command } = target
   if (helpRequested && command.name !== 'help') {
-    writer.stdout(`${helpText(command.name.split(' '), commands)}\n`)
+    const extra = await command.extraHelp?.()
+    writer.stdout(`${helpText(command.name.split(' '), commands)}\n${extra ? `\n${extra}\n` : ''}`)
     return
   }
   const args = command.rawArgs

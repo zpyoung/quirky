@@ -1,0 +1,13 @@
+{
+  "id": "quirky.git",
+  "apiVersion": "1.0.0",
+  "name": "Git (fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "contributes": {
+    "method": [
+      { "id": "snapshotTree", "params": { "type": "object", "additionalProperties": true } },
+      { "id": "treeChanges", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }
+    ]
+  }
+}
