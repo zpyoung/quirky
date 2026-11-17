@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RpcErrorCode, type GitStatus, type UiPluginContext } from '@quirky/protocol'
 import type { FixAction } from '../ai/types'
+import { readWindowStatus } from '../status-resource'
 
 export type GitHubReviewTarget = { worktree: string; branch: string; head: string }
 type ReviewSummary = { number: number; url: string; state: 'open' | 'draft' | 'closed' | 'merged' }
@@ -134,6 +135,7 @@ export function useGitHubReview(context: UiPluginContext, worktree: string, stat
       return
     }
     let active = true
+    const controller = new AbortController()
     const requested = { worktree, branch, head }
     const isCurrent = (request: number, target: GitHubReviewTarget) =>
       active && requestSequence.current === request && currentKey.current === targetKey(target)
@@ -141,7 +143,7 @@ export function useGitHubReview(context: UiPluginContext, worktree: string, stat
       if (isCurrent(request, target)) setStored({ key: targetKey(target), value })
     }
     const readStatus = async (): Promise<GitHubReviewTarget | null> => {
-      const fresh = await context.call('quirky.git/status', { worktree })
+      const fresh = await readWindowStatus(context, worktree, { fresh: false, signal: controller.signal })
       if (typeof fresh !== 'object' || fresh === null || Array.isArray(fresh) ||
         !('branch' in fresh) || typeof fresh.branch !== 'string' || fresh.branch === '' ||
         !('head' in fresh) || typeof fresh.head !== 'string' || fresh.head === '') return null
@@ -190,6 +192,7 @@ export function useGitHubReview(context: UiPluginContext, worktree: string, stat
     void read()
     return () => {
       active = false
+      controller.abort()
       unsubscribe()
     }
   }, [context, worktree, branch, head])

@@ -1,4 +1,4 @@
-import { expect } from 'bun:test'
+import { expect, jest } from 'bun:test'
 import type { GitDiff, GitStatus, QuirkyEvent, ReviewFile, ReviewModel, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
@@ -167,6 +167,14 @@ export function mountView(fake: Fake, input: unknown): Mounted {
 
 export async function settle(rounds = 6): Promise<void> {
   for (let i = 0; i < rounds; i++) await act(async () => {})
+}
+
+/** Advances only the explicitly requested fake-clock interval, then flushes pending work. */
+export async function settleAfter(ms: number, rounds = 6): Promise<void> {
+  await act(async () => {
+    ;(jest as unknown as { advanceTimersByTime(ms: number): void }).advanceTimersByTime(ms)
+  })
+  await settle(rounds)
 }
 
 export async function wait(ms: number): Promise<void> {

@@ -206,7 +206,10 @@ test.skipIf(!existsSync(executable))('criterion 1: at 1280x720 with the tool slo
     }, toolShellCssVariables(geometry) as Record<string, number>)
 
     await page.addScriptTag({ content: browserBundle })
-    await page.waitForFunction(() => document.querySelectorAll('[data-git-content] [role="option"][data-row-path]').length === 4)
+    await page.waitForFunction(() =>
+      document.querySelectorAll('[data-git-content] [role="option"][data-row-path]').length === 4 &&
+      document.querySelector('[data-branch-row]') !== null &&
+      document.querySelector('[data-count-line]') !== null)
 
     const layout = await page.evaluate(() => {
       const rect = (element: Element) => {

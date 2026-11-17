@@ -7,7 +7,7 @@ import type { MountFunction as Mount } from '@quirky/protocol'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./ui/panel-support')
-const { act, click, entry, failure, fakeContext, layoutFor, settle, statusOf } = s
+const { act, click, entry, failure, fakeContext, layoutFor, settle, settleAfter, statusOf } = s
 const { activate } = await import('../src/ui')
 
 const ITEM = 'status-bar:quirky.git/ahead-behind'
@@ -49,7 +49,7 @@ const advance = (ms: number) => (jest as unknown as { advanceTimersByTime(ms: nu
 
 const popup = () => document.querySelector('.ui-popup')
 const rows = () => [...document.querySelectorAll('.ui-popup [role="menuitem"]')].map((row) => row.textContent ?? '')
-const statusCalls = (fake: ReturnType<typeof fakeContext>) => fake.called('quirky.git/status')
+const statusCalls = (fake: Fake) => fake.called('quirky.git/status')
 
 describe('quirky.git ahead and behind status bar item', () => {
   test('the manifest declares the item at order 10 and activate provides it', async () => {
@@ -147,26 +147,36 @@ describe('quirky.git ahead and behind status bar item', () => {
   })
 
   test('it reads again on this worktree\'s git events and follows the selected worktree', async () => {
-    const fake = fakeContext(layoutFor('one'))
-    fake.statuses.one = statusOf([], { ahead: 1, behind: 0, branch: 'one-branch' })
-    fake.statuses.two = statusOf([], { ahead: 0, behind: 4, branch: 'two-branch' })
-    const { element, unmount } = mountItem(fake)
-    await settle()
-    expect(element.textContent).toBe('↑1 ↓0')
+    jest.useFakeTimers()
+    let unmount: (() => void) | null = null
+    try {
+      const fake = fakeContext(layoutFor('one'))
+      fake.statuses.one = statusOf([], { ahead: 1, behind: 0, branch: 'one-branch' })
+      fake.statuses.two = statusOf([], { ahead: 0, behind: 4, branch: 'two-branch' })
+      const mounted = mountItem(fake)
+      unmount = mounted.unmount
+      await settle()
+      expect(mounted.element.textContent).toBe('↑1 ↓0')
 
-    fake.statuses.one = statusOf([], { ahead: 3, behind: 0, branch: 'one-branch' })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'other' } }))
-    await settle()
-    expect(statusCalls(fake)).toHaveLength(1)
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'one' } }))
-    await settle()
-    expect(element.textContent).toBe('↑3 ↓0')
+      fake.statuses.one = statusOf([], { ahead: 3, behind: 0, branch: 'one-branch' })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'other' } }))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'one' } }))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+      await settleAfter(3_000)
+      expect(mounted.element.textContent).toBe('↑3 ↓0')
+      expect(statusCalls(fake)).toHaveLength(2)
 
-    await act(async () => fake.setLayout(layoutFor('two')))
-    await settle()
-    expect(element.textContent).toBe('↑0 ↓4')
-    expect(statusCalls(fake).at(-1)?.params).toEqual({ worktree: 'two' })
-    unmount()
+      await act(async () => fake.setLayout(layoutFor('two')))
+      await settle()
+      expect(mounted.element.textContent).toBe('↑0 ↓4')
+      expect(statusCalls(fake).filter(({ params }) => params.worktree === 'two')).toHaveLength(1)
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 })
 

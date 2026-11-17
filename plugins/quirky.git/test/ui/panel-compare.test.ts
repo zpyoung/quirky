@@ -1,11 +1,12 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
+import type { Fake } from './panel-support'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, qa, rowOf, rowPaths, selectedPaths, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, qa, rowOf, rowPaths, selectedPaths, settle, settleAfter, statusOf, type } = s
 const { activePanel } = await import('../../src/panel/registry')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -13,7 +14,6 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-type Fake = ReturnType<typeof fakeContext>
 
 async function open(configure: (fake: Fake) => void = () => {}) {
   const fake = fakeContext(layoutFor('feat'))
@@ -94,13 +94,24 @@ describe('SC-47 and SC-51: the branch compare refreshes', () => {
   })
 
   test('a status read showing HEAD moved reloads compare', async () => {
-    const { fake, unmount } = await open()
-    const before = fake.called('quirky.git/compare').length
-    fake.status = statusOf([], { head: 'f'.repeat(40) })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(fake.called('quirky.git/compare').length).toBe(before + 1)
-    unmount()
+    jest.useFakeTimers()
+    let unmount: (() => void) | null = null
+    try {
+      const mounted = await open()
+      unmount = mounted.unmount
+      const before = mounted.fake.called('quirky.git/compare').length
+      const statusBefore = mounted.fake.called('quirky.git/status').length
+      mounted.fake.status = statusOf([], { head: 'f'.repeat(40) })
+      await act(async () => mounted.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      expect(mounted.fake.called('quirky.git/status')).toHaveLength(statusBefore)
+      await settleAfter(3_000)
+      expect(mounted.fake.called('quirky.git/status')).toHaveLength(statusBefore + 1)
+      expect(mounted.fake.called('quirky.git/compare').length).toBe(before + 1)
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('changing the compare base setting reloads compare', async () => {

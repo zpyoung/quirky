@@ -69,7 +69,11 @@ try {
 
   rmSync(pidPath, { force: true })
   lock.recordHolder()
-  const server = startPtyServer({ home, onShutdown: finishShutdown })
+  const server = startPtyServer({
+    home,
+    onShutdown: finishShutdown,
+    onOrphaned: (_loss, error) => finishShutdown(error)
+  })
 
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
     process.on(signal, () => {

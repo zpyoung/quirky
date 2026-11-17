@@ -3,7 +3,7 @@ import { startPtyServer } from '../../src/server'
 const home = process.env.QUIRKY_HOME
 if (!home) throw new Error('QUIRKY_HOME is required')
 
-const server = startPtyServer({ home })
+const server = startPtyServer({ home, ownershipCheckMs: 0 })
 process.once('SIGTERM', () => {
   void server.stop().then(
     () => process.exit(0),

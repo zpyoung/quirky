@@ -12,6 +12,7 @@ import { makeTempHome, waitFor } from './helpers'
 
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 const GATED_FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'gated-fake-pty-host.ts')
+const REAL_HOST_MAIN = join(import.meta.dir, '../../pty-host/src/main.ts')
 
 const cleanups: (() => Promise<void> | void)[] = []
 const scopes = new Map<string, ProcessScope>()
@@ -171,6 +172,40 @@ describe('spawning the host', () => {
     await Bun.sleep(300)
     expect(process.kill(pid, 0)).toBe(true)
   })
+
+  test('a daemon-launched host survives client close and exits after its home is deleted', async () => {
+    const dir = home()
+    const scope = scopeFor(dir)
+    const client = newClient(dir, { hostEntry: REAL_HOST_MAIN })
+    await client.connect()
+    const hostPid = client.hostPid!
+    const session = await client.request('create', {
+      sessionId: 's1',
+      cwd: '/tmp',
+      argv: ['/bin/sh', '-c', '/bin/sleep 600 & wait'],
+      env: { PATH: '/usr/bin:/bin' },
+      cols: 80,
+      rows: 24
+    })
+    scope.track(session.pid)
+
+    client.close()
+    // This real delay verifies detached-process survival; fake timers cannot advance another process.
+    await Bun.sleep(3500)
+    expect(process.kill(hostPid, 0)).toBe(true)
+
+    rmSync(dir, { recursive: true, force: true })
+    await waitFor(() => {
+      try {
+        process.kill(hostPid, 0)
+        return undefined
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ESRCH') return true
+        throw error
+      }
+    }, 12_000)
+    expect(existsSync(dir)).toBe(false)
+  }, 30_000)
 
   test('starts the host in the home, not the daemon directory', async () => {
     const dir = home()

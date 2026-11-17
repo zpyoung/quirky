@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
@@ -103,11 +103,27 @@ function state(value: SessionInfo | null, over: Partial<PanelState> = {}): Panel
   return { session: value?.identity.sessionId ?? null, pane: value?.identity.pane ?? null, workspace: value ? 'wt-main' : null, openSections: ['liveActivity'], info: value, ...over }
 }
 
-const waitForUi = () => act(async () => {
-  const { promise, resolve } = Promise.withResolvers<void>()
-  setTimeout(resolve, 0)
-  await promise
-})
+let controlledClock = false
+function controlClock() {
+  controlledClock = true
+  jest.useFakeTimers()
+}
+async function advanceUi(milliseconds: number) {
+  const timers = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+  await act(async () => { timers.advanceTimersByTime(milliseconds) })
+  await waitForUi()
+}
+const waitForUi = async () => {
+  if (controlledClock) {
+    for (let turn = 0; turn < 6; turn++) await act(async () => {})
+    return
+  }
+  await act(async () => {
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, 0)
+    await promise
+  })
+}
 const click = (element: Element) => act(async () => { element.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
 const fillInput = (input: HTMLInputElement, value: string) => act(async () => {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
@@ -129,6 +145,8 @@ afterAll(async () => { await GlobalRegistrator.unregister() })
 afterEach(() => {
   for (const dispose of mountedDisposers.splice(0)) dispose()
   document.body.innerHTML = ''
+  if (controlledClock) jest.useRealTimers()
+  controlledClock = false
 })
 
 describe('Session Info UI contributions', () => {
@@ -159,6 +177,7 @@ describe('Session Info UI contributions', () => {
   })
 
   test('renders multiple accessible sections, preserves interrupted states, and applies context thresholds', async () => {
+    controlClock()
     let usedPercentage = 59
     const currentInfo = () => info({
       liveActivity: { state: 'done', label: 'Interrupted', toolName: 'Bash', toolInput: 'sleep 5', subagentCount: 0, startedAt: 1_700_000_000_000, updatedAt: 1_700_000_060_000 },
@@ -184,11 +203,11 @@ describe('Session Info UI contributions', () => {
 
     usedPercentage = 60
     await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
-    await waitForUi()
+    await advanceUi(1_500)
     expect(panel.element.querySelector('[data-context-threshold="strong"]')).not.toBeNull()
     usedPercentage = 80
     await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
-    await waitForUi()
+    await advanceUi(1_500)
     expect(panel.element.querySelector('[data-context-threshold="danger"]')).not.toBeNull()
 
     await click(button(panel.element, 'Usage'))
@@ -198,6 +217,7 @@ describe('Session Info UI contributions', () => {
   })
 
   test('retains stale Usage on retry failure and recovers with Hooks & MCP closed', async () => {
+    controlClock()
     let currentUsage: NonNullable<SessionInfo['usage']> = {
       status: 'ready', freshness: 'stale', totalTokens: 100, turnCount: 2, input: 70, output: 20, cacheRead: 5, cacheWrite: 5,
       updatedAt: 1_700_000_060_000, error: 'ENOENT: transcript missing'
@@ -255,6 +275,8 @@ describe('Session Info UI contributions', () => {
 
     await click(button(panel.element, 'Retry usage'))
     await waitForUi()
+    await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
+    await advanceUi(1_500)
 
     expect(inspectCount).toBe(2)
     expect(button(panel.element, 'Hooks & MCP').getAttribute('aria-expanded')).toBe('false')
@@ -297,6 +319,7 @@ describe('Session Info UI contributions', () => {
     panel.unmount()
   })
   test('shows initial loading and keeps session sections still during background refresh', async () => {
+    controlClock()
     const initial = Promise.withResolvers<PanelState>()
     const refresh = Promise.withResolvers<PanelState>()
     let reads = 0
@@ -312,7 +335,7 @@ describe('Session Info UI contributions', () => {
     initial.resolve(state(info()))
     await waitForUi()
     await fake.emit({ type: 'quirky.session-info/changed', data: { sessionId: 'quirky-1' } })
-    await waitForUi()
+    await advanceUi(1_500)
     expect(reads).toBe(2)
     expect(panel.element.querySelector('.ui-notice-line')).toBeNull()
     expect(panel.element.querySelector('#session-info-section-identity')).not.toBeNull()

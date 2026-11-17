@@ -1,11 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, listboxOf, mountPanel, press, q, qa, rowOf, rowPaths, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, compareOf, DIFF_VIEW, entry, fakeContext, layoutFor, listboxOf, mountPanel, press, q, qa, rowOf, rowPaths, settle, settleAfter, statusOf, type } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -167,13 +167,22 @@ describe('SC-10: empty states', () => {
 
 describe('SC-11: the uncommitted badge', () => {
   test('counts one per row, then clears when everything is committed', async () => {
-    const { fake, unmount } = await open()
-    expect(fake.badges.at(-1)).toEqual(['panel:quirky.git/source-control', 4, 'Source Control — 4 uncommitted changes'])
-    fake.status = statusOf([])
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(fake.badges.at(-1)?.[1]).toBeNull()
-    unmount()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open()
+      unmount = opened.unmount
+      const { fake } = opened
+      expect(fake.badges.at(-1)).toEqual(['panel:quirky.git/source-control', 4, 'Source Control — 4 uncommitted changes'])
+      fake.status = statusOf([])
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      await settleAfter(3_000)
+      expect(fake.badges.at(-1)?.[1]).toBeNull()
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('a capped status shows the 1000 entries it has', async () => {
