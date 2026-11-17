@@ -545,6 +545,19 @@ describe('plugin sample validation', () => {
     expect(validatePluginSample(changedContext, capture, target, AUTHOR_FAMILY, REVIEWER)?.code).toBe('evidence-changed')
   })
 
+  test('rejects a g3-68 review context after the trusted contract changes', () => {
+    const legacyTarget = { ...target, id: 'view:quirky.accounts/session-accessory' }
+    const legacyCapture = captureEvidence(legacyTarget, 'dark')
+    const sample = reviewerSample(legacyTarget, 'dark', 90, { capture: legacyCapture })
+
+    expect(validatePluginSample(sample, legacyCapture, legacyTarget, AUTHOR_FAMILY, REVIEWER)).toBeNull()
+
+    const legacyDigest = 'a42800e1234e171fcf18cf045ea18eaa208d2f102fa46cb2626950aa58a969cf'
+    sample.contractReview!.contextSha256 = legacyDigest
+    sample.contractReview!.audit.contextSha256 = legacyDigest
+    expect(validatePluginSample(sample, legacyCapture, legacyTarget, AUTHOR_FAMILY, REVIEWER)?.code).toBe('evidence-changed')
+  })
+
   test('rejects malformed trusted-context audits and undeclared contract IDs', () => {
     const missingAcknowledgment = reviewerSample(target, 'dark', 90, { capture })
     missingAcknowledgment.contractReview!.audit.acknowledgedRuleIds.pop()

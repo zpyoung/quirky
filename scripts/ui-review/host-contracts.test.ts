@@ -15,12 +15,16 @@ const RULE_IDS = [
   'palette-selected-colors',
   'worktrees-approved-redesign'
 ]
-const SOURCE_CITATIONS: Record<string, string> = {
-  'host-frame-ownership': 'scripts/ui-review/capture.ts',
-  'host-underline-tabs': 'g3-62 scenarios 1 and 8',
-  'palette-retained-spacing': 'g3-62 scenario 12',
-  'palette-selected-colors': 'g3-62 scenario 7',
-  'worktrees-approved-redesign': 'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md'
+const SOURCE_CITATIONS: Record<string, string[]> = {
+  'host-frame-ownership': ['scripts/ui-review/capture.ts'],
+  'host-underline-tabs': [
+    'g3-62 scenarios 1 and 8',
+    'packages/ui/src/design-system/components.css',
+    'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md'
+  ],
+  'palette-retained-spacing': ['g3-62 scenario 12'],
+  'palette-selected-colors': ['g3-62 scenario 7'],
+  'worktrees-approved-redesign': ['docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md']
 }
 const THEME_VALUES: Record<CaptureTheme, Record<string, string>> = {
   dark: {
@@ -33,6 +37,32 @@ const THEME_VALUES: Record<CaptureTheme, Record<string, string>> = {
   }
 }
 const TOKENS = ['surface', 'rail', 'selected', 'accent', 'border', 'text', 'muted'] as const
+const LEGACY_TAB_TEXT = 'The tablist is ui-tabs ui-tabs--underline, with a 1px solid var(--ui-border) bottom rule. Selected tabs have no top border, zero radius, var(--ui-surface) background, var(--ui-text) foreground, and an inset 2px bottom accent underline. Unselected tabs are transparent, have no top border or shadow, and use var(--ui-muted). This governs Open views and palette Search scope; other Tabs keep their existing boxed default. An underline is not a defect merely because it differs from the older golden.'
+const TREATMENT_PHRASES = {
+  header: [
+    'ToolPanelFrame header tabs', 'Tasks (Issues, PRs, Projects)',
+    'Agent Session History (Workspace, Project, All)',
+    'the tablist has no bottom rule', 'wraps whole tabs onto another row when narrow',
+    '2px by 4px padding', '7px radius', 'transparent background', 'transparent 1px border',
+    'selected tab keeps a transparent background with a 1px var(--ui-accent) border and var(--ui-text)',
+    'neither boxed nor underline tabs', 'this compact look is not a defect'
+  ],
+  savedViews: [
+    'Worktrees saved-view tabs (All, Needs you and starred views)',
+    'single scrolling row with no tablist bottom rule',
+    'transparent and borderless in var(--ui-muted)',
+    'selected tab uses var(--ui-text) with a 2px var(--ui-accent) bottom border',
+    'neither boxed nor the Open views underline tablist'
+  ],
+  standalone: [
+    'Other standalone Tabs, such as those in dialogs and settings, keep their existing boxed default',
+    '1px var(--ui-border) border', 'rounded top corners', 'var(--ui-selected) behind the selected tab'
+  ]
+} as const
+
+function treatmentFailures(text: string, treatment: keyof typeof TREATMENT_PHRASES): string[] {
+  return TREATMENT_PHRASES[treatment].filter((phrase) => !text.includes(phrase))
+}
 
 function target(id: string, title: string): CaptureTarget {
   return { id, plugin: null, title, kind: id.startsWith('host:') ? 'host' : 'view' }
@@ -50,7 +80,7 @@ test('each theme receives the five sorted, cited host rules and checked-in token
     expect(context.rules.map(({ id }) => id)).toEqual(RULE_IDS)
     for (const rule of context.rules) {
       expect(Object.keys(rule).sort()).toEqual(['id', 'source', 'text'])
-      expect(rule.source).toContain(SOURCE_CITATIONS[rule.id]!)
+      for (const citation of SOURCE_CITATIONS[rule.id]!) expect(rule.source).toContain(citation)
       expect(rule.text.trim().length).toBeGreaterThan(20)
     }
 
@@ -74,7 +104,7 @@ test('contract text preserves every locked palette, underline, Worktrees, and ho
   expect(rule('host-underline-tabs')).toMatch(/1px solid .*--ui-border/)
   expect(rule('host-underline-tabs')).toMatch(/inset 2px bottom accent underline/)
   expect(rule('host-underline-tabs')).toMatch(/Open views.*Search scope/i)
-  expect(rule('host-underline-tabs')).toMatch(/other Tabs.*boxed default/i)
+  expect(rule('host-underline-tabs')).toMatch(/Other standalone Tabs.*boxed default/i)
 
   expect(rule('palette-selected-colors')).toMatch(/transparent list background/i)
   expect(rule('palette-selected-colors')).toMatch(/no list border/i)
@@ -100,6 +130,59 @@ test('contract text preserves every locked palette, underline, Worktrees, and ho
   expect(rule('host-frame-ownership')).toMatch(/plugin.*row stylesheet/i)
   expect(rule('host-frame-ownership')).toMatch(/all-white frame/i)
   expect(rule('host-frame-ownership')).toMatch(/offline absence of hosted Checks data/i)
+})
+
+for (const theme of ['dark', 'light'] as const) {
+  const context = hostContractContext(target('host:palette', 'Palette'), theme)
+  const text = context.rules.find(({ id }) => id === 'host-underline-tabs')!.text
+
+  test(`${theme}: tool-panel header tabs are compact rather than boxed or underline`, () => {
+    expect(treatmentFailures(text, 'header')).toEqual([])
+  })
+
+  test(`${theme}: Worktrees saved-view tabs use their own scrolling strip`, () => {
+    expect(treatmentFailures(text, 'savedViews')).toEqual([])
+  })
+
+  test(`${theme}: the underline tablist bottom rule belongs only to Open views and palette scope`, () => {
+    expect(text).toMatch(/Open views and palette Search scope[^.]*ui-tabs ui-tabs--underline[^.]*1px solid var\(--ui-border\) bottom rule/)
+    expect(text).toContain('inset 2px bottom accent underline')
+    expect(text.indexOf('1px solid var(--ui-border) bottom rule')).toBeLessThan(text.indexOf('ToolPanelFrame header tabs'))
+  })
+
+  test(`${theme}: boxed defaults apply only to other standalone Tabs`, () => {
+    expect(treatmentFailures(text, 'standalone')).toEqual([])
+    expect(text).toMatch(/Other standalone Tabs[^.]*keep their existing boxed default/)
+    expect(text).not.toMatch(/This governs Open views and palette Search scope; other Tabs keep their existing boxed default/)
+  })
+
+  test(`${theme}: approved treatments do not excuse real tab defects`, () => {
+    expect(text).toContain("A tablist that matches its own treatment is not a defect for lacking another treatment's border, underline or box")
+    expect(text).toContain('Clipped or partial labels, unreadable text, a missing selected state and overlap remain defects')
+  })
+
+  test(`${theme}: the legacy blanket rule fails each treatment distinction`, () => {
+    const legacyContext = {
+      ...context,
+      rules: context.rules.map((rule) => rule.id === 'host-underline-tabs' ? { ...rule, text: LEGACY_TAB_TEXT } : rule)
+    }
+    const legacyText = legacyContext.rules.find(({ id }) => id === 'host-underline-tabs')!.text
+    expect(legacyText).toHaveLength(497)
+    for (const treatment of ['header', 'savedViews', 'standalone'] as const) {
+      expect(treatmentFailures(text, treatment)).toEqual([])
+      expect(treatmentFailures(legacyText, treatment)).toEqual([...TREATMENT_PHRASES[treatment]])
+    }
+  })
+
+  test(`${theme}: tab guidance fits the gate and single-line prompt context`, () => {
+    expect(text.length).toBeLessThanOrEqual(3000)
+    expect(text).not.toMatch(/[\r\n]/)
+  })
+}
+
+test('the tab guidance retires the digest recorded in docs/quirk/evidence/g3-68-plugin-baseline.md', () => {
+  const context = hostContractContext(target('view:quirky.accounts/session-accessory', 'Accounts'), 'dark')
+  expect(digest(serializeContractContext(context))).not.toBe('a42800e1234e171fcf18cf045ea18eaa208d2f102fa46cb2626950aa58a969cf')
 })
 
 test('Worktrees and Remote workspaces keep the complete full-window context without importing their titles', () => {
