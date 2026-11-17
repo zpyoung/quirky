@@ -237,7 +237,7 @@ describe('ownership', () => {
     expect(await connect(path)).toBe(true)
   })
 
-  test('scenario 20a leaves a decoy at the retired flat private socket name', () => {
+  test('closing preserves a decoy socket outside the private directory', () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     const owned = bind(path)
@@ -249,7 +249,7 @@ describe('ownership', () => {
     expect(fs.lstatSync(flatPath, { bigint: true }).ino).toBe(identity.ino)
   })
 
-  test('scenario 20b refuses a recreated private directory and can retry after it is removed', () => {
+  test('closing refuses a recreated private directory and retries after its removal', () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     const owned = bind(path)
@@ -263,16 +263,21 @@ describe('ownership', () => {
     fs.rmSync(home, { recursive: true, force: true })
     fs.mkdirSync(home, { mode: 0o700 })
     fs.mkdirSync(owned.privateDir, { mode: 0o700 })
-    listenOn(join(owned.privateDir, 's'))
+    const decoy = listenOn(join(owned.privateDir, 's'))
     const identity = fs.lstatSync(join(owned.privateDir, 's'), { bigint: true })
 
     expect(owned.close()).toEqual({ listenerStopped: false, socketRemoved: false })
     expect(originalListener.stopCalls).toBe(0)
     expect(originalListener.unrefCalls).toBe(1)
     expect(fs.lstatSync(join(owned.privateDir, 's'), { bigint: true }).ino).toBe(identity.ino)
+
+    decoy.stop(true)
+    fs.rmdirSync(owned.privateDir)
+    expect(owned.close()).toEqual({ listenerStopped: true, socketRemoved: false })
+    expect(originalListener.stopCalls).toBe(1)
   })
 
-  test('scenario 20c safely stops after the home and private directory disappear', () => {
+  test('closing stops the listener after the home and private directory disappear', () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     const owned = bind(path)
@@ -283,7 +288,7 @@ describe('ownership', () => {
     expect(fs.existsSync(owned.privateDir)).toBe(false)
   })
 
-  test('scenario 20d refuses a decoy in its owned private directory, then retries safely', async () => {
+  test('closing refuses a foreign private socket and retries after its removal', async () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     const owned = bind(path)
@@ -309,7 +314,7 @@ describe('ownership', () => {
     expect(owned.listener.stopCalls).toBe(1)
   })
 
-  test('scenario 21 cleans up each one-shot publication failure and allows a fresh bind', async () => {
+  test('publication failure cleans verified resources and permits a fresh bind', async () => {
     const points: Array<Parameters<typeof injectedOps>[1]> = ['chmod', 'claim-dir', 'rename', 'claim-published']
     for (const point of points) {
       const home = tempHome()
@@ -332,7 +337,7 @@ describe('ownership', () => {
     }
   })
 
-  test('scenario 21 preserves and reports paths when cleanup inspection keeps failing', () => {
+  test('publication failure preserves and reports paths it cannot inspect', () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     const capture: { privateDir?: string } = {}
@@ -385,7 +390,7 @@ describe('ownership', () => {
     fs.rmdirSync(capture.privateDir!)
   })
 
-  test('scenario 21 leaves an unreplaceable public directory alone, then allows a fresh bind', async () => {
+  test('publication preserves a nonempty public directory and succeeds after its removal', async () => {
     const home = tempHome()
     const path = join(home, 'pty.sock')
     let privatePath = ''
