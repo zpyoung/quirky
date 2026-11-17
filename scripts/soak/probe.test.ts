@@ -1745,6 +1745,21 @@ test('createPongMatcher accepts only complete exact lines for its current token'
   expect(terminated.push(encode('\n'))).toBe(true)
 })
 
+test('createPongMatcher carries at most 64 characters across chunks', () => {
+  const encoder = new TextEncoder()
+  for (const length of [64, 65]) {
+    const token = 'a'.repeat(length - 'soak-pong '.length)
+    const line = `soak-pong ${token}`
+    const matcher = createPongMatcher()
+    matcher.expect(token)
+    expect(matcher.push(encoder.encode(line.slice(0, 32)))).toBe(false)
+    expect(matcher.push(encoder.encode(line.slice(32)))).toBe(false)
+    expect(matcher.push(encoder.encode('\n'))).toBe(length === 64)
+    matcher.expect('ab12cd34-1')
+    expect(matcher.push(encoder.encode('soak-pong ab12cd34-1\n'))).toBe(true)
+  }
+})
+
 test('createPongMatcher bounds long tails and decodes split UTF-8 characters', () => {
   const matcher = createPongMatcher()
   const token = 'ab12cd34-1'

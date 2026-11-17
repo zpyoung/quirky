@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { QuirkyClient, PluginContext } from '@quirky/protocol'
@@ -1185,11 +1185,13 @@ for (const [label, prepare] of refusalCases) {
   })
 }
 
-for (const resultKind of ['absent', 'unreadable', 'replaced'] as const) {
+for (const resultKind of ['absent', 'unreadable', 'replaced', 'stopped'] as const) {
   test(`refuses to stop a host whose second inspection is ${resultKind}`, async () => {
     const host = createFakePtyHost()
     const real = await waitForHostIdentity(host)
     let inspections = 0
+    let firstInspection: PtyHostInspection | undefined
+    let secondInspection: PtyHostInspection | undefined
     const signals: string[] = []
     const injected: PtyHostInspection = resultKind === 'absent'
       ? { kind: 'absent' }
@@ -1199,13 +1201,35 @@ for (const resultKind of ['absent', 'unreadable', 'replaced'] as const) {
     const fault = startPtyFault(host, {
       inspect: (pid) => {
         inspections += 1
-        return inspections === 2 ? injected : inspectPtyHost(pid)
+        if (inspections === 1) {
+          const current = inspectPtyHost(pid)
+          firstInspection = current
+          return current
+        }
+        if (inspections === 2) {
+          const current = resultKind === 'stopped' && firstInspection?.kind === 'present'
+            ? { kind: 'present', identity: { ...firstInspection.identity, state: 'T' } } as const
+            : injected
+          secondInspection = current
+          return current
+        }
+        return inspectPtyHost(pid)
       },
       kill: (_pid, signal) => { signals.push(signal) }
     })
     await expectNotApplied(fault)
     expect(inspections).toBe(2)
     expect(signals).toEqual([])
+    if (resultKind === 'stopped') {
+      expect(firstInspection?.kind).toBe('present')
+      if (firstInspection?.kind === 'present') {
+        expect(firstInspection.identity.state.startsWith('T')).toBe(false)
+        expect(secondInspection).toEqual({
+          kind: 'present',
+          identity: { ...firstInspection.identity, state: 'T' }
+        })
+      }
+    }
   })
 }
 
@@ -1573,20 +1597,38 @@ test('bounds unreadable resume retries and reports pid and start time to stderr'
   }
 })
 
-test('synchronously resumes the same stopped host from the process exit handler', async () => {
-  const host = createFakePtyHost()
-  const runnerHome = makePtyScratch('quirky-soak-pty-exit-runner-home-')
-  const runnerRoot = makePtyScratch('quirky-soak-pty-exit-runner-')
-  const runnerPath = join(runnerRoot, 'exit-runner.ts')
-  writeFileSync(runnerPath, `
-import { startFault } from ${JSON.stringify(new URL('./faults.ts', import.meta.url).href)}
+const exitRunnerModes = ['success', 'replaced', 'absent', 'unreadable'] as const
+const exitRunnerNames = {
+  success: 'synchronously resumes the same stopped host from the process exit handler',
+  replaced: 'does not signal a replaced PTY host from the process exit handler',
+  absent: 'does not signal an absent PTY host from the process exit handler',
+  unreadable: 'does not signal an unreadable PTY host from the process exit handler'
+} as const
+
+for (const mode of exitRunnerModes) {
+  test(exitRunnerNames[mode], async () => {
+    const host = createFakePtyHost()
+    let runner: TestChild | undefined
+    try {
+      const runnerHome = makePtyScratch('quirky-soak-pty-exit-runner-home-')
+      const runnerRoot = makePtyScratch('quirky-soak-pty-exit-runner-')
+      const runnerPath = join(runnerRoot, 'exit-runner.ts')
+      const signalPath = join(runnerHome, 'signals.log')
+      const inspectionPath = join(runnerHome, 'inspections.log')
+      writeFileSync(runnerPath, `
+import { appendFileSync } from 'node:fs'
+import { inspectPtyHost, startFault } from ${JSON.stringify(new URL('./faults.ts', import.meta.url).href)}
 const repoRoot = process.argv[2]!
 const home = process.argv[3]!
 const pid = Number(process.argv[4])
+const mode = process.argv[5]!
+const signalPath = process.argv[6]!
+const inspectionPath = process.argv[7]!
 const control = { callAny: async (method: string) => {
   if (method !== 'status.get') throw new Error('unexpected control call: ' + method)
   return { ptyHost: { pid } }
 } }
+let inspections = 0
 startFault({
   kind: 'pty-pause',
   repoRoot,
@@ -1598,7 +1640,29 @@ startFault({
   runSeconds: 24,
   startedAt: performance.now() - 2100,
   signal: new AbortController().signal,
-  ptyPause: { holdMs: 3000 }
+  ptyPause: {
+    holdMs: 3000,
+    inspect: (targetPid) => {
+      inspections += 1
+      if (inspections <= 2 || mode === 'success') return inspectPtyHost(targetPid)
+      if (mode === 'absent') {
+        appendFileSync(inspectionPath, inspections + ':absent\\n')
+        return { kind: 'absent' }
+      }
+      if (mode === 'unreadable') {
+        appendFileSync(inspectionPath, inspections + ':unreadable\\n')
+        return { kind: 'unreadable', reason: 'injected exit inspection failure' }
+      }
+      const current = inspectPtyHost(targetPid)
+      if (current.kind !== 'present') return current
+      appendFileSync(inspectionPath, inspections + ':replaced\\n')
+      return { kind: 'present', identity: { ...current.identity, started: current.identity.started + ' replaced', state: 'T' } }
+    },
+    kill: (targetPid, signal) => {
+      appendFileSync(signalPath, targetPid + ':' + signal + '\\n')
+      if (targetPid === pid) process.kill(targetPid, signal)
+    }
+  }
 })
 const deadline = Date.now() + 5000
 while (Date.now() < deadline) {
@@ -1607,7 +1671,7 @@ while (Date.now() < deadline) {
     env: { ...process.env, QUIRKY_HOME: home }
   })
   if (result.exitCode === 0 && result.stdout.toString().trim().startsWith('T')) {
-    // Let the stopped host remain inside its real hold before process.exit invokes the sync handler.
+    // Exit synchronously while the real hold is active; do not wait for async resume.
     await Bun.sleep(100)
     process.exit(1)
   }
@@ -1615,23 +1679,43 @@ while (Date.now() < deadline) {
 }
 process.exit(2)
 `)
-  const runner = Bun.spawn([process.execPath, runnerPath, host.root, host.home, String(host.child.pid)], {
-    cwd: runnerHome,
-    env: { ...process.env, QUIRKY_HOME: runnerHome },
-    stdin: 'ignore',
-    stdout: 'ignore',
-    stderr: 'ignore'
-  })
-  ptyChildren.push(runner)
-  try {
-    expect(await runner.exited).toBe(1)
-    await waitForState(host.child.pid, host.home, false, 1000)
-  } finally {
-    try { host.child.kill('SIGCONT') } catch {}
-    try { host.child.kill('SIGKILL') } catch {}
-    await host.child.exited
-  }
-}, 15_000)
+      runner = Bun.spawn([process.execPath, runnerPath, host.root, host.home, String(host.child.pid), mode, signalPath, inspectionPath], {
+        cwd: runnerHome,
+        env: { ...process.env, QUIRKY_HOME: runnerHome },
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore'
+      })
+      ptyChildren.push(runner)
+      expect(await runner.exited).toBe(1)
+      const signals = readFileSync(signalPath, 'utf8').trim().split(/\r?\n/)
+      if (mode === 'success') {
+        expect(signals).toEqual([`${host.child.pid}:SIGSTOP`, `${host.child.pid}:SIGCONT`])
+        await waitForState(host.child.pid, host.home, false, 1000)
+      } else {
+        expect(signals).toEqual([`${host.child.pid}:SIGSTOP`])
+        await waitForState(host.child.pid, host.home, true, 1000)
+      }
+      if (mode === 'replaced') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/)).toEqual(['3:replaced'])
+      }
+      if (mode === 'absent') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/)).toEqual(['3:absent'])
+      }
+      if (mode === 'unreadable') {
+        expect(readFileSync(inspectionPath, 'utf8').trim().split(/\r?\n/))
+          .toEqual(['3:unreadable', '4:unreadable', '5:unreadable'])
+      }
+    } finally {
+      const children = runner ? [runner, host.child] : [host.child]
+      for (const child of children) {
+        try { child.kill('SIGCONT') } catch {}
+        try { child.kill('SIGKILL') } catch {}
+      }
+      await Promise.all(children.map((child) => child.exited))
+    }
+  }, 15_000)
+}
 const scopeCleanupVariants = [
   { name: 'plain', outcome: 'resumed', mustExit: false },
   { name: 'unreadable first three rounds', outcome: 'resumed', mustExit: false },
