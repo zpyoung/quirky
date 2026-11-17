@@ -1,8 +1,11 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
+import bundleSizeSpec from '../../plugins/quirky.view/test/fixtures/bundle-size.json'
 
 const FIXTURE_FILES = {
   source: 'src/app.ts',
@@ -407,6 +410,127 @@ async function callRpc(
     options.signal,
     method
   )
+}
+
+type BridgeReply = { code: number; stdout: string; stderr: string }
+
+async function waitForFile(path: string, options: FixtureOptions, label: string): Promise<string> {
+  const deadline = Date.now() + options.timeoutMs
+  for (;;) {
+    options.signal?.throwIfAborted()
+    if (existsSync(path)) return readFileSync(path, 'utf8')
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error(`${label} exceeded ${options.timeoutMs}ms`)
+    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, label)
+  }
+}
+
+/** Waits for the isolated fake provider to accept CLI bridge requests. */
+export async function waitForStartedEvent(home: string, session: string, options: FixtureOptions): Promise<void> {
+  const path = join(home, 'worker-fixture', `${session}.events.jsonl`)
+  const deadline = Date.now() + options.timeoutMs
+  for (;;) {
+    options.signal?.throwIfAborted()
+    if (existsSync(path)) {
+      const events = readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>)
+      if (events.some(event => event.type === 'started')) return
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error(`coordinator ${session} did not write a started event within ${options.timeoutMs}ms`)
+    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, 'coordinator started event')
+  }
+}
+
+/** Runs a fixture CLI request inside the provider's attested session environment. */
+export async function runBridgeCommand(
+  home: string,
+  session: string,
+  args: string[],
+  options: FixtureOptions
+): Promise<unknown> {
+  options.signal?.throwIfAborted()
+  const root = join(home, 'worker-fixture')
+  const id = randomUUID()
+  appendFileSync(join(root, `${session}.requests.jsonl`), JSON.stringify({ id, args }) + '\n', { mode: 0o600 })
+  const raw = await waitForFile(join(root, `${id}.reply.json`), options, `worker CLI ${args.slice(0, 2).join(' ')}`)
+  const reply = JSON.parse(raw) as BridgeReply
+  if (!reply || typeof reply !== 'object' || typeof reply.code !== 'number' || typeof reply.stdout !== 'string' || typeof reply.stderr !== 'string') {
+    throw new Error('worker CLI bridge returned an invalid reply')
+  }
+  if (reply.code !== 0) throw new Error(`worker CLI ${args[1]} exited ${reply.code}: ${reply.stderr.trim() || reply.stdout.trim() || 'no details'}`)
+  try {
+    return JSON.parse(reply.stdout) as unknown
+  } catch {
+    throw new Error(`worker CLI ${args[1]} did not return JSON: ${reply.stdout}`)
+  }
+}
+
+export type ViewFixture = { sessionId: string; inlineViewId: string; paneViewIds: [string, string] }
+
+/** Seeds representative stored views through an isolated live session, never through its database. */
+export async function createViewFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<ViewFixture> {
+  checkAbort(options.signal)
+  // cancellation stops waiting, not the daemon's session creation
+  const creation = client.callAny('quirky.session/create', {
+    worktree: fixtures.primaryWorktree.id, agent: 'claude', title: 'UI review views'
+  })
+  let acquiredSession: string | undefined
+  try {
+    const created = record(await bounded(creation, options.timeoutMs, options.signal, 'quirky.session/create'))
+    const sessionId = requiredString(created.id, 'quirky.session/create')
+    acquiredSession = sessionId
+    await waitForStartedEvent(fixtures.home, sessionId, options)
+    const open = async (spec: unknown, placement: 'inline' | 'pane') => {
+      const reply = record(await runBridgeCommand(fixtures.home, sessionId, [
+        'view', 'open', '--spec', JSON.stringify(spec), '--placement', placement, '--json'
+      ], options))
+      return requiredString(reply.viewId, 'view open')
+    }
+    const moduleMapSpec = { title: 'Module map', root: { type: 'markdown', props: { text: 'Module map body' } } }
+    const inlineViewId = await open(bundleSizeSpec, 'inline')
+    const firstPaneViewId = await open(bundleSizeSpec, 'pane')
+    const secondPaneViewId = await open(moduleMapSpec, 'pane')
+    const records = await runBridgeCommand(fixtures.home, sessionId, [
+      'api', 'call', 'quirky.view/list', '--session', sessionId, '--json'
+    ], options)
+    const expected = [
+      { viewId: inlineViewId, placement: 'inline', spec: bundleSizeSpec },
+      { viewId: firstPaneViewId, placement: 'pane', spec: bundleSizeSpec },
+      { viewId: secondPaneViewId, placement: 'pane', spec: moduleMapSpec }
+    ]
+    if (new Set(expected.map(({ viewId }) => viewId)).size !== 3 || !Array.isArray(records) || records.length !== 3 ||
+      expected.some((view, index) => {
+        const stored = record(records[index])
+        return stored.viewId !== view.viewId || stored.sessionId !== sessionId || stored.closed !== false ||
+          stored.placement !== view.placement || stored.title !== view.spec.title ||
+          !isDeepStrictEqual(stored.spec, view.spec)
+      })) {
+      throw new Error('view fixture list did not contain the three expected stored views')
+    }
+    return { sessionId, inlineViewId, paneViewIds: [firstPaneViewId, secondPaneViewId] }
+  } catch (error) {
+    if (acquiredSession === undefined) {
+      void creation.then(async (created) => {
+        const session = record(created).id
+        if (typeof session === 'string' && session !== '') {
+          await callRpc(client, 'quirky.session/close', { session }, { timeoutMs: options.timeoutMs })
+        }
+      }, () => undefined).catch((cleanupError) => {
+        console.error(`view fixture late-session cleanup failed: ${errorInHome(cleanupError, fixtures.home).message}`)
+      })
+      throw error
+    }
+    try {
+      await callRpc(client, 'quirky.session/close', { session: acquiredSession }, { timeoutMs: options.timeoutMs })
+    } catch (cleanupError) {
+      throw new Error(`${errorMessage(error)}; view fixture cleanup failed: ${errorMessage(cleanupError)}`)
+    }
+    throw error
+  }
 }
 
 /**

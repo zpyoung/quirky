@@ -1,5 +1,5 @@
-import { randomBytes, randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { connectDaemon } from '@quirky/protocol/node'
 import { type ProcessScope } from '../test-support/process-scope'
@@ -7,6 +7,8 @@ import { bounded, registerPathSecret, rpc, sanitizedError, waitForRuntime } from
 import {
   createIsolatedRuntimeEnvironment,
   prepareProviderExecutables,
+  runBridgeCommand,
+  waitForStartedEvent,
   type FixtureOptions,
   type FixtureRpcClient,
   type RegisteredCaptureFixtures
@@ -23,7 +25,6 @@ const defaultDependencies: RemoteFixtureDependencies = {
   waitForRuntime,
   connectDaemon: options => connectDaemon({ ...options, name: 'ui-review-host', autostart: false })
 }
-type BridgeReply = { code: number; stdout: string; stderr: string }
 
 export type RemoteFixtures = { mirrorId: string; dispatchId: string; stop(): Promise<string[]> }
 
@@ -54,54 +55,6 @@ function prepareHostRepository(hostHome: string, env: Record<string, string>): v
   writeFileSync(readme, '# Remote fixture\n\nCommitted content with one local change.\n', { mode: 0o600 })
 }
 
-async function waitForFile(path: string, options: FixtureOptions, label: string): Promise<string> {
-  const deadline = Date.now() + options.timeoutMs
-  for (;;) {
-    options.signal?.throwIfAborted()
-    if (existsSync(path)) return readFileSync(path, 'utf8')
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) throw new Error(`${label} exceeded ${options.timeoutMs}ms`)
-    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, label)
-  }
-}
-
-async function waitForStartedEvent(home: string, session: string, options: FixtureOptions): Promise<void> {
-  const path = join(home, 'worker-fixture', `${session}.events.jsonl`)
-  const deadline = Date.now() + options.timeoutMs
-  for (;;) {
-    options.signal?.throwIfAborted()
-    if (existsSync(path)) {
-      const events = readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>)
-      if (events.some(event => event.type === 'started')) return
-    }
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) throw new Error(`coordinator ${session} did not write a started event within ${options.timeoutMs}ms`)
-    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, 'coordinator started event')
-  }
-}
-
-async function runBridgeCommand(
-  home: string,
-  session: string,
-  args: string[],
-  options: FixtureOptions
-): Promise<unknown> {
-  options.signal?.throwIfAborted()
-  const root = join(home, 'worker-fixture')
-  const id = randomUUID()
-  appendFileSync(join(root, `${session}.requests.jsonl`), JSON.stringify({ id, args }) + '\n', { mode: 0o600 })
-  const raw = await waitForFile(join(root, `${id}.reply.json`), options, `worker CLI ${args.slice(0, 2).join(' ')}`)
-  const reply = JSON.parse(raw) as BridgeReply
-  if (!reply || typeof reply !== 'object' || typeof reply.code !== 'number' || typeof reply.stdout !== 'string' || typeof reply.stderr !== 'string') {
-    throw new Error('worker CLI bridge returned an invalid reply')
-  }
-  if (reply.code !== 0) throw new Error(`worker CLI ${args[1]} exited ${reply.code}: ${reply.stderr.trim() || reply.stdout.trim() || 'no details'}`)
-  try {
-    return JSON.parse(reply.stdout) as unknown
-  } catch {
-    throw new Error(`worker CLI ${args[1]} did not return JSON: ${reply.stdout}`)
-  }
-}
 
 /** Starts an isolated owner daemon, attaches its worktree, and launches one federated worker fixture. */
 export async function createRemoteFixtures(

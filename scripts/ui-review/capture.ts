@@ -11,6 +11,7 @@ import {
   createLoopFixture,
   createIsolatedRuntimeEnvironment,
   createTranscriptFixture,
+  createViewFixture,
   openFixtureEditorBuffer,
   prepareCaptureFixtureHome,
   registerCaptureFixtures,
@@ -21,7 +22,8 @@ import {
   type LoopFixture,
   type PreparedCaptureFixtureHome,
   type RegisteredCaptureFixtures,
-  type TranscriptFixture
+  type TranscriptFixture,
+  type ViewFixture
 } from './fixtures'
 import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createRemoteFixtures, type RemoteFixtures } from './remote-fixtures'
@@ -83,6 +85,7 @@ const REMOTE_TARGETS: ReadonlySet<string> = new Set([
   'view:quirky.orchestration/remote-worker-output',
   'view:quirky.worktree/remote'
 ])
+const VIEW_TARGETS: Readonly<Record<string, true>> = { 'view:quirky.view/render': true, 'view:quirky.view/pane': true }
 const TERMINAL_SURFACE_PLUGINS: ReadonlySet<string> = new Set([
   'quirky.terminal',
   'quirky.session',
@@ -110,6 +113,7 @@ export type CaptureRuntime = {
   transcriptFixture: TranscriptFixture | null
   loopFixture: LoopFixture | null
   remoteFixtures: RemoteFixtures | null
+  viewFixture?: ViewFixture | null
   structuredSessionId: string | null
   pendingUiCommand: Promise<unknown> | null
   scene: SceneState
@@ -429,7 +433,8 @@ async function openLocalWorktreeContext(
       transcript: runtime.transcriptFixture,
       loop: runtime.loopFixture,
       remote: runtime.remoteFixtures,
-      cellTerminal: usePrimarySession ? runtime.cellTerminalFixture : null
+      cellTerminal: usePrimarySession ? runtime.cellTerminalFixture : null,
+      view: runtime.viewFixture
     }
   )
   await rpc(runtime.client, 'ui.view.open', { id: view.id, input }, runtime.options.timeoutMs, runtime.options.signal)
@@ -618,6 +623,7 @@ export function fixtureViewInput(
     loop?: LoopFixture | null
     remote?: RemoteFixtures | null
     cellTerminal?: CaptureTerminalFixture | null
+    view?: ViewFixture | null
   }
 ): Record<string, unknown> {
   const worktree = fixtures.primaryWorktree
@@ -627,6 +633,14 @@ export function fixtureViewInput(
     workspace: worktree.id,
     repo: fixtures.repo.id,
     repoId: fixtures.repo.id
+  }
+  if (target.id === 'view:quirky.view/render') {
+    if (!extra?.view) throw new Error('a view fixture is required for the render view')
+    input.viewId = extra.view.inlineViewId
+  }
+  if (target.id === 'view:quirky.view/pane') {
+    if (!extra?.view) throw new Error('a view fixture is required for the pane view')
+    input.session = extra.view.sessionId
   }
   if (target.id === 'view:quirky.orchestration/remote-worker-output') {
     if (!extra?.remote) throw new Error('remote fixtures are required for the remote worker output view')
@@ -893,7 +907,8 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
         transcript: runtime.transcriptFixture,
         loop: runtime.loopFixture,
         remote: runtime.remoteFixtures,
-        cellTerminal: runtime.cellTerminalFixture
+        cellTerminal: runtime.cellTerminalFixture,
+        view: runtime.viewFixture
       })
       if (target.id === 'view:quirky.browser/page') {
         const pane = record(await rpc(runtime.client, 'quirky.browser/paneOpen', {
@@ -1322,6 +1337,34 @@ async function waitForTasksCapture(runtime: CaptureRuntime, target: CaptureTarge
   await bounded(ready, runtime.options.timeoutMs, runtime.options.signal, 'Tasks fixture rows and detail')
 }
 
+async function waitForViewCapture(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+  if (!VIEW_TARGETS[target.id]) return
+  const fixture = runtime.viewFixture
+  if (!fixture) throw new Error(`a view fixture is required for the ${target.id.endsWith('/pane') ? 'pane' : 'render'} view`)
+  const pane = target.id === 'view:quirky.view/pane'
+  const expected = {
+    selector: targetSlotSelector(target),
+    viewId: pane ? fixture.paneViewIds[0] : fixture.inlineViewId,
+    pane
+  }
+  await bounded(runtime.page.waitForFunction(({ selector, viewId, pane }) => {
+    const root = document.querySelector(selector)
+    const card = root?.querySelector(`[data-view-card="${viewId}"]`)
+    if (!root || !card || card.getAttribute('aria-label') !== 'Bundle size by route') return false
+    const rect = card.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0 || root.querySelector('[role="alert"]')) return false
+    if (!card.querySelector('[data-view-node="bar-chart"] [role="img"] svg') ||
+      card.querySelectorAll('table tbody tr').length !== 3 ||
+      !card.textContent?.includes('412 KB')) return false
+    const buttons = [...card.querySelectorAll('button')].map(button => button.textContent?.trim())
+    if (!buttons.includes('Lazy-load zxcvbn') || !buttons.includes('Replace date-fns-tz')) return false
+    if (!pane) return true
+    const tabs = [...root.querySelectorAll('[role="tab"]')]
+    return tabs.length === 2 && tabs[0]?.textContent?.trim() === 'Bundle size by route' &&
+      tabs[1]?.textContent?.trim() === 'Module map' && tabs[0]?.getAttribute('aria-selected') === 'true'
+  }, expected, { timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'stored view card, chart, table, buttons and pane tabs')
+}
+
 async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme: CaptureTheme): Promise<CaptureEvidence> {
   const cell = { targetId: target.id, theme }
   const reference = referenceFor(runtime.references, target.id, theme)
@@ -1334,9 +1377,11 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
     await openTarget(runtime, target)
     await inspectSurface(runtime, target)
     await waitForTasksCapture(runtime, target)
+    await waitForViewCapture(runtime, target)
     const themeChanged = await verifyThemeBeforeCapture(runtime, runtime.themes[theme])
     if (themeChanged) await inspectSurface(runtime, target)
     await waitForTasksCapture(runtime, target)
+    await waitForViewCapture(runtime, target)
     if (runtime.pageErrors.length > errorStart) {
       throw new Error(`renderer raised: ${runtime.pageErrors.slice(errorStart).join('; ')}`)
     }
@@ -1578,6 +1623,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   let loopFixture: LoopFixture | null = null
   let remoteFixtures: RemoteFixtures | null = null
   let structuredSessionId: string | null = null
+  let viewFixture: ViewFixture | null = null
   let daemon: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined
   let daemonOutput = () => ''
   let daemonErrors = () => ''
@@ -1759,6 +1805,17 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         recordFixtureInputFailure('loop', loopTargets, error)
       }
     }
+    const viewTargets = targets.filter((target) => VIEW_TARGETS[target.id])
+    if (viewTargets.length > 0) {
+      try {
+        viewFixture = await createViewFixture(activeClient, activeFixtures, {
+          timeoutMs: options.timeoutMs, signal: options.signal
+        })
+      } catch (error) {
+        recordFixtureInputFailure('view', viewTargets, error)
+      }
+    }
+
 
     const remoteTargets = targets.filter((target) => REMOTE_TARGETS.has(target.id))
     if (remoteTargets.length > 0) {
@@ -1840,6 +1897,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       transcriptFixture,
       loopFixture,
       remoteFixtures,
+      viewFixture,
       structuredSessionId,
       pendingUiCommand: null,
       scene: newSceneState(),
