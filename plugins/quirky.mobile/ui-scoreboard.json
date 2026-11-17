@@ -159,7 +159,7 @@
         },
         "import": {
           "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
         }
       }
     },
@@ -178,7 +178,7 @@
         },
         "import": {
           "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
         }
       }
     },
@@ -198,7 +198,7 @@
         },
         "import": {
           "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
         }
       }
     },
@@ -218,7 +218,7 @@
         },
         "import": {
           "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
         }
       }
     },
@@ -913,7 +913,7 @@
     {
       "site": {
         "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-        "quote": "onChange={(event) => void toggleSidebar(event.target.checked)}"
+        "quote": "onChange={toggleSidebar}"
       },
       "route": {
         "target": "quirky.mobile/configure",

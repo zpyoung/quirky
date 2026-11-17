@@ -167,6 +167,17 @@
   line-height: 1.35;
 }
 
+.ui-text-field__label--hidden {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: var(--ui-border-width);
+  margin: calc(-1 * var(--ui-border-width));
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
+}
+
 .ui-text-field__input {
   appearance: none;
   background: var(--ui-surface);
