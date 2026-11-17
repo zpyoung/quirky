@@ -465,6 +465,26 @@ button.ui-status-bar-item:focus-visible {
   padding-block: var(--ui-space-8);
 }
 
+.shell-palette .ui-list-row__title {
+  line-height: var(--ui-space-16);
+}
+
+.shell-palette__entry-title {
+  align-items: start;
+  column-gap: var(--ui-space-8);
+  display: grid;
+  grid-template-columns: var(--ui-icon-size) minmax(0, 1fr);
+}
+
+.shell-palette__entry-name {
+  min-width: 0;
+}
+
+.shell-palette .ui-list-row__description {
+  line-height: 1.4;
+  margin-inline-start: calc(var(--ui-icon-size) + var(--ui-space-8));
+}
+
 .shell-palette .ui-list-row--selected {
   background: var(--ui-accent);
   color: var(--ui-rail);

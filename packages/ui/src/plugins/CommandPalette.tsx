@@ -365,7 +365,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
                       onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
                     >
                       <ListRow
-                        title={<span className="ui-cluster"><EntryIcon entry={entry} /><span>{entry.title}</span></span>}
+                        title={<span className="shell-palette__entry-title"><EntryIcon entry={entry} /><span className="shell-palette__entry-name">{entry.title}</span></span>}
                         description={entry.description}
                         selected={index === current}
                         onClick={() => run(entry)}
