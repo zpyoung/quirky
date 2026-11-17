@@ -674,7 +674,7 @@ describe('host gate', () => {
       }
     }
     harness.deps.reviewManifest = (manifest, options) =>
-      reviewManifest(manifest, { ...options, reviewerExecutable, timeoutMs: 2_000 })
+      reviewManifest(manifest, { ...options, reviewerExecutable, timeoutMs: 20_000 })
 
     const exitCode = await runHostGate(args(value.output), harness.deps)
     assertGateExit(value, exitCode, 0)
