@@ -42,6 +42,7 @@ type ActiveTerminalAttempt = ActiveClockAttempt & {
   streamId?: number
   resolvePong?: () => void
   rejectPong?: (error: unknown) => void
+  rejectFailure?: (error: unknown) => void
 }
 
 class ProbeTimeoutError extends Error {}
@@ -322,7 +323,9 @@ export function startProbe(options: StartProbeOptions): Probe {
     if (stopped) return
     stopped = true
     controller.abort()
-    activeTerminalAttempt?.rejectPong?.(new Error('soak probe was stopped'))
+    const stoppedError = new Error('soak probe was stopped')
+    activeTerminalAttempt?.rejectPong?.(stoppedError)
+    activeTerminalAttempt?.rejectFailure?.(stoppedError)
     activeTerminalAttempt = undefined
     terminalMatcher?.expect(null)
     detachTerminalStream(activeClient)
@@ -629,15 +632,14 @@ export function startProbe(options: StartProbeOptions): Probe {
       method: string,
       params: Record<string, unknown>,
       beganAt: number,
-      onLateValue?: (value: unknown) => void
+      onLateValue?: (value: unknown) => void,
+      rpcTimeout = true
     ): Promise<unknown> => {
       const timeoutMs = remainingMs(beganAt)
-      return waitWithAbort(
-        client.callAny(method, params, { timeoutMs }),
-        controller.signal,
-        timeoutMs,
-        onLateValue
-      )
+      const task = rpcTimeout
+        ? client.callAny(method, params, { timeoutMs })
+        : client.callAny(method, params)
+      return waitWithAbort(task, controller.signal, timeoutMs, onLateValue)
     }
     const detachLateAttach = (value: unknown): void => {
       const streamId = terminalStreamId(value)
@@ -658,7 +660,7 @@ export function startProbe(options: StartProbeOptions): Probe {
         cols: size.cols,
         rows: size.rows,
         historyLines: 0
-      }, attempt.beganAt, detachLateAttach)
+      }, attempt.beganAt, detachLateAttach, false)
       if (stopped || daemonExited) {
         detachLateAttach(attached)
         return
@@ -683,7 +685,11 @@ export function startProbe(options: StartProbeOptions): Probe {
               if (stopped || activeTerminalStreamId !== streamId) return
               const active = activeTerminalAttempt
               detachTerminalStream(client, streamId)
-              if (active?.streamId === streamId) active.rejectPong?.(new TerminalLagError())
+              if (active?.streamId === streamId) {
+                const lagError = new TerminalLagError()
+                active.rejectPong?.(lagError)
+                active.rejectFailure?.(lagError)
+              }
             }
           }
         )
@@ -699,12 +705,15 @@ export function startProbe(options: StartProbeOptions): Probe {
       const beganAt = performance.now()
       const token = `${nonce}-${++sequence}`
       const { promise: pong, resolve: resolvePong, reject: rejectPong } = Promise.withResolvers<void>()
+      const { promise: attemptFailure, reject: rejectFailure } = Promise.withResolvers<void>()
       void pong.catch(() => undefined)
+      void attemptFailure.catch(() => undefined)
       const attempt: ActiveTerminalAttempt = {
         beganAt,
         ownLagMs: 0,
         resolvePong,
-        rejectPong
+        rejectPong,
+        rejectFailure
       }
       activeTerminalAttempt = attempt
       matcher.expect(null)
@@ -721,7 +730,7 @@ export function startProbe(options: StartProbeOptions): Probe {
           text: `soak-ping ${token}\n`
         }, beganAt)
         await waitWithAbort(
-          Promise.all([send, pong]),
+          Promise.race([Promise.all([send, pong]), attemptFailure]),
           controller.signal,
           remainingMs(beganAt)
         )

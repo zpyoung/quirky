@@ -194,7 +194,31 @@ function fakeClient(
           })
         }
         if (method === 'quirky.terminal/attach') {
-          return Promise.resolve(terminal.attach?.(params) ?? { streamId: ++nextStreamId, replay: '' })
+          const response = terminal.attach?.(params) ?? { streamId: ++nextStreamId, replay: '' }
+          let timeoutMs: number | undefined
+          if (options !== null && typeof options === 'object' && 'timeoutMs' in options) {
+            if (typeof options.timeoutMs === 'number') timeoutMs = options.timeoutMs
+          }
+          if (timeoutMs === undefined) return Promise.resolve(response)
+          const { promise, resolve, reject } = Promise.withResolvers<unknown>()
+          let timedOut = false
+          const timer = setTimeout(() => {
+            timedOut = true
+            reject(new Error(`RPC call timed out after ${timeoutMs} ms`))
+          }, timeoutMs)
+          Promise.resolve(response).then(
+            (value) => {
+              if (timedOut) return
+              clearTimeout(timer)
+              resolve(value)
+            },
+            (error: unknown) => {
+              if (timedOut) return
+              clearTimeout(timer)
+              reject(error)
+            }
+          )
+          return promise
         }
         if (method === 'quirky.terminal/send') return Promise.resolve(terminal.send?.(params))
         if (method === 'quirky.terminal/detach') return Promise.resolve(terminal.detach?.(params))
@@ -1797,6 +1821,87 @@ test('terminal probes register before send, wait for both results, and use sessi
     expect(secondText).toMatch(/^soak-ping [0-9a-f]{8}-2\n$/)
   }, true)
 })
+test('terminal lag after a pong fails before a later send acknowledgement', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const sending = deferred<unknown>()
+    const client = fakeClient(undefined, false, undefined, { send: () => sending.promise })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 100,
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => client.calls.includes('quirky.terminal/send'))
+    const text = (client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!.params as { text: string }).text
+    const token = /^soak-ping ([^\n]+)\n$/.exec(text)![1]!
+    const streamId = client.terminalSubscriptions[0]!.streamId
+
+    await advanceProbeClock(clock, startedAt + 10, 10)
+    client.emitTerminal(streamId, `\nsoak-pong ${token}\n`)
+    await drainMicrotasks()
+    expect(probe.terminalProbes).toEqual([])
+
+    await advanceProbeClock(clock, startedAt + 20, 10)
+    client.lagTerminal(streamId)
+    await drainUntil(() => probe.terminalProbes.length === 1)
+    expect(probe.terminalProbes[0]).toMatchObject({ ms: 20, timedOut: false, failed: true })
+
+    await advanceProbeClock(clock, startedAt + 30, 10)
+    sending.resolve(undefined)
+    await drainMicrotasks()
+    expect(probe.terminalProbes).toHaveLength(1)
+  }, true)
+})
+
+test('terminal lag after a pong fails immediately while send never resolves', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const client = fakeClient(undefined, false, undefined, { send: () => new Promise<unknown>(() => {}) })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 100,
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => client.calls.includes('quirky.terminal/send'))
+    const text = (client.rpcCalls.find(({ method }) => method === 'quirky.terminal/send')!.params as { text: string }).text
+    const token = /^soak-ping ([^\n]+)\n$/.exec(text)![1]!
+    const streamId = client.terminalSubscriptions[0]!.streamId
+
+    await advanceProbeClock(clock, startedAt + 10, 10)
+    client.emitTerminal(streamId, `\nsoak-pong ${token}\n`)
+    await advanceProbeClock(clock, startedAt + 20, 10)
+    client.lagTerminal(streamId)
+    await drainUntil(() => probe.terminalProbes.length === 1)
+    expect(probe.terminalProbes[0]).toMatchObject({ ms: 20, timedOut: false, failed: true })
+  }, true)
+})
+
+test('late terminal attach result is detached after the probe watchdog expires', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const lateAttach = deferred<unknown>()
+    const client = fakeClient(undefined, false, undefined, { attach: () => lateAttach.promise })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 40,
+      terminalProbe: { session: 's1' }
+    })
+    await drainUntil(() => client.rpcCalls.some(({ method }) => method === 'quirky.terminal/attach'))
+
+    await advanceProbeClock(clock, startedAt + 40, 10)
+    expect(probe.terminalProbes[0]).toMatchObject({ ms: 40, timedOut: true, failed: false })
+    await advanceProbeClock(clock, startedAt + 50, 10)
+    lateAttach.resolve({ streamId: 888, replay: '' })
+    await drainMicrotasks()
+    expect(client.rpcCalls.filter(({ method }) => method === 'quirky.terminal/detach').map(({ params }) => params))
+      .toContainEqual({ streamId: 888 })
+    probe.stop()
+  }, true)
+})
+
 
 test('terminal timeout detaches and reattaches, and the default timeout is 30 seconds', async () => {
   await withProbeClock(async (clock) => {
