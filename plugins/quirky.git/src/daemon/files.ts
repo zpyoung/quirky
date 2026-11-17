@@ -4,6 +4,7 @@ import { readCompare } from './compare'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
 import { moveMarkToWrite, reviewDiff } from './review'
+import { requireTrees } from './snapshots'
 
 declare global {
   /** Test-only replacement for Finder's `open -R`; production never sets it. */
@@ -20,8 +21,9 @@ function oidParam(env: DaemonEnv, name: string, value: unknown): string | undefi
 
 /**
  * Both sides of a file diff for a source: staged, unstaged, branch (merge base to head, defaulting
- * to the current compare), commit (first parent to commit) or review (the merge base, or the
- * reviewed content, to the working file; see `reviewDiff`). A diff git cannot read fails with
+ * to the current compare), commit (first parent to commit), trees (the `from` tree to the `to`
+ * tree of two snapshots) or review (the merge base, or the reviewed content, to the working file;
+ * see `reviewDiff`). A diff git cannot read fails with
  * git's message instead of looking like "no changes".
  */
 export function diff(env: DaemonEnv): Handler {
@@ -58,6 +60,13 @@ export function diff(env: DaemonEnv): Handler {
         request.mergeBase ??= current.mergeBase!
         request.head ??= current.headOid!
       }
+    } else if (source === 'trees') {
+      if (typeof params.from !== 'string' || typeof params.to !== 'string') {
+        throw env.context.error('invalid-params', 'from and to are required for source trees.')
+      }
+      await requireTrees(env, worktree, [params.from, params.to])
+      request.from = params.from
+      request.to = params.to
     } else if (source === 'commit') {
       const commit = oidParam(env, 'commit', params.commit)
       if (commit === undefined) throw env.context.error('invalid-params', 'commit is required for source commit.')

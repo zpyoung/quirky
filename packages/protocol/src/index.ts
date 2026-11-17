@@ -1,4 +1,5 @@
 export * from './model'
+export * from './chat'
 export * from './rpc'
 export * from './frames'
 export * from './pty'

@@ -2,6 +2,7 @@ import { EmptyState, InlineError } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
+// under `bun test`, Bun.build fails to resolve ./window/model when ./window/chat is imported before it
 import {
   forgetShowAllEvents,
   rememberShowAllEvents,
@@ -10,11 +11,14 @@ import {
   WORKTREE_VIEW_ID,
   WorktreeSessions
 } from './window/model'
-import { StructuredView } from './window/StructuredView'
+import { ChatView } from './window/chat/ChatView'
+import { newChatCommand, resetNewChatDialog } from './window/chat/newChat'
+import { NewChatOverlay } from './window/chat/NewChatOverlay'
 import { WorktreeView } from './window/WorktreeView'
 
 const PLUGIN_ID = 'quirky.session'
 const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
+const CHAT_OVERLAY_ID = `overlay:${PLUGIN_ID}/chat-dialogs`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 /** The selected worktree, if any. */
@@ -63,7 +67,7 @@ async function readSession(context: UiPluginContext, id: string): Promise<Exclud
   }
 }
 
-/** One structured session's transcript and input, re-read whenever the session changes or goes away. */
+/** One structured session's chat, re-read whenever the session changes or goes away. */
 function StructuredSession({ context, id }: { context: UiPluginContext; id: string | null }) {
   const [loaded, setLoaded] = useState<Loaded>(id === null ? { status: 'missing' } : { status: 'loading' })
   const latest = useRef(0)
@@ -102,7 +106,7 @@ function StructuredSession({ context, id }: { context: UiPluginContext; id: stri
   if (loaded.status === 'failed') {
     return <InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />
   }
-  return <StructuredView context={context} session={loaded.session} />
+  return <ChatView context={context} session={loaded.session} />
 }
 
 /**
@@ -152,6 +156,15 @@ export function activate(context: UiPluginContext): void {
     return () => queueMicrotask(() => root.unmount())
   }
 
+  const mountChatDialogs: MountFunction = (element) => {
+    const root = createRoot(element)
+    root.render(<NewChatOverlay context={context} />)
+    return () => {
+      resetNewChatDialog()
+      queueMicrotask(() => root.unmount())
+    }
+  }
+
   const selectTab = (index: number) => {
     const target = current?.tab(index)
     if (target) current?.open(target.id)
@@ -159,6 +172,8 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(WORKTREE_VIEW_ID, mountView)
   context.provide(STRUCTURED_VIEW_ID, mountStructured)
+  context.provide(CHAT_OVERLAY_ID, mountChatDialogs)
+  context.provide(`command:${PLUGIN_ID}/new-chat`, (args?: unknown) => newChatCommand(context, args))
   context.provide(`command:${PLUGIN_ID}/new-shell`, async () => {
     const store = current
     const worktree = store?.report().worktree ?? layoutWorktree(context)

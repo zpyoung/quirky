@@ -5,10 +5,10 @@ import type { MenuItem } from '@quirky/ui'
 import { AGENTS_VIEW_ID, loadMenuEntries, SHELL_ONLY_MENU, type MenuEntry } from './menuEntries'
 import type { NewSessionRequest } from './PromptDialog'
 
-type Props = { context: UiPluginContext; onPick: (request: NewSessionRequest) => void }
+type Props = { context: UiPluginContext; onPick: (request: NewSessionRequest) => void; onChat: () => void }
 
-/** The + menu: Shell, installed enabled agents, and the Agents settings entry. */
-export function NewSessionMenu({ context, onPick }: Props) {
+/** The + menu: Shell, Chat, installed enabled agents, and the Agents settings entry. */
+export function NewSessionMenu({ context, onPick, onChat }: Props) {
   const [entries, setEntries] = useState<MenuEntry[]>(SHELL_ONLY_MENU)
   const root = useRef<HTMLDivElement>(null)
   const latest = useRef(0)
@@ -16,8 +16,9 @@ export function NewSessionMenu({ context, onPick }: Props) {
   const items = useMemo<MenuItem[]>(() => entries.map((entry, index) => {
     const item = { id: `${entry.kind}-${index}-${entry.label}`, label: entry.label }
     if (entry.kind === 'manage') return { ...item, onAction: () => context.openView(AGENTS_VIEW_ID) }
+    if (entry.kind === 'chat') return { ...item, onAction: onChat }
     return { ...item, onAction: () => onPick(entry.request) }
-  }), [context, entries, onPick])
+  }), [context, entries, onPick, onChat])
 
   useEffect(() => {
     const trigger = root.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')

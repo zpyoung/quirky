@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ChangeEvent, MouseEvent } from 'react'
-import { AgentIcon, Badge, Button, Dialog, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs } from '@quirky/ui'
+import { AgentIcon, Badge, Button, Checkbox, Dialog, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs } from '@quirky/ui'
 import { useStableReport, type UiReport } from './report'
 import {
   ageLabel, accountSort, AccountsUiStore, canShowProviderVisibility, compactWindow, displayIdentity, displayPercent, formatReset, isConfigured, isCurrentSnapshot, maxUsed, providerSource,
@@ -115,19 +115,19 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
   const visible = new Set(preferences.visibleProviders)
   const agentDetection = useStore(store).agentDetection
   const visibilityProviders = PROVIDER_LABELS_LIST.filter(([provider]) => canShowProviderVisibility(provider, agentDetection))
-  const changeHidden = (event: ChangeEvent<HTMLInputElement>) => void store.setPreferences({ hidden: event.currentTarget.checked })
-  const changeDensity = (event: ChangeEvent<HTMLInputElement>) => void store.setPreferences({ density: event.currentTarget.checked ? 'icons' : 'normal' })
+  const changeHidden = (checked: boolean) => void store.setPreferences({ hidden: checked })
+  const changeDensity = (checked: boolean) => void store.setPreferences({ density: checked ? 'icons' : 'normal' })
   const refreshAll = () => void store.refreshCommand()
   return <div className="account-stack">
     <section className="section-card">
       <SectionHeader title="Usage display" />
       <p className="settings-description">Choose how provider usage appears in the status bar and Usage popover.</p>
       <UsageControls store={store} preferences={preferences} />
-      <FormRow label="Hide usage from the status bar" htmlFor="accounts-hide-status">
-        <input id="accounts-hide-status" type="checkbox" checked={preferences.hidden} onChange={changeHidden} />
+      <FormRow layout="inline" label="Hide usage from the status bar" htmlFor="accounts-hide-status">
+        <Checkbox hideLabel label="Hide usage from the status bar" id="accounts-hide-status" checked={preferences.hidden} onChange={changeHidden} />
       </FormRow>
-      <FormRow label="Show provider badges only" htmlFor="accounts-icon-density">
-        <input id="accounts-icon-density" type="checkbox" checked={preferences.density === 'icons'} onChange={changeDensity} />
+      <FormRow layout="inline" label="Show provider badges only" htmlFor="accounts-icon-density">
+        <Checkbox hideLabel label="Show provider badges only" id="accounts-icon-density" checked={preferences.density === 'icons'} onChange={changeDensity} />
       </FormRow>
     </section>
     <section className="section-card">
@@ -138,14 +138,14 @@ export function UsagePreferencesControls({ store, preferences }: { store: Accoun
         : agentDetection.status !== 'ready' && <InlineError message="Agent detection is unavailable; CLI-specific toggles are hidden." action={{ label: 'Retry', onAction: refreshAll }} />}
       {visibilityProviders.map(([provider, label]) => {
         const id = `accounts-provider-usage-${provider}`
-        const changeVisibility = (event: ChangeEvent<HTMLInputElement>) => {
+        const changeVisibility = (checked: boolean) => {
           const next = new Set(visible)
-          if (event.currentTarget.checked) next.add(provider)
+          if (checked) next.add(provider)
           else next.delete(provider)
           void store.setPreferences({ visibleProviders: [...next] })
         }
-        return <FormRow key={provider} label={`${label} Usage`} htmlFor={id}>
-          <input id={id} type="checkbox" aria-label={`${label} Usage`} checked={visible.has(provider)} onChange={changeVisibility} />
+        return <FormRow layout="inline" key={provider} label={`${label} Usage`} htmlFor={id}>
+          <Checkbox hideLabel label={`${label} Usage`} id={id} checked={visible.has(provider)} onChange={changeVisibility} />
         </FormRow>
       })}
     </section>
@@ -295,7 +295,7 @@ function ResetConfirmDialog({ store, onCancel, onConfirm, onDontAsk, accountLabe
   store: AccountsUiStore
   onCancel: () => void
   onConfirm: () => void
-  onDontAsk: (event: ChangeEvent<HTMLInputElement>) => void
+  onDontAsk: (checked: boolean) => void
   accountLabel: string
   submitting: boolean
   disabled: boolean
@@ -313,8 +313,8 @@ function ResetConfirmDialog({ store, onCancel, onConfirm, onDontAsk, accountLabe
   </>}>
     <p>This uses one Codex reset credit for the account and offer displayed when you requested it.</p>
     <small>Offer shown for {accountLabel}. The confirmation remains bound to that account and offer.</small>
-    <FormRow label="Don't ask again" htmlFor="codex-reset-dont-ask">
-      <input id="codex-reset-dont-ask" type="checkbox" checked={dontAsk || remembered} disabled={disabled || remembered} onChange={onDontAsk} />
+    <FormRow layout="inline" label="Don't ask again" htmlFor="codex-reset-dont-ask">
+      <Checkbox hideLabel label="Don't ask again" id="codex-reset-dont-ask" checked={dontAsk || remembered} disabled={disabled || remembered} onChange={onDontAsk} />
     </FormRow>
     {outcomeMessage && <InlineError message={outcomeMessage} />}
   </Dialog>
@@ -379,7 +379,7 @@ function ResetCredit({ store, snapshot, accounts, disabled = false }: { store: A
   const confirmReset = () => {
     if (pendingOffer) void submit(pendingOffer.expectedScope, pendingOffer.accountLabel, dontAsk || accounts?.preferences.skipCodexResetConfirm === true)
   }
-  const changeDontAsk = (event: ChangeEvent<HTMLInputElement>) => setDontAsk(event.currentTarget.checked)
+  const changeDontAsk = (checked: boolean) => setDontAsk(checked)
   const refreshCodex = () => void store.refreshCommand('codex')
   return <section className="section-card" aria-label="Codex reset credits">
     {offer && <>
@@ -790,7 +790,7 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
   }
   const keepAllSessions = () => void choose('keep')
   const restartAllSessions = () => void choose('restart')
-  const changeDontAsk = (event: ChangeEvent<HTMLInputElement>) => setDontAskChoice({ key: dialogKey, checked: event.currentTarget.checked })
+  const changeDontAsk = (checked: boolean) => setDontAskChoice({ key: dialogKey, checked })
   if (!visible.length) return null
   const revisions = new Set(visible.map((session) => session.selectionRevision))
   return <div className="accounts-ui accounts-switch-dialog-root">
@@ -807,8 +807,8 @@ export function AccountSwitchDialog({ store, report }: { store: AccountsUiStore;
           {session.error && <InlineError message="Restart failed. This session remains on its old account." />}
           <StaleSessionActions store={store} session={session} disabled={submitting} />
         </div>)}</div>
-        <FormRow label="Don't ask again (restart automatically)" htmlFor="switch-dialog-dont-ask" help="You can turn this off in Settings → AI Provider Accounts.">
-          <input id="switch-dialog-dont-ask" type="checkbox" checked={dontAskAgain} disabled={submitting} onChange={changeDontAsk} />
+        <FormRow layout="inline" label="Don't ask again (restart automatically)" htmlFor="switch-dialog-dont-ask" help="You can turn this off in Settings → AI Provider Accounts.">
+          <Checkbox hideLabel label="Don't ask again (restart automatically)" id="switch-dialog-dont-ask" checked={dontAskAgain} disabled={submitting} onChange={changeDontAsk} />
         </FormRow>
         {failureMessage && <InlineError message={failureMessage} />}
         {revisions.size > 1 && <small className="muted">Sessions from different account selections are protected by their own selection revisions.</small>}

@@ -1,7 +1,8 @@
 /** Diff content for every source (staged, unstaged, branch, commit) and the guarded save of a working file. */
 import { createHash, randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, copyFile, lstat, readFile, readlink, rename, unlink, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdtemp, readFile, readlink, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
@@ -44,8 +45,10 @@ export type DiffRequest = {
   /** `'worktree'` is internal: `from` to the working file, reported as an `unstaged` diff. */
   source: GitDiffSource | 'worktree'
   oldPath?: string
-  /** For `'worktree'`: the revision of the left side; empty means no left side (unborn HEAD). */
+  /** For `'worktree'`: the revision of the left side; empty means no left side (unborn HEAD). For `'trees'`: the tree oid of the left side. */
   from?: string
+  /** For `'trees'`: the tree oid of the right side. */
+  to?: string
   mergeBase?: string
   head?: string
   commit?: string
@@ -66,17 +69,31 @@ function requireOid(value: string | null | undefined): string {
   return value
 }
 
+function requireTreeOid(value: string | undefined): string {
+  if (typeof value !== 'string' || !OID.test(value)) throw new GitError('Invalid tree id', '', -1)
+  return value
+}
+
+/** Whether `oid` names a tree object (or a commit, whose tree it then is) in the repository at `cwd`. */
+export async function treeExists(cwd: string, oid: string): Promise<boolean> {
+  if (!OID.test(oid)) return false
+  const r = await runGit(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${oid}^{tree}`], { readOnly: true })
+  return r.exitCode === 0
+}
+
 async function gitCommitExists(cwd: string, oid: string): Promise<boolean> {
   const r = await runGit(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${oid}^{commit}`], { readOnly: true })
   return r.exitCode === 0
 }
+
+type Revision = 'commit' | 'tree'
 
 /**
  * Reads `git show <spec>` with stdout capped at `MAX_BLOB_BYTES`; past the cap the process is
  * killed and the side is `tooBig`. A path absent at a real revision is an empty side; any other
  * failure throws.
  */
-async function readBlob(cwd: string, spec: string): Promise<Side> {
+async function readBlob(cwd: string, spec: string, kind: Revision = 'commit'): Promise<Side> {
   const r = await runGit(cwd, ['show', '--no-textconv', '--end-of-options', spec], {
     readOnly: true,
     maxOutputBytes: MAX_BLOB_BYTES
@@ -88,7 +105,7 @@ async function readBlob(cwd: string, spec: string): Promise<Side> {
   const revision = spec.slice(0, spec.indexOf(':'))
   const unbornHead = revision === 'HEAD' && /invalid object name 'HEAD'/.test(message)
   // git words an unknown commit like a missing path, so a hex revision has to be checked itself
-  const knownRevision = !OID.test(revision) || (await gitCommitExists(cwd, revision))
+  const knownRevision = !OID.test(revision) || (await (kind === 'tree' ? treeExists(cwd, revision) : gitCommitExists(cwd, revision)))
   if (unbornHead || (MISSING_BLOB.test(message) && knownRevision)) return EMPTY
   const detail = message.trim()
   throw new GitError(`git show failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, message, r.exitCode)
@@ -143,7 +160,8 @@ function decodeSide(side: Side): string {
 /**
  * Both sides of `request.path` for its source, shaped as a `GitDiff`: staged is HEAD to index,
  * unstaged is index (else HEAD) to the working file, or HEAD to the working file when requested;
- * branch is merge base to head, commit is parent to commit. Images carry base64 sides; binary and
+ * branch is merge base to head, commit is parent to commit, trees is the `from` tree to the `to`
+ * tree. Images carry base64 sides; binary and
  * too-large files carry empty bodies.
  * Throws `GitError` for a bad commit id or any git failure other than a missing path, so an
  * unreadable diff never looks like "no changes".
@@ -183,6 +201,10 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
     original = base
     working = file
     modified = file.side
+  } else if (source === 'trees') {
+    const from = requireTreeOid(request.from)
+    const to = requireTreeOid(request.to)
+    ;[original, modified] = await Promise.all([readBlob(cwd, `${from}:${fromPath}`, 'tree'), readBlob(cwd, `${to}:${path}`, 'tree')])
   } else if (source === 'branch') {
     const mergeBase = requireOid(request.mergeBase)
     const head = requireOid(request.head)
@@ -360,5 +382,33 @@ export async function workingPatch(cwd: string): Promise<{ patch: string; omitte
     return await capturePatch(cwd, [base, ...PATCH_ARGS], { GIT_INDEX_FILE: scratch })
   } finally {
     await unlink(scratch).catch(() => {})
+  }
+}
+
+/**
+ * Writes a tree object for the whole working tree, tracked and untracked files alike and honoring
+ * `.gitignore`, and returns its oid. It builds the tree in a temporary index seeded from HEAD (empty
+ * on an unborn HEAD), so the real index, HEAD and refs are never touched; only objects are added.
+ * Throws `GitError` when `cwd` is not a git work tree or git fails.
+ */
+export async function snapshotTree(cwd: string): Promise<string> {
+  const inside = await runGit(cwd, ['rev-parse', '--is-inside-work-tree'], { readOnly: true })
+  if (inside.exitCode !== 0 || new TextDecoder().decode(inside.stdout).trim() !== 'true') {
+    throw new GitError('not a git work tree', inside.stderr, inside.exitCode === 0 ? -1 : inside.exitCode)
+  }
+  const dir = await mkdtemp(join(tmpdir(), 'quirky-snapshot-'))
+  const env = { GIT_INDEX_FILE: join(dir, 'index') }
+  const text = async (args: string[]): Promise<string> => {
+    const r = await runGit(cwd, args, { env })
+    if (r.exitCode !== 0) throw new GitError(`git ${args[0]} failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+    return new TextDecoder().decode(r.stdout)
+  }
+  try {
+    const born = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
+    if (born) await text(['read-tree', 'HEAD'])
+    await text(['add', '-A'])
+    return (await text(['write-tree'])).trim()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 }

@@ -496,7 +496,7 @@ describe('quirky.agents launchOptions data', () => {
     expect(antigravity.unlistedOptions).toEqual([{ id: 'effort' }])
 
     const omp = rawBlock('omp')
-    expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }] })
+    expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }], structured: 'model' })
     expect(omp.options ?? []).toEqual([])
     expect(modelsOf('omp')).toEqual([])
     expect(effectiveUnlisted(omp)).toBe('accept')

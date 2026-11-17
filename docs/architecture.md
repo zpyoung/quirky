@@ -220,9 +220,10 @@ quirks Orca records in `TuiAgentConfig` (`src/shared/agent-prompt-injection.ts`,
 `src/shared/tui-agent-config.ts`). The terminal dock uses this path.
 
 Background agents run structured: orchestration workers, loops, sitter fix agents, objectives and
-automations. Interactive Claude and Codex sessions stay in terminal panes with the dock, because a
-structured interactive session needs a chat view, and native chat is on the dropped list. Once
-hidden panes are unmounted, an interactive terminal costs memory only while it's on screen.
+automations. Interactive structured sessions are allowed too, through the chat view, for Claude,
+Codex, pi and omp. Mobile chat, voice and native mirroring stay out of scope. Interactive terminals
+stay in terminal panes with the dock. Once hidden panes are unmounted, an interactive terminal costs
+memory only while it's on screen.
 
 ### Federated worker reports
 
@@ -359,7 +360,7 @@ Decided with the user on 2026-10-23:
   contract (about 193 RPC methods, `src/main/runtime/rpc/e2ee-channel.ts`). Quirky doesn't use
   upstream's hosted relay (`relay.onorca.dev`). Phones connect directly over LAN or a tailnet, and a
   self-hosted relay built from Orca's `cloud/apps/relay` can be added later if needed.
-- **Structured sessions:** background agents only, as in
+- **Structured sessions:** background agents, and interactive sessions through the chat view, as in
   [Structured agent sessions](#structured-agent-sessions).
 - **Browser:** the system webview for people and an on-demand Chrome for agents, as in
   [Browser](#browser).

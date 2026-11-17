@@ -1845,10 +1845,30 @@
         "title": "Structured session"
       }
     ],
+    "overlay": [
+      {
+        "id": "chat-dialogs",
+        "title": "Chat dialogs"
+      }
+    ],
     "command": [
       {
         "id": "new-shell",
         "title": "New shell"
+      },
+      {
+        "id": "new-chat",
+        "title": "New chat",
+        "description": "Pick an agent and open a chat as a new tab in a workspace and group.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": { "type": "string" },
+            "workspace": { "type": "string" },
+            "group": { "type": "string" }
+          }
+        }
       },
       {
         "id": "close-session",
@@ -1942,6 +1962,14 @@
       {
         "id": "select-tab-9",
         "title": "Select tab 9"
+      }
+    ],
+    "menu-item": [
+      {
+        "id": "new-chat",
+        "menu": "quirky.terminal/tab",
+        "title": "Chat…",
+        "command": "new-chat"
       }
     ],
     "keybinding": [

@@ -46,6 +46,15 @@ function problemWith(session: Session, worktree: Worktree, label: string): Probl
   return null
 }
 
+/** Why `session` cannot take notes, or null when it can: a structured session of this worktree that has not exited. A working or waiting one queues them. */
+function structuredProblemWith(session: Session, worktree: Worktree): Problem | null {
+  if (session.kind !== 'structured' || session.worktreeId !== worktree.id) {
+    return { kind: 'invalid-params', reason: 'not-a-target', message: 'Notes go to an agent session in this worktree.' }
+  }
+  if (session.status === 'exited') return { kind: 'conflict', reason: 'exited', message: 'The session has exited.' }
+  return null
+}
+
 /** The live agent sessions of the worktree, each marked sendable or not, and the agents a new tab can start. */
 export function noteTargets(env: DaemonEnv): Handler {
   return async (params, caller) => {
@@ -55,10 +64,10 @@ export function noteTargets(env: DaemonEnv): Handler {
       agentEntries(env)
     ])
     const targets: NoteTarget[] = sessions
-      .filter((session) => session.kind === 'terminal' && session.agent !== 'shell' && session.status !== 'exited')
+      .filter((session) => (session.kind === 'terminal' && session.agent !== 'shell' && session.status !== 'exited') || (session.kind === 'structured' && session.status !== 'exited'))
       .map((session) => {
         const label = labelOf(entries, session.agent)
-        const problem = problemWith(session, worktree, label)
+        const problem = session.kind === 'structured' ? structuredProblemWith(session, worktree) : problemWith(session, worktree, label)
         return {
           session: session.id,
           agent: session.agent,
@@ -132,6 +141,21 @@ async function deliverToNewAgent(env: DaemonEnv, worktree: Worktree, agent: stri
   throw env.errors.reasoned('conflict', 'not-delivered', 'The agent did not receive the notes.')
 }
 
+/** Hands the notes to a structured session's own queue: they send at once when it is idle and after the running turn otherwise. */
+async function deliverToStructured(env: DaemonEnv, worktree: Worktree, session: Session, text: string): Promise<{ session: string; delivery: string }> {
+  const problem = structuredProblemWith(session, worktree)
+  if (problem) throw env.errors.reasoned(problem.kind, problem.reason, problem.message)
+  const result = (await env.context.call('quirky.structured/send', { session: session.id, text, when: 'idle' })) as { ok: boolean; reason?: string }
+  if (!result.ok) throw env.errors.reasoned('conflict', result.reason ?? 'not-delivered', 'The session did not take the notes.')
+  return { session: session.id, delivery: 'sent' }
+}
+
+/** Delivers to the session `sessionId`: through its own queue when it is structured, by typing into it when it is a terminal. */
+async function deliverToExisting(env: DaemonEnv, worktree: Worktree, sessionId: string, text: string): Promise<{ session: string; delivery: string }> {
+  const session = (await env.context.call('quirky.session/get', { session: sessionId })) as Session
+  if (session.kind === 'structured') return deliverToStructured(env, worktree, session, text)
+  return deliverToSession(env, worktree, sessionId, text)
+}
 
 /**
  * Sends notes (one, one file's, or all) to a running agent session or to a new agent tab, as one
@@ -191,7 +215,7 @@ export function sendNotes(env: DaemonEnv): Handler {
 
       const text = formatNotes(deliverable)
       const target = hasSession
-        ? await deliverToSession(env, worktree, params.session, text)
+        ? await deliverToExisting(env, worktree, params.session, text)
         : await deliverToNewAgent(env, worktree, params.agent, text)
       const markdownPicked = deliverable.filter(isMarkdownShelfNote)
       const markdownSettlement = await settleMarkdownNotes(env, worktree, holdId, markdownPicked)

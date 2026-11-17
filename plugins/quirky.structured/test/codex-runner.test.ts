@@ -61,7 +61,8 @@ function makeSetup(): Setup {
         role: message.role,
         text: message.text,
         at: message.at ?? Date.now(),
-        ...(message.data === undefined ? {} : { data: message.data })
+        ...(message.data === undefined ? {} : { data: message.data }),
+        ...(message.item === undefined ? {} : { item: message.item })
       }
       messages.push(stored)
       return stored
@@ -69,6 +70,7 @@ function makeSetup(): Setup {
     setStatus(_sessionId, status) {
       statuses.push(status)
     },
+    async cancelAsk() {},
     createAsk(spec, sessionId) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
       asks.push({ spec, sessionId, resolve })
@@ -82,7 +84,8 @@ function makeSetup(): Setup {
       })
     },
     resolveClaudePath: async () => '/not-used/claude',
-    resolveCodexPath: async () => fixture.executable
+    resolveCodexPath: async () => fixture.executable,
+    resolvePiPath: async () => '/not-used/pi'
   }
   const session: Session = {
     id: 's_codex',
@@ -268,6 +271,17 @@ describe('Codex app-server runner', () => {
       { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
     ])
   })
+  test('the next turn carries the model and effort picked while the session runs', async () => {
+    await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'low' })
+    await until(() => setup.statuses.includes('done'))
+    const result = await setup.runner.configure!(setup.session.id, { model: 'gpt-5.6', effort: 'high' })
+    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high' })
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.fixture.requests().filter((request) => request.method === 'turn/start').length === 2)
+    const second = setup.fixture.requests().filter((request) => request.method === 'turn/start')[1]!
+    expect(second.params).toMatchObject({ model: 'gpt-5.6', effort: 'high' })
+  })
+
   test('starts a native thread without an initial turn until the caller is attached', async () => {
     await setup.runner.start(setup.session, undefined)
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
@@ -464,4 +478,114 @@ describe('Codex app-server runner', () => {
     }
   })
 
+
+  test('journals chat items: user, running then finished command under one callId, prose and turn-end', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    const [decision, reason] = setup.asks[0]!.spec.questions as any[]
+    expect(decision.options.map((option: any) => [option.value, option.label])).toEqual([
+      ['allow', 'Allow once'],
+      ['always', 'Allow for this session'],
+      ['deny', 'Deny']
+    ])
+    expect(reason).toMatchObject({ id: 'reason', type: 'text', required: false })
+    setup.asks[0]!.resolve({ status: 'answered', askId: 'a1', answers: { decision: { value: 'allow', source: 'option' } }, skipped: ['reason'], summary: '' })
+    await until(() => setup.statuses.includes('done'))
+    const items = setup.messages.map((message) => message.item)
+    expect(items.every((item) => item !== undefined)).toBe(true)
+    expect(items[0]).toEqual({ kind: 'user', text: '[approve] run it' })
+    const command = items.filter((item) => item?.kind === 'activity') as any[]
+    expect(command.map((item) => [item.callId, item.state])).toEqual([
+      ['command-turn-1', 'running'],
+      ['command-turn-1', 'done']
+    ])
+    expect(items.at(-1)).toMatchObject({ kind: 'turn-end', state: 'done' })
+    expect(items.some((item) => item?.kind === 'prose' && item.text.startsWith('Codex: '))).toBe(true)
+  })
+
+  test('a denial with a reason declines, then tells the agent why', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    setup.asks[0]!.resolve({
+      status: 'answered',
+      askId: 'a1',
+      answers: { decision: { value: 'deny', source: 'option' }, reason: { value: 'not on prod', source: 'input' } },
+      skipped: [],
+      summary: ''
+    })
+    await until(() => setup.fixture.requests().some((request) => request.method === 'turn/steer' || (request.method === 'turn/start' && JSON.stringify(request.params).includes('Denied'))))
+    expect(setup.fixture.requests().find((request) => request.id === 'approval-1')).toEqual({ id: 'approval-1', result: { decision: 'decline' } })
+    const followUp = setup.fixture.requests().find((request) => JSON.stringify(request.params?.input ?? '').includes('Denied: not on prod'))
+    expect(followUp?.method).toBeDefined()
+    await until(() => setup.messages.some((message) => message.role === 'user' && message.text === 'Denied: not on prod'))
+  })
+
+  test('a denial without a reason sends no follow-up', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    setup.asks[0]!.resolve({ status: 'answered', askId: 'a1', answers: { decision: { value: 'deny', source: 'option' } }, skipped: ['reason'], summary: '' })
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().filter((request) => request.method === 'turn/steer')).toEqual([])
+  })
+
+  test('image paths go to the app-server as localImage inputs', async () => {
+    await setup.runner.start(setup.session, undefined)
+    const image = join(setup.home, 'shot.png')
+    writeFileSync(image, 'PNG')
+    await setup.runner.send(setup.session.id, 'look at this', { images: [image], queuedId: 'q1' })
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().find((request) => request.method === 'turn/start')?.params).toMatchObject({
+      input: [{ type: 'text', text: 'look at this' }, { type: 'localImage', path: image }]
+    })
+    expect(setup.messages.find((message) => message.role === 'user')?.item).toEqual({ kind: 'user', text: 'look at this', images: [image], queuedId: 'q1' })
+  })
+
+  test('stopping mid-turn closes the running call as stopped, then ends the turn as stopped', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    await setup.runner.stop(setup.session.id)
+    const items = setup.messages.map((message) => message.item) as any[]
+    expect(items.slice(-2).map((item) => [item.kind, item.state])).toEqual([['activity', 'stopped'], ['turn-end', 'stopped']])
+    expect(items.at(-2).callId).toBe('command-turn-1')
+  })
+
+  test('interrupting mid-turn ends the turn as stopped and keeps the session usable', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    await setup.runner.interrupt(setup.session.id)
+    const items = setup.messages.map((message) => message.item) as any[]
+    expect(items.slice(-2).map((item) => [item.kind, item.state])).toEqual([['activity', 'stopped'], ['turn-end', 'stopped']])
+    expect(setup.statuses.at(-1)).toBe('done')
+    await Bun.sleep(100)
+    expect(setup.statuses).not.toContain('exited')
+    expect(setup.fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(true)
+    setup.asks[0]!.resolve({ status: 'declined', askId: 'a1', answers: {}, skipped: ['decision'], summary: '' })
+    await setup.runner.send(setup.session.id, 'again')
+    await until(() => setup.messages.some((message) => message.item?.kind === 'user' && (message.item as any).text === 'again'))
+    expect(setup.statuses).not.toContain('exited')
+  })
+
+  test('interrupting with no open turn does nothing', async () => {
+    await setup.runner.start(setup.session, 'quick')
+    await until(() => setup.statuses.includes('done'))
+    const before = setup.messages.length
+    await setup.runner.interrupt(setup.session.id)
+    expect(setup.messages).toHaveLength(before)
+    expect(setup.fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(false)
+  })
+
+  test('an interrupt the app-server ignores falls back to a full stop', async () => {
+    await setup.runner.start(setup.session, '[approve] [ignore-interrupt] run it')
+    await until(() => setup.asks.length === 1)
+    await setup.runner.interrupt(setup.session.id)
+    expect(setup.statuses.at(-1)).toBe('exited')
+  })
+
+  test('a failed turn ends as failed and journals an error item', async () => {
+    await setup.runner.start(setup.session, '[failed]')
+    await until(() => setup.statuses.includes('exited'))
+    const items = setup.messages.map((message) => message.item) as any[]
+    expect(items.at(-2)).toMatchObject({ kind: 'turn-end', state: 'failed' })
+    expect(items.at(-1)).toMatchObject({ kind: 'error', reason: 'exited', resumable: true })
+  })
 })

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, SelectField, TextArea, TextField } from '@quirky/ui'
+import { Button, Checkbox, Dialog, EmptyState, FormRow, InlineError, NoticeLine, SelectField, TextArea, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { LoopSnapshot } from '../src/types'
 import { ConfigFields, initialDraft, validateDraft } from './config-form'
@@ -198,6 +198,7 @@ function matchesDraftOverlay(draft: LoopDraft, overlay: Partial<LoopDraft>): boo
 
 export function SetupDialog(props: SetupDialogProps) {
   const checkboxId = useId()
+  const formId = useId()
   const [draft, setDraft] = useState<LoopDraft>(() => initialDraft())
   const [agents, setAgents] = useState<AgentChoice[]>([])
   const [workspace, setWorkspace] = useState<WorkspaceChoice | null>(null)
@@ -790,11 +791,18 @@ export function SetupDialog(props: SetupDialogProps) {
   return (
     <Dialog
       open
+      scrollBody
       title="New loop"
       onClose={closeDialog}
       closeOnBackdrop={false}
+      actions={<>
+        <Button type="button" disabled={busy} onClick={() => void runSetupAction('cancel')}>Cancel</Button>
+        <Button type="submit" form={formId} variant="primary" disabled={!canStart}>
+          {busy ? 'Starting…' : 'Start loop'}
+        </Button>
+      </>}
     >
-      <form className="ui-stack" aria-label="New loop" onSubmit={onSubmit}>
+      <form id={formId} className="ui-stack" aria-label="New loop" onSubmit={onSubmit}>
         <section className="ui-stack" aria-label="Loop prompt">
           {warning && <NoticeLine><span role="status">{warning}</span></NoticeLine>}
           <TextField
@@ -850,13 +858,14 @@ export function SetupDialog(props: SetupDialogProps) {
                   Add to queue
                 </Button>
               </div>
-              <FormRow label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
-                <input
+              <FormRow layout="inline" label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
+                <Checkbox
+                  hideLabel
+                  label="Start over when the queue is empty"
                   id={`${checkboxId}-repeat-queue`}
-                  type="checkbox"
                   checked={displayDraft.repeatQueue}
                   disabled={!canEdit}
-                  onChange={(event) => void updateDraftFromDom({ repeatQueue: event.currentTarget.checked })}
+                  onChange={(checked) => void updateDraftFromDom({ repeatQueue: checked })}
                 />
               </FormRow>
             </div>
@@ -901,12 +910,6 @@ export function SetupDialog(props: SetupDialogProps) {
         </section>
         {serverError && <InlineError message={serverError} />}
         <p>Run an agent in this workspace over and over until the work is done.</p>
-        <div className="ui-cluster">
-          <Button type="button" disabled={busy} onClick={() => void runSetupAction('cancel')}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!canStart}>
-            {busy ? 'Starting…' : 'Start loop'}
-          </Button>
-        </div>
       </form>
     </Dialog>
   )

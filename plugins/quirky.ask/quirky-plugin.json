@@ -543,6 +543,12 @@
         "title": "Questions"
       }
     ],
+    "view": [
+      {
+        "id": "card",
+        "title": "Ask card"
+      }
+    ],
     "launch-hook": [
       {
         "id": "claude-ask",

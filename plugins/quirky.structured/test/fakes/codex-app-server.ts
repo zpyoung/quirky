@@ -210,6 +210,7 @@ function receive(message) {
         return
       }
       case 'turn/interrupt':
+        if (active.get(message.params.threadId)?.text.includes('[ignore-interrupt]')) return
         send({ id: message.id, result: {} })
         if (active.has(message.params.threadId)) finish(message.params.threadId, active.get(message.params.threadId).turn, 'interrupted')
         return

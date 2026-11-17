@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
-import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'
+import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'
 import { meterColor, SnapshotLine, UsagePreferencesControls } from './Usage'
 import { useStableReport, type UiReport } from './report'
 
@@ -304,8 +304,8 @@ function GeminiCliSettings({ context }: { context: UiPluginContext }) {
     <SectionHeader title="Gemini CLI (legacy)" />
     <p className="settings-description">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>
     <p className="settings-description">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>
-    <FormRow label="Allow Gemini CLI OAuth credential refresh" htmlFor="gemini-cli-oauth-enabled">
-      <input id="gemini-cli-oauth-enabled" type="checkbox" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />
+    <FormRow layout="inline" label="Allow Gemini CLI OAuth credential refresh" htmlFor="gemini-cli-oauth-enabled">
+      <Checkbox hideLabel label="Allow Gemini CLI OAuth credential refresh" id="gemini-cli-oauth-enabled" checked={enabled} disabled={saving} onChange={(value) => void update(value)} />
     </FormRow>
     {saving && <div role="status" aria-live="polite"><NoticeLine>Saving…</NoticeLine></div>}
   </section>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, Checkbox, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { MobilePairingResult, UiPluginContext } from '@quirky/protocol'
 import { createPairing } from './api'
 import { DeviceList } from './DeviceList'
@@ -141,12 +141,13 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
           <div className="ui-cluster">
             <Button disabled={!machineName.trim() || machineName === mobile.state.machineName} onClick={() => void saveMachineName()}>Save machine name</Button>
           </div>
-          <FormRow label="Show Mobile in the sidebar" htmlFor="mobile-sidebar-visibility">
-            <input
+          <FormRow label="Show Mobile in the sidebar" htmlFor="mobile-sidebar-visibility" layout="inline">
+            <Checkbox
               id="mobile-sidebar-visibility"
-              type="checkbox"
+              label="Show Mobile in the sidebar"
+              hideLabel
               checked={mobile.state.showMobileButton}
-              onChange={(event) => void toggleSidebar(event.target.checked)}
+              onChange={toggleSidebar}
             />
           </FormRow>
         </div>
