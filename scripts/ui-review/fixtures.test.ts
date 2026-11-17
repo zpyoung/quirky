@@ -3,6 +3,10 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import {
+  ASK_CARD_FIXTURE_COMMAND,
+  closeAskCardFixture,
+  createAskCardFixture,
+  prepareCaptureTerminalFixture,
   closeCaptureTerminalFixture,
   createCaptureTerminalFixture,
   createIsolatedRuntimeEnvironment,
@@ -18,6 +22,7 @@ import {
   type PreparedCaptureFixtureHome,
   type RegisteredCaptureFixtures
 } from './fixtures'
+import { approvalSpec } from '../../plugins/quirky.structured/native-questions'
 import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
 import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createProcessRunner } from '../../packages/process/src/api'
@@ -1017,6 +1022,407 @@ test('transcript fixture records four turns on a titled shell session', async ()
       }
     }
   ])
+})
+
+const askFixtureRow = (askId: string, overrides: Record<string, unknown> = {}) => ({
+  id: askId,
+  spec: approvalSpec(ASK_CARD_FIXTURE_COMMAND),
+  sessionId: null,
+  worktreeId: null,
+  envelope: { status: 'pending', askId, answers: {}, skipped: [], summary: '' },
+  queued: false,
+  ...overrides
+})
+
+test('terminal fixture acquisition uses the requested worktree and hands off ownership', async () => {
+  const worktree = { id: 'worktree:checks', path: '/fixture/checks' }
+  const fixtures = {
+    primaryWorktree: { id: 'worktree:primary', path: '/fixture/primary' }
+  } as RegisteredCaptureFixtures
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  const order: string[] = []
+  let acquired: unknown
+  const client: FixtureRpcClient = {
+    async callAny(method, params = {}) {
+      calls.push({ method, params })
+      return { session: 'session:checks', tab: 'tab:checks', pane: 'pane:checks' }
+    }
+  }
+
+  const terminal = await createCaptureTerminalFixture(client, fixtures, { timeoutMs: 1_000 }, 'UI Review Checks', {
+    worktree,
+    onAcquired: (fixture) => {
+      acquired = fixture
+      order.push('acquired')
+    }
+  })
+  order.push('returned')
+
+  expect(acquired).toEqual(terminal)
+  expect(order).toEqual(['acquired', 'returned'])
+  expect(calls).toEqual([{
+    method: 'quirky.terminal/newTab',
+    params: {
+      workspace: worktree.id,
+      cwd: worktree.path,
+      agent: 'shell',
+      title: 'UI Review Checks',
+      activate: true
+    }
+  }])
+})
+
+test('terminal readiness waits for a supported shell state and marker output exactly once', async () => {
+  const terminal = { sessionId: 'session:owned', tabId: 'tab:owned', paneId: 'pane:owned' }
+  for (const shellState of ['ready', 'unsupported'] as const) {
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+    let snapshots = 0
+    let historiesAfterWrite = 0
+    let writes = 0
+    const client: FixtureRpcClient = {
+      async callAny(method, params = {}) {
+        calls.push({ method, params })
+        if (method === 'quirky.terminal/snapshot') {
+          snapshots += 1
+          return { shellState: snapshots === 1 ? 'pending' : shellState, ansi: '' }
+        }
+        if (method === 'quirky.terminal/history') {
+          if (writes > 0) historiesAfterWrite += 1
+          return { lines: historiesAfterWrite >= 2 ? ['UI review terminal ready'] : [] }
+        }
+        if (method === 'quirky.terminal/write') {
+          writes += 1
+          return { ok: true }
+        }
+        throw new Error(`unexpected ${method}`)
+      }
+    }
+
+    await prepareCaptureTerminalFixture(client, terminal, { timeoutMs: 1_000 })
+
+    const writeCalls = calls.filter((call) => call.method === 'quirky.terminal/write')
+    expect(writes).toBe(1)
+    expect(writeCalls).toHaveLength(1)
+    expect(String(writeCalls[0]?.params.data).match(/UI review terminal ready/g)).toHaveLength(1)
+    expect(calls.filter((call) => call.method === 'quirky.terminal/snapshot')).toHaveLength(2)
+    expect(historiesAfterWrite).toBeGreaterThanOrEqual(2)
+  }
+})
+
+test('terminal readiness surfaces RPC errors and times out while the shell never becomes ready', async () => {
+  const terminal = { sessionId: 'session:owned', tabId: 'tab:owned', paneId: 'pane:owned' }
+  const rpcFailure: FixtureRpcClient = {
+    async callAny(method) {
+      if (method === 'quirky.terminal/snapshot') throw new Error('snapshot transport failed')
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  await expect(prepareCaptureTerminalFixture(rpcFailure, terminal, { timeoutMs: 100 }))
+    .rejects.toThrow('snapshot transport failed')
+
+  let wrote = false
+  const neverReady: FixtureRpcClient = {
+    async callAny(method) {
+      if (method === 'quirky.terminal/snapshot') return { shellState: 'pending', ansi: '' }
+      if (method === 'quirky.terminal/write') {
+        wrote = true
+        return { ok: true }
+      }
+      if (method === 'quirky.terminal/history') return { lines: [] }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  await expect(prepareCaptureTerminalFixture(neverReady, terminal, { timeoutMs: 40 }))
+    .rejects.toThrow()
+  expect(wrote).toBe(false)
+})
+
+test('terminal readiness aborts promptly and an acquired terminal is still closed after preparation failure', async () => {
+  const fixtures = {
+    primaryWorktree: { id: 'worktree:primary', path: '/fixture/primary' }
+  } as RegisteredCaptureFixtures
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  const controller = new AbortController()
+  const snapshotStarted = Promise.withResolvers<void>()
+  const snapshotReply = Promise.withResolvers<unknown>()
+  const client: FixtureRpcClient = {
+    callAny(method, params = {}) {
+      calls.push({ method, params })
+      if (method === 'quirky.terminal/newTab') {
+        return Promise.resolve({ session: 'session:owned', tab: 'tab:owned', pane: 'pane:owned' })
+      }
+      if (method === 'quirky.terminal/snapshot') {
+        snapshotStarted.resolve()
+        return snapshotReply.promise
+      }
+      if (method === 'quirky.terminal/closeTab') return Promise.resolve({ ok: true })
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  let acquired: { sessionId: string; tabId: string; paneId: string } | undefined
+  const terminal = await createCaptureTerminalFixture(client, fixtures, { timeoutMs: 1_000 }, 'Owned terminal', {
+    onAcquired: (fixture) => { acquired = fixture }
+  })
+  const preparing = prepareCaptureTerminalFixture(client, terminal, { timeoutMs: 1_000, signal: controller.signal })
+  await snapshotStarted.promise
+  controller.abort(new Error('fixture preparation aborted'))
+  await expect(preparing).rejects.toThrow('fixture preparation aborted')
+  snapshotReply.resolve({ shellState: 'pending', ansi: '' })
+  await closeCaptureTerminalFixture(client, acquired!, { timeoutMs: 1_000 })
+  expect(acquired).toEqual(terminal)
+  expect(calls.at(-1)).toEqual({
+    method: 'quirky.terminal/closeTab',
+    params: { tab: terminal.tabId, yes: true }
+  })
+})
+
+test('terminal readiness rejects unrelated history and an echoed marker command without its output', async () => {
+  const terminal = { sessionId: 'session:owned', tabId: 'tab:owned', paneId: 'pane:owned' }
+  for (const lines of [['an unrelated prompt'], ["printf '\\nUI review terminal ready\\n'"]]) {
+    let writes = 0
+    const client: FixtureRpcClient = {
+      async callAny(method) {
+        if (method === 'quirky.terminal/snapshot') return { shellState: 'ready' }
+        if (method === 'quirky.terminal/write') { writes += 1; return { ok: true } }
+        if (method === 'quirky.terminal/history') return { lines }
+        throw new Error(`unexpected ${method}`)
+      }
+    }
+    await expect(prepareCaptureTerminalFixture(client, terminal, { timeoutMs: 40 })).rejects.toThrow()
+    expect(writes).toBe(1)
+  }
+})
+
+test('terminal acquisition retains late IDs after abort so the owner can close that tab', async () => {
+  const fixtures = { primaryWorktree: { id: 'worktree:primary', path: '/fixture/primary' } } as RegisteredCaptureFixtures
+  const controller = new AbortController()
+  const reply = Promise.withResolvers<unknown>()
+  const acquired = Promise.withResolvers<{ sessionId: string; tabId: string; paneId: string }>()
+  const closed: string[] = []
+  const client: FixtureRpcClient = {
+    callAny(method, params = {}) {
+      if (method === 'quirky.terminal/newTab') return reply.promise
+      if (method === 'quirky.terminal/closeTab') { closed.push(String(params.tab)); return Promise.resolve({ ok: true }) }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  const creating = createCaptureTerminalFixture(client, fixtures, { timeoutMs: 1_000, signal: controller.signal }, 'Late shell', {
+    onAcquired: acquired.resolve
+  })
+  controller.abort(new Error('caller stopped'))
+  await expect(creating).rejects.toThrow('caller stopped')
+  reply.resolve({ session: 'session:late', tab: 'tab:late', pane: 'pane:late' })
+  await closeCaptureTerminalFixture(client, await acquired.promise, { timeoutMs: 1_000 })
+  expect(closed).toEqual(['tab:late'])
+})
+
+test('an already aborted Ask caller acquires nothing while cancellation ignores a caller abort', async () => {
+  const controller = new AbortController()
+  controller.abort(new Error('caller stopped'))
+  const calls: string[] = []
+  const owned: unknown[] = []
+  const client: FixtureRpcClient = {
+    async callAny(method) {
+      calls.push(method)
+      if (method === 'quirky.ask/cancel') return { status: 'declined' }
+      if (method === 'quirky.ask/list') return [askFixtureRow('ask:owned', { envelope: { status: 'declined' } })]
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  await expect(createAskCardFixture(client, { timeoutMs: 100, signal: controller.signal }, (fixture) => owned.push(fixture)))
+    .rejects.toThrow('caller stopped')
+  expect(owned).toEqual([])
+  expect(calls).toEqual([])
+  await closeAskCardFixture(client, { askId: 'ask:owned', command: ASK_CARD_FIXTURE_COMMAND }, { timeoutMs: 100, signal: controller.signal })
+  expect(calls).toEqual(['quirky.ask/cancel', 'quirky.ask/list'])
+})
+
+test('Ask-card fixture creates one unscoped approval and transfers ownership before read-back', async () => {
+  const askId = 'ask:fixture'
+  const calls: Array<{ method: string; params: Record<string, unknown>; options?: { timeoutMs?: number } }> = []
+  const order: string[] = []
+  let owned: unknown
+  const client: FixtureRpcClient = {
+    async callAny(method, params = {}, options) {
+      calls.push({ method, params, options })
+      if (method === 'quirky.ask/create') {
+        order.push('create')
+        return { askId }
+      }
+      if (method === 'quirky.ask/list') {
+        order.push('read-back')
+        return [askFixtureRow(askId)]
+      }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+
+  const fixture = await createAskCardFixture(client, { timeoutMs: 500 }, (value) => {
+    owned = value
+    order.push('owned')
+  })
+
+  expect(fixture).toEqual({ askId, command: 'Bash: bun run build' })
+  expect(owned).toEqual(fixture)
+  expect(order).toEqual(['create', 'owned', 'read-back'])
+  expect(calls).toEqual([
+    {
+      method: 'quirky.ask/create',
+      params: { spec: approvalSpec('Bash: bun run build') },
+      options: { timeoutMs: 500 }
+    },
+    {
+      method: 'quirky.ask/list',
+      params: { pendingOnly: false, askId },
+      options: { timeoutMs: 500 }
+    }
+  ])
+})
+
+test('Ask-card acquisition rejects missing identities and invalid or scoped read-back rows', async () => {
+  const askId = 'ask:fixture'
+  const cases: Array<{ name: string; create?: unknown; rows?: unknown }> = [
+    { name: 'missing ask ID', create: {} },
+    { name: 'malformed ask ID', create: { askId: '' } },
+    { name: 'missing read-back row', rows: [] },
+    { name: 'non-pending envelope', rows: [askFixtureRow(askId, { envelope: { status: 'answered', askId } })] },
+    { name: 'queued row', rows: [askFixtureRow(askId, { queued: true })] },
+    { name: 'session-scoped row', rows: [askFixtureRow(askId, { sessionId: 'session:other' })] },
+    { name: 'worktree-scoped row', rows: [askFixtureRow(askId, { worktreeId: 'worktree:other' })] },
+    { name: 'mismatched spec', rows: [askFixtureRow(askId, { spec: approvalSpec('Bash: bun test') })] },
+    { name: 'wrong ask identity', rows: [askFixtureRow('ask:other')] }
+  ]
+
+  for (const scenario of cases) {
+    const client: FixtureRpcClient = {
+      async callAny(method) {
+        if (method === 'quirky.ask/create') return scenario.create ?? { askId }
+        if (method === 'quirky.ask/list') return scenario.rows ?? [askFixtureRow(askId)]
+        throw new Error(`unexpected ${method}`)
+      }
+    }
+    const owned: unknown[] = []
+    await expect(createAskCardFixture(client, { timeoutMs: 200 }, (fixture) => owned.push(fixture)))
+      .rejects.toThrow()
+    expect(owned.length, scenario.name).toBe(scenario.name.includes('ask ID') || scenario.name.includes('malformed') ? 0 : 1)
+  }
+})
+
+test('Ask-card read-back errors and aborts preserve the acquired ID', async () => {
+  const askId = 'ask:fixture'
+  let readbackStarted = false
+  const client: FixtureRpcClient = {
+    async callAny(method) {
+      if (method === 'quirky.ask/create') return { askId }
+      if (method === 'quirky.ask/list') {
+        readbackStarted = true
+        throw new Error('read-back unavailable')
+      }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  const owned: unknown[] = []
+  await expect(createAskCardFixture(client, { timeoutMs: 200 }, (fixture) => owned.push(fixture)))
+    .rejects.toThrow('read-back unavailable')
+  expect(readbackStarted).toBe(true)
+  expect(owned).toEqual([{ askId, command: ASK_CARD_FIXTURE_COMMAND }])
+
+  const controller = new AbortController()
+  const listStarted = Promise.withResolvers<void>()
+  const listReply = Promise.withResolvers<unknown>()
+  const blockedReadback: FixtureRpcClient = {
+    callAny(method) {
+      if (method === 'quirky.ask/create') return Promise.resolve({ askId })
+      if (method === 'quirky.ask/list') {
+        listStarted.resolve()
+        return listReply.promise
+      }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  const abortOwned: unknown[] = []
+  const acquiring = createAskCardFixture(blockedReadback, { timeoutMs: 1_000, signal: controller.signal }, (fixture) => abortOwned.push(fixture))
+  await listStarted.promise
+  controller.abort(new Error('Ask fixture aborted'))
+  await expect(acquiring).rejects.toThrow('Ask fixture aborted')
+  expect(abortOwned).toEqual([{ askId, command: ASK_CARD_FIXTURE_COMMAND }])
+  listReply.resolve([askFixtureRow(askId)])
+})
+
+test('Ask-card fixture reports a create identity that arrives after caller abort', async () => {
+  const askId = 'ask:late'
+  const controller = new AbortController()
+  const createStarted = Promise.withResolvers<void>()
+  const createReply = Promise.withResolvers<unknown>()
+  const calls: string[] = []
+  const client: FixtureRpcClient = {
+    callAny(method) {
+      calls.push(method)
+      if (method === 'quirky.ask/create') {
+        createStarted.resolve()
+        return createReply.promise
+      }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  const owned: unknown[] = []
+  const wasOwned = Promise.withResolvers<void>()
+  const acquiring = createAskCardFixture(client, { timeoutMs: 1_000, signal: controller.signal }, (fixture) => {
+    owned.push(fixture)
+    wasOwned.resolve()
+  })
+  await createStarted.promise
+  controller.abort(new Error('Ask fixture aborted'))
+  await expect(acquiring).rejects.toThrow('Ask fixture aborted')
+  createReply.resolve({ askId })
+  await wasOwned.promise
+
+  expect(owned).toEqual([{ askId, command: ASK_CARD_FIXTURE_COMMAND }])
+  expect(calls).toEqual(['quirky.ask/create'])
+})
+
+test('Ask-card cancellation verifies its durable non-pending row', async () => {
+  const fixture = { askId: 'ask:fixture', command: ASK_CARD_FIXTURE_COMMAND }
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  const client: FixtureRpcClient = {
+    async callAny(method, params = {}) {
+      calls.push({ method, params })
+      if (method === 'quirky.ask/cancel') return { status: 'declined', askId: fixture.askId }
+      if (method === 'quirky.ask/list') return [askFixtureRow(fixture.askId, { envelope: { status: 'declined', askId: fixture.askId } })]
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+
+  await closeAskCardFixture(client, fixture, { timeoutMs: 200 })
+
+  expect(calls).toEqual([
+    { method: 'quirky.ask/cancel', params: { askId: fixture.askId } },
+    { method: 'quirky.ask/list', params: { pendingOnly: false, askId: fixture.askId } }
+  ])
+})
+
+test('Ask-card cancellation rejects pending outcomes and cancellation or read-back errors', async () => {
+  const fixture = { askId: 'ask:fixture', command: ASK_CARD_FIXTURE_COMMAND }
+  const pendingRow = askFixtureRow(fixture.askId)
+  const cases: Array<{ name: string; cancel?: unknown; rows?: unknown; failAt?: string }> = [
+    { name: 'cancel reply is pending', cancel: pendingRow.envelope, rows: [pendingRow] },
+    { name: 'durable row remains pending', cancel: { status: 'declined' }, rows: [pendingRow] },
+    { name: 'cancel RPC fails', failAt: 'quirky.ask/cancel' },
+    { name: 'read-back RPC fails', cancel: { status: 'declined' }, failAt: 'quirky.ask/list' },
+    { name: 'durable row is missing', cancel: { status: 'declined' }, rows: [] }
+  ]
+
+  for (const scenario of cases) {
+    const client: FixtureRpcClient = {
+      async callAny(method) {
+        if (method === scenario.failAt) throw new Error(`${scenario.name} failure`)
+        if (method === 'quirky.ask/cancel') return scenario.cancel ?? { status: 'declined', askId: fixture.askId }
+        if (method === 'quirky.ask/list') return scenario.rows ?? [askFixtureRow(fixture.askId, { envelope: { status: 'declined', askId: fixture.askId } })]
+        throw new Error(`unexpected ${method}`)
+      }
+    }
+    await expect(closeAskCardFixture(client, fixture, { timeoutMs: 200 })).rejects.toThrow()
+  }
 })
 
 test('terminal fixtures honor titles and close their own tab with confirmation', async () => {
