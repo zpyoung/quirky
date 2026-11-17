@@ -535,7 +535,7 @@ export function startFault(options: {
   }
 
   const injectPtyPause = async () => {
-    const notApplied = (reason: string): never => {
+    function notApplied(reason: string): never {
       settlePtyPause('not-applied')
       throw new Error(`pty-pause fault not applied: ${reason}`)
     }

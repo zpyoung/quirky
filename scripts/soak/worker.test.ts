@@ -83,11 +83,17 @@ test('answers pings from stdin while running as main', async () => {
     const output = (async () => {
       let text = ''
       const decoder = new TextDecoder()
-      for await (const chunk of child.stdout) {
-        text += decoder.decode(chunk, { stream: true })
-        if (text.includes(expected)) return text
+      const reader = child.stdout.getReader()
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) return text + decoder.decode()
+          text += decoder.decode(value, { stream: true })
+          if (text.includes(expected)) return text
+        }
+      } finally {
+        reader.releaseLock()
       }
-      return text + decoder.decode()
     })()
 
     try {
