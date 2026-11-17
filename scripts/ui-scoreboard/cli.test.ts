@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { runUiScoreboard, type SignalSource } from '../ui-scoreboard'
 import { SCORE_DIMENSIONS, type CaptureManifest, type ModelFamily, type ReviewReport } from '../ui-review/contracts'
+import { REVIEW_TIMEOUT_MS } from '../ui-review/arguments'
 import { collectInventory } from './inventory'
 import type { Inventory, ScoreboardReport } from './contracts'
 
@@ -20,6 +21,24 @@ function fixture() {
 }
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 const quiet = { stdout: (_: string) => {}, stderr: (_: string) => {} }
+const processResult = {
+  exitCode: 0,
+  stdout: { text: '', bytes: 0, truncated: false },
+  stderr: { text: '', bytes: 0, truncated: false },
+  timedOut: false,
+  aborted: false
+}
+const successfulPreflight = async () => ({
+  ok: true as const,
+  resolved: { provider: 'google', model: 'fixture-vision', family: 'google' as const },
+  process: processResult
+})
+const failedPreflight = {
+  ok: false as const,
+  resolved: { provider: 'google', model: 'fixture-vision', family: 'google' as const },
+  process: processResult,
+  issue: { code: 'operational' as const, message: 'Reviewer preflight unavailable.' }
+}
 function report(output: string): ScoreboardReport { return JSON.parse(readFileSync(join(output, 'scoreboard.json'), 'utf8')) }
 
 type TestToolAlias = {
@@ -211,7 +230,7 @@ function passingPluginReview(manifest: CaptureManifest, reviewerAlias: string, a
     scope: manifest.scope, threshold: 85, authorFamily, reviewerAlias,
     captures: manifest.captures.map((capture) => ({
       targetId: capture.targetId, theme: capture.theme, image: capture.image!, reference: capture.reference,
-      reviewer: { alias: reviewerAlias, provider: 'fixture', model: 'fixture-reviewer', family: authorFamily },
+      reviewer: { alias: reviewerAlias, provider: 'google', model: 'fixture-vision', family: 'google' },
       assessment: {
         targetVisible: true, imagesRead: true, reasons: [],
         scores: Object.fromEntries(SCORE_DIMENSIONS.map((dimension) => [dimension, 85])) as Record<typeof SCORE_DIMENSIONS[number], number>,
@@ -249,6 +268,7 @@ test('plugin mode captures and reports only the selected plugin without certifyi
   const exit = await runUiScoreboard(['--plugin', 'acme.ui', '--author-family', 'openai', '--output', output], {
     ...quiet,
     collectInventory: () => inventory,
+    preflightReviewer: successfulPreflight,
     captureApplication: async (options) => {
       captureOnly = options.only
       return pluginManifest(inventory, 'acme.ui')
@@ -278,6 +298,60 @@ test('plugin mode captures and reports only the selected plugin without certifyi
   expect(markdown).not.toContain('acme.other')
 })
 
+test('full and plugin CLI preflight failures persist unscored error reports', async () => {
+  for (const mode of ['full', 'plugin'] as const) {
+    const { inventory, output } = fixture()
+    inventory.targets.push({ id: 'host:shell', plugin: null, title: 'Shell', kind: 'host' })
+    const preflightOptions: Array<{ reviewerAlias: string; authorFamily: ModelFamily; timeoutMs: number; signal?: AbortSignal }> = []
+    let captureCalls = 0
+    let reviewCalls = 0
+    const modeArgs = mode === 'plugin' ? ['--plugin', 'acme.ui'] : []
+    const exit = await runUiScoreboard([
+      ...modeArgs, '--reviewer', 'fixture-reviewer', '--author-family', 'openai', '--output', output
+    ], {
+      ...quiet,
+      collectInventory: () => inventory,
+      preflightReviewer: async (received) => {
+        preflightOptions.push(received)
+        return failedPreflight
+      },
+      captureApplication: async () => {
+        captureCalls++
+        throw new Error('capture must not start')
+      },
+      reviewManifest: async () => {
+        reviewCalls++
+        throw new Error('review must not start')
+      }
+    })
+
+    expect(exit).toBe(2)
+    expect(preflightOptions).toHaveLength(1)
+    expect(preflightOptions[0]).toMatchObject({
+      reviewerAlias: 'fixture-reviewer',
+      authorFamily: 'openai',
+      timeoutMs: REVIEW_TIMEOUT_MS
+    })
+    expect(preflightOptions[0]?.signal).toBeInstanceOf(AbortSignal)
+    expect(captureCalls).toBe(0)
+    expect(reviewCalls).toBe(0)
+    const value = report(output)
+    const expectedTargets = mode === 'plugin'
+      ? inventory.targets.filter((target) => target.plugin === 'acme.ui')
+      : inventory.targets
+    expect(value).toMatchObject({ mode, status: 'error', goalPassed: false })
+    expect(value.cells).toHaveLength(expectedTargets.length * 2)
+    expect(value.cells.every((cell) => expectedTargets.some((target) => target.id === cell.targetId) &&
+      cell.status === 'fail' && cell.code === 'reviewer-preflight' && cell.score === null &&
+      cell.assessment === null && cell.image === null && cell.reference === null && cell.reviewer === null)).toBe(true)
+    expect(value.failures.some((failure) => failure.code === 'reviewer-preflight' &&
+      failure.message.includes('Reviewer preflight unavailable.'))).toBe(true)
+    expect(existsSync(join(output, 'scoreboard.md'))).toBe(true)
+    expect(existsSync(join(output, 'capture-manifest.json'))).toBe(false)
+    expect(existsSync(join(output, 'reviews'))).toBe(false)
+  }
+})
+
 test('plugin arguments reject duplicates, missing values, incompatible modes, and missing requirements', async () => {
   const forbidden = () => { throw new Error('side effect') }
   for (const args of [
@@ -289,14 +363,23 @@ test('plugin arguments reject duplicates, missing values, incompatible modes, an
     ['--plugin', 'acme.ui', '--output', '/tmp/no'],
     ['--plugin', 'acme.ui', '--author-family', 'openai'],
   ]) {
-    expect(await runUiScoreboard(args, { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(2)
+    expect(await runUiScoreboard(args, {
+      ...quiet,
+      collectInventory: forbidden,
+      mkdir: forbidden,
+      preflightReviewer: forbidden,
+      captureApplication: forbidden,
+      reviewManifest: forbidden
+    })).toBe(2)
   }
 })
 
 test('plugin mode rejects unknown and zero-target plugins before capture', async () => {
   const { inventory: base, root } = fixture()
   const inventory = pluginModeInventory(base)
+  let preflightStarted = false
   let captureStarted = false
+  let reviewStarted = false
   for (const [pluginId, output, expected] of [
     ['acme.missing', join(root, 'unknown-output'), 'Unknown plugin: acme.missing'],
     ['acme.palette', join(root, 'zero-output'), 'Plugin acme.palette has no declared capture targets'],
@@ -305,30 +388,54 @@ test('plugin mode rejects unknown and zero-target plugins before capture', async
     expect(await runUiScoreboard(['--plugin', pluginId, '--author-family', 'openai', '--output', output], {
       ...quiet,
       collectInventory: () => inventory,
+      preflightReviewer: async () => { preflightStarted = true; throw new Error('preflight should not start') },
       captureApplication: async () => { captureStarted = true; throw new Error('capture should not start') },
+      reviewManifest: async () => { reviewStarted = true; throw new Error('review should not start') },
       stderr: (text) => errors.push(text),
     })).toBe(2)
     expect(errors.join('\\n')).toContain(expected)
   }
+  expect(preflightStarted).toBe(false)
   expect(captureStarted).toBe(false)
+  expect(reviewStarted).toBe(false)
 })
 
 test('help and malformed arguments perform no filesystem or runtime work', async () => {
   const forbidden = () => { throw new Error('side effect') }
   const help: string[] = []
-  expect(await runUiScoreboard(['--help'], { ...quiet, stdout: (text) => help.push(text), collectInventory: forbidden, mkdir: forbidden })).toBe(0)
+  expect(await runUiScoreboard(['--help'], {
+    ...quiet,
+    stdout: (text) => help.push(text),
+    collectInventory: forbidden,
+    mkdir: forbidden,
+    preflightReviewer: forbidden,
+    captureApplication: forbidden,
+    reviewManifest: forbidden
+  })).toBe(0)
   expect(help.join('\\n')).toContain("source audit read from each plugin's ui-scoreboard.json")
   expect(help.join('\\n')).toContain('[--plugin <id>]')
   expect(help.join('\\n')).toContain('never sets goalPassed: true')
   for (const args of [[], ['--wat'], ['--help', '--help'], ['--static-only', '--output', 'relative'], ['--check-ratchet', '--output', '/tmp/no'], ['--static-only', '--author-family', 'openai', '--output', '/tmp/no'], ['--author-family', 'no', '--output', '/tmp/no'], ['--static-only', '--output', '/tmp/no', '--output', '/tmp/no']]) {
-    expect(await runUiScoreboard(args, { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(2)
+    expect(await runUiScoreboard(args, {
+      ...quiet,
+      collectInventory: forbidden,
+      mkdir: forbidden,
+      preflightReviewer: forbidden,
+      captureApplication: forbidden,
+      reviewManifest: forbidden
+    })).toBe(2)
   }
 })
 test('static-only writes complete honest reports and never starts runtime', async () => {
   const { inventory, output } = fixture(); const messages: string[] = []
   const forbidden = async () => { throw new Error('runtime called') }
   expect(await runUiScoreboard(['--', '--static-only', '--output', output], {
-    ...quiet, collectInventory: () => inventory, captureApplication: forbidden, reviewManifest: forbidden, stdout: (text) => messages.push(text),
+    ...quiet,
+    collectInventory: () => inventory,
+    preflightReviewer: forbidden,
+    captureApplication: forbidden,
+    reviewManifest: forbidden,
+    stdout: (text) => messages.push(text),
   })).toBe(1)
   const value = report(output)
   expect(value).toMatchObject({ mode: 'static-only', goalPassed: false, status: 'failed', sourceDigest: 'digest', threshold: 85 })
@@ -413,6 +520,7 @@ test('render contributions keep failed full screenshot measurement applicable wi
   expect(await runUiScoreboard(['--author-family', 'openai', '--output', output], {
     ...quiet,
     collectInventory: () => inventory,
+    preflightReviewer: successfulPreflight,
     captureApplication: async () => {
       captureStarted = true
       throw new Error('Chromium missing')
@@ -434,9 +542,21 @@ test('UI plugins with no declared capture targets rate screenshots as not applic
     .toMatchObject({ applicable: false, status: 'pass', reason: 'no-ui-surface' })
 })
 
-test('existing output is never overwritten, including files', async () => {
+test('existing output blocks preflight and runtime dependencies without overwriting files', async () => {
   const { output, inventory } = fixture(); mkdirSync(output); writeFileSync(join(output, 'keep'), 'owner')
-  expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, collectInventory: () => inventory })).toBe(2)
+  let preflightCalled = false
+  let captureCalled = false
+  let reviewCalled = false
+  expect(await runUiScoreboard(['--static-only', '--output', output], {
+    ...quiet,
+    collectInventory: () => inventory,
+    preflightReviewer: async () => { preflightCalled = true; throw new Error('unexpected preflight') },
+    captureApplication: async () => { captureCalled = true; throw new Error('unexpected capture') },
+    reviewManifest: async () => { reviewCalled = true; throw new Error('unexpected review') }
+  })).toBe(2)
+  expect(preflightCalled).toBe(false)
+  expect(captureCalled).toBe(false)
+  expect(reviewCalled).toBe(false)
   expect(readFileSync(join(output, 'keep'), 'utf8')).toBe('owner')
   expect(existsSync(join(output, 'scoreboard.json'))).toBe(false)
 })
@@ -444,17 +564,30 @@ test('full mode attempts capture despite static debt and preserves operational f
   const { inventory, output } = fixture(); let called = false
   const exit = await runUiScoreboard(['--author-family', 'openai', '--output', output], {
     ...quiet, collectInventory: () => inventory,
+    preflightReviewer: successfulPreflight,
     captureApplication: async () => { called = true; throw new Error('Chromium missing') },
   })
   expect(called).toBe(true); expect(exit).toBe(2)
   expect(report(output)).toMatchObject({ status: 'error', goalPassed: false })
   expect(report(output).plugins[0]!.checks[0]!.status).toBe('fail')
 })
-test('inventory failures block capture but preserve every plugin and failure', async () => {
-  const { inventory, output } = fixture(); inventory.failures.push({ code: 'paused-plugin-present', message: 'avatar present' })
-  let called = false
-  expect(await runUiScoreboard(['--author-family', 'openai', '--output', output], { ...quiet, collectInventory: () => inventory, captureApplication: async () => { called = true; throw new Error('unexpected') } })).toBe(2)
-  expect(called).toBe(false); expect(report(output).failures[0]!.code).toBe('paused-plugin-present')
+test('inventory failures block preflight and runtime while preserving every plugin and failure', async () => {
+  const { inventory, output } = fixture()
+  inventory.failures.push({ code: 'paused-plugin-present', message: 'avatar present' })
+  let preflightCalled = false
+  let captureCalled = false
+  let reviewCalled = false
+  expect(await runUiScoreboard(['--author-family', 'openai', '--output', output], {
+    ...quiet,
+    collectInventory: () => inventory,
+    preflightReviewer: async () => { preflightCalled = true; throw new Error('unexpected preflight') },
+    captureApplication: async () => { captureCalled = true; throw new Error('unexpected capture') },
+    reviewManifest: async () => { reviewCalled = true; throw new Error('unexpected review') }
+  })).toBe(2)
+  expect(preflightCalled).toBe(false)
+  expect(captureCalled).toBe(false)
+  expect(reviewCalled).toBe(false)
+  expect(report(output).failures[0]!.code).toBe('paused-plugin-present')
   expect(report(output).plugins.map((plugin) => plugin.id)).toEqual(['acme.ui'])
 })
 test('signals abort owned work, await cleanup, preserve report and remove listeners', async () => {
@@ -463,6 +596,7 @@ test('signals abort owned work, await cleanup, preserve report and remove listen
     const signals: SignalSource = { on: (name, fn) => { listeners.set(name, fn) }, off: (name) => { listeners.delete(name) } }
     const exit = await runUiScoreboard(['--author-family', 'openai', '--output', output], {
       ...quiet, collectInventory: () => inventory, signals,
+      preflightReviewer: successfulPreflight,
       captureApplication: async (options) => {
         const { promise: aborted, resolve: done } = Promise.withResolvers<void>()
         options.signal!.addEventListener('abort', () => { cleaned = true; done() }, { once: true })
@@ -489,6 +623,7 @@ test('ratchet CLI starts no runtime and creates no reports', async () => {
   const exit = await runUiScoreboard(['--check-ratchet'], {
     ...quiet, repoRoot: root, collectInventory: () => inventory, readFile: async () => '{}',
     mkdir: forbidden, writeFile: forbidden, captureApplication: forbidden, reviewManifest: forbidden,
+    preflightReviewer: forbidden,
     stdout: (text) => messages.push(text),
   })
   expect(exit).toBe(0)
