@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RpcErrorCode, type ReviewModel, type UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type GitStatus, type ReviewModel, type UiPluginContext } from '@quirky/protocol'
 import { dataOf, messageOf } from '../panel/format'
 
 export const REVIEW_POLL_MS = 3000
@@ -8,14 +8,18 @@ const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.str
 
 /**
  * The worktree's review model. Reads `quirky.git/review` on mount, every 3 seconds, and on this
- * worktree's `changed` and `reviewChanged` events. At most one read is in flight, so a response
- * slower than the poll interval still lands; a trigger that arrives meanwhile becomes one follow-up
- * read. An unchanged result keeps the previous object, a failure keeps the last good model, and a
+ * worktree's `changed` and `reviewChanged` events. One read owns publication for a snapshot, so a
+ * slow response still lands; notifications during it retain one follow-up read.
+ * An unchanged result keeps the previous object, a failure keeps the last good model, and a
  * response that lands after a worktree switch or unmount is dropped.
+ * With a status snapshot, `pending` keeps reports from combining it with an earlier model read.
  */
-export function useReview(context: UiPluginContext, worktree: string): { model: ReviewModel | null; error: string | null; refresh(): void } {
-  const [model, setModel] = useState<ReviewModel | null>(null)
+export function useReview(context: UiPluginContext, worktree: string, snapshot: GitStatus | null | undefined): { model: ReviewModel | null; error: string | null; pending: boolean; refresh(): void } {
+  const [loaded, setLoaded] = useState<{ model: ReviewModel; snapshot: GitStatus | null | undefined } | null>(null)
+  const model = loaded?.model ?? null
   const [error, setError] = useState<string | null>(null)
+  const currentSnapshot = useRef(snapshot)
+  currentSnapshot.current = snapshot
   const generation = useRef(0)
   const inFlight = useRef(false)
   const queued = useRef(false)
@@ -27,6 +31,7 @@ export function useReview(context: UiPluginContext, worktree: string): { model: 
     }
     inFlight.current = true
     const mine = generation.current
+    const requestedSnapshot = currentSnapshot.current
     const settle = (apply: () => void) => {
       if (mine !== generation.current) return
       inFlight.current = false
@@ -39,7 +44,10 @@ export function useReview(context: UiPluginContext, worktree: string): { model: 
     context.call('quirky.git/review', { worktree }).then(
       (next) =>
         settle(() => {
-          setModel((prev) => (same(prev, next) ? prev : (next as ReviewModel)))
+          setLoaded((prev) => {
+            const model = prev && same(prev.model, next) ? prev.model : next as ReviewModel
+            return prev !== null && prev.model === model && prev.snapshot === requestedSnapshot ? prev : { model, snapshot: requestedSnapshot }
+          })
           setError(null)
         }),
       (e: unknown) => settle(() => setError(messageOf(e)))
@@ -50,7 +58,7 @@ export function useReview(context: UiPluginContext, worktree: string): { model: 
     generation.current++
     inFlight.current = false
     queued.current = false
-    setModel(null)
+    setLoaded(null)
     setError(null)
     refresh()
     const timer = setInterval(refresh, REVIEW_POLL_MS)
@@ -66,7 +74,15 @@ export function useReview(context: UiPluginContext, worktree: string): { model: 
     }
   }, [context, worktree, refresh])
 
-  return { model, error, refresh }
+  useEffect(() => {
+    if (snapshot === undefined || snapshot === null) return
+    generation.current++
+    inFlight.current = false
+    queued.current = false
+    refresh()
+  }, [snapshot, refresh])
+
+  return { model, error, pending: snapshot !== undefined && (snapshot === null || loaded?.snapshot !== snapshot), refresh }
 }
 
 /**

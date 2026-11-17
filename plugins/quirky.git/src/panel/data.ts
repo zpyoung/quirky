@@ -213,6 +213,8 @@ export type CompareData = {
   compare: GitCompare | null
   /** The compare call itself failed (not an unready compare, which is a result). */
   error: string | null
+  /** A comparison for the current status/base trigger has not arrived. */
+  pending: boolean
   refresh(): Promise<void>
 }
 
@@ -222,7 +224,8 @@ export type CompareData = {
  * `refresh` is called.
  */
 export function useCompare(context: UiPluginContext, worktree: string, trigger: string, enabled: boolean): CompareData {
-  const [compare, setCompare] = useState<GitCompare | null>(null)
+  const [loaded, setLoaded] = useState<{ compare: GitCompare; trigger: string } | null>(null)
+  const compare = loaded?.compare ?? null
   const [error, setError] = useState<string | null>(null)
   const newest = useRef(0)
   const alive = useRef(true)
@@ -232,12 +235,12 @@ export function useCompare(context: UiPluginContext, worktree: string, trigger: 
     try {
       const next = (await context.call('quirky.git/compare', { worktree })) as GitCompare
       if (!alive.current || ticket !== newest.current) return
-      setCompare((prev) => (same(prev, next) ? prev : next))
+      setLoaded((prev) => prev?.trigger === trigger && same(prev.compare, next) ? prev : { compare: next, trigger })
       setError(null)
     } catch (e) {
       if (alive.current && ticket === newest.current) setError(messageOf(e))
     }
-  }, [context, worktree])
+  }, [context, worktree, trigger])
 
   useEffect(() => {
     alive.current = true
@@ -252,7 +255,7 @@ export function useCompare(context: UiPluginContext, worktree: string, trigger: 
     }
   }, [refresh, trigger, enabled])
 
-  return { compare, error, refresh }
+  return { compare, error, pending: enabled && loaded?.trigger !== trigger, refresh }
 }
 
 /** The absolute path of the worktree, for Copy Path and dragging; null until it resolves. */

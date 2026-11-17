@@ -294,6 +294,64 @@ for (const [name, view] of [
   })
 }
 
+for (const initialProvider of ['github', null] as const) {
+test(`settings refreshes provider observations after an initially successful shell read (${initialProvider ?? 'unconfigured'})`, async () => {
+  const refresh = Promise.withResolvers<unknown>()
+  const initialState = stateFor(WORKTREE_A)
+  initialState.settings.provider = initialProvider
+  initialState.settings.repository = initialProvider === null ? null : { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  const freshState = stateFor(WORKTREE_A)
+  freshState.revision = 2
+  freshState.settings.provider = 'github'
+  freshState.settings.repository = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  freshState.settings.diagnostics = {
+    provider: 'github', ghAvailable: true, activeAccount: null, accounts: [], envTokenInProcess: false,
+    missingScopes: [], requiredScopes: ['repo'], hasKeyringFallback: false,
+    requiredHost: 'github.com', requiredHostAuthenticated: true
+  }
+  let latestState = initialState
+  const fake = fakeContext(WORKTREE_A, async (method) => {
+    if (method === 'quirky.reviews/state') return latestState
+    if (method === 'quirky.worktree/list') {
+      return [{ kind: 'git', id: WORKTREE_A, name: 'tree-a', path: WORKTREE_A, branch: 'main' }]
+    }
+    if (method === 'quirky.reviews/creationDefaults') {
+      return { defaults: DEFAULTS, repoId: 'fixture/repo', overrides: {} }
+    }
+    if (method === 'quirky.reviews/hostingSettingsRefresh') {
+      return refresh.promise.then((value) => {
+        latestState = freshState
+        return value
+      })
+    }
+    return {}
+  })
+  const surface = await mountSurface(fake, SETTINGS_VIEW)
+
+  expect(stateCalls(fake)).toHaveLength(1)
+  expect(fake.activeConnectionCount()).toBe(1)
+  expect(fake.calls.filter(({ method }) => method === 'quirky.reviews/hostingSettingsRefresh')).toHaveLength(1)
+  if (initialProvider === 'github') expect(surface.element.textContent).toContain('Checking GitHub readiness…')
+  expect(surface.element.textContent).not.toContain('GitHub diagnostics are unavailable.')
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await act(async () => refresh.resolve({ refreshed: true }))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+  expect(surface.element.textContent).toContain('Connected')
+  expect(surface.element.textContent).not.toContain('GitHub diagnostics are unavailable.')
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+  await surface.unmount()
+})
+}
+
+
 function commentState(draft = '') {
   const state = stateFor(WORKTREE_A)
   state.checks.lookup = null

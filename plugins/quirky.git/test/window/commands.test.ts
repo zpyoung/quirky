@@ -11,6 +11,7 @@ const { scratch } = isolateGitConfig()
 const SLOW = 120_000
 afterEach(shutdown)
 
+
 const rows = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => `${prefix} ${i}`).join('\n') + '\n'
 const numbered = (n: number, change: Record<number, string> = {}) =>
   Array.from({ length: n }, (_, i) => change[i + 1] ?? `line ${i + 1}`).join('\n') + '\n'
@@ -62,12 +63,20 @@ async function windowConnId(world: World): Promise<number> {
 }
 
 async function runOn<T>(world: World, id: string, args: Record<string, unknown> = {}): Promise<T> {
-  const response = await world.agent.callAny('ui.window.command.run', {
-    connId: await windowConnId(world),
-    id: `command:quirky.git/${id}`,
-    args
-  }) as { result: T }
-  return response.result
+  const commandId = `command:quirky.git/${id}`
+  try {
+    const response = await world.agent.callAny('ui.window.command.run', {
+      connId: await windowConnId(world),
+      id: commandId,
+      args
+    }) as { result: T }
+    return response.result
+  } catch (error) {
+    if (error instanceof Error && error.message === 'the window did not answer') {
+      console.log(`[headless window] ui.window.command.run ${commandId} did not answer`, error)
+    }
+    throw error
+  }
 }
 
 async function layoutFor(world: World, connId: number): Promise<unknown> {

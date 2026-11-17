@@ -283,7 +283,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
   const worktreePath = useWorktreePath(context, worktree)
-  const review = useReview(context, worktree)
+  const review = useReview(context, worktree, polled)
   const model = review.model
   const files = useMemo(() => model?.files ?? NO_FILES, [model])
   const refreshReview = useCallback(function refreshReview(): void {
@@ -2492,8 +2492,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     historyOpen
   })
   useEffect(() => {
-    report(JSON.parse(reportJson) as ScmReport)
-  }, [reportJson, report])
+    if (!review.pending && !compareData.pending) report(JSON.parse(reportJson) as ScmReport)
+  }, [reportJson, report, review.pending, compareData.pending])
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape' && ticks !== null) {
