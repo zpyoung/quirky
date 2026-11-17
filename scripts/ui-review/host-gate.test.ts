@@ -1,13 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CAPTURE_TIMEOUT_MS, REVIEW_TIMEOUT_MS } from './arguments'
 import { hostContractContext, serializeContractContext } from './host-contracts'
 import { runHostGate, type HostGateDependencies } from './host-gate'
 import { goldenFor } from './goldens'
+import { collectInventory } from '../ui-scoreboard/inventory'
+import { reviewManifest } from './review'
 import { SCORE_DIMENSIONS, THEMES, type CaptureManifest, type CaptureOptions, type CaptureTarget, type CaptureTheme, type ReviewCellKey, type ReviewReport, type ReviewerIdentity, type ReviewedCapture, type VisualAssessment } from './contracts'
 const HOST_TARGET_IDS = ['host:shell', 'host:scoped', 'host:popups', 'host:settings', 'host:palette'] as const
 const tempRoots: string[] = []
@@ -51,6 +53,42 @@ function putFile(path: string, bytes: Uint8Array | string): void {
 function putPrivateFile(path: string, bytes: Uint8Array | string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   writeFileSync(path, bytes, { flag: 'wx', mode: 0o600 })
+}
+function fakeHostGateReviewerSource(): string {
+  return `#!/usr/bin/env node
+const args = process.argv.slice(2)
+const identity = '▶ resolved google/fixture-vision (alias gemini)'
+if (args[0] === '--check') {
+  process.stderr.write(identity + '\\n')
+  process.exit(0)
+}
+const prompt = args[args.length - 1] || ''
+const contextMatch = /Trusted host contract context \\(canonical JSON; sha256=([a-f0-9]{64})\\):\\n([^\\n]+)/.exec(prompt)
+if (!contextMatch) {
+  process.stderr.write('trusted contract context missing\\n')
+  process.exit(4)
+}
+const context = JSON.parse(contextMatch[2])
+const assessment = {
+  targetVisible: true,
+  imagesRead: true,
+  scores: { palette: 90, typography: 90, spacing: 90, components: 90, hierarchy: 90 },
+  reasons: ['The target surface and both images were inspected.', 'Spacing and component styling are clearly compared.']
+}
+const contractAudit = {
+  contextSha256: contextMatch[1],
+  acknowledgedRuleIds: context.rules.map((rule) => rule.id).sort(),
+  reasonChecks: assessment.reasons.map((_, reasonIndex) => ({
+    reasonIndex,
+    contractIds: [],
+    conflictsWithContract: false,
+    affectsScore: false
+  })),
+  conflicts: []
+}
+process.stderr.write(identity + '\\n')
+process.stdout.write(JSON.stringify({ assessment, contractAudit }) + '\\n')
+`
 }
 
 type Fixture = {
@@ -570,6 +608,50 @@ describe('host gate', () => {
     expect(report.status).toBe('error')
     expect(report.cells.every((cell) => cell.median === null)).toBe(true)
   })
+
+  test('uses canonical artifact paths with a real reviewer behind a symlinked output parent', async () => {
+    const value = fixture()
+    const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+    const initialInventory = collectInventory(repoRoot)
+    value.root = repoRoot
+    value.manifest.commit = initialInventory.commit
+    for (const capture of value.manifest.captures) {
+      const path = goldenFor(capture.targetId, capture.theme, repoRoot)
+      capture.reference = { path, sha256: digest(readFileSync(path)) }
+    }
+
+    const scratch = root()
+    const realParent = join(scratch, 'real-output-parent')
+    const aliasParent = join(scratch, 'aliased-output-parent')
+    mkdirSync(realParent)
+    symlinkSync(realParent, aliasParent)
+    value.output = join(aliasParent, 'fresh-output')
+    const reviewerExecutable = join(scratch, 'fake-pi-watch.cjs')
+    writeFileSync(reviewerExecutable, fakeHostGateReviewerSource(), { mode: 0o700 })
+    chmodSync(reviewerExecutable, 0o700)
+
+    const harness = dependencies(value)
+    harness.deps.sourceSnapshot = () => {
+      const inventory = collectInventory(repoRoot)
+      return {
+        repoRoot: inventory.repoRoot,
+        commit: inventory.commit,
+        sourceDigest: inventory.sourceDigest,
+        dirty: inventory.dirty,
+        failures: inventory.failures
+      }
+    }
+    harness.deps.reviewManifest = (manifest, options) =>
+      reviewManifest(manifest, { ...options, reviewerExecutable, timeoutMs: 2_000 })
+
+    const exitCode = await runHostGate(args(value.output), harness.deps)
+    assertGateExit(value, exitCode, 0)
+    const report = reportAt(value)
+    expect(report.status).toBe('passed')
+    expect(report.cells).toHaveLength(10)
+    expect(report.cells.every((cell) => cell.median === 90)).toBe(true)
+    expect(report.attempts).toHaveLength(3)
+  }, 30_000)
 
   test('validates visibility, imagesRead, contract acknowledgment, per-reason audits and nonretryable conflicts', async () => {
     const invalid: Array<(report: ReviewReport) => void> = [

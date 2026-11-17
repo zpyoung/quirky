@@ -185,6 +185,44 @@ const contextBytes = contextMatch[2];
 const context = JSON.parse(contextBytes);
 const contextSha256 = createHash('sha256').update(contextBytes, 'utf8').digest('hex');
 const ruleIds = context.rules.map((rule) => rule.id).sort();
+const auditSchema = [
+  'type ContractAudit = {',
+  '  contextSha256: string',
+  '  acknowledgedRuleIds: string[]',
+  '  reasonChecks: {',
+  '    reasonIndex: number',
+  '    contractIds: string[]',
+  '    conflictsWithContract: boolean',
+  '    affectsScore: boolean',
+  '  }[]',
+  '  conflicts: {',
+  '    contractId: string',
+  '    reason: string',
+  '    affectsScore: boolean',
+  '  }[]',
+  '}'
+].join(String.fromCharCode(10));
+const auditBounds = [
+  'contextSha256 is the 64-character lowercase hexadecimal digest of the exact context bytes.',
+  'acknowledgedRuleIds contains every context rule ID exactly once in sorted order.',
+  'reasonChecks contains exactly one entry per assessment reason; assessment.reasons has 2 to 20 items, each at most 1000 characters.',
+  'reasonIndex is the corresponding zero-based assessment reason position, in order.',
+  'contractIds contains only unique known rule IDs; use an empty array when no rule applies.',
+  'conflicts has at most 20 entries, with unique known contractId values and nonempty reason strings of at most 1000 characters.',
+  'Return exactly one JSON object with exactly two keys: assessment and contractAudit.',
+  'Each conflicts entry records the exact text of the contradictory review reason, without paraphrase.',
+  'Do not use alternate field names or legacy aliases.',
+  'The unchanged visual rubric still scores actual defects; audit flags do not waive or penalize them.',
+  'A contract conflict is a review reason or recommended change that contradicts an approved rule, not an implementation defect.',
+  'If the captured implementation violates a rule, report a legitimate defect and set conflictsWithContract and affectsScore false; requesting a compliant repair is not a contract conflict.',
+  'If an older golden or reference suggests changing a compliant implementation against a rule, set conflictsWithContract true and affectsScore false.',
+  'AffectsScore must be false for a contract conflict; audit flags never change or correct the returned dimension scores.',
+  'Do not add keys beyond these shapes.'
+];
+if (!prompt.includes(auditSchema) || auditBounds.some((instruction) => !prompt.includes(instruction))) {
+  process.stderr.write('contractAudit schema missing from reviewer request' + String.fromCharCode(10));
+  process.exit(4);
+}
 let score = mode === 'bad-score' || mode === 'fenced-bad-score' ? 101 : mode === 'boundary' ? 85 : mode === 'low-dark' && metadataLine.includes('"theme":"dark"') ? 84 : 100;
 if (process.env.UI_REVIEW_FAKE_SCORE) score = Number(process.env.UI_REVIEW_FAKE_SCORE);
 const assessment = {
@@ -193,7 +231,9 @@ const assessment = {
   scores: { palette: score, typography: score, spacing: score, components: score, hierarchy: score },
   reasons: mode === 'usage-phrase-in-reason'
     ? ['Usage limit bars use the shared colors and clear labels.', 'The separate limit control uses compact spacing and clear labels.']
-    : ['The target surface and both images were inspected.', 'Spacing and component styling are compared against the approved theme.']
+    : mode === 'legitimate-defect'
+      ? ['The workspace panels are touching without the required host gaps and rounded corners, creating a monolithic surface.', 'The shell lacks distinct rail gaps around its content panels.']
+      : ['The target surface and both images were inspected.', 'Spacing and component styling are compared against the approved theme.']
 };
 const audit = {
   contextSha256,
@@ -206,6 +246,14 @@ const audit = {
   })),
   conflicts: []
 };
+if (mode === 'legitimate-defect') {
+  audit.reasonChecks = assessment.reasons.map((_, reasonIndex) => ({
+    reasonIndex,
+    contractIds: ['host-frame-ownership'],
+    conflictsWithContract: false,
+    affectsScore: false
+  }));
+}
 const conflictReason = process.env.UI_REVIEW_FAKE_CONFLICT_REASON || 'The golden suggests boxed tabs instead of the locked underline treatment.';
 const conflictId = process.env.UI_REVIEW_FAKE_CONFLICT_ID || ruleIds[0];
 
@@ -343,6 +391,20 @@ test('the request supplements the exact base prompt with hashed trusted context 
     .map((name) => readFileSync(join(reviewerDir, name), 'utf8')).join('\n')
   expect(log).toContain(reviewed.contractReview.contextSha256)
   expect(log).toContain('acknowledgedRuleIds')
+})
+
+test('review request declares the full contractAudit schema and bounds', async () => {
+  const report = await reviewManifest(manifest('host:palette'), options({
+    onlyCells: [{ targetId: 'host:palette', theme: 'dark' }]
+  }))
+
+  expect(report.status).toBe('passed')
+  const prompt = JSON.parse(readFileSync(promptLogFile, 'utf8').trim()) as string
+  expect(prompt).toContain('type ContractAudit = {')
+  expect(prompt).toContain('acknowledgedRuleIds: string[]')
+  expect(prompt).toContain('reasonIndex: number')
+  expect(prompt).toContain('conflictsWithContract: boolean')
+  expect(prompt).toContain('conflicts has at most 20 entries')
 })
 
 test.each([
@@ -506,6 +568,24 @@ test('an unpenalized conflict does not change an exact 85 score', async () => {
 
   expect(report.status).toBe('passed')
   expect(report.captures[0]!.score).toBe(85)
+})
+
+test('a legitimate implementation defect at 84 remains a failed score, not a contract conflict', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'legitimate-defect')
+  setEnv('UI_REVIEW_FAKE_SCORE', '84')
+  const report = await reviewManifest(manifest('host:shell'), options({
+    onlyCells: [{ targetId: 'host:shell', theme: 'dark' }]
+  }))
+
+  expect(report.status).toBe('failed')
+  expect(report.captures).toHaveLength(1)
+  expect(report.captures[0]!.score).toBe(84)
+  expect(report.captures[0]!.contractReview?.audit.reasonChecks).toEqual([
+    { reasonIndex: 0, contractIds: ['host-frame-ownership'], conflictsWithContract: false, affectsScore: false },
+    { reasonIndex: 1, contractIds: ['host-frame-ownership'], conflictsWithContract: false, affectsScore: false }
+  ])
+  expect(report.captures[0]!.contractReview?.audit.conflicts).toEqual([])
+  expect(report.issues?.some(({ code }) => code === 'contract-conflict')).toBe(false)
 })
 
 test('a validated penalized contract conflict invalidates even a score of 100 and preserves the exact contradiction', async () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises'
 import type { Stats } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,6 +66,7 @@ type HostGateIO = {
   readFile(path: string): Promise<Buffer>
   readdir(path: string): Promise<string[]>
   writeFile(path: string, contents: string | Uint8Array, options: FileWriteOptions): Promise<unknown>
+  realpath(path: string): Promise<string>
 }
 type CaptureRunner = (options: CaptureOptions) => Promise<CaptureManifest>
 type ReviewRunner = (manifest: CaptureManifest, options: ReviewOptions) => Promise<ReviewReport>
@@ -75,6 +76,7 @@ export interface HostGateDependencies {
   reviewManifest?: ReviewRunner
   sourceSnapshot?: (repoRoot: string) => SourceSnapshot | Promise<SourceSnapshot>
   mkdir?: HostGateIO['mkdir']
+  realpath?: HostGateIO['realpath']
   lstat?: HostGateIO['lstat']
   readFile?: HostGateIO['readFile']
   readdir?: HostGateIO['readdir']
@@ -203,6 +205,7 @@ const processSignals: HostGateSignalSource = {
 }
 const defaultIO: Omit<IO, 'repoRoot' | 'sourceSnapshot'> = {
   mkdir: async (path, options) => await mkdir(path, options),
+  realpath: async (path) => await realpath(path),
   lstat: async (path) => await lstat(path),
   readFile: async (path) => await readFile(path),
   readdir: async (path) => await readdir(path),
@@ -1077,6 +1080,7 @@ export async function runHostGate(argv: readonly string[], dependencies: HostGat
     }
     await io.mkdir(dirname(args.outputDir), { mode: 0o700, recursive: true })
     await createPrivateDirectory(args.outputDir, io)
+    args.outputDir = await io.realpath(args.outputDir)
   } catch (error) {
     io.stderr(`Cannot create fresh private host-gate output: ${errorMessage(error)}`)
     return 2
