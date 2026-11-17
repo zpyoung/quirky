@@ -383,6 +383,7 @@ export function Dialog({ dialog, context }: { dialog: HandoffDialog; context: Ui
   return (
     <SharedDialog
       open={snapshot.shown}
+      scrollBody
       title={DIALOG_TITLE}
       closeOnBackdrop={false}
       onClose={() => void context.executeCommand(COMMAND_CANCEL)}
