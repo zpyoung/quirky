@@ -86,10 +86,13 @@ async function readyFaultWindows(
     for (const [index, record] of pending) {
       const state = await world.control.callAny('ui.window.state', { connId: record.connId }, {
         timeoutMs: Math.max(1, Math.min(1_000, deadline - performance.now())),
+      }).catch((error: unknown) => {
+        if (error instanceof Error && /^RPC call timed out after \d+(?:\.\d+)? ms$/.test(error.message)) return undefined
+        throw error
       }) as {
         slots?: { id: string; shown: boolean; report?: { ready?: boolean; worktree?: string; error?: string | null } }[]
-      }
-      const slot = state.slots?.find(({ id }) => id === panel)
+      } | undefined
+      const slot = state?.slots?.find(({ id }) => id === panel)
       if (slot?.report?.error) throw new Error(`${kind} panel readiness: ${slot.report.error}`)
       if (slot?.shown && slot.report?.ready === true && slot.report.worktree === record.worktree) pending.delete(index)
       if (signal.aborted) throw new Error(`${kind} panel readiness was interrupted`)

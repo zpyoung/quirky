@@ -34,6 +34,114 @@ function isAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch { return false }
 }
 
+for (const kind of ['feedback', 'flood']) {
+  for (const failure of ['deadline timeout', 'transport error']) {
+    test(`${kind} readiness preserves its diagnostic after a ${failure}`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'quirky-soak-readiness-rpc-'))
+      const out = join(root, 'out')
+      const entrypoint = join(root, 'readiness.ts')
+      const resultPath = join(root, 'result.json')
+      writeFileSync(entrypoint, `
+import { mock, vi } from 'bun:test'
+import { writeFileSync } from 'node:fs'
+import * as day from ${JSON.stringify(join(repoRoot, 'scripts/soak/day.ts'))}
+const dayExports = { ...day }
+const opened = Promise.withResolvers()
+const records = [{ index: 0, connId: 1, worktree: 'a' }, { index: 1, connId: 2, worktree: 'b' }]
+let windowStopped = false
+let worldStopped = false
+let timedOutMs = null
+let calls = 0
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
+  startWorld: async () => ({
+    home: ${JSON.stringify(join(root, 'home'))},
+    fixtures: { worktrees: [{ id: 'a' }, { id: 'b' }] },
+    control: { callAny: async (method, params, options) => {
+      if (method === 'ui.tool.open') { opened.resolve(); return {} }
+      if (method !== 'ui.window.state') throw new Error('unexpected method: ' + method)
+      calls++
+      if (${JSON.stringify(failure)} === 'transport error') throw new Error('readiness transport disconnected')
+      if (options.timeoutMs < 1000) {
+        timedOutMs = options.timeoutMs
+        vi.advanceTimersByTime(options.timeoutMs)
+        throw new Error('RPC call timed out after ' + options.timeoutMs + ' ms')
+      }
+      return { slots: [] }
+    } },
+    stop: async () => { worldStopped = true }
+  })
+}))
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/windows.ts'))}, () => ({
+  chromiumPath: () => '/fixture/chromium',
+  openWindows: async () => ({
+    liveness: () => records,
+    finish: async () => ({ records, requests: [] }),
+    stop: async () => { windowStopped = true }
+  })
+}))
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/day.ts'))}, () => ({
+  ...dayExports,
+  applyPhase: async () => {}
+}))
+// main must load after the isolated setup stand-ins are registered
+const { main } = await import(${JSON.stringify(join(repoRoot, 'scripts/soak.ts'))})
+vi.useFakeTimers()
+let finished = false
+const outcome = main(['--fault', ${JSON.stringify(kind)}, '--windows', '2', '--minutes', '0.4', '--out', ${JSON.stringify(out)}])
+  .finally(() => { finished = true })
+try {
+  await opened.promise
+  for (let turn = 0; turn < 400 && !finished; turn++) {
+    for (let step = 0; step < 20; step++) await Promise.resolve()
+    if (!finished) vi.advanceTimersByTime(100)
+  }
+  if (!finished) throw new Error('readiness did not settle within the controlled deadline')
+  const code = await outcome
+  writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({ code, timedOutMs, calls, windowStopped, worldStopped }))
+  process.exitCode = code
+} finally {
+  vi.useRealTimers()
+}
+`)
+      const child = Bun.spawn([process.execPath, entrypoint], {
+        cwd: repoRoot,
+        env: createIsolatedRuntimeEnvironment(root, { repoRoot }),
+        stdout: 'pipe', stderr: 'pipe',
+      })
+      const output = new Response(child.stdout).text()
+      const errors = new Response(child.stderr).text()
+      // the child owns fake timers; the parent must still bound its OS process
+      const watchdog = setTimeout(() => child.kill('SIGTERM'), 10_000)
+      try {
+        const code = await child.exited
+        await output
+        const stderr = await errors
+        expect(code, stderr).toBe(2)
+        const result = JSON.parse(readFileSync(resultPath, 'utf8')) as {
+          code: number; timedOutMs: number | null; calls: number; windowStopped: boolean; worldStopped: boolean
+        }
+        expect(result).toMatchObject({ code: 2, windowStopped: true, worldStopped: true })
+        if (failure === 'deadline timeout') {
+          expect(result.timedOutMs).toBeGreaterThan(0)
+          expect(result.timedOutMs).toBeLessThan(1000)
+          expect(stderr).toContain(`${kind} panel readiness missing for a, b within 30000ms`)
+        } else {
+          expect(result.calls).toBe(1)
+          expect(stderr).toContain('readiness transport disconnected')
+          expect(stderr).not.toContain('panel readiness missing')
+        }
+        expect(existsSync(join(out, 'soak-report.json'))).toBe(false)
+      } finally {
+        clearTimeout(watchdog)
+        if (child.exitCode === null) child.kill('SIGTERM')
+        await child.exited
+        await Promise.all([output, errors])
+        rmSync(root, { recursive: true, force: true })
+      }
+    }, 30_000)
+  }
+}
+
 for (const count of [2, 3]) {
   test.skipIf(executable === null)(`rejects exactly 17 mounted-panel feedback refreshes with ${count} windows`, async () => {
     const out = mkdtempSync(join(tmpdir(), 'quirky-soak-feedback-'))
