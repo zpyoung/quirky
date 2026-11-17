@@ -830,6 +830,33 @@
   min-width: 0;
 }
 
+.ui-form-row--inline {
+  column-gap: var(--ui-space-8);
+  display: grid;
+  grid-template-columns: var(--ui-checkbox-size) minmax(0, 1fr);
+}
+
+.ui-form-row--inline > .ui-form-row__label {
+  grid-column: 2;
+  grid-row: 1;
+  overflow-wrap: anywhere;
+}
+
+.ui-form-row--inline > .ui-form-row__control {
+  align-self: start;
+  display: flex;
+  font-size: var(--ui-font-label);
+  line-height: 1.35;
+  grid-column: 1;
+  grid-row: 1;
+  margin-top: calc((1lh - var(--ui-checkbox-size)) / 2);
+}
+
+.ui-form-row--inline > .ui-help-text,
+.ui-form-row--inline > .ui-error-text {
+  grid-column: 2;
+}
+
 .ui-tool-panel-frame {
   background: var(--ui-surface);
   border: var(--ui-border-width) solid var(--ui-border);
