@@ -27,7 +27,7 @@ const ACTIONS = [
   { action: 'reviewConversation', title: 'Review conversation' },
   { action: 'branchName', title: 'Branch name' },
   { action: 'conversationName', title: 'Conversation name' }
-] as const
+]
 const WORKTREE = '/fixture/feature'
 const executable = browserExecutable()
 
@@ -43,10 +43,11 @@ type BrowserTestWindow = typeof window & {
     toasts: FixtureToast[]
     pending: number
     mounted: boolean
+    failures: Record<string, string>
     mount(options?: FixtureOptions): void
     cleanup(): void
     setSetting(name: string, value: unknown): void
-    emit(event: { type: string; id?: string }): void
+    emit(event: { type: string; id?: string; value?: unknown }): void
   }
 }
 
@@ -394,6 +395,129 @@ for (const theme of ['dark', 'light'] as const) {
         expect(recipeCalls).toEqual(ACTIONS.map(({ action }) => ({ worktree: WORKTREE, action })))
       } finally {
         await context.close()
+      }
+    }, 60_000)
+  }
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  for (const width of [280, 800]) {
+    test(`AI switch inline geometry and native interactions: ${theme}, ${width}px`, async () => {
+      const { context, page, pageErrors } = await openPage(theme, width)
+      try {
+        await page.evaluate(() => (window as BrowserTestWindow).__aiSettingsFixture.mount())
+        await page.waitForFunction(() => {
+          const fixture = (window as BrowserTestWindow).__aiSettingsFixture
+          return fixture.pending === 0 &&
+            document.querySelectorAll('[data-action] input[aria-label$=" model"]').length === 10 &&
+            document.querySelectorAll('[role="status"]').length === 0
+        })
+        const toggle = page.getByRole('switch', { name: 'Show Source Control AI actions', exact: true })
+        expect(await toggle.count()).toBe(1)
+        expect(await toggle.isChecked()).toBe(true)
+        const geometry = await toggle.evaluate((element) => {
+          const input = element as HTMLInputElement
+          const row = input.closest('.ui-form-row')!
+          const label = row.querySelector<HTMLLabelElement>('label')!
+          const inputRect = input.getBoundingClientRect()
+          const labelRect = label.getBoundingClientRect()
+          const rootRect = document.getElementById('settings-root')!.getBoundingClientRect()
+          const labelLineHeight = parseFloat(getComputedStyle(label).lineHeight)
+          return {
+            centerDifference: Math.abs(inputRect.top + inputRect.height / 2 - (labelRect.top + labelLineHeight / 2)),
+            gap: labelRect.left - inputRect.right,
+            width: inputRect.width,
+            height: inputRect.height,
+            sizeToken: parseFloat(getComputedStyle(input).getPropertyValue('--ui-checkbox-size')),
+            withinForm: inputRect.left >= rootRect.left && labelRect.right <= rootRect.right &&
+              inputRect.right <= rootRect.right && labelRect.left >= rootRect.left,
+            id: input.id,
+            labelFor: label.htmlFor,
+            label: label.textContent,
+            type: input.type,
+            inlineRows: document.querySelectorAll('.ui-form-row--inline').length,
+            otherRowsStacked: [...document.querySelectorAll('.ui-form-row')].filter((candidate) => candidate !== row)
+              .every((candidate) => {
+                const style = getComputedStyle(candidate)
+                return style.display === 'flex' && style.flexDirection === 'column'
+              })
+          }
+        })
+        expect(geometry.centerDifference).toBeLessThanOrEqual(1)
+        expect(Math.abs(geometry.gap - 8)).toBeLessThanOrEqual(0.5)
+        expect(geometry.width).toBe(geometry.sizeToken)
+        expect(geometry.height).toBe(geometry.sizeToken)
+        expect(geometry.withinForm).toBe(true)
+        expect(geometry.id).not.toBe('')
+        expect(geometry.labelFor).toBe(geometry.id)
+        expect(geometry.label).toBe('Show Source Control AI actions')
+        expect(geometry.type).toBe('checkbox')
+        expect(geometry.inlineRows).toBe(1)
+        expect(geometry.otherRowsStacked).toBe(true)
+
+        const label = page.locator('.ui-form-row__label').filter({ hasText: /^Show Source Control AI actions$/ })
+        const settingCalls = () => page.evaluate(() =>
+          (window as BrowserTestWindow).__aiSettingsFixture.calls.filter((call) => call.method === 'setting.set').map((call) => call.params)
+        )
+        await label.click()
+        await page.waitForFunction(() => {
+          const input = document.querySelector<HTMLInputElement>('input[role="switch"]')
+          return input?.checked === false && (window as BrowserTestWindow).__aiSettingsFixture.pending === 0
+        })
+        expect(await settingCalls()).toEqual([{ id: 'setting:quirky.git/ai-enabled', value: false }])
+
+        await toggle.focus()
+        await toggle.press('Space')
+        await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[role="switch"]')?.checked === true)
+        expect(await settingCalls()).toEqual([
+          { id: 'setting:quirky.git/ai-enabled', value: false },
+          { id: 'setting:quirky.git/ai-enabled', value: true }
+        ])
+        const focus = await toggle.evaluate((input) => {
+          const style = getComputedStyle(input)
+          return {
+            active: document.activeElement === input,
+            visible: input.matches(':focus-visible'),
+            width: parseFloat(style.outlineWidth),
+            style: style.outlineStyle,
+            color: style.outlineColor
+          }
+        })
+        expect(focus.active).toBe(true)
+        expect(focus.visible).toBe(true)
+        expect(focus.width).toBeGreaterThan(0)
+        expect(focus.style).not.toBe('none')
+        expect(focus.color).not.toBe('rgba(0, 0, 0, 0)')
+
+        await page.evaluate(() => {
+          (window as BrowserTestWindow).__aiSettingsFixture.failures['setting.set'] = 'setting refused'
+        })
+        await label.click()
+        await page.waitForFunction(() => {
+          const fixture = (window as BrowserTestWindow).__aiSettingsFixture
+          return fixture.pending === 0 && fixture.toasts.length === 1 &&
+            document.querySelector<HTMLInputElement>('input[role="switch"]')?.checked === true
+        })
+        expect(await settingCalls()).toEqual([
+          { id: 'setting:quirky.git/ai-enabled', value: false },
+          { id: 'setting:quirky.git/ai-enabled', value: true },
+          { id: 'setting:quirky.git/ai-enabled', value: false }
+        ])
+        expect(await page.evaluate(() => (window as BrowserTestWindow).__aiSettingsFixture.toasts)).toEqual([{
+          title: 'Could not change the setting',
+          message: 'setting refused',
+          options: { kind: 'error' }
+        }])
+        await page.evaluate(() => {
+          const fixture = (window as BrowserTestWindow).__aiSettingsFixture
+          fixture.setSetting('ai-enabled', false)
+          fixture.emit({ type: 'setting.changed', id: 'setting:quirky.git/ai-enabled', value: false })
+        })
+        await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[role="switch"]')?.checked === false)
+        expect(await settingCalls()).toHaveLength(3)
+      } finally {
+        await context.close()
+        expect(pageErrors).toEqual([])
       }
     }, 60_000)
   }
