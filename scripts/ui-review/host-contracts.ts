@@ -36,7 +36,7 @@ const RULE_SOURCES = {
   'host-underline-tabs': 'g3-62 scenarios 1 and 8; packages/ui/src/design-system/components.css (tool-panel header tabs); docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md (saved-view tabs)',
   'palette-retained-spacing': 'g3-62 scenario 12',
   'palette-selected-colors': 'g3-62 scenario 7',
-  'worktrees-approved-redesign': 'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md, Design direction and SC-2 through SC-4'
+  'worktrees-approved-redesign': 'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md, Design direction and SC-2 through SC-4; docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md AC7 (orchestration rows)'
 } as const
 
 function compareRuleIds(left: ContractRule, right: ContractRule): number {
@@ -70,7 +70,7 @@ export function hostContractContext(target: CaptureTarget, theme: CaptureTheme):
     {
       id: 'worktrees-approved-redesign',
       source: RULE_SOURCES['worktrees-approved-redesign'],
-      text: 'The approved Worktrees redesign supersedes the older shell golden for this component. Worktrees rows are single-line 26px, with 4px gaps and 12px indentation; selection is neutral var(--ui-selected) with a bold name, not blue. Saved-view tabs, filter and changed lines, header actions, hierarchy, counts, and rail attention badges are approved capabilities. Their presence or one-line density is not a defect. Overflow, illegible names, missing controls, and incorrect implementation of these rules remain defects. This rule does not apply Worktrees row anatomy to Remote workspaces.'
+      text: 'The approved Worktrees redesign supersedes the older shell golden for this component. Worktree checkout rows (activity mark, worktree name, up to two tag chips plus +N, and one right-side fact) are single-line 26px, with 4px gaps and 12px indentation; selection is neutral var(--ui-selected) with a bold name, not blue. Saved-view tabs, filter and changed lines, header actions, hierarchy, counts, and rail attention badges are approved capabilities. Their presence or one-line density is not a defect. Orchestration session rows nested under a worktree are not checkout rows: coordinator rows (Coordinator followed by a session name, Orphaned coordinator, Coordinator unavailable) and worker rows (a task name, or Worker assignment unverified) are shared list rows with a title line above a muted status description at a 34px minimum, and at narrow widths they wrap their full text onto further lines instead of clipping it. That second line, the 34px height and that wrapping are not defects, and the single-line 26px checkout anatomy does not apply to them. Overflow that clips or overlaps text, illegible names, missing controls, and incorrect implementation of these rules remain defects in either kind of row. This rule does not apply Worktrees row anatomy to Remote workspaces.'
     }
   ].sort(compareRuleIds)
 
