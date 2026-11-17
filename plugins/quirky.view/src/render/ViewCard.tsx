@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Badge, Button, Dialog } from '@quirky/ui'
-import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import type { ViewPlacement, ViewRecord } from '../core/catalog'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
+import { RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import type { ViewPlacement, ViewRecord } from '../core/contract'
 import { RenderNode } from './RenderNode'
 import { RuntimeContext, type ViewRuntime } from './runtime'
+import { ACTION_COMMAND_ID, CONTROL_COMMAND_ID, MOVE_COMMAND_ID, type ViewUiInstance } from '../control'
 import { COLUMN, MONO, MUTED, ROW } from './styles'
 
 export const RENDER_VIEW_ID = 'view:quirky.view/render'
@@ -60,7 +61,9 @@ const RECORD: CSSProperties = { ...MUTED, margin: 0, padding: 'var(--ui-space-6)
 
 type Props = {
   context: UiPluginContext
+  instance: ViewUiInstance
   record: ViewRecord
+  link: string | null
   agent?: string
   /** Draws the card's own border; the pane already has a frame. */
   framed?: boolean
@@ -73,32 +76,33 @@ type Props = {
  * the transcript and the Views pane. Buttons and fields send actions to the agent, and a markdown
  * link asks before it opens.
  */
-export function ViewCard({ context, record, agent, framed = true, inPane = false }: Props) {
+export function ViewCard({ context, instance, record, link, agent, framed = true, inPane = false }: Props) {
   const { viewId } = record
-  const [link, setLink] = useState<string | null>(null)
   const [moving, setMoving] = useState(false)
 
-  const runtime = useMemo<ViewRuntime>(
-    () => ({
-      send: async (name, source, data) => {
-        try {
-          await context.call('quirky.view/action', { viewId, name, source, ...(data === undefined ? {} : { data }) })
-          return true
-        } catch (error) {
-          context.toast('Could not send the action', errorText(error))
-          return false
-        }
-      },
-      openLink: setLink
-    }),
-    [context, viewId]
-  )
+  const runtime = useMemo<ViewRuntime>(() => {
+    const send: ViewRuntime['send'] = async (name, source, data) => {
+      try {
+        await context.executeCommand(ACTION_COMMAND_ID, { viewId, name, source, ...(data === undefined ? {} : { data }) }, { activateOwner: false })
+        return true
+      } catch (error) {
+        context.toast('Could not send the action', errorText(error))
+        return false
+      }
+    }
+    const onLink: ViewRuntime['openLink'] = (href) => {
+      void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-preview', viewId, href }, { activateOwner: false }).catch((error: unknown) => {
+        context.toast('Could not open link', errorText(error))
+      })
+    }
+    return { send, openLink: onLink }
+  }, [context, instance, viewId])
 
   const target: ViewPlacement = record.placement === 'pane' ? 'inline' : 'pane'
   const move = async () => {
     setMoving(true)
     try {
-      await context.call('quirky.view/move', { viewId, placement: target })
+      await context.executeCommand(MOVE_COMMAND_ID, { viewId, placement: target }, { activateOwner: false })
     } catch (error) {
       context.toast('Could not move the view', errorText(error))
     } finally {
@@ -106,28 +110,30 @@ export function ViewCard({ context, record, agent, framed = true, inPane = false
     }
   }
 
-  const openLink = async () => {
-    const href = link
-    setLink(null)
-    if (href === null) return
+  const cancelLink = () => {
+    void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-cancel', viewId }, { activateOwner: false }).catch((error: unknown) => {
+      context.toast('Could not open link', errorText(error))
+    })
+  }
+
+  const confirmLink = async () => {
     try {
-      await context.call('quirky.terminal/openExternal', { target: href })
+      await context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-confirm', viewId }, { activateOwner: false })
     } catch (error) {
       context.toast('Could not open link', errorText(error))
     }
   }
 
   if (record.closed) {
-    return <p data-view-record={viewId} role="status" style={RECORD}>{record.title} closed</p>
+    return <div data-view-record={viewId} role="status" style={RECORD}><NoticeLine>{record.title} closed</NoticeLine></div>
   }
 
   if (record.placement === 'pane' && !inPane) {
     return (
-      <div data-view-record={viewId} role="status" style={{ ...ROW, justifyContent: 'space-between', ...RECORD }}>
-        <span>{record.title} is in the Views pane</span>
-        <div style={ROW}>
-          <Button disabled={moving} onClick={() => void move()}>Move inline</Button>
-        </div>
+      <div data-view-record={viewId} role="status" style={RECORD}>
+        <NoticeLine actions={[{ label: 'Move inline', disabled: moving, onAction: () => void move() }]}>
+          {record.title} is in the Views pane
+        </NoticeLine>
       </div>
     )
   }
@@ -151,11 +157,11 @@ export function ViewCard({ context, record, agent, framed = true, inPane = false
       <Dialog
         open={link !== null}
         title="Open this link?"
-        onClose={() => setLink(null)}
+        onClose={cancelLink}
         actions={
           <>
-            <Button onClick={() => setLink(null)}>Cancel</Button>
-            <Button variant="primary" onClick={() => void openLink()}>Open link</Button>
+            <Button onClick={cancelLink}>Cancel</Button>
+            <Button variant="primary" onClick={() => void confirmLink()}>Open link</Button>
           </>
         }
       >
@@ -167,38 +173,91 @@ export function ViewCard({ context, record, agent, framed = true, inPane = false
 }
 
 /** Loads the view `viewId` and keeps it fresh: reloaded when the daemon reports a change to it and when the connection returns. */
-export function ViewCardView({ context, viewId }: { context: UiPluginContext; viewId: string }) {
+export function ViewCardView({ context, instance, viewId }: { context: UiPluginContext; instance: ViewUiInstance; viewId: string }) {
   const [record, setRecord] = useState<ViewRecord | null>(null)
+  const recordRef = useRef<ViewRecord | null>(null)
   const alive = useRef(true)
+  const requestId = useRef(0)
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed' | 'missing'>('loading')
+  const [failure, setFailure] = useState<string | null>(null)
+  const [link, setLink] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    const request = ++requestId.current
     try {
-      const next = (await context.call('quirky.view/get', { viewId })) as ViewRecord | null
-      if (alive.current && next) setRecord(next)
+      const next = (await context.call('quirky.view/get', { viewId })) as ViewRecord | null | undefined
+      if (!alive.current || request !== requestId.current) return
+      const previous = recordRef.current
+      if (previous?.closed !== next?.closed || previous?.placement !== next?.placement ||
+        JSON.stringify(previous?.spec) !== JSON.stringify(next?.spec)) instance.update({ pendingLink: null })
+      recordRef.current = next ?? null
+      setRecord(next ?? null)
+      setFailure(null)
+      const nextPhase = next ? 'ready' : 'missing'
+      setPhase(nextPhase)
+      instance.update({ phase: nextPhase, activeViewId: next?.viewId ?? null })
     } catch (error) {
-      context.log(`could not load view ${viewId}: ${errorText(error)}`)
+      if (!alive.current || request !== requestId.current) throw error
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.NotFound) {
+        recordRef.current = null
+        setRecord(null)
+        setFailure(null)
+        setPhase('missing')
+        instance.update({ phase: 'missing', activeViewId: null })
+        return
+      }
+      setPhase('failed')
+      setFailure(errorText(error))
+      instance.update({ phase: 'failed' })
+      throw error
     }
-  }, [context, viewId])
+  }, [context, instance, viewId])
 
   useEffect(() => {
     alive.current = true
-    void load()
+    recordRef.current = null
+    setRecord(null)
+    setPhase('loading')
+    setFailure(null)
+    setLink(null)
+    instance.update({ phase: 'loading', activeViewId: null, tabs: [], pendingLink: null })
+    instance.setHandlers({
+      refresh: load,
+      previewLink: (href) => {
+        const current = recordRef.current
+        if (!current || current.closed || current.placement !== 'inline') throw new Error('View link preview is not available for this mount.')
+        setLink(href)
+      },
+      cancelLink: () => setLink(null)
+    })
+    void load().catch(() => {})
     const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
-      if (eventData(event, 'quirky.view/changed')?.viewId === viewId) void load()
+      if (eventData(event, 'quirky.view/changed')?.viewId === viewId) void load().catch(() => {})
     })
     const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void load()
+      if (status === 'connected') void load().catch(() => {})
     })
     return () => {
       alive.current = false
+      ++requestId.current
+      instance.clearHandlers('refresh', 'previewLink', 'cancelLink')
       unsubscribeEvents()
       unsubscribeConnection()
     }
-  }, [context, viewId, load])
+  }, [context, instance, viewId, load])
 
   const agent = useAgent(context, record?.sessionId)
-  if (!record) return null
-  return <ViewCard context={context} record={record} agent={agent} />
+  const retry = () => {
+    void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'refresh' }, { activateOwner: false }).catch(() => {})
+  }
+  if (phase === 'loading') return <NoticeLine>Loading view…</NoticeLine>
+  if (phase === 'missing') return <EmptyState message="This view is no longer available." />
+  return (
+    <>
+      {failure !== null && <InlineError message={`Could not load view: ${failure}`} action={{ label: 'Retry', onAction: retry }} />}
+      {record && <ViewCard context={context} instance={instance} record={record} link={link} agent={agent} />}
+    </>
+  )
 }
 
 /** Reads the view input, which is untrusted until it has a `viewId`. */

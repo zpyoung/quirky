@@ -378,9 +378,10 @@ test('fixture view inputs carry the selected worktree, transcript, loop, remote,
     transcript: { sessionId: 'transcript-session', transcriptPath: '/fixture/transcript.jsonl' },
     loop: { loopId: 'loop-1' },
     remote: { mirrorId: 'remote_mirror', dispatchId: 'ctx_fixture', stop: async () => [] },
-    cellTerminal: { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    cellTerminal: { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' },
+    view: { sessionId: 'view-session', inlineViewId: 'view-inline', paneViewIds: ['view-pane-one', 'view-pane-two'] as [string, string] }
   }
-  const input = (id: string, plugin: string, extraInput = extra) => fixtureViewInput(
+  const input = (id: string, plugin: string, extraInput: Parameters<typeof fixtureViewInput>[5] = extra) => fixtureViewInput(
     fixtures,
     target(id, plugin, 'view'),
     null,
@@ -390,6 +391,7 @@ test('fixture view inputs carry the selected worktree, transcript, loop, remote,
   )
 
   expect(input('view:quirky.reviews/create', 'quirky.reviews')).toMatchObject({ worktree: 'ready-worktree' })
+  expect(input('view:quirky.reviews/create', 'quirky.reviews', {})).toMatchObject({ worktree: 'ready-worktree' })
   expect(input('view:quirky.session-info/transcript', 'quirky.session-info')).toMatchObject({ session: 'transcript-session' })
   expect(input('view:quirky.loops/loop', 'quirky.loops')).toMatchObject({ loopId: 'loop-1' })
   expect(input('view:quirky.orchestration/remote-worker-output', 'quirky.orchestration')).toEqual({ dispatchId: 'ctx_fixture' })
@@ -397,7 +399,51 @@ test('fixture view inputs carry the selected worktree, transcript, loop, remote,
   expect(input('view:quirky.accounts/session-accessory', 'quirky.accounts')).toMatchObject({
     session: 'cell-session', sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane'
   })
+  expect(input('view:quirky.view/render', 'quirky.view')).toEqual({
+    worktree: 'worktree-1', worktreeId: 'worktree-1', workspace: 'worktree-1', repo: 'repo-1', repoId: 'repo-1',
+    viewId: 'view-inline'
+  })
+  expect(input('view:quirky.view/pane', 'quirky.view')).toEqual({
+    worktree: 'worktree-1', worktreeId: 'worktree-1', workspace: 'worktree-1', repo: 'repo-1', repoId: 'repo-1',
+    session: 'view-session'
+  })
 })
+
+test('view fixture input requires a fixture for each quirky.view surface', () => {
+  const fixtures = { primaryWorktree: { id: 'worktree-1' }, repo: { id: 'repo-1' } } as Parameters<typeof fixtureViewInput>[0]
+
+  expect(() => fixtureViewInput(
+    fixtures,
+    target('view:quirky.view/render', 'quirky.view', 'view'),
+    null,
+    null,
+    null,
+    {}
+  )).toThrow('a view fixture is required for the render view')
+  expect(() => fixtureViewInput(
+    fixtures,
+    target('view:quirky.view/pane', 'quirky.view', 'view'),
+    null,
+    null,
+    null,
+    {}
+  )).toThrow('a view fixture is required for the pane view')
+})
+test('view fixture setup failures fail their target cell instead of capturing an empty view', async () => {
+  const fake = buildFakeCaptureRuntime()
+  const render = target('view:quirky.view/render', 'quirky.view', 'view')
+  const failure = 'view fixture input: provider startup timed out'
+  fake.runtime.fixtureInputErrors = new Map([[render.id, failure]])
+  fake.runtime.manifest.failures.push(failure)
+  try {
+    const { capture } = await captureTargetCell(fake.runtime, render, 'dark')
+    expect(capture).toMatchObject({ status: 'failed', image: null, error: failure })
+    expect(fake.calls.some((call) => call.method === 'ui.view.open' && call.params?.id === render.id)).toBe(false)
+  } finally {
+    fake.cleanup()
+  }
+})
+
 
 describe('bounded overlay opening', () => {
   test('resolves as soon as the overlay is visible without awaiting its decision promise', async () => {
@@ -1219,7 +1265,10 @@ mock.module('@quirky/protocol/node', () => ({
   readRuntime() { return current.runtime }
 }))
 
+const actualFixtures = await import(modulePath('scripts/ui-review/fixtures.ts'))
+
 mock.module(modulePath('scripts/ui-review/fixtures.ts'), () => ({
+  ...actualFixtures,
   createIsolatedRuntimeEnvironment(home: string, settings: { repoRoot: string; uiDir: string }) {
     current.events.push('environment:base')
     current.baseEnvironment = {

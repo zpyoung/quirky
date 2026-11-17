@@ -453,6 +453,8 @@ describe('plugin sample validation', () => {
   const capture = captureEvidence(target, 'dark')
   // the pre-g3-78 rule text preserves the context whose reviews must be rejected
   const LEGACY_WORKTREES_TEXT = 'The approved Worktrees redesign supersedes the older shell golden for this component. Worktrees rows are single-line 26px, with 4px gaps and 12px indentation; selection is neutral var(--ui-selected) with a bold name, not blue. Saved-view tabs, filter and changed lines, header actions, hierarchy, counts, and rail attention badges are approved capabilities. Their presence or one-line density is not a defect. Overflow, illegible names, missing controls, and incorrect implementation of these rules remain defects. This rule does not apply Worktrees row anatomy to Remote workspaces.'
+  // the pre-g3-79 rule text preserves the context whose reviews must be rejected
+  const LEGACY_HOST_FRAME_TEXT = "Applies to every full-window capture. Distinguish the named contribution from surrounding shell chrome. Theme token values for dark: --ui-surface: #16171b; --ui-rail: #0c0d0f; --ui-selected: #22242b; --ui-accent: #7c8cff; --ui-border: #24262c; --ui-text: #eceef2; --ui-muted: #7c828d. These hex values are checked-in token defaults; use the resolved --ui-text and --ui-muted foreground tokens, not a blanket fixed runtime foreground requirement. In light mode a white content surface is valid; the rail and gaps use the separate rail token. Missing actual host gaps or corners remain host defects and must not be described as a defect in a plugin's row stylesheet. Do not waive a genuinely all-white frame or touching panels. Legitimate content differences and the documented offline absence of hosted Checks data do not authorize inventing or removing product controls."
 
   test('accepts one exact five-dimension mean with trusted context and an unpenalized conflict', () => {
     const original = reviewerSample(target, 'dark', 82.4, { capture })
@@ -553,6 +555,27 @@ describe('plugin sample validation', () => {
       ...currentContext,
       rules: currentContext.rules.map(rule =>
         rule.id === 'worktrees-approved-redesign' ? { ...rule, text: LEGACY_WORKTREES_TEXT } : rule
+      )
+    }
+    const legacyDigest = sha256(serializeContractContext(legacyContext))
+    const currentDigest = sha256(serializeContractContext(currentContext))
+    const sample = reviewerSample(target, 'dark', 90, { capture })
+
+    sample.contractReview!.contextSha256 = legacyDigest
+    sample.contractReview!.audit.contextSha256 = legacyDigest
+    expect(validatePluginSample(sample, capture, target, AUTHOR_FAMILY, REVIEWER)?.code).toBe('evidence-changed')
+
+    sample.contractReview!.contextSha256 = currentDigest
+    sample.contractReview!.audit.contextSha256 = currentDigest
+    expect(validatePluginSample(sample, capture, target, AUTHOR_FAMILY, REVIEWER)).toBeNull()
+  })
+
+  test('rejects a review made under the pre-g3-79 host frame context', () => {
+    const currentContext = hostContractContext(target, 'dark')
+    const legacyContext = {
+      ...currentContext,
+      rules: currentContext.rules.map(rule =>
+        rule.id === 'host-frame-ownership' ? { ...rule, text: LEGACY_HOST_FRAME_TEXT } : rule
       )
     }
     const legacyDigest = sha256(serializeContractContext(legacyContext))

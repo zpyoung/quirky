@@ -19,6 +19,26 @@ Events: `changed {sessionId, viewId}` after every open, update, close and move, 
 
 CLI: `quirky view open --spec @file.json [--placement inline|pane]`, `update --id <viewId> --spec @file.json`, `close --id <viewId>` and `wait --id <viewId> [--timeout-ms N]`. A refused spec exits 2 with `path: message; ...` on stderr. Outside an agent session the commands exit 1. `quirky view` with no arguments prints the usage and the catalog guide from `src/core/catalog.ts`.
 
+UI commands use the mounted window's authority; they don't change the agent CLI's session requirements. Discover mounted cards and panes, including embedded cards, before addressing a control:
+
+```sh
+quirky ui run command:quirky.view/control --args '{"action":"state"}' --json
+quirky ui run command:quirky.view/control --args '{"instance":"<instance>","action":"select-tab","viewId":"<viewId>"}' --json
+quirky ui run command:quirky.view/move --args '{"viewId":"<viewId>","placement":"pane"}' --json
+quirky ui run command:quirky.view/action --args '{"viewId":"<viewId>","name":"go","source":"button"}' --json
+```
+
+The API equivalent is `ui.command.run({id:'command:quirky.view/action',args:{viewId,name,source,data}})`. Move accepts `inline` or `pane`; action data is optional.
+
+`control state` returns `{instances:[...]}` with each mount's opaque `instance`, surface, target, active view, phase, tabs and pending link. Other controls require that exact instance:
+
+- `refresh` retries its read.
+- `select-tab` and `dismiss-tab` take an open pane `viewId`. Dismissal only hides the tab locally until its record changes.
+- `link-preview` takes the active `viewId` and an absolute HTTP(S) `href`, opening a confirmation without opening the URL.
+- `link-cancel` and `link-confirm` take the active `viewId`. Confirm uses only the pending URL; it accepts no replacement URL.
+
+Unmounting invalidates the instance. A changed active card or spec clears link confirmation. Invalid commands reject before effects; draft edits stay local until Send or form submission.
+
 Mobile has no access: no `quirky.view` method is in the mobile authorization list.
 
 ## Catalog

@@ -1,13 +1,14 @@
 import { afterEach, expect, test } from 'bun:test'
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import {
   closeCaptureTerminalFixture,
   createCaptureTerminalFixture,
   createIsolatedRuntimeEnvironment,
   createLoopFixture,
   createTranscriptFixture,
+  createViewFixture,
   prepareCaptureFixtureHome,
   prepareProviderExecutables,
   registerCaptureFixtures,
@@ -20,9 +21,314 @@ import {
 import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
 import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createProcessRunner } from '../../packages/process/src/api'
-import type { ProcessRunner } from '@quirky/protocol'
+import { QuirkyClient, type ProcessRunner } from '@quirky/protocol'
 import { resolveCodexThroughLoginShell } from '../../plugins/quirky.structured/codex-path'
 
+import bundleSizeSpec from '../../plugins/quirky.view/test/fixtures/bundle-size.json'
+
+const fixtureProcesses: Array<Bun.Subprocess<'ignore', 'ignore', 'ignore'>> = []
+let viewFixtureSessionNumber = 0
+
+const VIEW_FIXTURE_CLI = String.raw`
+import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+
+const args = process.argv.slice(2)
+const logPath = process.env.VIEW_FIXTURE_CLI_LOG
+const mode = process.env.VIEW_FIXTURE_CLI_MODE
+const readRows = () => existsSync(logPath) ? readFileSync(logPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : []
+const flagValue = name => {
+  const index = args.indexOf(name)
+  if (index >= 0) return args[index + 1]
+  const joined = args.find(value => value.startsWith(name + '='))
+  return joined?.slice(name.length + 1)
+}
+const rows = readRows()
+const isOpen = args[0] === 'view' && args[1] === 'open'
+const isList = args[0] === 'api' && args[1] === 'call' && args[2] === 'quirky.view/list'
+let spec
+if (isOpen) {
+  const raw = flagValue('--spec')
+  const source = raw?.startsWith('@') ? readFileSync(raw.slice(1), 'utf8') : raw
+  spec = JSON.parse(source)
+}
+const placement = isOpen ? flagValue('--placement') ?? 'inline' : undefined
+const row = { kind: isOpen ? 'open' : isList ? 'list' : 'other', args, spec, placement }
+appendFileSync(logPath, JSON.stringify(row) + '\n')
+
+if (isOpen) {
+  const index = rows.filter(candidate => candidate.kind === 'open').length
+  if (mode === 'nonzero' && index === 0 || mode === 'nonzero-second-open' && index === 1) {
+    process.stderr.write('fixture CLI stand-in failed')
+    process.exitCode = 7
+  } else if (mode === 'malformed') {
+    process.stdout.write('not JSON')
+  } else if (mode === 'missing-id') {
+    process.stdout.write('{}')
+  } else {
+    process.stdout.write(JSON.stringify({ viewId: ['view_000000000001', 'view_000000000002', 'view_000000000003'][index] }))
+  }
+} else if (isList) {
+  if (mode === 'invalid-list' || flagValue('--session') !== process.env.QUIRKY_SESSION_ID) {
+    process.stdout.write('[]')
+  } else {
+    const opened = [...rows, row].filter(candidate => candidate.kind === 'open')
+    const ids = ['view_000000000001', 'view_000000000002', 'view_000000000003']
+    const records = opened.map((candidate, index) => ({
+      viewId: ids[index],
+      sessionId: process.env.QUIRKY_SESSION_ID,
+      title: candidate.spec.title,
+      spec: { root: candidate.spec.root, title: candidate.spec.title },
+      placement: candidate.placement,
+      movedByUser: false,
+      updates: 0,
+      createdAt: '2026-11-17T12:00:00.000Z',
+      updatedAt: '2026-11-17T12:00:00.000Z',
+      closed: false
+    }))
+    process.stdout.write(JSON.stringify(records))
+  }
+} else {
+  process.stdout.write('{}')
+}
+`
+
+function readJsonLines(path: string): Array<Record<string, unknown>> {
+  return existsSync(path)
+    ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>)
+    : []
+}
+
+async function prepareViewFixtureHome(): Promise<{ prepared: PreparedCaptureFixtureHome; fixtures: RegisteredCaptureFixtures }> {
+  const prepared = await prepareCaptureFixtureHome(freshHome(), { timeoutMs: 20_000 })
+  const fixtures = await registerCaptureFixtures(fakeFixtureClient(prepared), prepared, { timeoutMs: 5_000 })
+  return { prepared, fixtures }
+}
+
+function localViewFixtureBridge(
+  prepared: PreparedCaptureFixtureHome,
+  mode = 'success',
+  onSessionCreated?: (session: string) => void
+) {
+  const base = fakeFixtureClient(prepared)
+  const cliPath = join(prepared.home, 'view-fixture-cli.ts')
+  const logPath = join(prepared.home, `view-fixture-${mode}.jsonl`)
+  writeFileSync(cliPath, VIEW_FIXTURE_CLI)
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  const createdSessions: string[] = []
+  const closedSessions: string[] = []
+  const processes = new Map<string, Bun.Subprocess<'ignore', 'ignore', 'ignore'>>()
+  const client: FixtureRpcClient = {
+    async callAny(method, params = {}, options) {
+      calls.push({ method, params })
+      if (method === 'quirky.session/create') {
+        const session = `session_${String(++viewFixtureSessionNumber).padStart(12, '0')}`
+        createdSessions.push(session)
+        if (mode !== 'provider-timeout' && mode !== 'abort') {
+          const env = {
+            ...createIsolatedRuntimeEnvironment(prepared.home, { repoRoot: resolve(import.meta.dir, '../..') }),
+            QUIRKY_SESSION_ID: session,
+            WORKER_TEST_CLI: cliPath,
+            VIEW_FIXTURE_CLI_LOG: logPath,
+            VIEW_FIXTURE_CLI_MODE: mode
+          }
+          const child = Bun.spawn([join(prepared.home, 'fakebin', 'claude')], {
+            cwd: prepared.repoPath,
+            env,
+            stdin: 'ignore',
+            stdout: 'ignore',
+            stderr: 'ignore'
+          })
+          fixtureProcesses.push(child)
+          processes.set(session, child)
+        }
+        onSessionCreated?.(session)
+        return { id: session }
+      }
+      if (method === 'quirky.session/close') {
+        const session = String(params.session)
+        closedSessions.push(session)
+        const child = processes.get(session)
+        if (child?.exitCode === null) {
+          child.kill('SIGTERM')
+          await Promise.race([child.exited, Bun.sleep(500)])
+          if (child.exitCode === null) {
+            child.kill('SIGKILL')
+            await Promise.race([child.exited, Bun.sleep(500)])
+          }
+        }
+        return { ok: true }
+      }
+      return await base.callAny(method, params, options)
+    }
+  }
+  return { client, calls, createdSessions, closedSessions, logPath }
+}
+
+const temporaryHomes: string[] = []
+
+afterEach(async () => {
+  for (const child of fixtureProcesses.splice(0)) {
+    if (child.exitCode === null) child.kill('SIGTERM')
+    await Promise.race([child.exited, Bun.sleep(500)])
+    if (child.exitCode === null) {
+      child.kill('SIGKILL')
+      await Promise.race([child.exited, Bun.sleep(500)])
+    }
+  }
+  for (const home of temporaryHomes.splice(0)) rmSync(home, { recursive: true, force: true })
+})
+
+test('creates three stored view fixtures through the authorized fake-Claude CLI bridge', async () => {
+  const { prepared, fixtures } = await prepareViewFixtureHome()
+  const bridge = localViewFixtureBridge(prepared)
+  const fixture = await createViewFixture(bridge.client, fixtures, { timeoutMs: 8_000 })
+
+  expect(fixture).toEqual({
+    sessionId: bridge.createdSessions[0],
+    inlineViewId: 'view_000000000001',
+    paneViewIds: ['view_000000000002', 'view_000000000003']
+  })
+  expect(bridge.createdSessions).toHaveLength(1)
+  expect(bridge.closedSessions).toEqual([])
+  expect(bridge.calls.find((call) => call.method === 'quirky.session/create')?.params).toMatchObject({
+    worktree: fixtures.primaryWorktree.id,
+    agent: 'claude'
+  })
+
+  const eventPath = join(prepared.home, 'worker-fixture', `${fixture.sessionId}.events.jsonl`)
+  const requestPath = join(prepared.home, 'worker-fixture', `${fixture.sessionId}.requests.jsonl`)
+  expect(readJsonLines(eventPath).map((event) => event.type)).toContain('started')
+  const requests = readJsonLines(requestPath).map((request) => request.args as string[])
+  expect(requests.filter((args) => args[0] === 'view' && args[1] === 'open')).toHaveLength(3)
+  expect(requests.some((args) =>
+    args[0] === 'api' && args[1] === 'call' && args[2] === 'quirky.view/list' &&
+    args.includes('--session') && args[args.indexOf('--session') + 1] === fixture.sessionId && args.includes('--json')
+  )).toBe(true)
+  expect(bridge.calls.some((call) => call.method === 'quirky.view/list')).toBe(false)
+
+  const cliRows = readJsonLines(bridge.logPath)
+  const opened = cliRows.filter((row) => row.kind === 'open')
+  expect(opened.map((row) => ({
+    title: (row.spec as { title: string }).title,
+    placement: row.placement,
+    spec: row.spec
+  }))).toEqual([
+    { title: 'Bundle size by route', placement: 'inline', spec: bundleSizeSpec },
+    { title: 'Bundle size by route', placement: 'pane', spec: bundleSizeSpec },
+    {
+      title: 'Module map',
+      placement: 'pane',
+      spec: { title: 'Module map', root: { type: 'markdown', props: { text: 'Module map body' } } }
+    }
+  ])
+})
+
+test('view fixture setup failures close the session, including a partially seeded session', async () => {
+  const { prepared, fixtures } = await prepareViewFixtureHome()
+  const failures: Array<{ mode: string; timeoutMs: number; expected?: RegExp | string }> = [
+    { mode: 'provider-timeout', timeoutMs: 60, expected: /started|provider|worker/i },
+    { mode: 'nonzero', timeoutMs: 5_000, expected: /exited 7/ },
+    { mode: 'malformed', timeoutMs: 5_000, expected: /JSON/i },
+    { mode: 'missing-id', timeoutMs: 5_000, expected: /view.*ID|ID.*view/i },
+    { mode: 'invalid-list', timeoutMs: 5_000, expected: /view|list/i },
+    { mode: 'nonzero-second-open', timeoutMs: 5_000, expected: /exited 7/ }
+  ]
+
+  for (const failure of failures) {
+    const bridge = localViewFixtureBridge(prepared, failure.mode)
+    const setup = createViewFixture(bridge.client, fixtures, { timeoutMs: failure.timeoutMs })
+    if (failure.expected) await expect(setup).rejects.toThrow(failure.expected)
+    else await expect(setup).rejects.toThrow()
+    expect(bridge.closedSessions).toEqual(bridge.createdSessions)
+    if (failure.mode === 'nonzero-second-open') {
+      expect(readJsonLines(bridge.logPath).filter((row) => row.kind === 'open')).toHaveLength(2)
+    }
+  }
+
+  const controller = new AbortController()
+  const abortBridge = localViewFixtureBridge(prepared, 'abort', () => {
+    // Abort after create returns so the fixture has an acquired session to clean up.
+    setTimeout(() => controller.abort(new Error('view fixture setup cancelled')), 25)
+  })
+  await expect(createViewFixture(abortBridge.client, fixtures, { timeoutMs: 5_000, signal: controller.signal }))
+    .rejects.toThrow('view fixture setup cancelled')
+  expect(abortBridge.closedSessions).toEqual(abortBridge.createdSessions)
+})
+
+test('closes a view fixture session returned after create cancellation', async () => {
+  const creation = Promise.withResolvers<unknown>()
+  const started = Promise.withResolvers<void>()
+  const closed = Promise.withResolvers<string>()
+  const controller = new AbortController()
+  const fixtures = { home: freshHome(), primaryWorktree: { id: 'worktree' } } as RegisteredCaptureFixtures
+  const client: FixtureRpcClient = {
+    async callAny(method, params) {
+      if (method === 'quirky.session/create') {
+        started.resolve()
+        return await creation.promise
+      }
+      if (method === 'quirky.session/close') {
+        closed.resolve(String(params?.session))
+        return { ok: true }
+      }
+      throw new Error(`Unexpected fixture RPC: ${method}`)
+    }
+  }
+  const setup = createViewFixture(client, fixtures, {
+    timeoutMs: 1_000,
+    signal: controller.signal
+  })
+  await started.promise
+  controller.abort(new Error('cancelled during create'))
+  await expect(setup).rejects.toThrow('cancelled during create')
+  creation.resolve({ id: 'late-session' })
+  expect(await closed.promise).toBe('late-session')
+}, 1_000)
+
+test('closes a view session returned after its local creation deadline without expiring the RPC response', async () => {
+  const started = Promise.withResolvers<void>()
+  const closed = Promise.withResolvers<string>()
+  let replyToCreation: (() => void) | undefined
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request, server) {
+      if (server.upgrade(request)) return undefined
+      return new Response('WebSocket only', { status: 400 })
+    },
+    websocket: {
+      message(socket, message) {
+        const request = JSON.parse(String(message))
+        if (request.method === 'quirky.session/create') {
+          replyToCreation = () => socket.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { id: 'late-session' } }))
+          started.resolve()
+        } else {
+          socket.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: {} }))
+        }
+      }
+    }
+  })
+  let transport: QuirkyClient | undefined
+  try {
+    transport = await QuirkyClient.connect(`ws://127.0.0.1:${server.port}`, { role: 'cli' })
+    const client: FixtureRpcClient = {
+      async callAny(method, params = {}, options) {
+        const result = await transport!.callAny(method, params, options)
+        if (method === 'quirky.session/close') closed.resolve(String(params.session))
+        return result
+      }
+    }
+    const fixtures = { home: freshHome(), primaryWorktree: { id: 'worktree' } } as RegisteredCaptureFixtures
+    const setup = createViewFixture(client, fixtures, { timeoutMs: 50 })
+    await started.promise
+    await expect(setup).rejects.toThrow('quirky.session/create exceeded 50ms')
+    replyToCreation!()
+    expect(await closed.promise).toBe('late-session')
+  } finally {
+    transport?.close()
+    server.stop(true)
+  }
+}, 2_000)
 const TASKS_FIXTURE_OWNER = 'fixture-owner'
 const TASKS_FIXTURE_REPO = 'ui-review-fixture'
 const TASKS_FIXTURE_ORIGIN = `git@github.com:${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}.git`
@@ -111,11 +417,6 @@ async function runFixtureGhWithInput(
   }
 }
 
-const temporaryHomes: string[] = []
-
-afterEach(() => {
-  for (const home of temporaryHomes.splice(0)) rmSync(home, { recursive: true, force: true })
-})
 
 function freshHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'quirky-ui-review-fixture-test-'))

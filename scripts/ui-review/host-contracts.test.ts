@@ -16,7 +16,7 @@ const RULE_IDS = [
   'worktrees-approved-redesign'
 ]
 const SOURCE_CITATIONS: Record<string, string[]> = {
-  'host-frame-ownership': ['scripts/ui-review/capture.ts'],
+  'host-frame-ownership': ['scripts/ui-review/capture.ts', 'docs/quirk/specs/2026-10-30-ui-pycharm-shell/logic.md, Frame and cards'],
   'host-underline-tabs': [
     'g3-62 scenarios 1 and 8',
     'packages/ui/src/design-system/components.css',
@@ -90,6 +90,68 @@ const ORCHESTRATION_ROW_PHRASES = [
 
 function orchestrationRowFailures(text: string): string[] {
   return ORCHESTRATION_ROW_PHRASES.filter((phrase) => !text.includes(phrase))
+}
+
+function hostFramePhrases(theme: CaptureTheme): string[] {
+  const colors = THEME_VALUES[theme]
+  return [
+    '5px rail-colored gap between neighbors',
+    'side by side and stacked',
+    '10px corner radius',
+    'corner cutouts show the rail',
+    'flush, with no extra outer inset',
+    `In ${theme} the rail is ${colors.rail} and card surfaces are ${colors.surface}`,
+    'The shell golden shows this same frame, with the same 5px gap, 10px radius and flush edges',
+    'are not defects',
+    'wider or thicker gaps, card borders or shadows, or an outer inset contradicts this contract',
+    'Panels that actually touch with no rail strip, square or clipped corners, and a gap in the wrong color remain host defects'
+  ]
+}
+
+function hostFrameFailures(text: string, theme: CaptureTheme): string[] {
+  return hostFramePhrases(theme).filter((phrase) => !text.includes(phrase))
+}
+
+function legacyHostFrameText(theme: CaptureTheme): string {
+  const colors = THEME_VALUES[theme]
+  return `Applies to every full-window capture. Distinguish the named contribution from surrounding shell chrome. Theme token values for ${theme}: --ui-surface: ${colors.surface}; --ui-rail: ${colors.rail}; --ui-selected: ${colors.selected}; --ui-accent: ${colors.accent}; --ui-border: ${colors.border}; --ui-text: ${colors.text}; --ui-muted: ${colors.muted}. These hex values are checked-in token defaults; use the resolved --ui-text and --ui-muted foreground tokens, not a blanket fixed runtime foreground requirement. In light mode a white content surface is valid; the rail and gaps use the separate rail token. Missing actual host gaps or corners remain host defects and must not be described as a defect in a plugin's row stylesheet. Do not waive a genuinely all-white frame or touching panels. Legitimate content differences and the documented offline absence of hosted Checks data do not authorize inventing or removing product controls.`
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  const text = hostContractContext(target('host:shell', 'Shell'), theme)
+    .rules.find(({ id }) => id === 'host-frame-ownership')!.text
+
+  test(`${theme}: the host contract states the approved frame and rejects restyling it`, () => {
+    expect(hostFrameFailures(text, theme)).toEqual([])
+    const phrases = hostFramePhrases(theme)
+    for (let index = 1; index < phrases.length; index++) {
+      expect(text.indexOf(phrases[index]!)).toBeGreaterThan(text.indexOf(phrases[index - 1]!))
+    }
+    expect(text).not.toContain('even where the older golden')
+  })
+
+  test(`${theme}: frame guidance retains genuine defect and ownership protections`, () => {
+    for (const pattern of [/white content surface is valid/i, /rail.*separate/i, /plugin.*row stylesheet/i, /all-white frame/i, /offline absence of hosted Checks data/i, /full-window/]) {
+      expect(text).toMatch(pattern)
+    }
+    expect(text).toContain('Do not waive a genuinely all-white frame or touching panels')
+    for (const token of TOKENS) expect(text).toContain(`--ui-${token}: ${THEME_VALUES[theme][token]}`)
+  })
+
+  test(`${theme}: legacy and removed frame statements lose the required guidance`, () => {
+    const legacy = legacyHostFrameText(theme)
+    expect(legacy).toHaveLength(theme === 'dark' ? 870 : 871)
+    expect(hostFrameFailures(legacy, theme)).toEqual(hostFramePhrases(theme))
+    const withoutMeasurements = text.split('. ').filter((sentence) => !/5px|10px/.test(sentence)).join('. ')
+    expect(hostFrameFailures(text, theme)).toEqual([])
+    expect(hostFrameFailures(withoutMeasurements, theme).length).toBeGreaterThan(0)
+  })
+
+  test(`${theme}: host frame guidance stays one ASCII line within the context limit`, () => {
+    expect(text.length).toBeLessThanOrEqual(2000)
+    expect(text).not.toMatch(/[\r\n]/)
+    expect(text).toMatch(/^[\x20-\x7e]+$/)
+  })
 }
 
 for (const theme of ['dark', 'light'] as const) {
