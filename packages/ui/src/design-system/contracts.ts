@@ -59,7 +59,7 @@ export type DialogProps = {
   scrollBody?: boolean
 }
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
-export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
+export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode; layout?: 'stacked' | 'inline' }
 export type ToolPanelFrameProps = { title: string; tabs?: ReactNode; tools?: ReactNode; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
 /** Plugin-owned controls portaled into their nearest shared tool frame header. */
 export type ToolPanelActionsProps = { children: ReactNode }
@@ -131,7 +131,17 @@ export type UiTag = { id: string; name: string; color: UiTagColor | null }
 export type ActivityMarkProps = { state: UiActivityMarkState; label: string }
 export type TagChipProps = { name: string; color: UiTagColor | null }
 export type TagChipsProps = { tags: UiTag[]; max?: number }
-export type CheckboxProps = { checked: boolean; indeterminate?: boolean; label: string; onChange: (checked: boolean) => void; hideLabel?: boolean }
+export type CheckboxProps = {
+  checked: boolean
+  indeterminate?: boolean
+  label: string
+  onChange: (checked: boolean) => void
+  hideLabel?: boolean
+  id?: string
+  disabled?: boolean
+  'aria-describedby'?: string
+  'aria-invalid'?: InputHTMLAttributes<HTMLInputElement>['aria-invalid']
+}
 export type SwatchGroupProps = { value: UiTagColor | null; onChange: (color: UiTagColor | null) => void; label: string }
 export type NoticeLineProps = { children: ReactNode; actions?: UiAction[] }
 export type HoverCardProps = { anchor: HTMLElement | null; open: boolean; children: ReactNode }

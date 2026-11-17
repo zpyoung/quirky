@@ -55,10 +55,10 @@ function associateDescriptions(children: ReactNode, htmlFor: string, description
   })
 }
 
-export function FormRow({ label, htmlFor, help, error, children }: FormRowProps) {
+export function FormRow({ label, htmlFor, help, error, children, layout = 'stacked' }: FormRowProps) {
   const descriptionIds = [help ? `${htmlFor}-help` : undefined, error ? `${htmlFor}-error` : undefined].filter(Boolean).join(' ')
   return (
-    <div className="ui-form-row">
+    <div className={classNames('ui-form-row', layout === 'inline' && 'ui-form-row--inline')}>
       <label className="ui-form-row__label" htmlFor={htmlFor}>{label}</label>
       <div className="ui-form-row__control">{associateDescriptions(children, htmlFor, descriptionIds, Boolean(error))}</div>
       {help && <span className="ui-help-text" id={`${htmlFor}-help`}>{help}</span>}

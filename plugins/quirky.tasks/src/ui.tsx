@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { Button, ControlIcon, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { Button, Checkbox, ControlIcon, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
 import { TASKS_TOOL, TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
 import { CompactTasks } from './list/CompactTasks'
 import { place } from './list/place'
@@ -113,11 +113,22 @@ function TasksSettings({ context, state, refresh, report }: { context: UiPluginC
   }
   const sourceStatus = checking ? 'Checking…' : diagnosis ? diagnosis.ghAvailable !== true ? 'Not installed' : diagnosis.requiredHostAuthenticated === true ? 'Ready' : 'Connect required' : 'Unavailable'
   return <section className="tasks-settings" aria-label="Task Sources settings">
-    <FormRow label="Show Tasks button" htmlFor="tasks-show-button">
-      <input type="checkbox" checked={state.preferences.showTasksButton} onChange={event => void save({ showTasksButton: event.target.checked })} />
+    <FormRow label="Show Tasks button" htmlFor="tasks-show-button" layout="inline">
+      <Checkbox checked={state.preferences.showTasksButton} label="Show Tasks button" onChange={checked => void save({ showTasksButton: checked })} hideLabel />
     </FormRow>
     <SectionHeader title="Visible providers" />
-    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => <FormRow key={provider} label={provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'} htmlFor={`tasks-provider-${provider}`}><input type="checkbox" checked={state.preferences.visibleTaskProviders.includes(provider)} disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)} onChange={event => void save({ visibleTaskProviders: event.target.checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })} /></FormRow>)}</div>
+    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => {
+      const label = provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'
+      return <FormRow key={provider} label={label} htmlFor={`tasks-provider-${provider}`} layout="inline">
+        <Checkbox
+          checked={state.preferences.visibleTaskProviders.includes(provider)}
+          label={label}
+          disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)}
+          onChange={checked => void save({ visibleTaskProviders: checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })}
+          hideLabel
+        />
+      </FormRow>
+    })}</div>
     <div className="tasks-row"><strong>GitHub · {sourceStatus}</strong><Button disabled={checking} onClick={() => void runCheck()}>Re-check GitHub</Button></div>
     {availabilityError && <InlineError message={availabilityError} action={{ label: 'Retry', onAction: () => { void runCheck() } }} />}
     {diagnosis?.ghAvailable === false && <Button onClick={() => void context.executeCommand('command:quirky.tasks/open-link', { url: 'https://cli.github.com' }).catch(cause => setError(message(cause)))}>Install GitHub CLI</Button>}
