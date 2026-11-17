@@ -1069,6 +1069,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
         const raw = await ownerCall(watcherId, () => engine.create({
           lifetime: 'plugin',
           lifetimeKey: watcherId,
+          background: true,
           worktree: enrollment.worktreeId ? `id:${enrollment.worktreeId}` : `path:${enrollment.workspacePath}`,
           agent: 'claude',
           prompt,
