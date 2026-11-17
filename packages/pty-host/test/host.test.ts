@@ -6,7 +6,7 @@ import { base64ToBytes, encodePtyJson, PtyFrameDecoder, PTY_PROTOCOL_VERSION, ty
 import { PtyClient } from '../src/client'
 import { readSegments } from '../src/history/log'
 import { SocketWriter } from '../src/writer'
-import { concat, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
+import { concat, onCleanup, runCleanups, startHost, text, waitFor, type TestHost } from './helpers'
 
 // Process-scope startup and cleanup can each outlast Bun's 5 s default under suite load.
 setDefaultTimeout(60_000)
@@ -966,7 +966,12 @@ describe('connection output queues', () => {
   })
 
   test('live overflow drops the sink once and clears bytes before the peer closes', async () => {
+    const listening = spyOn(Bun, 'listen')
+    onCleanup(() => listening.mockRestore())
     const host = startHost({ maxConnectionQueuedBytes: 1024 })
+    const listener = listening.mock.results[0]!.value
+    listening.mockRestore()
+    onCleanup(() => listener.stop(true))
     const control = await host.connect()
     await control.request('create', createParams('A', ['/bin/cat']))
     const { client, conn } = await queuedClient(host)
@@ -990,6 +995,14 @@ describe('connection output queues', () => {
       expect(end).toHaveBeenCalledTimes(1)
       await flushed
       expect((await control.request('list', {}))[0].sessionId).toBe('A')
+      const privateDir = readdirSync(host.home).find(entry => entry.startsWith('.p'))!
+      const privatePath = join(host.home, privateDir, 's')
+      const decoy = Bun.listen({ unix: privatePath, socket: { data() {} } })
+      onCleanup(() => decoy.stop(true))
+      const decoyInode = statSync(privatePath).ino
+      await host.server.stop()
+      await waitFor(() => client.closed, 2000, 'severed transport to close during shutdown')
+      expect(statSync(privatePath).ino).toBe(decoyInode)
     } finally {
       blocked.mockRestore()
       end.mockRestore()
