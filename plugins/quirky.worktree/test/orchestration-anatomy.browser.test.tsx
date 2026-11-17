@@ -50,6 +50,7 @@ type OrchestrationMeasurement = {
   className: string
   title: string
   titleScrollWidth: number
+  titleTextWidth: number
   titleClientWidth: number
   description: string
   row: Rect
@@ -300,11 +301,16 @@ async function mount(width: number, theme: typeof THEMES[number]): Promise<Page>
   await page.setContent(`<!doctype html>
     <html data-theme="${theme}"><head><style>
       ${bundle.css}
+      /* metric-compatible fonts keep the narrow coordinator wrapping while the worker fits */
+      @font-face { font-family: "Anatomy Sans"; src: local("Arial"), local("Liberation Sans"); size-adjust: 108%; }
+      body { font-family: "Anatomy Sans"; }
       html, body { width: 100%; height: 100%; margin: 0; }
       #host { box-sizing: border-box; width: ${width}px; height: 360px; min-width: 0; }
       #host > .ui-tool-panel-frame { height: 100%; min-width: 0; }
       #tree-scroll { box-sizing: border-box; height: 280px; min-width: 0; width: 100%; }
     </style></head><body><div id="host" data-tool-panel></div></body></html>`)
+  const loadedFonts = await page.evaluate(async () => (await document.fonts.load('12px "Anatomy Sans"')).length)
+  expect(loadedFonts).toBe(1)
   await page.addScriptTag({ content: bundle.js })
   await page.waitForFunction(() => document.querySelectorAll('.worktree-tree [data-worktree-id]').length === 5)
   await page.waitForSelector('.orchestration-rows')
@@ -336,11 +342,14 @@ async function measureLayout(page: Page): Promise<LayoutMeasurement> {
       const title = row.querySelector<HTMLElement>('.ui-list-row__title')
       const description = row.querySelector<HTMLElement>('.ui-list-row__description')
       if (!title || !description) throw new Error('Orchestration ListRow is missing its title or description.')
+      const canvas = document.createElement('canvas').getContext('2d')!
+      canvas.font = getComputedStyle(title).font
       return {
         className: row.className,
         title: title.textContent?.trim() ?? '',
         titleScrollWidth: title.scrollWidth,
         titleClientWidth: title.clientWidth,
+        titleTextWidth: canvas.measureText(title.textContent ?? '').width,
         description: description.textContent?.trim() ?? '',
         row: box(row),
         descriptionRect: box(description)
@@ -380,11 +389,16 @@ function expectCheckoutAndOrchestrationRows(layout: LayoutMeasurement, width: nu
 
   if (width === 320) {
     for (const row of layout.orchestrationRows) expectNear(row.row.height, 34)
+    for (const row of layout.orchestrationRows) {
+      expect(row.titleTextWidth).toBeLessThanOrEqual(row.titleClientWidth - 16)
+    }
   } else {
     const [coordinator, worker] = layout.orchestrationRows
     expect(coordinator!.row.height).toBeGreaterThan(34.5)
     expect(coordinator!.titleScrollWidth).toBeLessThanOrEqual(coordinator!.titleClientWidth)
+    expect(coordinator!.titleTextWidth).toBeGreaterThan(coordinator!.titleClientWidth + 4)
     expectNear(worker!.row.height, 34)
+    expect(worker!.titleTextWidth).toBeLessThanOrEqual(worker!.titleClientWidth - 4)
   }
 }
 
