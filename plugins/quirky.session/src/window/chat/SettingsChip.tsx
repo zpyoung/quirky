@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Badge, Button, ControlIcon, ListRow, Popover, SectionHeader, TextField } from '@quirky/ui'
 import type { Picks, TurnSettings } from './controls'
 
+const DEFAULT = 'Default'
+
 export type SettingsSection = 'model' | 'effort' | 'mode'
 
 const SEARCH_THRESHOLD = 8
@@ -35,10 +37,19 @@ const knob = (on: boolean): CSSProperties => ({
   transform: on ? 'translateX(var(--ui-space-16))' : undefined
 })
 
-/** The closed chip's text: model and effort, or the model alone when the agent has no effort. */
+/**
+ * The closed chip's text: model and effort, or the model alone when the agent has no effort. A setting
+ * the session launched without reads "Default", since the agent then runs on its own choice.
+ */
 export function chipLabel(settings: TurnSettings): string {
-  const model = settings.modelList.find((entry) => entry.value === settings.model)?.label ?? settings.model
-  const effort = settings.effortReason === undefined ? settings.choices.find((entry) => entry.value === settings.effort)?.label : undefined
+  const model =
+    settings.model === null ? (settings.modelReason === undefined ? DEFAULT : undefined)
+    : settings.modelList.find((entry) => entry.value === settings.model)?.label ?? settings.model
+  const effort =
+    settings.effortReason !== undefined ? undefined
+    : settings.effort === '' ? DEFAULT
+    : settings.choices.find((entry) => entry.value === settings.effort)?.label
+  if (model === DEFAULT && effort === DEFAULT) return DEFAULT
   return [model, effort].filter((part): part is string => typeof part === 'string' && part !== '').join(' · ') || 'Settings'
 }
 

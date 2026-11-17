@@ -716,7 +716,15 @@ describe('the agent picker', () => {
     agentInfo('pi', 'pi', { installed: false }),
     agentInfo('omp', 'omp')
   ])
-  const options = (agent: string) => ({ models: agent === 'omp' ? [{ id: 'sonnet-5.5', label: 'sonnet-5.5' }] : [{ id: 'opus', label: 'Opus 5.5' }] })
+  const effort = { id: 'effort', label: 'Effort', type: 'select', choices: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }], default: 'high' }
+  // claude declares a default; omp lists a model but declares none, so it must not read as its default
+  const options = (agent: string) =>
+    agent === 'omp'
+      ? { models: [{ id: 'sonnet-5.5', label: 'sonnet-5.5', options: [] }], defaultModel: null }
+      : {
+          models: [{ id: 'fable', label: 'Fable', options: [effort] }, { id: 'opus', label: 'Opus 5.5', options: [effort] }, { id: 'haiku', label: 'Haiku', options: [] }],
+          defaultModel: 'opus'
+        }
 
   async function mountPicker(handlers: Record<string, Handler> = {}, props: Partial<Parameters<typeof AgentPicker>[0]> = {}) {
     const created: Session[] = []
@@ -756,7 +764,7 @@ describe('the agent picker', () => {
     expect(card('Codex').disabled).toBe(true)
     expect(card('pi').textContent).toContain('not installed')
     expect(card('pi').disabled).toBe(true)
-    expect(card('omp').textContent).toContain('sonnet-5.5 · ready')
+    expect(card('omp').textContent).toContain('Default model · ready')
   })
 
   test('reads ready with the default model when the model list cannot be read', async () => {
@@ -770,12 +778,60 @@ describe('the agent picker', () => {
     expect(card('omp').textContent).toContain('not installed')
   })
 
-  test('picking an agent creates the chat in the worktree and reports the session', async () => {
+  test('picking an agent creates the chat in the worktree on its declared default model and effort', async () => {
     const created = await mountPicker()
     await click(card('Claude Code'))
     await settle()
-    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
+      agent: 'claude',
+      worktree: 'wt-main',
+      deferStart: true,
+      model: 'opus',
+      options: { effort: 'high' }
+    })
     expect(created.map((entry) => entry.id)).toEqual(['new'])
+  })
+
+  test('the agent settings in the worktree name the card and the create call ahead of the catalog default', async () => {
+    await mountPicker({ 'quirky.structured/defaults': (params) => (params.agent === 'claude' ? { model: 'fable', effort: 'low' } : { model: null, effort: null }) })
+    expect(fake.callsTo('quirky.structured/defaults').map((call) => call.params)).toContainEqual({ agent: 'claude', worktree: 'wt-main' })
+    expect(card('Claude Code').textContent).toContain('Fable · ready')
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
+      agent: 'claude',
+      worktree: 'wt-main',
+      deferStart: true,
+      model: 'fable',
+      options: { effort: 'low' }
+    })
+  })
+
+  test('an agent with no declared default launches on its own choice', async () => {
+    await mountPicker()
+    await click(card('omp'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'omp', worktree: 'wt-main', deferStart: true })
+  })
+
+  test('a picked model without effort gets no default effort, and a picked effort applies to the default model', async () => {
+    await mountPicker({}, { picks: { model: 'haiku', effort: null, mode: null, plan: false } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true, model: 'haiku' })
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountPicker({}, { picks: { model: null, effort: 'low', mode: null, plan: false } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toMatchObject({ model: 'opus', options: { effort: 'low' } })
+  })
+
+  test('creates with the picks alone when the model list cannot be read', async () => {
+    await mountPicker({ 'quirky.agents/options': () => { throw new RpcError(RpcErrorCode.MethodNotFound, 'x') } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
   })
 
   test('the composer picks reach the create call', async () => {

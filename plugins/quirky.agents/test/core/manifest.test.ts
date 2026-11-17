@@ -300,7 +300,7 @@ describe('quirky.agents manifest', () => {
 })
 
 type RawChoice = { value: string; label: string }
-type RawOption = { id: string; label: string; type: string; choices?: RawChoice[]; flag?: string[]; conflicts?: unknown[]; composed?: true; structured?: string }
+type RawOption = { id: string; label: string; type: string; choices?: RawChoice[]; flag?: string[]; conflicts?: unknown[]; composed?: true; structured?: string; default?: string }
 type RawModel = { id: string; label: string; description?: string; options: { id: string; choices?: string[] }[] }
 type RawBlock = {
   model: { flag: string[]; conflicts: unknown[]; structured?: string }
@@ -308,6 +308,7 @@ type RawBlock = {
   models?: RawModel[]
   unlisted?: 'accept' | 'refuse'
   unlistedOptions?: { id: string; choices?: string[] }[]
+  defaultModel?: string
   composeModel?: string
   valueFlags?: string[]
   extraArgs?: { allowed: { kind: string; flags: string[]; valuePrefix?: string }[]; placeholder: string }
@@ -369,11 +370,13 @@ describe('quirky.agents launchOptions data', () => {
         label: 'Effort',
         type: 'select',
         choices: choiceList(['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Max']),
+        default: 'high',
         flag: ['--effort', '{value}'],
         conflicts: [{ flags: ['--effort'] }],
         structured: 'effort'
       }
     ])
+    expect(block.defaultModel).toBe('opus')
     expect(modelsOf('claude')).toEqual([
       { id: 'fable', label: 'Fable', description: 'Most capable for the hardest, longest-running tasks', options: { effort: CLAUDE_EFFORT } },
       { id: 'opus', label: 'Opus', description: 'Best for everyday, complex tasks', options: { effort: CLAUDE_EFFORT } },
@@ -497,10 +500,20 @@ describe('quirky.agents launchOptions data', () => {
 
     const omp = rawBlock('omp')
     expect(omp.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['--model'] }], structured: 'model' })
-    expect(omp.options ?? []).toEqual([])
+    expect(omp.options).toEqual([
+      {
+        id: 'effort',
+        label: 'Thinking level',
+        type: 'select',
+        choices: choiceList(['off', 'Off'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Maximum'], ['auto', 'Auto']),
+        flag: ['--thinking', '{value}'],
+        conflicts: [{ flags: ['--thinking'] }],
+        structured: 'effort'
+      }
+    ])
     expect(modelsOf('omp')).toEqual([])
     expect(effectiveUnlisted(omp)).toBe('accept')
-    expect(omp.unlistedOptions).toBeUndefined()
+    expect(omp.unlistedOptions).toEqual([{ id: 'effort' }])
 
     const opencode = rawBlock('opencode')
     expect(opencode.model).toEqual({ flag: ['--model', '{value}'], conflicts: [{ flags: ['-m', '--model'] }] })

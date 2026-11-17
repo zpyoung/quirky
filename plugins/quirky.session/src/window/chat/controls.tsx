@@ -3,11 +3,17 @@ import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@q
 import { AgentIcon, Badge } from '@quirky/ui'
 
 export type Choice = { value: string; label: string }
-type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
+type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null; default?: string }
 export type AgentModel = { id: string; label: string; options: ModelOption[] }
 
-/** The part of `quirky.agents/options` the composer reads; null models mean the list could not be loaded. */
-export type AgentOptions = { supported: boolean; models: AgentModel[]; unlistedOptions: ModelOption[] }
+/** The part of `quirky.agents/options` the composer reads; a null `defaultModel` means the agent picks its own. */
+export type AgentOptions = {
+  supported: boolean
+  models: AgentModel[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: ModelOption[]
+  defaultModel: string | null
+}
 
 /** What the user has picked in the composer; null means the agent's own default. */
 export type Picks = { model: string | null; effort: string | null; mode: string | null; plan: boolean }
@@ -22,6 +28,18 @@ export function reasonOf(capability: Capability | AgentCapabilities['permissionM
   return capability.ok ? undefined : capability.reason
 }
 
+/** Reads a `quirky.agents/options` reply, tolerating fields an older agents plugin leaves out. */
+export function agentOptionsOf(loaded: unknown): AgentOptions {
+  const info = loaded as Partial<AgentOptions> | undefined
+  return {
+    supported: info?.supported !== false,
+    models: info?.models ?? [],
+    unlisted: info?.unlisted === 'refuse' ? 'refuse' : 'accept',
+    unlistedOptions: info?.unlistedOptions ?? [],
+    defaultModel: typeof info?.defaultModel === 'string' ? info.defaultModel : null
+  }
+}
+
 /** Loads the model catalog for `agent`; null until it arrives and when the agents plugin is missing. */
 export function useAgentOptions(context: UiPluginContext, agent: string): AgentOptions | null {
   const [options, setOptions] = useState<AgentOptions | null>(null)
@@ -32,8 +50,7 @@ export function useAgentOptions(context: UiPluginContext, agent: string): AgentO
       .call('quirky.agents/options', { agent })
       .then((loaded) => {
         if (cancelled) return
-        const info = loaded as Partial<AgentOptions> | undefined
-        setOptions({ supported: info?.supported !== false, models: info?.models ?? [], unlistedOptions: info?.unlistedOptions ?? [] })
+        setOptions(agentOptionsOf(loaded))
       })
       .catch(() => {})
     return () => {
@@ -72,9 +89,13 @@ function useLiveModels(context: UiPluginContext, session: Session, capabilities:
   return wanted ? live : null
 }
 
-const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
+export const effortOption = (options: AgentOptions, model: string | null): ModelOption | undefined => {
   const known = options.models.find((entry) => entry.id === model)
-  const effort = (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
+  return (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
+}
+
+export const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
+  const effort = effortOption(options, model)
   return Array.isArray(effort?.choices) ? effort.choices : []
 }
 
@@ -120,10 +141,12 @@ export async function absolutePathsOf(context: UiPluginContext, files: File[]): 
 /** What the settings chip shows and offers: the lists, the current values and why a control is off. */
 export type TurnSettings = {
   modelList: Choice[]
+  /** Null when the session launched without one, so the agent runs on its own default. */
   model: string | null
   /** True when the current model is not in the list, so it needs an entry of its own. */
   unlisted: boolean
   choices: Choice[]
+  /** Empty when the session launched without one, so the agent runs on its own default. */
   effort: string
   modes: string[]
   mode: string
@@ -176,9 +199,9 @@ export function useTurnSettings(
   const liveList = live !== null && live !== 'failed' ? live.models : []
   const modelList: Choice[] = (options?.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })).concat(liveList)
   const liveCurrent = live !== null && live !== 'failed' ? live.current : null
-  const model = picks.model ?? launched.model ?? liveCurrent ?? modelList[0]?.value ?? null
+  const model = picks.model ?? launched.model ?? liveCurrent
   const choices = options ? effortChoices(options, model) : []
-  const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
+  const effort = picks.effort ?? launched.effort ?? ''
   const permissionModes = capabilities?.permissionModes
   const modes = permissionModes?.ok ? permissionModes.modes : []
   const defaultMode = modes[0] ?? null
