@@ -169,6 +169,7 @@ button.qt-badge-command.ui-button { padding: var(--ui-space-2) var(--ui-space-4)
 .qt-icon { border-radius: var(--ui-radius-mark); }
 .qt-plus,
 .qt-actions { align-self: center; margin-inline: var(--ui-space-2); font-size: var(--ui-font-title); }
+.qt-plus { margin-inline-start: var(--ui-space-8); }
 .qt-rename,
 .qt-title-field { min-width: calc(var(--ui-space-24) * 3); max-width: calc(var(--ui-space-24) * 7); padding: 0 var(--ui-space-4); }
 
