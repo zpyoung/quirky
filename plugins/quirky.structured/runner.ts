@@ -51,8 +51,15 @@ export type StructuredContext = {
 /** The per-session launch inputs: agent picks plus the resolved provider environment patch. */
 export type StructuredLaunchOptions = { model?: string; effort?: string; env?: Record<string, string | null> }
 
-/** Start-only provider identity; launch options remain provider-native model/effort strings. */
-export type StructuredStartOptions = StructuredLaunchOptions & { providerSession?: SessionProviderSession }
+/**
+ * Start-only provider identity and the permission mode and plan mode the session opens in, already
+ * checked against the agent's capabilities; launch options remain provider-native model/effort strings.
+ */
+export type StructuredStartOptions = StructuredLaunchOptions & {
+  providerSession?: SessionProviderSession
+  permissionMode?: string
+  planMode?: boolean
+}
 
 /** Extras of one message: absolute image paths the agent should see, and the queue entry the message came from. */
 export type StructuredSendOptions = { images?: string[]; queuedId?: string }

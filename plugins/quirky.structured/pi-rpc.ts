@@ -47,12 +47,13 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const STDIN_GRACE_MS = 500
 const TERM_GRACE_MS = 2_000
 
-/** The command-line arguments that start a pi or omp RPC child, resuming `resume` when given. */
-export function piLaunchArgs(variant: PiVariant, options: { model?: string; effort?: string; resume?: string }): string[] {
+/** The command-line arguments that start a pi or omp RPC child, resuming `resume` when given; only omp takes an approval mode. */
+export function piLaunchArgs(variant: PiVariant, options: { model?: string; effort?: string; resume?: string; approvalMode?: string }): string[] {
   const args = ['--mode', 'rpc']
   if (options.resume !== undefined) args.push(variant === 'pi' ? '--session' : '--resume', options.resume)
   if (options.model !== undefined) args.push('--model', options.model)
   if (options.effort !== undefined) args.push('--thinking', options.effort)
+  if (options.approvalMode !== undefined && variant === 'omp') args.push('--approval-mode', options.approvalMode)
   return args
 }
 

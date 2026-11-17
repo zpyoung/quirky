@@ -21,6 +21,12 @@ const CLAUDE: AgentCapabilities = {
   approveForSession: OK,
   resume: OK
 }
+const CLAUDE_ALL_MODES: AgentCapabilities['permissionModes'] = {
+  ok: true,
+  modes: ['default', 'acceptEdits', 'auto', 'bypassPermissions'],
+  labels: { acceptEdits: 'Accept edits', bypassPermissions: 'Bypass permissions' },
+  dangerous: ['bypassPermissions']
+}
 const PI: AgentCapabilities = {
   agent: 'pi',
   steer: { ok: false, reason: 'pi steers only between tool calls' },
@@ -624,6 +630,49 @@ describe('screens: settings (SC-15, SC-16)', () => {
     await settle()
     expect(buttonNamed('Return permissions to Default')).toBeUndefined()
     expect(fake.callsTo('quirky.structured/configure').map((call) => call.params).at(-1)).toEqual({ session: 's1', permissionMode: 'default' })
+  })
+
+  test('the permission list uses the agent labels and marks modes that skip approvals', async () => {
+    await mount({}, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    const rows = [...popover()!.querySelectorAll<HTMLElement>('[data-section="mode"] .ui-list-row')]
+    expect(rows.map((entry) => entry.querySelector('.ui-list-row__main')!.textContent?.trim())).toEqual(['Default', 'Accept edits', 'Auto', 'Bypass permissions'])
+    expect(rows.map((entry) => entry.querySelector('.ui-list-row__trailing')?.textContent ?? null)).toEqual([null, null, null, 'No approvals'])
+  })
+
+  test('picking bypass permissions shows a failing-tone badge that says the agent acts without asking', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(row('Bypass permissions'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').at(-1)!.params).toEqual({ session: 's1', permissionMode: 'bypassPermissions' })
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.textContent).toContain('Bypass permissions')
+    expect(badge.dataset.dangerous).toBe('true')
+    expect(badge.title).toContain('acts without asking for approval')
+    expect(badge.querySelector('.ui-badge--failing')).not.toBeNull()
+  })
+
+  test('a non-dangerous mode badge keeps the needs-you tone', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(row('Auto'))
+    await settle()
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.dataset.dangerous).toBeUndefined()
+    expect(badge.querySelector('.ui-badge--needs-you')).not.toBeNull()
+  })
+
+  test('a session that opened in another mode shows that mode, read from the runner', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    expect(fake.callsTo('quirky.structured/settings')[0]!.params).toEqual({ session: 's1' })
+    expect(buttonNamed('Return permissions to Default')!.textContent).toContain('Bypass permissions')
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+  })
+
+  test('a reported mode the agent does not list is ignored', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'mystery' } }) })
+    expect(buttonNamed('Return permissions to Default')).toBeUndefined()
   })
 
   test('unsupported controls stay visible, disabled, with the reason on hover; the chip shows the model alone without effort', async () => {

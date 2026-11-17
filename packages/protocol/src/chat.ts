@@ -35,13 +35,20 @@ export type ChatItem =
 /** Whether an agent supports a feature; `reason` is the hover text shown when it does not. */
 export type Capability = { ok: true } | { ok: false; reason: string }
 
+/**
+ * The permission modes an agent's harness offers. `modes[0]` is the mode a chat uses when nothing else
+ * picks one; `labels` names a mode for people where its id reads badly; `dangerous` lists the modes
+ * that let the agent act without asking, which the composer marks while one is active.
+ */
+export type PermissionModes = { ok: true; modes: string[]; labels?: Record<string, string>; dangerous?: string[] } | { ok: false; reason: string }
+
 /** The static feature set of one agent runner, which the composer uses to enable or disable controls. */
 export type AgentCapabilities = {
   agent: 'claude' | 'codex' | 'pi' | 'omp'
   steer: Capability
   model: Capability
   planMode: Capability
-  permissionModes: { ok: true; modes: string[] } | { ok: false; reason: string }
+  permissionModes: PermissionModes
   images: Capability
   effort: Capability
   approveForSession: Capability
