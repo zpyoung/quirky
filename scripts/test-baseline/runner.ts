@@ -18,6 +18,7 @@ export type RunOptions = {
   platform: Platform
   jobs: number
   limitMs: number
+  fileLimits?: ReadonlyMap<string, number>
   run?: typeof bunTestFile
   log?: (text: string) => void
   alone?: ReadonlySet<string>
@@ -51,10 +52,11 @@ async function attemptFile(opts: RunOptions, file: string): Promise<Outcome> {
   try {
     const began = performance.now()
     const run = opts.run ?? bunTestFile
+    const limitMs = opts.fileLimits?.get(file) ?? opts.limitMs
     const { code, output, timedOut } = await run(
       opts.cwd,
       [isAbsolute(file) ? file : `./${file}`, '--reporter=junit', `--reporter-outfile=${report}`, `--timeout=${TEST_LIMIT_MS}`],
-      opts.limitMs
+      limitMs
     )
     const durationMs = performance.now() - began
     if (code !== 0 || timedOut) opts.log?.(`::group::${file} failed\n${output}\n::endgroup::\n`)
