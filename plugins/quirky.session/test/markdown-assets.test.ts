@@ -9,6 +9,7 @@ let base: string
 let root: string
 let outside: string
 let resources: { path: string; contentType: string; disposition?: string }[]
+let worktreeCalls: unknown[]
 let handler: ReturnType<typeof createMarkdownAssets>
 
 class KindError extends Error {
@@ -18,6 +19,10 @@ class KindError extends Error {
 }
 
 const context = {
+  call: async (method: string, params: unknown) => {
+    worktreeCalls.push({ method, params })
+    return { id: 'wt', path: root }
+  },
   error: (kind: PluginErrorKind, message: string) => new KindError(kind, message),
   createFileResource: async (options: { path: string; contentType: string; disposition?: 'inline' | 'attachment' }) => {
     resources.push(options)
@@ -57,11 +62,14 @@ afterAll(() => rmSync(base, { recursive: true, force: true }))
 
 const fresh = () => {
   resources = []
-  handler = createMarkdownAssets({ context, cwdOf: (session) => {
-    if (session !== 'chat') throw context.error('not-found', `no such session: ${session}`)
-    return root
-  } })
+  worktreeCalls = []
+  handler = sessionIn(root)
 }
+
+const sessionIn = (cwd: string, worktreeId = 'wt') => createMarkdownAssets({ context, sessionOf: (session) => {
+  if (session !== 'chat') throw context.error('not-found', `no such session: ${session}`)
+  return { cwd, worktreeId }
+} })
 
 describe('markdownAssets files', () => {
   test('resolves a relative file to its root-relative path and strips the line suffix', async () => {
@@ -104,6 +112,64 @@ describe('markdownAssets files', () => {
     expect(result.files['escape/secret.ts']).toBeNull()
     expect(result.files['src/link.ts']).toBeNull()
     expect(result.files['src/inside.ts']).toEqual({ path: 'src/a.ts' })
+  })
+})
+
+describe('markdownAssets in a session below the worktree root', () => {
+  test('resolves from the session directory and answers worktree-relative paths', async () => {
+    fresh()
+    handler = sessionIn(join(root, 'src'))
+    const result = await ask({ session: 'chat', files: ['a.ts', 'a.ts:7', './a.ts', '../docs/notes.txt', join(root, 'docs', 'notes.txt'), 'src/a.ts'] })
+    expect(result.files).toEqual({
+      'a.ts': { path: 'src/a.ts' },
+      'a.ts:7': { path: 'src/a.ts', line: 7 },
+      './a.ts': { path: 'src/a.ts' },
+      '../docs/notes.txt': { path: 'docs/notes.txt' },
+      [join(root, 'docs', 'notes.txt')]: { path: 'docs/notes.txt' },
+      'src/a.ts': null
+    })
+    expect(worktreeCalls).toEqual([{ method: 'quirky.worktree/resolve', params: { selector: 'id:wt' } }])
+  })
+
+  test('the returned path reaches the same file from the worktree root', async () => {
+    fresh()
+    handler = sessionIn(join(root, 'docs'))
+    const hit = (await ask({ session: 'chat', files: ['../src/a.ts'] })).files['../src/a.ts']
+    expect(hit && realpathSync(join(root, hit.path))).toBe(join(root, 'src', 'a.ts'))
+  })
+
+  test('refuses a .. that leaves the worktree root, from the root and from below it', async () => {
+    fresh()
+    handler = sessionIn(join(root, 'src'))
+    const below = await ask({ session: 'chat', files: ['../../outside/secret.ts', '../../../work/../outside/secret.ts', join(outside, 'secret.ts'), '../escape/secret.ts', 'link.ts'] })
+    expect(Object.values(below.files).every((hit) => hit === null)).toBe(true)
+    handler = sessionIn(root)
+    const atRoot = await ask({ session: 'chat', files: ['../outside/secret.ts'] })
+    expect(atRoot.files['../outside/secret.ts']).toBeNull()
+  })
+
+  test('serves a worktree image named from the session directory', async () => {
+    fresh()
+    handler = sessionIn(join(root, 'docs'))
+    const result = await ask({ session: 'chat', images: ['shot.png', '../../outside/secret.png'] })
+    expect(result.images).toEqual({ 'shot.png': '/resource/1', '../../outside/secret.png': null })
+  })
+
+  test('answers null everywhere when the worktree cannot be resolved', async () => {
+    fresh()
+    handler = createMarkdownAssets({
+      context: { ...context, call: async () => { throw new Error('no such worktree') } },
+      sessionOf: () => ({ cwd: root, worktreeId: 'gone' })
+    })
+    expect(await ask({ session: 'chat', files: ['src/a.ts'], images: ['docs/shot.png'] })).toEqual({ files: { 'src/a.ts': null }, images: { 'docs/shot.png': null } })
+  })
+
+  test('a floating session opens no files and keeps images inside its directory', async () => {
+    fresh()
+    handler = sessionIn(root, 'floating')
+    const result = await ask({ session: 'chat', files: ['src/a.ts'], images: ['docs/shot.png', '../outside/secret.png'] })
+    expect(result).toEqual({ files: { 'src/a.ts': null }, images: { 'docs/shot.png': '/resource/1', '../outside/secret.png': null } })
+    expect(worktreeCalls).toEqual([])
   })
 })
 
@@ -159,7 +225,7 @@ describe('markdownAssets images', () => {
           return context.createFileResource(options)
         }
       },
-      cwdOf: () => root
+      sessionOf: () => ({ cwd: root, worktreeId: 'wt' })
     })
     expect((await ask({ session: 'chat', images: ['docs/shot.png'] })).images['docs/shot.png']).toBeNull()
     fail = false

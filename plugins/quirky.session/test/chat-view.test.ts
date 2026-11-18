@@ -567,6 +567,21 @@ describe('markdown prose', () => {
     ])
   })
 
+  test('a chip opens the worktree-relative path the daemon answered, not the path as written', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), prose(2, 'See `src/markdown/index.ts:8`.')],
+      handlers: {
+        'quirky.session/markdownAssets': () => ({ files: { 'src/markdown/index.ts:8': { path: 'packages/ui/src/markdown/index.ts', line: 8 } }, images: {} }),
+        'quirky.editor/open': () => ({ ok: true })
+      }
+    })
+    await settle()
+    await click(host!.querySelector('[data-path-chip]'))
+    expect(fake.callsTo('quirky.editor/open').map((call) => call.params)).toEqual([
+      { worktree: 'wt-main', path: 'packages/ui/src/markdown/index.ts', line: 8, focus: true }
+    ])
+  })
+
   test('a chip says so when the editor cannot open the file', async () => {
     await mountChat({
       messages: [user(1, 'go'), prose(2, 'See `src/a.ts`.')],
