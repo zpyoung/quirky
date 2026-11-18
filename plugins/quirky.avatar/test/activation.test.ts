@@ -133,6 +133,182 @@ function addRuntimeWorktree(t: TestApp) {
   return { worktreePath, mainPath }
 }
 
+async function finishLifecycleTurn(): Promise<void> {
+  const turn = Promise.withResolvers<void>()
+  setImmediate(turn.resolve)
+  await turn.promise
+}
+
+const PROOF = 'The Avatar is checking its permission hook. Run only `pwd` once, then stop and wait for your mandate. Do not start work.'
+const UPDATE = 'Your mandate from the user was updated. Work to this version from now on.\n\nGoal: Fix the build\nDone when (this command passes): bun test\nLevel: own-branch\n\nWhen the work meets the done-when, say so plainly and stop.'
+
+for (const state of ['checking', 'briefing'] as const) {
+  test(`restores owed ${state} briefing only after new proof and readiness`, async () => {
+    let working = false
+    const t = appSetup({
+      'quirky.session/get': ({ session }) => ({ id: session, agent: 'claude', status: 'running', agentStatus: { state: working ? 'working' : 'idle' } })
+    })
+    const mandate = sampleMandate({ goal: 'Fix the build', doneWhen: 'bun test', doneWhenKind: 'command', guidelines: [] })
+    addHandoff(t, { state, sessionId: 's1', handedOffAt: 1_700_000_000_000, mandate })
+    addHandoff(t, { worktreeId: 'already-working', state: 'working', sessionId: 's2' })
+    handoffSetup(t)
+    const check = Promise.withResolvers<{ ok: boolean; reason: string }>()
+    const checks: string[] = []
+    const sent: string[] = []
+    t.app.services.gate.gateCheck = (id) => { checks.push(id); return check.promise }
+    t.app.services.gate.writeMarker = (sessionId, worktreeId, level) => writeMarkerFile(t.context.home, sessionId, { worktreeId, level })
+    t.app.services.supervisor.send = async (_id, text) => {
+      sent.push(text)
+      if (text === PROOF) working = true
+      return { sent: true }
+    }
+
+    expect(restoreHandoffs(t.app).checksResumed).toEqual(['wt-1'])
+    await finishLifecycleTurn()
+    expect(sent).toEqual([PROOF])
+    expect(restoredEntries(t, 'wt-1')[0]?.data).toEqual({ type: 'restored', sessionId: 's1', marker: 'written', gateCheck: true })
+    expect(t.app.store.handoffs.get('wt-1')?.state).toBe('checking')
+    if (state === 'briefing') {
+      expect(t.app.store.journalSince(0).some((entry) => entry.data.type === 'state' && entry.data.from === 'briefing' &&
+        entry.data.state === 'checking' && entry.data.note === 'rechecking before the mandate brief')).toBe(true)
+    }
+    restoreHandoffs(t.app)
+    check.resolve({ ok: true, reason: '' })
+    await finishLifecycleTurn()
+    expect(sent).toEqual([PROOF])
+    expect(t.app.store.handoffs.get('wt-1')?.state).toBe('briefing')
+    working = false
+    await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+    await finishLifecycleTurn()
+    expect(sent).toEqual([PROOF, UPDATE])
+    expect(t.app.store.handoffs.get('wt-1')?.state).toBe('working')
+    restoreHandoffs(t.app)
+    await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+    await finishLifecycleTurn()
+    expect(sent).toEqual([PROOF, UPDATE])
+    expect(checks).toEqual(['wt-1'])
+  })
+}
+
+test('a restored accepted proof settlement reaches the real checker and fails without a receipt', async () => {
+  const t = appSetup({
+    'quirky.session/get': ({ session }) => ({
+      id: session, agent: 'claude', status: 'running', agentStatus: { state: 'idle' },
+      launch: { args: ['--settings', JSON.stringify(claudeGateSettings({}, 55))] }
+    })
+  })
+  addHandoff(t, { state: 'checking', sessionId: 's1' })
+  runtimeSetup(t)
+  const sent: string[] = []
+  t.app.services.supervisor.send = async (_id, text) => { sent.push(text); return { sent: true } }
+  restoreHandoffs(t.app)
+  await finishLifecycleTurn()
+  expect(sent).toEqual([PROOF])
+  await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+  await finishLifecycleTurn()
+  expect(t.app.store.handoffs.get('wt-1')?.state).toBe('gate-failed')
+  expect(t.app.needs.list({ open: true })).toMatchObject([{
+    kind: 'gate-failed', detail: { sessionId: 's1', reason: 'the proof turn ended without a gate receipt' },
+    actions: ['restart-to-handoff']
+  }])
+  expect(readMarkerFile(t.context.home, 's1')).toBeNull()
+  expect(sent).toEqual([PROOF])
+})
+
+test('restored pending proof preserves its need and journal suppression until accepted', async () => {
+  const t = appSetup({ 'quirky.session/get': () => ({ id: 's1', agent: 'claude', status: 'running', agentStatus: { state: 'idle' } }) })
+  addHandoff(t, { state: 'checking', sessionId: 's1' })
+  t.app.journal('wt-1', 'handoff', { updated: false })
+  t.app.journal('wt-1', 'event', { type: 'proof-not-sent', reason: 'user-typing' })
+  const pending = t.app.needs.add({
+    worktreeId: 'wt-1', kind: 'gate-failed', title: 'Gate proof not sent: user-typing',
+    detail: { reason: 'user-typing', agent: 'claude', sessionId: 's1' }, actions: ['restart-to-handoff', 'take-back']
+  })
+  const unrelated = t.app.needs.add({
+    worktreeId: 'wt-1', kind: 'gate-failed', title: "The avatar can't confirm it gates Claude",
+    detail: { reason: 'other session', agent: 'claude', sessionId: 'other' }, actions: ['restart-to-handoff']
+  })
+  handoffSetup(t)
+  const proof = Promise.withResolvers<{ ok: boolean; reason: string }>()
+  t.app.services.gate.gateCheck = () => proof.promise
+  let accepted = false
+  t.app.services.supervisor.send = async () => ({ sent: accepted, reason: accepted ? undefined : 'user-typing' })
+  let changes = 0
+  const off = t.app.on((event) => { if (event.type === 'needs-changed') changes++ })
+  disposers.push(off)
+  restoreHandoffs(t.app)
+  await finishLifecycleTurn()
+  await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+  await finishLifecycleTurn()
+  expect(t.app.store.needs.get(pending.id)).toEqual(pending)
+  expect(changes).toBe(0)
+  expect(t.app.store.journalSince(0).filter((entry) => entry.data.type === 'proof-not-sent').map((entry) => entry.data))
+    .toEqual([{ type: 'proof-not-sent', reason: 'user-typing' }])
+  accepted = true
+  await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+  await finishLifecycleTurn()
+  expect(t.app.store.needs.get(pending.id)?.resolution).toBe('proof-prompt-sent')
+  expect(t.app.store.needs.get(unrelated.id)?.resolvedAt).toBeNull()
+  proof.resolve({ ok: true, reason: '' })
+  await finishLifecycleTurn()
+})
+
+test('restoration re-proves a refused brief without repeating its journal reason', async () => {
+  const t = appSetup({ 'quirky.session/get': () => ({ id: 's1', agent: 'claude', status: 'running', agentStatus: { state: 'idle' } }) })
+  addHandoff(t, { state: 'briefing', sessionId: 's1' })
+  t.app.journal('wt-1', 'handoff', { updated: false })
+  t.app.journal('wt-1', 'event', { type: 'brief-not-sent', reason: 'user-typing' })
+  handoffSetup(t)
+  const proof = Promise.withResolvers<{ ok: boolean; reason: string }>()
+  t.app.services.gate.gateCheck = () => proof.promise
+  const attempts: string[] = []
+  t.app.services.supervisor.send = async (_id, text) => {
+    attempts.push(text)
+    return text === PROOF ? { sent: true } : { sent: false, reason: 'user-typing' }
+  }
+  restoreHandoffs(t.app)
+  await finishLifecycleTurn()
+  expect(attempts).toEqual([PROOF])
+  proof.resolve({ ok: true, reason: '' })
+  await finishLifecycleTurn()
+  for (let retry = 0; retry < 2; retry++) {
+    await t.deliver({ type: 'quirky.agent-status/settled', data: { worktreeId: 'wt-1', sessionId: 's1' } } as never)
+    await finishLifecycleTurn()
+  }
+  expect(attempts.filter((text) => text !== PROOF)).toHaveLength(3)
+  expect(t.app.store.handoffs.get('wt-1')?.state).toBe('briefing')
+  expect(t.app.store.journalSince(0).filter((entry) => entry.data.type === 'brief-not-sent').map((entry) => entry.data))
+    .toEqual([{ type: 'brief-not-sent', reason: 'user-typing' }])
+  expect(t.app.needs.list({ open: true })).toEqual([])
+})
+
+test('restored natural proof closes only its matching incomplete-check need', async () => {
+  const t = appSetup({ 'quirky.session/get': () => ({ id: 's1', agent: 'claude', status: 'running', agentStatus: { state: 'working' } }) })
+  addHandoff(t, { state: 'checking', sessionId: 's1' })
+  const incomplete = t.app.needs.add({
+    worktreeId: 'wt-1', kind: 'gate-failed', title: 'Gate check could not finish: proof unavailable',
+    detail: { reason: 'proof unavailable', agent: 'claude', sessionId: 's1' }, actions: ['restart-to-handoff', 'take-back']
+  })
+  const other = t.app.needs.add({
+    worktreeId: 'wt-1', kind: 'gate-failed', title: "The avatar can't confirm it gates Claude",
+    detail: { reason: 'an actual failure', agent: 'claude', sessionId: 's1' }, actions: ['restart-to-handoff']
+  })
+  handoffSetup(t)
+  const proof = Promise.withResolvers<{ ok: boolean; reason: string }>()
+  t.app.services.gate.gateCheck = () => proof.promise
+  const sent: string[] = []
+  t.app.services.supervisor.send = async (_id, text) => { sent.push(text); return { sent: true } }
+  restoreHandoffs(t.app)
+  await finishLifecycleTurn()
+  expect(sent).toEqual([])
+  proof.resolve({ ok: true, reason: '' })
+  await finishLifecycleTurn()
+  expect(t.app.store.needs.get(incomplete.id)?.resolution).toBe('gate-proved')
+  expect(t.app.store.needs.get(other.id)?.resolvedAt).toBeNull()
+  expect(t.app.store.handoffs.get('wt-1')?.state).toBe('briefing')
+  expect(sent).toEqual([])
+})
+
 test('writes a missing marker from an active hand-off', () => {
   const t = appSetup()
   gateSetup(t)
@@ -318,7 +494,7 @@ test('keeps a second marker for a worktree with an active hand-off', () => {
 
 test('resumes a checking hand-off and journals its marker state', () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   addHandoff(t, { state: 'checking' })
   const checks: string[] = []
   t.app.services.gate.gateCheck = async (worktreeId) => {
@@ -337,7 +513,7 @@ test('resumes a checking hand-off and journals its marker state', () => {
 
 test('journals a kept marker when it resumes a checking hand-off', () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   addHandoff(t, { state: 'checking' })
   writeMarkerFile(t.context.home, 's-1', { worktreeId: 'wt-1', level: 'own-branch' })
   const checks: string[] = []
@@ -357,7 +533,7 @@ test('journals a kept marker when it resumes a checking hand-off', () => {
 
 test('journals no marker when it resumes a checking hand-off that has no session', () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   addHandoff(t, { state: 'checking', sessionId: null })
   const checks: string[] = []
   t.app.services.gate.gateCheck = (worktreeId) => {
@@ -377,7 +553,7 @@ test('journals no marker when it resumes a checking hand-off that has no session
 
 test('journals a resumed check that throws at once and goes on to the next hand-off', () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   addHandoff(t, { state: 'checking', worktreeId: 'wt-1', sessionId: 's-1' })
   addHandoff(t, { state: 'checking', worktreeId: 'wt-2', sessionId: 's-2' })
   const checks: string[] = []
@@ -400,11 +576,11 @@ test('journals a resumed check that throws at once and goes on to the next hand-
   ])
 })
 
-test('does not resume gate checks outside the checking state', () => {
+test('does not resume gate checks when no briefing is owed', () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   const states: WorktreeState[] = [
-    'briefing', 'working', 'waiting-on-you', 'checking-done', 'in-review', 'merge-ready', 'merged',
+    'working', 'waiting-on-you', 'checking-done', 'in-review', 'merge-ready', 'merged',
     'pr-ready', 'committed', 'done', 'parked', 'gate-failed'
   ]
   for (const [index, state] of states.entries()) {
@@ -495,12 +671,12 @@ test('a checking hand-off without a session fails through the real gate modules'
 
 test('journals a rejected resumed check without an unhandled rejection', async () => {
   const t = appSetup()
-  gateSetup(t)
+  runtimeSetup(t)
   addHandoff(t, { state: 'checking' })
   t.app.services.gate.gateCheck = async () => { throw new Error('boom') }
 
   restoreHandoffs(t.app)
-  await Promise.resolve()
+  await finishLifecycleTurn()
 
   expect(t.app.store.journalPage({ worktreeId: 'wt-1' }).some((entry) =>
     entry.kind === 'event' && entry.data.type === 'gate-check-error' && entry.data.error === 'boom'
