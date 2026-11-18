@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import DOMPurify from 'dompurify'
 import type { FenceProps } from '../types'
 import { BlockFrame, CodeBlock, CopyButton } from './CodeBlock'
-import { loadsImages, withRemoteImagesBlocked } from './mermaid-safety'
+import { loadsImages, NO_HTML_LABELS, withRemoteImagesBlocked } from './mermaid-safety'
 import { RenderError } from './RenderError'
 
 type Outcome = { kind: 'pending' } | { kind: 'ready'; svg: string } | { kind: 'failed'; message: string }
@@ -31,9 +31,31 @@ function themeVariables(): Record<string, string> {
   return variables
 }
 
+const FETCHING_TAGS = 'input,video,audio,img,source,picture,object,embed,iframe,link'
+
+/** Any attribute that points off-page: a remote url, a `url()` that is not a fragment, or an `@import`. */
+const REMOTE_VALUE = /^\s*(?:https?:)?\/\/|url\(\s*["']?(?!#)|@import/i
+
+/**
+ * Sanitises the drawn svg, then removes whatever could still fetch a remote resource once inserted
+ * into the page. The second pass walks the result itself so it does not depend on the sanitiser
+ * visiting every node.
+ */
 function sanitizeSvg(svg: string): string {
   const purify = DOMPurify.isSupported ? DOMPurify : (DOMPurify as unknown as (window: Window) => typeof DOMPurify)(window)
-  return purify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+  const clean = purify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: FETCHING_TAGS.split(',') })
+  const holder = document.createElement('div')
+  holder.innerHTML = clean
+  for (const node of [...holder.querySelectorAll('*')]) {
+    if (node.matches(FETCHING_TAGS)) {
+      node.remove()
+      continue
+    }
+    for (const { name, value } of [...node.attributes]) {
+      if (!name.toLowerCase().startsWith('xmlns') && REMOTE_VALUE.test(value)) node.removeAttribute(name)
+    }
+  }
+  return holder.innerHTML
 }
 
 /** The first and last lines of a mermaid error, which carry the position and the expectation without the echoed source. */
@@ -104,7 +126,7 @@ export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps)
     void (async () => {
       try {
         const { default: mermaid } = await import('mermaid')
-        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(), suppressErrorRendering: true })
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', ...NO_HTML_LABELS, theme: 'base', themeVariables: themeVariables(), suppressErrorRendering: true })
         const { svg } = await withRemoteImagesBlocked(() => mermaid.render(id, code))
         const clean = sanitizeSvg(svg)
         remember(key, clean)

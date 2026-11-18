@@ -40,6 +40,7 @@ let createElement: typeof import('react').createElement
 let createRoot: typeof import('react-dom/client').createRoot
 let QuirkyMarkdown: typeof MarkdownModule.QuirkyMarkdown
 let withRemoteImagesBlocked: typeof SafetyModule.withRemoteImagesBlocked
+let loadsImages: typeof SafetyModule.loadsImages
 const mounted: Mounted[] = []
 
 type Globals = { Image: unknown; srcSetter: unknown; srcsetSetter: unknown; setAttribute: unknown; setAttributeNS: unknown }
@@ -132,6 +133,7 @@ beforeAll(async () => {
   createRoot = client.createRoot
   QuirkyMarkdown = markdown.QuirkyMarkdown
   withRemoteImagesBlocked = safety.withRemoteImagesBlocked
+  loadsImages = safety.loadsImages
 })
 
 afterAll(async () => {
@@ -240,6 +242,61 @@ describe('mermaid render with remote images blocked', () => {
     const container = await mount('```mermaid\nflowchart LR\n A-->B\n```')
     await settle(() => !!container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent, 'diagram')
     expect(container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent).toBe('drawn')
+    expect(recorded).toEqual([])
+  })
+})
+
+const HTML_LABEL_SOURCES = {
+  flowchart: [
+    "flowchart LR\n A[\"<table background='https://tracker.example/p.png'>x</table>\"] --> B",
+    "flowchart LR\n A[\"<div style='background-image:url(https://tracker.example/q.png)'>x</div>\"] --> B",
+    "flowchart LR\n A[\"<input type=image src='https://tracker.example/i.png'>\"] --> B",
+    "flowchart LR\n A[\"<video poster='https://tracker.example/v.png'></video>\"] --> B"
+  ],
+  mindmap: [
+    "mindmap\n  root((r))\n    a[\"<table background='https://tracker.example/p.png'>x</table>\"]",
+    "mindmap\n  root((r))\n    a[\"<div style='background-image:url(https://tracker.example/q.png)'>x</div>\"]"
+  ]
+}
+
+const remoteUrlCarriers = (container: Element) => [...container.querySelectorAll('*')].filter((element) => [...element.attributes].some((attribute) => /tracker\.example/.test(attribute.value)))
+
+describe('html in diagram labels', () => {
+  test('sources with URL-bearing label html are refused before mermaid sees them', async () => {
+    for (const [kind, sources] of Object.entries(HTML_LABEL_SOURCES)) {
+      for (const source of sources) {
+        expect(loadsImages(source)).toBe(true)
+        const container = await mount(`\`\`\`mermaid\n${source}\n\`\`\``)
+        await settle(() => !!container.querySelector('[role="alert"], .qmd-error, pre'), `${kind} refusal`)
+        expect(remoteUrlCarriers(container).length).toBe(0)
+      }
+    }
+    expect(mermaidRender).not.toHaveBeenCalled()
+    expect(recorded).toEqual([])
+  })
+
+  test('ordinary label text is not refused', () => {
+    for (const source of ['flowchart LR\n A[Start] --> B{Is a < b?}', 'mindmap\n  root((r))\n    child', 'flowchart LR\n A[\"a <b>bold</b>\"] --> B']) {
+      expect(loadsImages(source)).toBe(false)
+    }
+  })
+
+  test('mermaid is initialised with html labels off', async () => {
+    const container = await mount('```mermaid\nflowchart LR\n Init-->Config\n```')
+    await settle(() => !!container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent, 'diagram')
+    const config = mermaidInitialize.mock.calls[0][0] as { securityLevel: string; htmlLabels: boolean; flowchart: { htmlLabels: boolean } }
+    expect(config.securityLevel).toBe('strict')
+    expect(config.htmlLabels).toBe(false)
+    expect(config.flowchart.htmlLabels).toBe(false)
+  })
+
+  test('label html that a render still emits is stripped of remote urls', async () => {
+    mermaidRender.mockImplementationOnce(async () => ({
+      svg: `<svg viewBox="0 0 10 10"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml"><table background="https://tracker.example/p.png"><tr><td>x</td></tr></table><div style="background-image:url(https://tracker.example/q.png)">y</div><input type="image" src="https://tracker.example/i.png"><video poster="https://tracker.example/v.png"></video></div></foreignObject><text>drawn</text></svg>`
+    }))
+    const container = await mount('```mermaid\nflowchart LR\n Strip-->Remote\n```')
+    await settle(() => !!container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent, 'diagram')
+    expect(container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.innerHTML).not.toContain('tracker.example')
     expect(recorded).toEqual([])
   })
 })
