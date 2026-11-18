@@ -109,7 +109,11 @@ function recordProgress(
 
 function assertFullCapture(manifest: CaptureManifest): void {
   expect(manifest.scope).toBe('full')
-  expect(manifest.failures).toEqual([])
+  const emulatorTarget = 'view:quirky.terminal/emulator'
+  const emulatorError = `slot ${emulatorTarget} reported an error: iOS Simulator preview requires macOS and Xcode.Retry`
+  expect(manifest.failures).toEqual(process.platform === 'darwin' ? [] : themes.map((theme) =>
+    `${emulatorTarget} (${theme}): ${emulatorError}`
+  ))
   expect(manifest.captures).toHaveLength(2 * manifest.targets.length)
 
   const targetOrder = manifest.targets.map((target) => target.id)
@@ -129,7 +133,9 @@ function assertFullCapture(manifest: CaptureManifest): void {
   }
 
   for (const cell of manifest.captures) {
-    expect(cell.status).toBe('captured')
+    const unsupportedEmulator = process.platform !== 'darwin' && cell.targetId === emulatorTarget
+    expect(cell.status).toBe(unsupportedEmulator ? 'failed' : 'captured')
+    if (unsupportedEmulator) expect(cell.error).toBe(emulatorError)
     expect(cell.image).not.toBeNull()
     const bytes = readFileSync(cell.image!.path)
     expect(bytes.byteLength).toBeGreaterThan(0)
@@ -1365,6 +1371,23 @@ async function exerciseNewChatReadinessFaults(runtime: CaptureRuntime, proxy: Re
 
         runtime.options = { ...originalOptions, timeoutMs: 15_000 }
         let closeBlockerInstalled = false
+        const closeWaitRelease = Promise.withResolvers<void>()
+        const originalLocator = runtime.page.locator.bind(runtime.page)
+        runtime.page.locator = (selector, options) => {
+          const locator = originalLocator(selector, options)
+          if (selector !== dialog) return locator
+          const waitFor = locator.waitFor.bind(locator)
+          locator.waitFor = async (waitOptions) => {
+            if (!closeBlockerInstalled || waitOptions?.state !== 'detached') return await waitFor(waitOptions)
+            try {
+              await waitFor({ ...waitOptions, timeout: 1_000 })
+            } catch (error) {
+              await closeWaitRelease.promise
+              throw error
+            }
+          }
+          return locator
+        }
         const blockedCatalog = holdAgentCatalog()
         const restoreCloseBlocker = wrapClientCalls(runtime, async (method, params, callOptions, forward) => {
           if (method !== 'ui.command.run' || params.id !== 'command:quirky.session/new-chat') {
@@ -1398,6 +1421,8 @@ async function exerciseNewChatReadinessFaults(runtime: CaptureRuntime, proxy: Re
           void blockedClosePromise.catch(() => undefined)
           blockedCloseResult = await blockedClosePromise
         } finally {
+          closeWaitRelease.resolve()
+          runtime.page.locator = originalLocator
           blockedCatalog.release()
           await blockedClosePromise?.catch(() => undefined)
           restoreCloseBlocker()
@@ -1415,7 +1440,7 @@ async function exerciseNewChatReadinessFaults(runtime: CaptureRuntime, proxy: Re
         }
         if (!blockedCloseResult) throw new Error('New chat stuck-close fault did not produce a capture result')
         expect(closeBlockerInstalled).toBe(true)
-        expect(blockedCloseResult.capture.error).toContain('close New chat dialog')
+        expect(blockedCloseResult.capture.error).toContain('close New chat dialog exceeded 3000ms')
         await recoverWithGit(`new-chat-close-stuck-${theme}`, blockedCloseResult)
       }
       expect(createdSessions).toBe(0)

@@ -1099,10 +1099,13 @@ test('reports the slot state when content readiness times out', async () => {
 test('Git admission requires rendered code in every expanded diff', async () => {
   const home = mkdtempSync(join(tmpdir(), 'capture-git-admission-'))
   try {
+    const environment = createIsolatedRuntimeEnvironment(home)
+    mkdirSync(environment.TMPDIR!, { recursive: true })
+    mkdirSync(environment.XDG_RUNTIME_DIR!, { recursive: true })
     const browser = await chromium.launch({
       executablePath: captureBrowserExecutable(),
       headless: true,
-      env: createIsolatedRuntimeEnvironment(home)
+      env: environment
     })
     try {
       const page = await browser.newPage({ viewport: { width: 1400, height: 880 }, deviceScaleFactor: 2 })
