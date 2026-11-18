@@ -4,7 +4,7 @@ import type { Root } from 'react-dom/client'
 import type { QuirkyMarkdownProps } from '../src/markdown'
 import { maskLooseDollars } from '../src/markdown/math-dollars'
 
-type Node = { type: string; value?: string; position?: { start: { offset: number }; end: { offset: number } }; children?: Node[] }
+type Node = { type: string; value?: string; url?: string; position?: { start: { offset: number }; end: { offset: number } }; children?: Node[] }
 type Profile = 'untrusted' | 'file'
 
 let act: typeof import('react').act
@@ -203,36 +203,60 @@ describe('maskLooseDollars', () => {
 
   test('never changes the length', () => {
     for (const source of ['costs $5 and $10', '$$ open', 'so \\(x\\) and \\[y\\]', 'a $x $ b', '`$a` $b']) {
-      expect(maskLooseDollars(source, [], mask)).toHaveLength(source.length)
+      expect(maskLooseDollars(source, mask)).toHaveLength(source.length)
     }
   })
 
   test('masks loose dollars and keeps tight pairs', () => {
-    expect(maskLooseDollars('costs $5, and $x+1$ holds', [], mask)).toBe(`costs ${mask}5, and $x+1$ holds`)
+    expect(maskLooseDollars('costs $5, and $x+1$ holds', mask)).toBe(`costs ${mask}5, and $x+1$ holds`)
   })
 
-  test('leaves given spans and inline code alone', () => {
-    expect(maskLooseDollars('$5 `$6` $7', [[6, 7]], mask)).toBe(`${mask}5 \`$6\` ${mask}7`)
-    expect(maskLooseDollars('$5 $6', [[0, 2]], mask)).toBe('$5 ' + mask + '6')
+  test('leaves code, inline code and html alone', () => {
+    expect(maskLooseDollars('$5 `$6` $7', mask)).toBe(`${mask}5 \`$6\` ${mask}7`)
+    expect(maskLooseDollars('$5\n\n```\n$6 and $7\n```', mask)).toBe(`${mask}5\n\n\`\`\`\n$6 and $7\n\`\`\``)
   })
 
   test('escaped parentheses in link and image destinations and in definitions are not math', () => {
     for (const source of ['![shot](docs/shot\\(1\\).png)', '[a](docs/a\\(1\\).md "t")', '![shot][s]\n\n[s]: docs/shot\\(1\\).png']) {
-      expect(maskLooseDollars(source, [], mask)).toBe(source)
+      expect(maskLooseDollars(source, mask)).toBe(source)
     }
-    expect(maskLooseDollars('![a](b.png) then \\(x\\)', [], mask)).toBe('![a](b.png) then  $x$ ')
+    expect(maskLooseDollars('![a](b.png) then \\(x\\)', mask)).toBe('![a](b.png) then  $x$ ')
   })
 
   test('is a no-op on a second pass over its own output once unmasked', () => {
-    const once = maskLooseDollars('costs $5 and $10, $O(n)$', [], mask).replaceAll(mask, '$')
-    expect(maskLooseDollars(once, [], mask)).toBe(maskLooseDollars('costs $5 and $10, $O(n)$', [], mask))
+    const once = maskLooseDollars('costs $5 and $10, $O(n)$', mask).replaceAll(mask, '$')
+    expect(maskLooseDollars(once, mask)).toBe(maskLooseDollars('costs $5 and $10, $O(n)$', mask))
   })
 })
 
-describe('escaped parentheses in destinations', () => {
+describe.each<Profile>(['untrusted', 'file'])('escaped parentheses in destinations in the %s profile', (profile) => {
   test('an image whose path has escaped parentheses stays an image with no math', async () => {
-    const { tree } = await parse('![shot](docs/shot\\(1\\).png)', 'untrusted')
+    const { tree } = await parse('![shot](docs/shot\\(1\\).png)', profile)
     expect(mathNodes(tree)).toEqual([])
-    expect(nodes(tree, 'image').length).toBe(1)
+    expect(nodes(tree, 'image').map((node) => node.url)).toEqual(['docs/shot(1).png'])
+  })
+
+  test.each([
+    ['an inline link', '[a](docs/a\\(1\\).md "t")', 'link', 'docs/a(1).md'],
+    ['a definition', '![a][s]\n\n[s]: docs/shot\\(1\\).png', 'definition', 'docs/shot(1).png'],
+    ['a definition with the destination on the next line', '![a][s]\n\n[s]:\n  docs/shot\\(1\\).png', 'definition', 'docs/shot(1).png'],
+    ['a definition in a blockquote', '![a][s]\n\n> [s]: docs/shot\\(1\\).png', 'definition', 'docs/shot(1).png'],
+    ['an angle link destination with parentheses', '[a](<docs/a(b\\(1\\).md>)', 'link', 'docs/a(b(1).md'],
+    ['an angle image destination with a closing parenthesis', '![a](<docs/a)\\(x\\).png>)', 'image', 'docs/a)(x).png']
+  ])('%s keeps its destination', async (_label, text, type, url) => {
+    const { tree } = await parse(text, profile)
+    expect(mathNodes(tree)).toEqual([])
+    expect(nodes(tree, type).map((node) => node.url)).toEqual([url])
+  })
+
+  test('escaped delimiters in prose beside a destination are still math', async () => {
+    const { tree } = await parse('[a](docs/a\\(1\\).md) and \\(x\\)', profile)
+    expect(nodes(tree, 'link').map((node) => node.url)).toEqual(['docs/a(1).md'])
+    expect(nodes(tree, 'inlineMath').map((node) => node.value)).toEqual(['x'])
+  })
+
+  test('a pair may span emphasis', async () => {
+    const { tree } = await parse('so $a*b*c$ holds', profile)
+    expect(nodes(tree, 'inlineMath').map((node) => node.value)).toEqual(['a*b*c'])
   })
 })
