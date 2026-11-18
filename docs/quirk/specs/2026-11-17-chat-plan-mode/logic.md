@@ -253,6 +253,6 @@ Open questions from the mock's gaps (elements with no existing component):
 
 ## Status & amendments
 
-**Status:** Approved
+**Status:** Approved. Tech spec: authored (gate: crosses subsystems, >3 files)
 
 **Amendments:** none
