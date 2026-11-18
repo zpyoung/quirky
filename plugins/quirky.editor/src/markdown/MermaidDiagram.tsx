@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { InlineError, NoticeLine, uiTokens } from '@quirky/ui'
+import { loadsImages, NO_HTML_LABELS, sanitizeSvg, withRemoteImagesBlocked } from '@quirky/ui/markdown'
 import { useEditorUiControl, useEditorUiControlContext, type EditorUiControl } from '../window/uiControl'
 
 type MermaidApi = {
@@ -9,6 +10,9 @@ type MermaidApi = {
     securityLevel: 'strict'
     theme: 'base'
     themeVariables: Record<string, string>
+    htmlLabels: false
+    flowchart: { htmlLabels: false }
+    class: { htmlLabels: false }
   }): void
   render(id: string, source: string): Promise<{ svg: string }>
 }
@@ -16,6 +20,7 @@ type MermaidPackage = { default: MermaidApi }
 
 let mermaidModule: Promise<MermaidPackage> | null = null
 let nextDiagramOrdinal = 0
+const REFUSED = 'This diagram loads remote images, so it is not drawn.'
 
 function loadMermaid(): Promise<MermaidPackage> {
   // Mermaid is a large diagram parser; keep it out of the editor bundle until a Mermaid block is rendered.
@@ -97,6 +102,10 @@ export function MermaidDiagram({ source }: { source: string }): React.JSX.Elemen
   useEffect(() => {
     let active = true
     pendingRetry.current = false
+    if (loadsImages(source)) {
+      setResult({ session, svg: '', error: REFUSED })
+      return () => { active = false }
+    }
     setResult({ session, svg: '', error: null })
     loadMermaid().then(async (module) => {
       if (!active || currentSession.current !== session) return
@@ -104,11 +113,12 @@ export function MermaidDiagram({ source }: { source: string }): React.JSX.Elemen
         startOnLoad: false,
         securityLevel: 'strict',
         theme: 'base',
-        themeVariables: mermaidThemeVariables()
+        themeVariables: mermaidThemeVariables(),
+        ...NO_HTML_LABELS
       })
-      const rendered = await module.default.render(id, source)
+      const rendered = await withRemoteImagesBlocked(() => module.default.render(id, source))
       if (active && currentSession.current === session) {
-        setResult({ session, svg: DOMPurify.sanitize(rendered.svg, { USE_PROFILES: { svg: true, svgFilters: true } }), error: null })
+        setResult({ session, svg: sanitizeSvg(DOMPurify.sanitize(rendered.svg, { USE_PROFILES: { svg: true, svgFilters: true } })), error: null })
       }
     }).catch((cause: unknown) => {
       if (active && currentSession.current === session) {

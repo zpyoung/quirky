@@ -41,7 +41,7 @@ const REMOTE_VALUE = /^\s*(?:https?:)?\/\/|url\(\s*["']?(?!#)|@import/i
  * into the page. The second pass walks the result itself so it does not depend on the sanitiser
  * visiting every node.
  */
-function sanitizeSvg(svg: string): string {
+export function sanitizeSvg(svg: string): string {
   const purify = DOMPurify.isSupported ? DOMPurify : (DOMPurify as unknown as (window: Window) => typeof DOMPurify)(window)
   const clean = purify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: FETCHING_TAGS.split(',') })
   const holder = document.createElement('div')
