@@ -200,7 +200,7 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
     return typeof report === 'object' && report !== null && 'scope' in report && report.scope === 'project'
   })
   await click(panel.closest('[data-ui-tool-panel-frame]')!.querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!)
-  const search = (await world.win.waitFor(() => field(panel, 'Search title or ID')))!
+  const search = (await world.win.waitFor(() => field<HTMLInputElement>(panel, 'Search title or ID')))!
   await setText(search, 'not found')
   await world.win.waitFor(() => panel.querySelector('ul li') === null)
   await setText(search, 'Panel origin')
