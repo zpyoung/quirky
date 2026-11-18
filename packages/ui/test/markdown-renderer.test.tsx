@@ -207,6 +207,18 @@ describe('streaming (SC-1, SC-2)', () => {
     expect(block.querySelector('.qmd-line span[style]')).toBeNull()
   })
 
+  test('an open fence inside a blockquote or list item is plain source with the caret inside it', async () => {
+    for (const text of ['> ```ts\n> const a = 1', '- item\n  ```ts\n  const a = 1', '> - ```ts\n>   const a = 1']) {
+      const { container } = await mount({ text, streaming: true })
+      const block = one(container, '.qmd-code[data-language="ts"]')
+      expect(block.dataset.incomplete).toBe('true')
+      expect(block.querySelector('.qmd-code-toggle')).toBeNull()
+      expect(block.querySelector('.qmd-line span[style]')).toBeNull()
+      expect(block.querySelector('.qmd-caret')).toBeTruthy()
+      expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
+    }
+  })
+
   test('the caret follows the last block when no fence is open', async () => {
     const { container } = await mount({ text: 'Now running the reload test suite', streaming: true })
     const carets = all(container, '.qmd-caret')
@@ -285,6 +297,17 @@ describe('links and images (SC-5, SC-7, SC-8)', () => {
     expect(onOpenLink).toHaveBeenCalledWith('https://status.example.com/badge.png')
     await click(chips[1])
     expect(onOpenLink).toHaveBeenLastCalledWith('https://cdn.example.com/a.gif')
+  })
+
+  test('local images with spaces or non-ASCII in the path are asked for as written and found again', async () => {
+    const images = { 'docs/my shot.png': 'blob:space', 'docs/café.png': 'blob:cafe' }
+    const text = '![a](<docs/my shot.png>)\n\n![b][s]\n\n![c](docs/café.png)\n\n[s]: <docs/my shot.png>'
+    const { assets, resolveImages } = assetsFor({}, images)
+    const { container } = await mount({ text, assets })
+    await settle(() => container.querySelectorAll('figure').length === 3, 'figures')
+    expect(resolveImages.mock.calls[0][0].sort()).toEqual(['docs/café.png', 'docs/my shot.png'])
+    expect(all(container, 'figure img').map((img) => img.getAttribute('src'))).toEqual(['blob:space', 'blob:space', 'blob:cafe'])
+    expect(all(container, 'figcaption').map((caption) => caption.textContent)).toEqual(['docs/my shot.png', 'docs/my shot.png', 'docs/café.png'])
   })
 
   test('a worktree image shows with its path as a caption, and its alt text before it resolves', async () => {
@@ -392,6 +415,18 @@ describe('path chips (SC-6)', () => {
     await settle(() => resolveFiles.mock.calls.length > 0)
     expect(all(container, 'code[data-streamdown="inline-code"]').map((code) => code.textContent)).toEqual(['kept/code.ts'])
     expect(container.textContent).toBe('see a/b.ts and gone/missing.ts:7 and kept/code.ts here')
+  })
+
+  test('inline code inside a link label is ordinary code, not a chip or a candidate', async () => {
+    const { assets, resolveFiles } = assetsFor({ 'src/a.ts': {} })
+    const { container } = await mount({ text: 'Read [`src/a.ts`](https://example.com) now', assets })
+    await settle(() => resolveFiles.mock.calls.length > 0 || !!container.querySelector('a'), 'render')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(container.querySelector('[data-path-chip]')).toBeNull()
+    expect(one(container, 'a code[data-streamdown="inline-code"]').textContent).toBe('src/a.ts')
+    expect(resolveFiles.mock.calls.flatMap((call) => call[0])).not.toContain('src/a.ts')
   })
 
   test('without assets there are no chips and prose paths stay prose', async () => {
@@ -687,6 +722,15 @@ describe('mermaid and math (SC-4, SC-10)', () => {
     expect(one(note, '.qmd-error-message').textContent).toMatch(/^Couldn't typeset: .*sume/)
     expect(note.textContent).toContain('\\sume_{i=1}^n c_i')
     expect(container.querySelectorAll('.katex').length).toBeGreaterThan(0)
+  })
+
+  test('math that does not parse yet is silent source while streaming and a note once the message ends', async () => {
+    const { container, rerender } = await mount({ text: '$$\nT = \\su', streaming: true })
+    expect(container.querySelector('[data-qmd-error]')).toBeNull()
+    expect(container.textContent).toContain('\\su')
+    await rerender({ text: '$$\nT = \\sume\n$$', streaming: false })
+    expect(one(container, '[data-qmd-error] .qmd-error-message').textContent).toMatch(/^Couldn't typeset: /)
+    expect(one(container, '[data-qmd-error]').textContent).toContain('\\su')
   })
 
   test('prices, code and real math follow the strict dollar rule', async () => {

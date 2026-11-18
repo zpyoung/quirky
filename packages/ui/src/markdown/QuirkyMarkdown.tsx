@@ -9,8 +9,8 @@ import remarkMath from 'remark-math'
 import { Streamdown, defaultRemarkPlugins } from 'streamdown'
 import type { ControlsConfig, CustomRenderer, LinkSafetyConfig, PluginConfig } from 'streamdown'
 import { codePlugin } from './blocks/CodeBlock'
-import { BUILT_IN_RENDERERS, QUIRKY_COMPONENTS, RenderersContext } from './components'
-import { collectChartSources, collectLocalImageSources, endsInOpenFence } from './fences'
+import { BUILT_IN_RENDERERS, QUIRKY_COMPONENTS, OpenFenceContext, RenderersContext, StreamingContext } from './components'
+import { collectChartSources, collectLocalImageSources, openFenceAtEnd } from './fences'
 import { MATH_ERROR_COLOR } from './math-errors'
 import { remarkHtmlAllowlist } from './remark-html-allowlist'
 import { remarkLooseDollars } from './remark-loose-dollars'
@@ -159,35 +159,40 @@ export function QuirkyMarkdown({
   const images = useMemo(() => (resolving ? collectLocalImageSources(text) : NO_STRINGS), [resolving, text])
   const resolved = useAssetResolutions(resolving ? assets : undefined, files, images)
   const sources = useStableSources(useMemo(() => collectChartSources(text), [text]))
-  const caretInBlock = streaming && endsInOpenFence(text)
+  const openFence = useMemo(() => (streaming ? openFenceAtEnd(text) : null), [streaming, text])
+  const caretInBlock = openFence !== null
 
   return (
     <div className={className ? `qmd ${className}` : 'qmd'} data-profile={profile} data-streaming={streaming ? 'true' : undefined}>
       <RuntimeContext.Provider value={runtime}>
-        <FilesContext.Provider value={resolved.files}>
-          <ImagesContext.Provider value={resolved.images}>
-            <ChartSourcesContext.Provider value={sources}>
-              <RenderersContext.Provider value={config.renderers}>
-                <Streamdown
-                  mode={streaming ? 'streaming' : 'static'}
-                  isAnimating={streaming}
-                  parseIncompleteMarkdown
-                  prefix="sd"
-                  linkSafety={LINK_SAFETY}
-                  controls={CONTROLS}
-                  tableMaxHeight="none"
-                  plugins={config.plugins}
-                  remarkPlugins={config.remark}
-                  rehypePlugins={config.rehype}
-                  components={config.components}
-                  data-qmd-body=""
-                >
-                  {text}
-                </Streamdown>
-              </RenderersContext.Provider>
-            </ChartSourcesContext.Provider>
-          </ImagesContext.Provider>
-        </FilesContext.Provider>
+        <StreamingContext.Provider value={streaming}>
+          <OpenFenceContext.Provider value={openFence}>
+            <FilesContext.Provider value={resolved.files}>
+              <ImagesContext.Provider value={resolved.images}>
+                <ChartSourcesContext.Provider value={sources}>
+                  <RenderersContext.Provider value={config.renderers}>
+                    <Streamdown
+                      mode={streaming ? 'streaming' : 'static'}
+                      isAnimating={streaming}
+                      parseIncompleteMarkdown
+                      prefix="sd"
+                      linkSafety={LINK_SAFETY}
+                      controls={CONTROLS}
+                      tableMaxHeight="none"
+                      plugins={config.plugins}
+                      remarkPlugins={config.remark}
+                      rehypePlugins={config.rehype}
+                      components={config.components}
+                      data-qmd-body=""
+                    >
+                      {text}
+                    </Streamdown>
+                  </RenderersContext.Provider>
+                </ChartSourcesContext.Provider>
+              </ImagesContext.Provider>
+            </FilesContext.Provider>
+          </OpenFenceContext.Provider>
+        </StreamingContext.Provider>
       </RuntimeContext.Provider>
       {streaming && !caretInBlock ? <span className="qmd-caret" aria-hidden="true">{'▍'}</span> : null}
     </div>

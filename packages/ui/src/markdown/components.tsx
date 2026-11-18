@@ -23,6 +23,12 @@ export const BUILT_IN_RENDERERS: CustomRenderer[] = [
 /** The fence renderers in priority order: the caller's first, then the built-ins. */
 export const RenderersContext = createContext<CustomRenderer[]>(BUILT_IN_RENDERERS)
 
+/** True while the message is still arriving, when a block that cannot render yet shows as source instead of an error. */
+export const StreamingContext = createContext(false)
+
+/** The code block still being written at the end of a streaming message, which streamdown cannot see inside a blockquote. */
+export const OpenFenceContext = createContext<{ language: string; code: string } | null>(null)
+
 export function textOf(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -53,36 +59,50 @@ function anchorAttributes(props: Record<string, unknown>): Record<string, unknow
   return kept
 }
 
+/** True inside a link label, where inline code is ordinary code and never a path chip. */
+const InsideLinkContext = createContext(false)
+
 /** Only http and https become links, and a click goes to the caller instead of navigating. */
 function Link({ href, children, node: _node, ...rest }: ComponentProps<'a'> & ExtraProps) {
   const runtime = useContext(RuntimeContext)
+  const label = <InsideLinkContext.Provider value={true}>{children}</InsideLinkContext.Provider>
   if (typeof href === 'string' && /^https?:\/\//i.test(href)) {
     const open = (event: MouseEvent<HTMLAnchorElement>) => {
       event.preventDefault()
       runtime.current.onOpenLink(href)
     }
-    return <a data-streamdown="link" href={href} rel="noreferrer" onClick={open} onAuxClick={open}>{children}</a>
+    return <a data-streamdown="link" href={href} rel="noreferrer" onClick={open} onAuxClick={open}>{label}</a>
   }
   if (typeof href === 'string' && href.length > 1 && href.startsWith('#')) {
-    return <a data-streamdown="link" href={href} {...anchorAttributes(rest)} onClick={(event) => jumpToFragment(event, href)}>{children}</a>
+    return <a data-streamdown="link" href={href} {...anchorAttributes(rest)} onClick={(event) => jumpToFragment(event, href)}>{label}</a>
   }
-  return <>{children}</>
+  return label
 }
 
 const REMOTE_SRC = /^(?:https?:)?\/\//i
 const OTHER_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+function decodedPath(src: string): string {
+  try {
+    return decodeURIComponent(src)
+  } catch {
+    return src
+  }
+}
 
 function Image({ src, alt }: ComponentProps<'img'> & ExtraProps) {
   const images = useContext(ImagesContext)
   if (typeof src !== 'string' || src === '') return <>{alt ?? ''}</>
   if (REMOTE_SRC.test(src)) return <RemoteImageChip src={src} alt={alt} />
   if (OTHER_SCHEME.test(src)) return <>{alt ?? ''}</>
-  const url = images[src]
+  // the parser percent-encodes the destination, while the lookup keys are the path as written
+  const written = images[src] ? src : decodedPath(src)
+  const url = images[written]
   if (!url) return <>{alt ?? ''}</>
   return (
     <figure className="qmd-figure" data-streamdown="image-wrapper">
       <img src={url} alt={alt ?? ''} loading="lazy" />
-      <figcaption>{src}</figcaption>
+      <figcaption>{written}</figcaption>
     </figure>
   )
 }
@@ -106,8 +126,10 @@ function katexMessage(title: string | undefined): string {
  * span. Both become the shared error note with the source underneath.
  */
 function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) {
+  const streaming = useContext(StreamingContext)
   const classes = typeof rest.className === 'string' ? rest.className.split(/\s+/) : []
   if (classes.includes('katex-error')) {
+    if (streaming) return <span className="qmd-source">{textOf(children)}</span>
     return (
       <RenderError inline message={`Couldn't typeset: ${katexMessage(rest.title)}`}>
         <span className="qmd-source">{textOf(children)}</span>
@@ -116,6 +138,7 @@ function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) 
   }
   const failure = classes.includes('katex') ? readMathFailure(node as never) : null
   if (failure) {
+    if (streaming) return <span className="qmd-source">{failure.tex}</span>
     return (
       <RenderError inline message={`Couldn't typeset: ${explainMath(failure.tex)}`}>
         <span className="qmd-source">{failure.tex}</span>
@@ -127,9 +150,10 @@ function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) 
 
 function InlineCode({ children, ...rest }: ComponentProps<'code'> & ExtraProps) {
   const files = useContext(FilesContext)
+  const insideLink = useContext(InsideLinkContext)
   const text = textOf(children)
   const marked = (rest as Record<string, unknown>)['data-path-candidate']
-  const candidate = typeof marked === 'string' ? marked : isPathCandidate(text) ? text : undefined
+  const candidate = typeof marked === 'string' ? marked : isPathCandidate(text) && !insideLink ? text : undefined
   const resolved = candidate ? files[candidate] : undefined
   if (candidate && resolved) return <PathChip candidate={candidate} line={resolved.line} />
   // a candidate split out of prose that did not resolve is prose again; only written inline code stays code
@@ -175,11 +199,13 @@ function markedLines(children: ReactNode): ReactNode[] | undefined {
 
 function FenceCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
   const renderers = useContext(RenderersContext)
-  const isIncomplete = useIsCodeFenceIncomplete()
+  const openFence = useContext(OpenFenceContext)
+  const streamdownIncomplete = useIsCodeFenceIncomplete()
   const language = /language-([^\s]+)/.exec(className ?? '')?.[1]?.toLowerCase() ?? ''
   const metaValue = node?.properties?.metastring
   const meta = typeof metaValue === 'string' ? metaValue : undefined
   const code = textOf(children).replace(/\n$/, '')
+  const isIncomplete = streamdownIncomplete || (openFence !== null && openFence.language === language && openFence.code.trimEnd() === code.trimEnd())
   const renderer = language === '' ? undefined : renderers.find((entry) => (Array.isArray(entry.language) ? entry.language.includes(language) : entry.language === language))
   if (renderer) {
     const Component = renderer.component

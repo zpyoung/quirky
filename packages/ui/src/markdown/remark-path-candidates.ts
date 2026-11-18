@@ -33,10 +33,10 @@ function withoutFencedCode(markdown: string): string {
   return kept.join('\n')
 }
 
-/** Every distinct candidate written in `markdown` outside fenced code and link targets, in the order first seen. */
+/** Every distinct candidate written in `markdown` outside fenced code, link labels and link targets, in the order first seen. */
 export function collectPathCandidates(markdown: string): string[] {
   const found = new Set<string>()
-  const prose = withoutFencedCode(markdown).replace(/\]\([^)\n]*\)/g, ']')
+  const prose = withoutFencedCode(markdown).replace(/\[[^\]\n]*\]\([^)\n]*\)/g, '')
   for (const match of prose.matchAll(PATH_CANDIDATE)) found.add(match[0])
   return [...found]
 }
