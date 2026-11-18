@@ -8,6 +8,7 @@ import { parseCliRefusal, type CliReceipt } from './cli-run'
 import { checkIds } from './cli-checks'
 import * as table from './cli-table'
 import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
+import { CLI_FILES_LIMITS } from './cli-files-limits'
 import { createCliFilesWorld, CliFilesStartupError, getProcessInspectionMetadata, type CliFilesWorld, type CliFilesStartupDiagnostics, type CliProcessInspectionMetadata } from './cli-world'
 import type { BrowserContext } from 'playwright'
 
@@ -230,8 +231,9 @@ export class CliFilesFailure extends Error {
   }
 }
 
-const WORK_LIMIT_MS = 330_000
-const TEARDOWN_LIMIT_MS = 30_000
+const WORK_LIMIT_MS = CLI_FILES_LIMITS.workMs
+const TEARDOWN_LIMIT_MS = CLI_FILES_LIMITS.cleanupMs
+const WORK_DEADLINE_MESSAGE = `CLI file rehearsal exceeded its ${WORK_LIMIT_MS / 1_000}-second work deadline`
 const CHILD_LIMIT_MS = 15_000
 const MAX_STDOUT_BYTES = 16 * 1024 * 1024
 const MAX_DIAGNOSTIC_BYTES = 8 * 1024
@@ -2834,7 +2836,7 @@ export class CliFilesRunner {
   constructor(readonly options: CliFilesRunOptions) {
     this.timing.begin('setup')
     this.activeTimingPhase = 'setup'
-    this.workTimer = setTimeout(() => this.workController.abort(new CliFilesFailure('deadline', 'CLI file rehearsal exceeded its 330-second work deadline')),
+    this.workTimer = setTimeout(() => this.workController.abort(new CliFilesFailure('deadline', WORK_DEADLINE_MESSAGE)),
       Math.max(1, this.workDeadline - Date.now()))
     if (options.signal) {
       this.signalListener = () => this.workController.abort(options.signal?.reason ?? new CliFilesFailure('interrupted', 'CLI file rehearsal interrupted'))
@@ -2848,7 +2850,7 @@ export class CliFilesRunner {
       const reason = this.workController.signal.reason
       throw reason instanceof Error ? reason : new CliFilesFailure('interrupted', 'CLI file rehearsal interrupted')
     }
-    if (Date.now() >= this.workDeadline) throw new CliFilesFailure('deadline', 'CLI file rehearsal exceeded its 330-second work deadline')
+    if (Date.now() >= this.workDeadline) throw new CliFilesFailure('deadline', WORK_DEADLINE_MESSAGE)
   }
 
 
@@ -4429,7 +4431,7 @@ export class CliFilesRunner {
     }
     const deadline = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS)
     this.cleanupTimer ??= setTimeout(() => this.cleanupController.abort(
-      new CliFilesFailure('cleanup-deadline', 'CLI file teardown exceeded its 30-second cleanup reserve')
+      new CliFilesFailure('cleanup-deadline', `CLI file teardown exceeded its ${TEARDOWN_LIMIT_MS / 1_000}-second cleanup reserve`)
     ), Math.max(1, deadline - Date.now()))
     return deadline
   }
