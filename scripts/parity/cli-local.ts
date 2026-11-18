@@ -670,6 +670,7 @@ async function runHookChecks(context: CliCheckContext): Promise<void> {
   const { world } = context
   const hookFile = world.paths.codexHooksFile
   const userDocument = world.paths.userHookDocument
+  await productCall(context, 'local-hooks-avatar-off', ['setting', 'set', 'setting:quirky.avatar/agent-hooks', 'false'], 'local-hooks-status')
   const entries = await productCall(context, 'local-hooks-status', ['agent-status', 'hooks', 'status'])
   const statusEntriesValue = statusEntries(entries, 'initial hooks status')
   equal(statusEntriesValue.length, 28, 'initial hook status count')

@@ -495,13 +495,12 @@ export class PluginHost {
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
-      if (!disabledMidway && imported.module) await this.callDeactivate(id, imported.module, runtime)
+      if (imported.module) await this.callDeactivate(id, imported.module, runtime)
       attempt.revoked = true
       attempt.implementations.clear()
       runtime.attempt = undefined
       runtime.module = undefined
       if (disabledMidway) {
-        if (imported.module) await this.callDeactivate(id, imported.module, runtime)
         await this.disposeActivation(id, attempt, runtime)
         await this.revokeExtension(id, attempt)
         runtime.failure = undefined
@@ -509,7 +508,6 @@ export class PluginHost {
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
-      if (imported.module) await this.callDeactivate(id, imported.module, runtime)
       await this.disposeActivation(id, attempt, runtime)
       await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)

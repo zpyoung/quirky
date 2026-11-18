@@ -110,7 +110,7 @@ test('the fragment covers only the already-declared worktree surface and owned c
 
 test('Menu and WorktreeBoard callback producers are explicitly forwarded', () => {
   const menuActions = coverage.actions.filter((entry) => entry.site.file === MENU)
-  expect(menuActions).toHaveLength(32)
+  expect(menuActions).toHaveLength(33)
   expect(menuActions.every((entry) => 'notAction' in entry && entry.notAction === 'forwarded')).toBe(true)
 
   const boardActions = coverage.actions.filter((entry) => entry.site.file === BOARD)

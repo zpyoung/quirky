@@ -1440,7 +1440,7 @@ describe('launch settings', () => {
     })
   })
 
-  test('scenarios 12–14: pi and omp expose and resolve structured models, but refuse effort without discovery', async () => {
+  test('scenarios 12–14: pi and omp expose and resolve structured models, and pi refuses effort without discovery', async () => {
     const t = await start()
     for (const agent of ['pi', 'omp'] as const) {
       expect(await t.call(A('options'), { agent })).toMatchObject({
@@ -1455,12 +1455,17 @@ describe('launch settings', () => {
         structured: { model: 'stub/think' },
         shadowed: []
       })
-      expect(await failure(t.call(A('resolveLaunch'), {
+      const withEffort = t.call(A('resolveLaunch'), {
         agent,
         model: 'stub/think',
         options: { effort: 'high' },
         structured: true
-      }))).toMatchObject({
+      })
+      if (agent === 'omp') {
+        expect(await withEffort).toMatchObject({ structured: { model: 'stub/think', effort: 'high' } })
+        continue
+      }
+      expect(await failure(withEffort)).toMatchObject({
         code: RpcErrorCode.InvalidParams,
         message: `Agent ${agent} model stub/think does not support effort high.`
       })
