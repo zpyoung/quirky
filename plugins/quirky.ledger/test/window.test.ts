@@ -200,7 +200,7 @@ test('SC-13: the sidebar panel follows the active workspace, scopes and client s
     return typeof report === 'object' && report !== null && 'scope' in report && report.scope === 'project'
   })
   await click(panel.closest('[data-ui-tool-panel-frame]')!.querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!)
-  const search = field(panel, 'Search title or ID')!
+  const search = (await world.win.waitFor(() => field<HTMLInputElement>(panel, 'Search title or ID')))!
   await setText(search, 'not found')
   await world.win.waitFor(() => panel.querySelector('ul li') === null)
   await setText(search, 'Panel origin')
@@ -245,8 +245,10 @@ test('SC-14: Open Ledger and real owner menus route to the same attached and det
   await chooseMenu(world, 'Open ledger')
   await world.win.waitFor(() => frameTitle(ledgerPage()) === group.name)
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'detail', id: 'proposal-1' } })
-  const commandedDetail = await world.win.waitFor(() => dialogNamed('Ledger entry proposal-1'))
-  expect(commandedDetail.textContent).toContain('Group policy')
+  const commandedDetail = await world.win.waitFor(() => {
+    const dialog = dialogNamed('Ledger entry proposal-1')
+    return dialog?.textContent?.includes('Group policy') ? dialog : undefined
+  })
   await click(button(commandedDetail, 'Close')!)
   await world.agent.callAny('ui.command.run', { id: CONTROL, args: { action: 'new' } })
   const commandedForm = await world.win.waitFor(() => dialogNamed('New ledger entry'))
