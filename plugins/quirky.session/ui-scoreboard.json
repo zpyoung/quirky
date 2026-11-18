@@ -1206,7 +1206,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
-        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
       },
       "anchor": "item.tag ?",
       "reason": "Shows the acts-now or sent mark when the row has one."
@@ -1214,10 +1214,18 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
-        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
       },
-      "anchor": "item.detail ?",
-      "reason": "Prefixes the mark with the command's description when it has one."
+      "anchor": "item.source !== 'agent' && item.detail ?",
+      "reason": "Prefixes the mark with a Quirky command's description; agent rows show theirs on a second line."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "description={item.source === 'agent' && item.detail ? <span style={oneLine}>{item.detail}</span> : undefined}"
+      },
+      "anchor": "item.source === 'agent' && item.detail ?",
+      "reason": "Shows an agent command's description on a second line when it has one."
     },
     {
       "site": {

@@ -379,7 +379,11 @@ export function Composer({
 
   const listKey = trigger ? `${trigger.kind}:${trigger.from}` : null
   const listOpen = trigger !== null && listKey !== dismissed
-  const items: Suggestion[] = !listOpen ? [] : trigger.kind === '@' ? fileSuggestions(search.items) : slashSuggestions(commands, trigger.query, agentLabel)
+  const items: Suggestion[] = !listOpen
+    ? []
+    : trigger.kind === '@'
+      ? fileSuggestions(search.items)
+      : slashSuggestions(commands, trigger.query, agentLabel, text.slice(0, trigger.from).trim() === '')
 
   const choose = (item: Suggestion) => {
     if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })

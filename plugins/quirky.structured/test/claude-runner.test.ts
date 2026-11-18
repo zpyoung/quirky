@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
-import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
+import type { AgentCommand, AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import { claudeCommands, createClaudeRunner, type ClaudeQueryParams, type ClaudeSlashCommand } from '../claude-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { FakeQuery } from './fakes/fake-query'
 
@@ -816,5 +816,95 @@ describe('interrupt', () => {
     asks[0]!.resolve(envelope('declined'))
     await decision
     expect(statuses.at(-1)).toBe('done')
+  })
+})
+
+describe('commands', () => {
+  const LIST: ClaudeSlashCommand[] = [
+    { name: 'compact', description: 'Free up context', argumentHint: '<instructions>', builtin: true },
+    { name: 'simplify', description: 'Review the changed code', argumentHint: '', builtin: true },
+    { name: '__remote-workflow', description: 'internal', argumentHint: '', builtin: true },
+    { name: 'graphify', description: 'Build a knowledge graph', argumentHint: '' },
+    { name: 'research', description: 'Research a repo (user)', argumentHint: '[topic]' },
+    { name: 'quirk:brainstorming', description: '(quirk) Turn an idea into a design', argumentHint: '' },
+    { name: 'claude.ai Notion:make-a-page (MCP)', description: 'Make a Notion page', argumentHint: '' }
+  ]
+
+  test('sorts the SDK list into built-in, skill, command, plugin and MCP entries before the first turn', () => {
+    expect(claudeCommands(LIST, null)).toEqual([
+      { name: 'compact', kind: 'builtin', description: 'Free up context', argumentHint: '<instructions>', startOnly: true },
+      { name: 'simplify', kind: 'builtin', description: 'Review the changed code', startOnly: true },
+      { name: 'graphify', kind: 'skill', description: 'Build a knowledge graph' },
+      { name: 'research', kind: 'command', description: 'Research a repo', argumentHint: '[topic]' },
+      { name: 'quirk:brainstorming', kind: 'plugin', description: 'Turn an idea into a design' },
+      { name: 'mcp__claude_ai_Notion__make-a-page', kind: 'mcp', description: 'Make a Notion page' }
+    ])
+  })
+
+  test('once init names the skills, a built-in skill can be used mid-message and init decides skill or command', () => {
+    const sorted = claudeCommands(LIST, new Set(['simplify', 'research']))
+    expect(sorted.find((command) => command.name === 'simplify')).toEqual({ name: 'simplify', kind: 'skill', description: 'Review the changed code' })
+    expect(sorted.find((command) => command.name === 'research')?.kind).toBe('skill')
+    expect(sorted.find((command) => command.name === 'graphify')?.kind).toBe('command')
+  })
+
+  function commandRunner(list: ClaudeSlashCommand[] | Promise<ClaudeSlashCommand[]>) {
+    const reported: AgentCommand[][] = []
+    const commandQueries: FakeQuery[] = []
+    const withCommands = createClaudeRunner(
+      { ...makeContext(), reportCommands: (_id, commands) => void reported.push(commands) },
+      {
+        query: (params: ClaudeQueryParams) => {
+          const query = new FakeQuery(params)
+          query.supportedCommands = () => Promise.resolve(list)
+          commandQueries.push(query)
+          return query
+        }
+      }
+    )
+    return { reported, commandQueries, withCommands }
+  }
+
+  test('reports the list as soon as the session opens, then refines it from init and follows commands_changed', async () => {
+    const { reported, commandQueries, withCommands } = commandRunner(LIST)
+    await withCommands.start(session, undefined)
+    await until(() => reported.length === 1)
+    expect(reported[0]!.map((command) => `${command.kind}:${command.name}`)).toContain('skill:graphify')
+    commandQueries[0]!.emit({ type: 'system', subtype: 'init', session_id: 'c1', slash_commands: [], skills: ['simplify'] })
+    await until(() => reported.length === 2)
+    expect(reported[1]!.find((command) => command.name === 'simplify')?.kind).toBe('skill')
+    expect(reported[1]!.find((command) => command.name === 'graphify')?.kind).toBe('command')
+    commandQueries[0]!.emit({ type: 'system', subtype: 'commands_changed', session_id: 'c1', commands: [{ name: 'new-skill', description: 'Added', argumentHint: '' }] })
+    await until(() => reported.length === 3)
+    expect(reported[2]).toEqual([{ name: 'new-skill', kind: 'command', description: 'Added' }])
+    await withCommands.stop(session.id)
+  })
+
+  test('a command picked mid-message opens the prompt Claude receives; the journal keeps what was typed', async () => {
+    const { commandQueries, withCommands } = commandRunner(LIST)
+    await withCommands.start(session, 'tidy this up /simplify please')
+    await until(() => commandQueries[0]!.written.length === 1)
+    expect(commandQueries[0]!.written[0]).toMatchObject({ message: { content: 'tidy this up /simplify please' } })
+    await withCommands.send(session.id, 'fix the login /quirk:brainstorming focus on auth')
+    await until(() => commandQueries[0]!.written.length === 2)
+    expect(commandQueries[0]!.written[1]).toMatchObject({ message: { content: '/quirk:brainstorming fix the login focus on auth' } })
+    expect(messages.filter((message) => message.role === 'user').map((message) => message.text)).toEqual([
+      'tidy this up /simplify please',
+      'fix the login /quirk:brainstorming focus on auth'
+    ])
+    await withCommands.stop(session.id)
+  })
+
+  test('messages wait for the command list and keep their order', async () => {
+    const { promise, resolve } = Promise.withResolvers<ClaudeSlashCommand[]>()
+    const { commandQueries, withCommands } = commandRunner(promise)
+    await withCommands.start(session, 'one /graphify')
+    await withCommands.send(session.id, 'two')
+    await tick()
+    expect(commandQueries[0]!.written).toEqual([])
+    resolve(LIST)
+    await until(() => commandQueries[0]!.written.length === 2)
+    expect(commandQueries[0]!.written.map((message) => message.message.content)).toEqual(['/graphify one', 'two'])
+    await withCommands.stop(session.id)
   })
 })

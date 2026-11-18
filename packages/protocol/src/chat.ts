@@ -55,8 +55,24 @@ export type AgentCapabilities = {
   resume: Capability
 }
 
-/** A slash command or skill a session's agent offers; `name` has no leading slash. */
-export type AgentCommand = { name: string; kind: 'command' | 'skill'; description?: string }
+/**
+ * What an agent command is: the user's or project's own `command` or `skill`, a `plugin` entry, an
+ * MCP server's prompt (`mcp`), or one of the harness's `builtin` commands.
+ */
+export type AgentCommandKind = 'command' | 'skill' | 'plugin' | 'mcp' | 'builtin'
+
+/**
+ * A slash command, skill or plugin entry a session's agent offers. `name` is what follows the `/`
+ * when typed. `startOnly` marks an entry the harness runs only when it opens the message, so it is
+ * not offered mid-message.
+ */
+export type AgentCommand = {
+  name: string
+  kind: AgentCommandKind
+  description?: string
+  argumentHint?: string
+  startOnly?: boolean
+}
 
 /** A message waiting in a session's queue; `images` are absolute paths and `at` is an ISO timestamp. */
 export type QueuedMessage = { id: string; text: string; images?: string[]; at: string }
