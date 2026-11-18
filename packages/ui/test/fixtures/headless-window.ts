@@ -174,6 +174,8 @@ export async function startHeadlessWindow(options: HeadlessWindowOptions): Promi
           shell.plugins.stop()
           root.unmount()
         })
+        // tiptap's React hook destroys an unmounted editor on a 1 ms timer that must fire before the window goes
+        await Bun.sleep(10)
       } finally {
         if (previousActEnvironment === undefined) Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
         else Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', previousActEnvironment)
