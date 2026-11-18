@@ -178,10 +178,15 @@ function PaneAccessoryMount({
     }
   }, [controller, sessionId, paneId, accessory.id, accessory.plugin, accessory.view])
   return (
-    <div className="qt-pane-accessory" data-terminal-accessory={accessory.id} aria-label={accessory.title}>
-      <div ref={host} />
-      {accessoryFailure ? <InlineError message={accessoryFailure} /> : null}
-    </div>
+    <>
+      {/* the plugin view owns this node's children; keeping it the chrome lets `:empty` hide a view that rendered nothing */}
+      <div ref={host} className="qt-pane-accessory" data-terminal-accessory={accessory.id} aria-label={accessory.title} />
+      {accessoryFailure ? (
+        <div className="qt-pane-accessory" data-terminal-accessory-failure={accessory.id}>
+          <InlineError message={accessoryFailure} />
+        </div>
+      ) : null}
+    </>
   )
 }
 

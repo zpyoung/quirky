@@ -230,6 +230,16 @@ describe('rendering from the daemon workspace', () => {
     expect([...overlay.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Close', 'Restart'])
   })
 
+  test('an accessory whose view renders nothing leaves its chrome empty so CSS can hide it over the prompt', async () => {
+    const view = await mount(fakeDaemon(simpleWorkspace()), { extra: accessoryHandlers() })
+    await settle()
+
+    const accessory = view.q(`[data-terminal-accessory="${ACCESSORY_ID}"]`)!
+    expect(accessory.classList.contains('qt-pane-accessory')).toBe(true)
+    expect(view.fake.mountedViews.map(({ element }) => element)).toContain(accessory)
+    expect(accessory.childNodes).toHaveLength(0)
+  })
+
   test('shares discovery across four panes and keeps each accessory mounted on an equal refresh', async () => {
     const view = await mount(fakeDaemon(conceptualWorkspace()), { extra: accessoryHandlers() })
     await settle()
@@ -363,7 +373,7 @@ describe('rendering from the daemon workspace', () => {
     await settle()
     await settle()
     const expected = kind === 'structured' ? 'Could not open structured session: mount refused' : kind === 'accessory' ? 'Could not open Account: accessory refused' : 'mount refused'
-    const failure = kind === 'accessory' ? view.q('[data-terminal-accessory] .ui-inline-error') : view.q('.qt-structured .ui-inline-error')
+    const failure = kind === 'accessory' ? view.q('[data-terminal-accessory-failure] .ui-inline-error') : view.q('.qt-structured .ui-inline-error')
     expect(failure?.textContent).toBe(expected)
     expect(mountNodes.length).toBeGreaterThan(0)
     expect(mountNodes.every((element) => element.querySelector('.ui-inline-error') === null)).toBe(true)
