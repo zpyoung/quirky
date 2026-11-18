@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import DOMPurify from 'dompurify'
 import type { FenceProps } from '../types'
 import { BlockFrame, CodeBlock, CopyButton } from './CodeBlock'
-import { loadsImages } from './mermaid-safety'
+import { loadsImages, withRemoteImagesBlocked } from './mermaid-safety'
 import { RenderError } from './RenderError'
 
 type Outcome = { kind: 'pending' } | { kind: 'ready'; svg: string } | { kind: 'failed'; message: string }
@@ -105,7 +105,7 @@ export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps)
       try {
         const { default: mermaid } = await import('mermaid')
         mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(), suppressErrorRendering: true })
-        const { svg } = await mermaid.render(id, code)
+        const { svg } = await withRemoteImagesBlocked(() => mermaid.render(id, code))
         const clean = sanitizeSvg(svg)
         remember(key, clean)
         if (live) setOutcome({ kind: 'ready', svg: clean })
