@@ -2412,3 +2412,25 @@ Verification logs, relative to the same private evidence root:
 | `typecheck-hutch.log` | `1672a940e78c127d98fe0fc883df35b0f681389cafe8bfa297e4ddc41aa741dd` | Exit 0 after Hutch PATH correction |
 
 No product UI changed. Neither headless product screenshots nor native menus/window chrome, embedded native content, focus, notifications, owner profiles or provider-backed product flows were exercised. Every current product cell remains unmeasured despite the passing instrument checks.
+
+
+### Later base integration is not screenshot-measured
+
+Before the draft push, `git fetch origin && git merge origin/main` incorporated base `86af0af96ff8dc13878f8d99c5efaa987d80e432` (g11-16) as merge `3a1383ff1753b60f741f5acde39f54673fff7c60`. This brought in CLI rehearsal/test-baseline infrastructure and Git review tests, not new screenshot evidence. The original disclosure remains tied to `8329e064f4ca5c5752374e23ed5054b3c447a8df`; the later source was not numerically or screenshot-measured, and the campaign was not restarted.
+
+The later base keeps packages `5f0cde3263b40f75e4810585f6fceb1f483be937` and apps `2fe3ddbc9e4eb0626149293e1e97306bc7432eea`; its plugin tree is `66be6564afa5a7b9b828d6c214f81a9caee674af` and scripts tree `d17786391fde709f8137f05834596d2998bb8b89`. The five measurement-source files in `measurement-source-sha256.txt` still match their original hashes. `git diff --name-only origin/main HEAD` lists only this evidence document; `git diff --check` exited 0 after integration.
+
+Required integration checks run each test file in a separate isolated process. Git review tests start disposable local daemons, and the two-window CLI rehearsal uses local stand-ins and an owned headless browser; these are integration verification, not plugin acquisition, image review or new campaign artifacts.
+
+
+All post-integration checks below completed successfully. Injected startup failures in the startup test file are expected assertions, not product-capture failures. The real CLI rehearsal observed two headless windows and verified owned-process cleanup (1 test, 3,527 assertions); it did not supply an image, sample or score to this record.
+
+| Command | Observed result | Private log | SHA-256 |
+| --- | --- | --- | --- |
+| `bun test plugins/quirky.git/test/scenarios/review.test.ts` | 32 pass, 0 fail | `integration-git-review.log` | `c888555a25638024f72463fa78e6f9a515c64f14bfa374e74b42c189c1b27a65` |
+| `bun test scripts/parity/cli-files-startup.test.ts` | 37 pass, 0 fail | `integration-cli-startup.log` | `f96bb6ca3d197173f07111b33631129de819207220aa11ef2767b93d6d0edd89` |
+| `bun test scripts/parity/cli-files.test.ts` | 1 pass, 0 fail; owned cleanup verified | `integration-cli-files.log` | `9c541ff669a0ca543e4f45f513924a22948a61e890d59cdd5ff7c5afd180e8c0` |
+| `bun test scripts/test-baseline/cli.test.ts` | 127 pass, 0 fail | `integration-baseline-cli.log` | `304a0fef225c33b61483641bd6b80e2382b193921ebc78609dc4613ea9cdbb0f` |
+| `bun test scripts/test-baseline/runner.test.ts` | 24 pass, 0 fail | `integration-baseline-runner.log` | `473ee9ee6397d4ae57154ed8b229d8818d0029963774ce3d4b2155ca55333c63` |
+| `bun test scripts/test-baseline/workflow.test.ts` | 61 pass, 1 skip, 0 fail | `integration-baseline-workflow.log` | `09c76b58c2518dcc83d76c7ecbdbf933dccccfd179aaf0f4d042c55f3b1f1380` |
+| `bun run typecheck` | Exit 0 after base integration | `integration-typecheck.log` | `ba7d8fd30ec044295e3edad14e40229b83f784e637e15cefdb28582bc21a7f0c` |
