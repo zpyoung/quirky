@@ -246,6 +246,7 @@ The showcase transcript lives at `packages/ui/test/fixtures/markdown-showcase.md
 - `renderUserMarkdown` in `Prose.tsx` and its mention handling (`Prose.tsx:51-68`, `:107`). User bubbles are out of scope ([logic: Scope](logic.md#scope--non-goals)).
 - `plugins/quirky.editor/src/markdown/preview.tsx` (`renderSafeMarkdownHtml`) and its callers (`service.ts`, `detachedPreview.ts`). This is the server-side HTML string path, used for detached previews and the reader. Streamdown is a client component, and moving this path would change the detached-preview security contract.
 - `plugins/quirky.editor/src/markdown/previewPipeline.ts`. Its exports are reused as the file profile's `rehypePlugins` unchanged. `notebook-mermaid-scoreboard.test.ts:16-23` owns this file, as well as `MermaidDiagram.tsx`.
+- `MermaidDiagram.tsx` is no longer fenced (lifted 2026-11-18). It uses the shared guard from `@quirky/ui/markdown` (`loadsImages`, `NO_HTML_LABELS`, `withRemoteImagesBlocked`, `sanitizeSvg`) and otherwise keeps its retry, theme and public API.
 - `plugins/quirky.view/src/core/catalog.ts:331-337` (`checkMarkdown`). View specs keep refusing images and non-http(s) links at validation.
 - The tool-call cards in `plugins/quirky.session/src/window/chat/cards/*` and `MessageRow.tsx` (logic non-goals).
 - `ui-lint` rules (`scripts/ui-lint.ts`). New CSS and TSX must pass them as written. Never add an exemption.
