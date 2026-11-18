@@ -294,6 +294,94 @@ describe('the dynamic step', () => {
   })
 })
 
+describe('completed gate proof turns', () => {
+  function resultWithinTurn(check: Promise<unknown>) {
+    const nextTurn = Promise.withResolvers<string>()
+    setImmediate(() => nextTurn.resolve('still checking'))
+    return Promise.race([check, nextTurn.promise])
+  }
+
+  test('a settled proof without a receipt fails visibly and removes its marker', async () => {
+    const s = setup()
+    const check = s.checker.check('wt-1')
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    try {
+      expect(await resultWithinTurn(check)).toEqual({ ok: false, reason: 'the proof turn ended without a gate receipt' })
+      expect(s.states).toEqual([['wt-1', 'gate-failed', 'the proof turn ended without a gate receipt']])
+      expect(marked(s, 's-1')).toBe(false)
+      expect(s.needs()).toMatchObject([{
+        kind: 'gate-failed', title: "The avatar can't confirm it gates Claude",
+        detail: { reason: 'the proof turn ended without a gate receipt', agent: 'claude', sessionId: 's-1' },
+        actions: ['restart-to-handoff']
+      }])
+      expect(s.app.store.journalSince(0).filter((entry) => entry.data.type === 'gate-check').map((entry) => entry.data))
+        .toEqual([{ type: 'gate-check', ok: false, agent: 'claude', reason: 'the proof turn ended without a gate receipt' }])
+    } finally {
+      s.checker.dispose()
+    }
+  })
+
+  test('a qualifying receipt already present wins over proof settlement', async () => {
+    const sessionReady = Promise.withResolvers<void>()
+    const s = setup({ sessionReady: sessionReady.promise })
+    const check = s.checker.check('wt-1')
+    s.receive()
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    sessionReady.resolve()
+    expect(await check).toEqual({ ok: true, reason: '' })
+    expect(s.needs()).toEqual([])
+    expect(marked(s, 's-1')).toBe(true)
+  })
+
+  test('remembers proof settlement during static preparation', async () => {
+    const prepared = Promise.withResolvers<void>()
+    const s = setup({ prepare: () => prepared.promise })
+    const check = s.checker.check('wt-1')
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    prepared.resolve()
+    try {
+      expect(await resultWithinTurn(check)).toEqual({ ok: false, reason: 'the proof turn ended without a gate receipt' })
+    } finally {
+      s.checker.dispose()
+    }
+  })
+
+  test('wrong sessions and worktrees do not finish another proof', async () => {
+    const s = setup()
+    const check = s.checker.check('wt-1')
+    s.checker.noteProbeSettled?.('wt-1', 's-2')
+    s.checker.noteProbeSettled?.('wt-2', 's-1')
+    expect(await resultWithinTurn(check)).toBe('still checking')
+    s.receive()
+    expect(await check).toEqual({ ok: true, reason: '' })
+  })
+
+  test('unmatched observed calls retain their grace rule after settlement', async () => {
+    const s = setup({ graceMs: 10_000 })
+    const check = s.checker.check('wt-1')
+    s.checker.noteObserved('s-1', 'missing', Date.now())
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    expect(await resultWithinTurn(check)).toBe('still checking')
+    s.app.now = () => Date.now() + 10_001
+    s.checker.noteReceipt('s-1')
+    expect(await check).toEqual({ ok: false, reason: 'tool calls are not reaching the gate' })
+  })
+
+  test.each(['success', 'failure', 'cancel', 'dispose'] as const)('late and duplicate signals after %s leave journal and needs alone', async (end) => {
+    const s = setup()
+    const check = s.checker.check('wt-1')
+    if (end === 'success') s.receive()
+    else if (end === 'failure') s.checker.noteObserved('s-1', 'old', Date.now() - 5_000)
+    else if (end === 'cancel') s.checker.cancel('wt-1')
+    else s.checker.dispose()
+    await check
+    const before = { journal: s.app.store.journalSince(0), needs: s.needs(), states: [...s.states] }
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    s.checker.noteProbeSettled?.('wt-1', 's-1')
+    expect({ journal: s.app.store.journalSince(0), needs: s.needs(), states: s.states }).toEqual(before)
+  })
+})
+
 describe('Codex', () => {
   test('fails when the avatar entries are not in hooks.json, and passes with them', async () => {
     const s = setup({ session: { agent: 'codex' } })
