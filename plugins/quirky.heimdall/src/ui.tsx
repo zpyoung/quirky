@@ -1,19 +1,24 @@
-import { Badge, Button, EmptyState, InlineAgentCard, ListRow, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import type { MountCleanup, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { UiStatus, UiTone } from '@quirky/ui'
 import type { ApprovalScope, TickTrace } from './contracts'
 import type { CommandRequest, CommandResult, FleetAction, FleetRow, FleetSnapshot, OpenEscalation, WatcherCommand, WatcherDetail, WatcherTarget, WatcherWorker } from './control-contracts'
 import { groupFleetRows, sortFleetRows } from './fleet-selectors'
-import { acceptFleetSnapshot, groupDecisionTraces, statusPresentation } from './ui-model'
+import { acceptFleetSnapshot, answerDraftKey, commandEligibility, groupDecisionTraces, ownerEpochKey, sameCommandOwner, statusPresentation, type CommandReceipt } from './ui-model'
+import { UI_CONTROL_COMMAND, dispatchFleetControl, registerFleetControl, requestFleetControl, type FleetControlAction, type FleetControlArgs } from './ui-control'
 const FLEET_VIEW_ID = 'view:quirky.heimdall/fleet'
 const NAVIGATION_ID = 'sidebar-section:quirky.heimdall/navigation'
 const FLEET_CHANGED_EVENT = 'quirky.heimdall/fleetChanged'
 const SESSION_VIEW_ID = 'view:quirky.session/worktree'
 
 type MountProps = { input?: unknown; report?(state: unknown): void }
-type Feedback = { command: string; result: CommandResult }
+type OperationOwner = { generation: string; ownerEpoch: string }
+type Feedback = { command: string; result: CommandResult; owner: OperationOwner }
+type DetailReceipt = { detail: WatcherDetail; generation: string; ownerEpoch: string; concurrency: number | null }
+type Reservation = { key: string; token: string }
+type OwnerCommandRequest = CommandRequest & Record<string, unknown>
 type BudgetDraft = { activeMinutes: string; turns: string }
 
 
@@ -46,6 +51,15 @@ function isCommandResult(value: unknown): value is CommandResult {
   if (data.kind === 'applied') return typeof data.appliedAtMs === 'number' && Number.isFinite(data.appliedAtMs)
   if (data.kind === 'refused') return typeof data.reason === 'string' && typeof data.detail === 'string'
   return data.kind === 'indeterminate' && typeof data.detail === 'string'
+}
+async function readFleetSnapshot(context: UiPluginContext): Promise<FleetSnapshot> {
+  const response = await context.call('quirky.heimdall/fleet', {})
+  if (!isFleetSnapshot(response)) throw new Error('The fleet response was not a valid snapshot.')
+  return response
+}
+
+async function readWatcherDetail(context: UiPluginContext, target: WatcherTarget): Promise<WatcherDetail | null> {
+  return await context.call('quirky.heimdall/detail', { target }) as WatcherDetail | null
 }
 
 function initialTarget(input: unknown): WatcherTarget | null {
@@ -225,52 +239,75 @@ function ActionHistory({ items }: { items: readonly FleetAction[] }) {
 
 function NavigationEntry({ context }: { context: UiPluginContext }) {
   const [snapshot, setSnapshot] = useState<FleetSnapshot | null>(null)
-  const latest = useRef<FleetSnapshot | null>(null)
-  const accept = useCallback((next: FleetSnapshot) => {
-    const accepted = acceptFleetSnapshot(latest.current, next)
-    if (accepted === latest.current) return
-    latest.current = accepted
+  const snapshotRef = useRef<FleetSnapshot | null>(null)
+  const [readError, setReadError] = useState<{ message: string; retained: boolean } | null>(null)
+  const requestRef = useRef(0)
+  const refreshRef = useRef<() => Promise<void>>(async () => {})
+
+  const acceptSnapshot = (incoming: FleetSnapshot): void => {
+    const accepted = acceptFleetSnapshot(snapshotRef.current, incoming)
+    if (accepted === snapshotRef.current) return
+    snapshotRef.current = accepted
     setSnapshot(accepted)
-  }, [])
-  const refresh = useCallback(async () => {
+  }
+
+  const refreshFleet = async (): Promise<void> => {
+    const ticket = ++requestRef.current
     try {
-      const next = await context.call('quirky.heimdall/fleet', {})
-      if (isFleetSnapshot(next)) accept(next)
-    } catch {
-      // Heimdall may be disabled or unavailable; navigation remains mounted with zeroed counts.
+      const incoming = await readFleetSnapshot(context)
+      if (ticket !== requestRef.current) return
+      acceptSnapshot(incoming)
+      setReadError(null)
+    } catch (error) {
+      if (ticket !== requestRef.current) return
+      setReadError({ message: messageOf(error), retained: snapshotRef.current !== null })
     }
-  }, [accept, context])
+  }
+  refreshRef.current = refreshFleet
 
   useEffect(() => {
+    void refreshRef.current()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
-      if (event.type !== FLEET_CHANGED_EVENT) return
-      if (!('data' in event)) return
-      const data = event.data
-      if (isFleetSnapshot(data)) accept(data)
+      if (event.type !== FLEET_CHANGED_EVENT || !('data' in event) || !isFleetSnapshot(event.data)) return
+      acceptSnapshot(event.data)
+      setReadError(null)
     })
     const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void refresh()
+      if (status === 'connected') void refreshRef.current()
     })
-    void refresh()
     return () => {
+      requestRef.current += 1
       unsubscribe()
       unsubscribeConnection()
     }
-  }, [accept, context, refresh])
+  }, [context])
 
   const groups = snapshot ? groupFleetRows(snapshot.rows) : null
+  const openFleet = (): void => context.openView(FLEET_VIEW_ID)
+  const errorMessage = readError
+    ? readError.retained
+      ? `Could not refresh the Heimdall fleet; showing the last confirmed counts: ${readError.message}`
+      : `Could not load the Heimdall fleet: ${readError.message}`
+    : null
   return (
-    <Button
-      className="ui-stack"
-      style={{ width: '100%', alignItems: 'stretch', textAlign: 'left' }}
-      onClick={() => context.openView(FLEET_VIEW_ID)}
-      aria-label="Open Heimdall fleet"
-    >
-      <strong>Heimdall</strong>
-      <span className="ui-text-muted">
-        Needs you {groups?.needsYou.length ?? 0} · Lost contact {groups?.lostContact.length ?? 0} · Active {groups?.active.length ?? 0}
-      </span>
-    </Button>
+    <div className="ui-stack">
+      <Button
+        className="ui-stack"
+        style={{ width: '100%', alignItems: 'stretch', textAlign: 'left' }}
+        onClick={openFleet}
+        aria-label="Open Heimdall fleet"
+      >
+        <strong>Heimdall</strong>
+        {snapshot && snapshot.rows.length > 0 && (
+          <span className="ui-text-muted">
+            Needs you {groups?.needsYou.length ?? 0} · Lost contact {groups?.lostContact.length ?? 0} · Active {groups?.active.length ?? 0}
+          </span>
+        )}
+      </Button>
+      {snapshot?.rows.length === 0 && <EmptyState message="No watchers yet." />}
+      {!snapshot && !readError && <NoticeLine>Loading fleet…</NoticeLine>}
+      {errorMessage && <InlineError message={errorMessage} action={{ label: 'Retry', onAction: () => { void refreshFleet() } }} />}
+    </div>
   )
 }
 
@@ -403,31 +440,53 @@ function OpenEscalations({ escalations, onApprove, disabled }: { escalations: re
 }
 
 function Workers({
-  context, workers, worktreeId, disabled, canOpenTerminal, onCommand
+  context, workers, worktreeId, disabled, canOpenTerminal, owner, ownerIsCurrent, ownerEpoch, submitCommand
 }: {
   context: UiPluginContext
   workers: readonly WatcherWorker[]
   worktreeId: string | null | undefined
   disabled: boolean
   canOpenTerminal: boolean
-  onCommand(command: WatcherCommand, label: string): void
+  owner: OperationOwner
+  ownerIsCurrent(owner: OperationOwner): boolean
+  ownerEpoch: string
+  submitCommand(command: WatcherCommand, label: string, receipt?: CommandReceipt): Promise<void>
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const openTerminal = async (worker: WatcherWorker) => {
+  const answerEpoch = useRef(ownerEpoch)
+
+  useEffect(() => {
+    if (answerEpoch.current !== ownerEpoch) {
+      answerEpoch.current = ownerEpoch
+      setAnswers({})
+      return
+    }
+    const current = new Set(workers.flatMap((item) => item.question && !item.question.answered
+      ? [answerDraftKey(item.identity, item.question.messageId)]
+      : []))
+    setAnswers((previous) => Object.fromEntries(
+      Object.entries(previous).filter(([key]) => current.has(key))
+    ))
+  }, [ownerEpoch, workers])
+
+  const openTerminal = async (worker: WatcherWorker): Promise<void> => {
     const sessionId = worker.identity.sessionId
-    if (!sessionId) return
+    if (!sessionId || !ownerIsCurrent(owner)) return
     try {
-      let id = worktreeId ?? null
-      if (!id) {
+      let worktree = worktreeId ?? null
+      if (!worktree) {
         const session = record(await context.call('quirky.session/get', { session: sessionId }))
-        id = typeof session.worktreeId === 'string' ? session.worktreeId : null
+        if (!ownerIsCurrent(owner)) return
+        worktree = typeof session.worktreeId === 'string' ? session.worktreeId : null
       }
-      if (!id) throw new Error('The session does not belong to a worktree that can be opened.')
-      context.openView(SESSION_VIEW_ID, { worktree: id, session: sessionId })
+      if (!ownerIsCurrent(owner)) return
+      if (!worktree) throw new Error('The session does not belong to a worktree that can be opened.')
+      context.openView(SESSION_VIEW_ID, { worktree, session: sessionId })
     } catch (error) {
-      context.toast('Could not open worker terminal', messageOf(error), { kind: 'error' })
+      if (ownerIsCurrent(owner)) context.toast('Could not open worker terminal', messageOf(error), { kind: 'error' })
     }
   }
+
   return (
     <ToolPanelFrame title="Workers">
       {workers.length === 0 ? (
@@ -436,9 +495,27 @@ function Workers({
         <div className="ui-stack">
           {workers.map((worker) => {
             const identity = worker.identity
-            const answer = answers[identity.dispatchId] ?? ''
-            const exactProcessIdentity = Boolean(identity.sessionId && identity.processIncarnation)
             const question = worker.question && !worker.question.answered ? worker.question : null
+            const answerKey = question ? answerDraftKey(identity, question.messageId) : null
+            const answer = answerKey ? answers[answerKey] ?? '' : ''
+            const exactProcessIdentity = Boolean(identity.sessionId && identity.processIncarnation)
+            const answerSubmit = (event: FormEvent): void => {
+              event.preventDefault()
+              if (!question || !answer.trim()) return
+              void submitCommand(
+                { kind: 'answer-question', messageId: question.messageId, body: answer },
+                `Answer worker question ${identity.dispatchId}`,
+                { kind: 'answer', worker: { ...identity }, messageId: question.messageId }
+              )
+            }
+            const updateAnswer = (event: ChangeEvent<HTMLTextAreaElement>): void => {
+              const value = event.currentTarget.value
+              if (answerKey) setAnswers((previous) => ({ ...previous, [answerKey]: value }))
+            }
+            const stopWorker = (): void => {
+              void submitCommand({ kind: 'stop-worker', identity }, `Stop worker ${identity.dispatchId}`, { kind: 'none' })
+            }
+            const openWorkerTerminal = (): void => { void openTerminal(worker) }
             return (
               <div key={identity.dispatchId} className="ui-stack">
                 <InlineAgentCard
@@ -456,31 +533,24 @@ function Workers({
                   <Button
                     disabled={disabled || worker.state !== 'live' || !exactProcessIdentity}
                     title={!exactProcessIdentity ? 'Exact session and process-incarnation identity is required to stop a worker safely.' : undefined}
-                    onClick={() => onCommand({ kind: 'stop-worker', identity }, `Stop worker ${identity.dispatchId}`)}
+                    onClick={stopWorker}
                   >Stop</Button>
                   <Button
                     disabled={!canOpenTerminal || !identity.sessionId}
                     title={!canOpenTerminal ? 'Remote worker terminals cannot be opened on this device.' : !identity.sessionId ? 'This worker has no session identity.' : undefined}
-                    onClick={() => void openTerminal(worker)}
+                    onClick={openWorkerTerminal}
                   >Open terminal</Button>
                 </div>
                 {!exactProcessIdentity && <p className="ui-text-muted">Stop is unavailable until the exact session and process-incarnation identity can be verified.</p>}
                 {question && (
-                  <form
-                    className="ui-stack"
-                    onSubmit={(event: FormEvent) => {
-                      event.preventDefault()
-                      if (!answer.trim()) return
-                      onCommand({ kind: 'answer-question', messageId: question.messageId, body: answer }, `Answer worker question ${identity.dispatchId}`)
-                    }}
-                  >
+                  <form className="ui-stack" onSubmit={answerSubmit}>
                     <div><strong>Question:</strong> {question.body}</div>
                     <TextArea
                       id={`worker-answer-${identity.dispatchId}`}
                       label="Answer"
                       rows={3}
                       value={answer}
-                      onChange={(event) => { const value = event.currentTarget.value; setAnswers((previous) => ({ ...previous, [identity.dispatchId]: value })) }}
+                      onChange={updateAnswer}
                     />
                     <div className="ui-cluster">
                       <Button type="submit" disabled={disabled || !answer.trim()}>Send answer</Button>
@@ -502,9 +572,21 @@ function objectiveCap(detail: WatcherDetail, row: FleetRow | undefined): number 
   const payload = record(detail.enrollment.kindPayload)
   return typeof payload.maxConcurrency === 'number' && Number.isFinite(payload.maxConcurrency) ? payload.maxConcurrency : null
 }
+function canControlDetail(detail: WatcherDetail): boolean {
+  return !detail.readOnly && !detail.enrollment.malformed && detail.ownerContact === 'live' &&
+    (!isRemoteTarget(detail.target) || Boolean(detail.ownerIncarnation))
+}
+
+function sameOperationOwner(left: OperationOwner, right: OperationOwner): boolean {
+  return left.generation === right.generation && left.ownerEpoch === right.ownerEpoch
+}
 
 function WatcherDetailPane({
-  context, detail, row, now, pending, canCommand, feedback, onCommand, onDelete
+  context, detail, row, now, pending, canCommand, feedback, owner, ownerEpoch,
+  budgetDraft, editingBudget, budgetEditorRevision, budgetError,
+  capDraft, concurrencyRevision, concurrencyError,
+  setBudgetDraft, setBudgetError, setConcurrencyError,
+  changeBudgetEditor, changeConcurrencyDraft, requestControl, submitCommand, deleteWatcher, ownerIsCurrent
 }: {
   context: UiPluginContext
   detail: WatcherDetail
@@ -513,13 +595,25 @@ function WatcherDetailPane({
   pending: boolean
   canCommand: boolean
   feedback: Feedback | null
-  onCommand(command: WatcherCommand, label: string): void
-  onDelete(): void
+  owner: OperationOwner
+  ownerEpoch: string
+  budgetDraft: BudgetDraft
+  editingBudget: boolean
+  budgetEditorRevision: number
+  budgetError: string | null
+  capDraft: string
+  concurrencyRevision: number
+  concurrencyError: string | null
+  setBudgetDraft(draft: BudgetDraft): void
+  setBudgetError(value: string | null): void
+  setConcurrencyError(value: string | null): void
+  changeBudgetEditor(open: boolean): void
+  changeConcurrencyDraft(value: string): void
+  requestControl(action: FleetControlAction, revision: number, title: string): void
+  submitCommand(command: WatcherCommand, label: string, receipt?: CommandReceipt): Promise<void>
+  deleteWatcher(): Promise<void>
+  ownerIsCurrent(owner: OperationOwner): boolean
 }) {
-  const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({ activeMinutes: '', turns: '' })
-  const [editingBudget, setEditingBudget] = useState(false)
-  const [capDraft, setCapDraft] = useState('')
-  const [formError, setFormError] = useState<string | null>(null)
   const statusSource = detail.status ?? row?.status
   const status = statusSource ? statusPresentation({ status: statusSource, ownerContact: detail.ownerContact, observedAtMs: detail.observedAtMs }, now) : null
   const cap = detail.enrollment.kind === 'objective' ? objectiveCap(detail, row) : null
@@ -527,61 +621,73 @@ function WatcherDetailPane({
   const controlsDisabled = controlsPending || !canCommand
   const canResume = detail.status?.state !== 'terminal' && detail.enrollment.terminalAtMs === null && (detail.enrollment.paused || detail.enrollment.parkReason !== null)
 
-  useEffect(() => {
-    setBudgetDraft({
-      activeMinutes: detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000),
-      turns: detail.enrollment.budget.turns === null ? '' : String(detail.enrollment.budget.turns)
-    })
-    setCapDraft(cap === null ? '' : String(cap))
-    setFormError(null)
-    setEditingBudget(false)
-  }, [detail.target.watcherId, detail.enrollment.budget.wallClockActiveMs, detail.enrollment.budget.turns, cap])
-
-  const applyBudget = (event: FormEvent) => {
+  const applyBudget = (event: FormEvent): void => {
     event.preventDefault()
     const activeValue = budgetDraft.activeMinutes.trim() === '' ? null : Number(budgetDraft.activeMinutes)
     const turnsValue = budgetDraft.turns.trim() === '' ? null : Number(budgetDraft.turns)
     if (activeValue !== null && (!Number.isFinite(activeValue) || activeValue < 0 || !Number.isFinite(activeValue * 60_000))) {
-      setFormError('Active-time limit must be a finite non-negative number of minutes, or blank for unlimited.')
+      setBudgetError('Active-time limit must be a finite non-negative number of minutes, or blank for unlimited.')
       return
     }
     if (turnsValue !== null && (!Number.isFinite(turnsValue) || !Number.isInteger(turnsValue) || turnsValue < 0)) {
-      setFormError('Worker-turn limit must be a non-negative integer, or blank for unlimited.')
+      setBudgetError('Worker-turn limit must be a non-negative integer, or blank for unlimited.')
       return
     }
-    setFormError(null)
+    setBudgetError(null)
     const currentActiveMinutes = detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000)
     const wallClockActiveMs = budgetDraft.activeMinutes === currentActiveMinutes
       ? detail.enrollment.budget.wallClockActiveMs
       : activeValue === null ? null : activeValue * 60_000
-    setEditingBudget(false)
-    onCommand({ kind: 'adjust-budget', budget: { wallClockActiveMs, turns: turnsValue } }, 'Update budget')
+    changeBudgetEditor(false)
+    void submitCommand({ kind: 'adjust-budget', budget: { wallClockActiveMs, turns: turnsValue } }, 'Update budget')
   }
 
-  const applyCap = (event: FormEvent) => {
+  const applyConcurrency = (event: FormEvent): void => {
     event.preventDefault()
     const value = Number(capDraft)
     if (!Number.isSafeInteger(value) || value < 1 || value > 1024) {
-      setFormError('Objective concurrency must be an integer from 1 through 1,024.')
+      setConcurrencyError('Objective concurrency must be an integer from 1 through 1,024.')
       return
     }
-    setFormError(null)
-    onCommand({ kind: 'set-concurrency', maxConcurrency: value }, 'Update objective concurrency')
+    setConcurrencyError(null)
+    void submitCommand({ kind: 'set-concurrency', maxConcurrency: value }, 'Update objective concurrency')
   }
 
-  const copyDebug = async () => {
+  const copyDebugReport = async (): Promise<void> => {
+    if (!ownerIsCurrent(owner)) return
     try {
       const report = await context.call('quirky.heimdall/debugReport', { target: detail.target })
+      if (!ownerIsCurrent(owner)) return
       if (report === null || report === undefined) throw new Error('No debug report is available for this watcher.')
       const text = JSON.stringify(report, null, 2)
       if (typeof text !== 'string') throw new Error('The debug report could not be encoded as JSON.')
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this window.')
       await navigator.clipboard.writeText(text)
-      context.toast('Debug report copied', '', { kind: 'success' })
+      if (ownerIsCurrent(owner)) context.toast('Debug report copied', '', { kind: 'success' })
     } catch (error) {
-      context.toast('Could not copy the debug report.', messageOf(error), { kind: 'error' })
+      if (ownerIsCurrent(owner)) context.toast('Could not copy the debug report.', messageOf(error), { kind: 'error' })
     }
   }
+
+  const updateActiveMinutes = (event: ChangeEvent<HTMLInputElement>): void => {
+    setBudgetDraft({ ...budgetDraft, activeMinutes: event.currentTarget.value })
+  }
+  const updateWorkerTurns = (event: ChangeEvent<HTMLInputElement>): void => {
+    setBudgetDraft({ ...budgetDraft, turns: event.currentTarget.value })
+  }
+  const editBudget = (): void => requestControl('edit-budget', budgetEditorRevision, 'Could not edit the budget')
+  const cancelBudget = (): void => requestControl('cancel-budget', budgetEditorRevision, 'Could not cancel the budget edit')
+  const cancelConcurrency = (): void => requestControl('cancel-concurrency', concurrencyRevision, 'Could not cancel the concurrency edit')
+  const approveEscalation = (escalation: OpenEscalation): void => {
+    if (escalation.approvalScope) {
+      void submitCommand(
+        { kind: 'approve', escalationId: escalation.escalationId, scope: escalation.approvalScope },
+        `Approve ${escalation.escalationKind}`,
+        { kind: 'none' }
+      )
+    }
+  }
+  const copyDebug = (): void => { void copyDebugReport() }
 
   const currentReason = status?.reason ?? detail.enrollment.haltReason ?? detail.enrollment.parkReason
   return (
@@ -621,18 +727,18 @@ function WatcherDetailPane({
         </div>
       )}
       {controlsPending && <div role="status"><Badge tone="needs-you">A command is pending; additional controls are disabled until it settles.</Badge></div>}
-      {!canCommand && !detail.readOnly && !isRemoteTarget(detail.target) && detail.ownerContact !== 'unverifiable' && <div role="alert" className="ui-error-text">Controls are unavailable for this malformed enrollment.</div>}
+      {!canCommand && !detail.readOnly && !isRemoteTarget(detail.target) && detail.ownerContact !== 'unverifiable' && <InlineError message="Controls are unavailable for this malformed enrollment." />}
 
       <ToolPanelFrame title="Owner controls">
         <div className="ui-stack">
           <div className="ui-cluster">
-            <Button disabled={controlsDisabled || !canResume} onClick={() => onCommand({ kind: 'resume' }, 'Resume watcher')}>Resume</Button>
-            <Button disabled={controlsDisabled || !detail.enrollment.enabled || detail.enrollment.paused} onClick={() => onCommand({ kind: 'pause' }, 'Pause watcher')}>Pause</Button>
-            <Button disabled={controlsDisabled || !detail.enrollment.enabled} onClick={() => onCommand({ kind: 'disarm' }, 'Disarm watcher')}>Disarm</Button>
-            <Button variant="destructive" disabled={controlsDisabled} onClick={onDelete}>Delete watcher</Button>
+            <Button disabled={controlsDisabled || !canResume} onClick={() => { void submitCommand({ kind: 'resume' }, 'Resume watcher') }}>Resume</Button>
+            <Button disabled={controlsDisabled || !detail.enrollment.enabled || detail.enrollment.paused} onClick={() => { void submitCommand({ kind: 'pause' }, 'Pause watcher') }}>Pause</Button>
+            <Button disabled={controlsDisabled || !detail.enrollment.enabled} onClick={() => { void submitCommand({ kind: 'disarm' }, 'Disarm watcher') }}>Disarm</Button>
+            <Button variant="destructive" disabled={controlsDisabled} onClick={() => { void deleteWatcher() }}>Delete watcher</Button>
           </div>
           {detail.enrollment.kind === 'objective' && (
-            <form className="ui-stack" onSubmit={applyCap}>
+            <form className="ui-stack" noValidate onSubmit={applyConcurrency}>
               <TextField
                 id={`max-concurrency-${detail.target.watcherId}`}
                 label="Max concurrency (1–1,024)"
@@ -641,17 +747,17 @@ function WatcherDetailPane({
                 max={1024}
                 step={1}
                 value={capDraft}
-                onChange={(event) => setCapDraft(event.currentTarget.value)}
+                onChange={(event) => changeConcurrencyDraft(event.currentTarget.value)}
               />
+              {concurrencyError && <InlineError message={concurrencyError} />}
               <div className="ui-cluster">
                 <Button type="submit" disabled={controlsDisabled || capDraft === '' || capDraft === String(cap)}>Update cap</Button>
-                <Button type="button" disabled={controlsPending || capDraft === String(cap ?? '')} onClick={() => { setCapDraft(cap === null ? '' : String(cap)); setFormError(null) }}>Cancel</Button>
+                <Button type="button" disabled={controlsPending || capDraft === String(cap ?? '')} onClick={cancelConcurrency}>Cancel</Button>
               </div>
             </form>
           )}
         </div>
       </ToolPanelFrame>
-      {formError && <div role="alert" className="ui-error-text">{formError}</div>}
 
       <ToolPanelFrame title="Budget">
         <div className="ui-stack">
@@ -659,10 +765,10 @@ function WatcherDetailPane({
           <ListRow title="Worker turns" description={`${detail.budget.turns} / ${detail.enrollment.budget.turns ?? '∞'}`} />
           {!editingBudget ? (
             <div className="ui-cluster">
-              <Button disabled={controlsDisabled} onClick={() => { setEditingBudget(true); setFormError(null) }}>Edit budget</Button>
+              <Button disabled={controlsDisabled} onClick={editBudget}>Edit budget</Button>
             </div>
           ) : (
-            <form className="ui-stack" onSubmit={applyBudget}>
+            <form className="ui-stack" noValidate onSubmit={applyBudget}>
               <TextField
                 id="active-time-limit"
                 label="Active-time limit (minutes)"
@@ -671,7 +777,7 @@ function WatcherDetailPane({
                 step="any"
                 placeholder="Unlimited"
                 value={budgetDraft.activeMinutes}
-                onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, activeMinutes: value })) }}
+                onChange={updateActiveMinutes}
               />
               <TextField
                 id="worker-turn-limit"
@@ -681,31 +787,31 @@ function WatcherDetailPane({
                 step={1}
                 placeholder="Unlimited"
                 value={budgetDraft.turns}
-                onChange={(event) => { const value = event.currentTarget.value; setBudgetDraft((previous) => ({ ...previous, turns: value })) }}
+                onChange={updateWorkerTurns}
               />
               <p className="ui-text-muted">Leave a limit blank for unlimited (null). Zero is a valid limit and does not resume a parked watcher.</p>
+              {budgetError && <InlineError message={budgetError} />}
               <div className="ui-cluster">
                 <Button type="submit" disabled={controlsDisabled || budgetDraft.activeMinutes === String(detail.enrollment.budget.wallClockActiveMs === null ? '' : detail.enrollment.budget.wallClockActiveMs / 60_000) && budgetDraft.turns === String(detail.enrollment.budget.turns ?? '')}>Apply budget</Button>
-                <Button type="button" disabled={controlsPending} onClick={() => {
-                  setBudgetDraft({
-                    activeMinutes: detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000),
-                    turns: detail.enrollment.budget.turns === null ? '' : String(detail.enrollment.budget.turns)
-                  })
-                  setEditingBudget(false)
-                  setFormError(null)
-                }}>Cancel</Button>
+                <Button type="button" disabled={controlsPending} onClick={cancelBudget}>Cancel</Button>
               </div>
             </form>
           )}
         </div>
       </ToolPanelFrame>
 
-      <OpenEscalations escalations={detail.openEscalations} disabled={controlsDisabled} onApprove={(escalation) => {
-        const scope = escalation.approvalScope
-        if (scope) onCommand({ kind: 'approve', escalationId: escalation.escalationId, scope }, `Approve ${escalation.escalationKind}`)
-      }} />
-
-      <Workers context={context} workers={detail.workers} worktreeId={detail.enrollment.worktreeId} disabled={controlsDisabled} canOpenTerminal={!isRemoteTarget(detail.target)} onCommand={onCommand} />
+      <OpenEscalations escalations={detail.openEscalations} disabled={controlsDisabled} onApprove={approveEscalation} />
+      <Workers
+        context={context}
+        workers={detail.workers}
+        worktreeId={detail.enrollment.worktreeId}
+        disabled={controlsDisabled}
+        canOpenTerminal={!isRemoteTarget(detail.target)}
+        owner={owner}
+        ownerIsCurrent={ownerIsCurrent}
+        ownerEpoch={ownerEpoch}
+        submitCommand={submitCommand}
+      />
 
       <ToolPanelFrame title="Decision trace">
         <DecisionTraceList traces={detail.traces} />
@@ -715,152 +821,316 @@ function WatcherDetailPane({
   )
 }
 
-function HeimdallFleet({ context, input }: { context: UiPluginContext; input: unknown }) {
+function HeimdallFleet({
+  context, input, instance, report, updateInputRef, signal
+}: {
+  context: UiPluginContext
+  input: unknown
+  instance: string
+  report?: (state: unknown) => void
+  updateInputRef: { current(input: unknown): boolean }
+  signal: AbortSignal
+}) {
+  const firstTarget = initialTarget(input)
+  const [selection, setSelection] = useState(() => ({
+    target: firstTarget,
+    generation: firstTarget ? crypto.randomUUID() : null
+  }))
+  const selectionRef = useRef(selection)
   const [snapshot, setSnapshot] = useState<FleetSnapshot | null>(null)
   const snapshotRef = useRef<FleetSnapshot | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [refreshError, setRefreshError] = useState<string | null>(null)
-  const [selectedTarget, setSelectedTarget] = useState<WatcherTarget | null>(() => initialTarget(input))
-  const [detail, setDetail] = useState<WatcherDetail | null>(null)
-  const [detailBusy, setDetailBusy] = useState(false)
+  const [fleetError, setFleetError] = useState<string | null>(null)
+  const [loadedDetail, setLoadedDetail] = useState<DetailReceipt | null>(null)
+  const latestDetailRef = useRef<DetailReceipt | null>(null)
+  const [detailMissing, setDetailMissing] = useState(false)
+  const [detailBusy, setDetailBusy] = useState(Boolean(firstTarget))
   const [detailError, setDetailError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  const [pending, setPending] = useState(false)
-  const pendingRef = useRef(false)
+  const [reservedKeys, setReservedKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const reservationsRef = useRef(new Map<string, string>())
   const latestDetailRequest = useRef(0)
   const latestFleetRequest = useRef(0)
-  const selectedTargetRef = useRef(selectedTarget)
-  selectedTargetRef.current = selectedTarget
+  const refreshFleetRef = useRef<() => Promise<void>>(async () => {})
+  const loadDetailRef = useRef<(target: WatcherTarget, generation: string) => Promise<void>>(async () => {})
+  const acceptSnapshotRef = useRef<(incoming: FleetSnapshot) => boolean>(() => false)
   const now = useClock()
 
-  const accept = useCallback((incoming: FleetSnapshot): boolean => {
+  const [budgetDraft, setBudgetDraftState] = useState<BudgetDraft>({ activeMinutes: '', turns: '' })
+  const [editingBudget, setEditingBudget] = useState(false)
+  const editingBudgetRef = useRef(false)
+  const [budgetEditorRevision, setBudgetEditorRevision] = useState(0)
+  const budgetEditorRevisionRef = useRef(0)
+  const [budgetError, setBudgetError] = useState<string | null>(null)
+  const [capDraft, setCapDraftState] = useState('')
+  const capDirtyRef = useRef(false)
+  const [concurrencyRevision, setConcurrencyRevision] = useState(0)
+  const concurrencyRevisionRef = useRef(0)
+  const [concurrencyError, setConcurrencyError] = useState<string | null>(null)
+
+  const setBudgetDraft = (draft: BudgetDraft): void => setBudgetDraftState(draft)
+  const setCapDraft = (draft: string): void => setCapDraftState(draft)
+  const bumpBudgetEditorRevision = (): void => {
+    const next = budgetEditorRevisionRef.current + 1
+    budgetEditorRevisionRef.current = next
+    setBudgetEditorRevision(next)
+  }
+  const bumpConcurrencyRevision = (): void => {
+    const next = concurrencyRevisionRef.current + 1
+    concurrencyRevisionRef.current = next
+    setConcurrencyRevision(next)
+  }
+  const changeBudgetEditor = (open: boolean): void => {
+    if (editingBudgetRef.current === open) return
+    editingBudgetRef.current = open
+    setEditingBudget(open)
+    bumpBudgetEditorRevision()
+  }
+
+  const confirmedBudget = (detail: WatcherDetail): BudgetDraft => ({
+    activeMinutes: detail.enrollment.budget.wallClockActiveMs === null ? '' : String(detail.enrollment.budget.wallClockActiveMs / 60_000),
+    turns: detail.enrollment.budget.turns === null ? '' : String(detail.enrollment.budget.turns)
+  })
+  const confirmedConcurrency = (detail: WatcherDetail): number | null => {
+    const row = snapshotRef.current?.rows.find((item) => targetKey(item.target) === targetKey(detail.target))
+    return detail.enrollment.kind === 'objective' ? objectiveCap(detail, row) : null
+  }
+  const changeConcurrencyDraft = (draft: string): void => {
+    const cap = latestDetailRef.current?.concurrency ?? null
+    const dirty = draft !== (cap === null ? '' : String(cap))
+    if (dirty !== capDirtyRef.current) {
+      capDirtyRef.current = dirty
+      bumpConcurrencyRevision()
+    }
+    setCapDraft(draft)
+  }
+  const resetSelectionDrafts = (): void => {
+    editingBudgetRef.current = false
+    setEditingBudget(false)
+    budgetEditorRevisionRef.current = 0
+    setBudgetEditorRevision(0)
+    setBudgetDraft({ activeMinutes: '', turns: '' })
+    setBudgetError(null)
+    capDirtyRef.current = false
+    concurrencyRevisionRef.current = 0
+    setConcurrencyRevision(0)
+    setCapDraft('')
+    setConcurrencyError(null)
+  }
+  const selectTarget = (target: WatcherTarget | null): boolean => {
+    const current = selectionRef.current
+    if (current.target === null && target === null) return true
+    if (current.target && target && targetKey(current.target) === targetKey(target)) return true
+    const next = { target, generation: target ? crypto.randomUUID() : null }
+    selectionRef.current = next
+    setSelection(next)
+    latestDetailRequest.current += 1
+    latestDetailRef.current = null
+    setLoadedDetail(null)
+    setDetailMissing(false)
+    setDetailBusy(target !== null)
+    setDetailError(null)
+    setFeedback(null)
+    resetSelectionDrafts()
+    return true
+  }
+  const applyInput = (nextInput: unknown): boolean => selectTarget(initialTarget(nextInput))
+  updateInputRef.current = applyInput
+
+  const acceptSnapshot = (incoming: FleetSnapshot): boolean => {
     const accepted = acceptFleetSnapshot(snapshotRef.current, incoming)
     if (accepted === snapshotRef.current) return false
     snapshotRef.current = accepted
     setSnapshot(accepted)
+    const selected = selectionRef.current
+    if (selected.target) {
+      const replacement = accepted.rows.find((row) => sameTargetOwner(row.target, selected.target!))
+      if (replacement && targetKey(replacement.target) !== targetKey(selected.target)) selectTarget(replacement.target)
+    }
     return true
-  }, [])
+  }
+  acceptSnapshotRef.current = acceptSnapshot
 
-  const loadDetail = useCallback(async (requestedTarget: WatcherTarget) => {
+  const synchronizeDrafts = (previous: DetailReceipt | null, next: DetailReceipt): void => {
+    const previousDetail = previous?.generation === next.generation ? previous.detail : null
+    if (!previousDetail) {
+      setBudgetDraft(confirmedBudget(next.detail))
+      setBudgetError(null)
+      editingBudgetRef.current = false
+      setEditingBudget(false)
+      capDirtyRef.current = false
+      setCapDraft(next.concurrency === null ? '' : String(next.concurrency))
+      setConcurrencyError(null)
+      return
+    }
+
+    const epochChanged = previous?.ownerEpoch !== next.ownerEpoch
+    const budgetChanged =
+      previousDetail.enrollment.budget.wallClockActiveMs !== next.detail.enrollment.budget.wallClockActiveMs ||
+      previousDetail.enrollment.budget.turns !== next.detail.enrollment.budget.turns
+    if (epochChanged || budgetChanged) {
+      setBudgetDraft(confirmedBudget(next.detail))
+      setBudgetError(null)
+      editingBudgetRef.current = false
+      setEditingBudget(false)
+      bumpBudgetEditorRevision()
+    }
+
+    if (epochChanged || previous?.concurrency !== next.concurrency) {
+      changeConcurrencyDraft(next.concurrency === null ? '' : String(next.concurrency))
+      setConcurrencyError(null)
+    }
+    if (epochChanged) setFeedback(null)
+  }
+
+  const loadDetail = async (requestedTarget: WatcherTarget, generation: string): Promise<void> => {
+    if (signal.aborted) return
     const ticket = ++latestDetailRequest.current
     setDetailBusy(true)
     setDetailError(null)
     const row = snapshotRef.current?.rows.find((item) => targetKey(item.target) === targetKey(requestedTarget))
     const target = row?.target ?? requestedTarget
     try {
-      const loaded = await context.call('quirky.heimdall/detail', { target }) as WatcherDetail | null
-      if (ticket !== latestDetailRequest.current) return
+      const loaded = await readWatcherDetail(context, target)
+      if (ticket !== latestDetailRequest.current || selectionRef.current.generation !== generation) return
       if (loaded === null) {
-        setDetail(null)
-        setDetailError('This watcher is no longer available in the fleet.')
+        latestDetailRef.current = null
+        setLoadedDetail(null)
+        setDetailMissing(true)
       } else {
-        setDetail(loaded)
+        const previous = latestDetailRef.current
+        const receipt = { detail: loaded, generation, ownerEpoch: ownerEpochKey(loaded), concurrency: confirmedConcurrency(loaded) }
+        latestDetailRef.current = receipt
+        synchronizeDrafts(previous, receipt)
+        setLoadedDetail(receipt)
+        setDetailMissing(false)
       }
     } catch (error) {
-      if (ticket !== latestDetailRequest.current) return
-      setDetail(null)
+      if (ticket !== latestDetailRequest.current || selectionRef.current.generation !== generation) return
       setDetailError(messageOf(error))
     } finally {
-      if (ticket === latestDetailRequest.current) setDetailBusy(false)
+      if (ticket === latestDetailRequest.current && selectionRef.current.generation === generation) setDetailBusy(false)
     }
-  }, [context])
+  }
+  loadDetailRef.current = loadDetail
 
-  const refreshFleet = useCallback(async () => {
+  const refreshFleet = async (): Promise<void> => {
+    if (signal.aborted) return
     const ticket = ++latestFleetRequest.current
     setRefreshing(true)
     try {
-      const incoming = await context.call('quirky.heimdall/fleet', {})
-      if (!isFleetSnapshot(incoming)) throw new Error('The fleet response was not a valid snapshot.')
-      accept(incoming)
-      if (ticket === latestFleetRequest.current) setRefreshError(null)
+      const incoming = await readFleetSnapshot(context)
+      if (ticket !== latestFleetRequest.current) return
+      acceptSnapshotRef.current(incoming)
+      setFleetError(null)
     } catch (error) {
-      if (ticket === latestFleetRequest.current) setRefreshError(messageOf(error))
+      if (ticket === latestFleetRequest.current) setFleetError(messageOf(error))
     } finally {
       if (ticket === latestFleetRequest.current) setRefreshing(false)
     }
-  }, [accept, context])
+  }
+  refreshFleetRef.current = refreshFleet
 
   useEffect(() => {
-    void refreshFleet()
+    void refreshFleetRef.current()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
-      if (event.type !== FLEET_CHANGED_EVENT) return
-      if (!('data' in event)) return
-      const data = event.data
-      if (!isFleetSnapshot(data)) return
-      const changed = accept(data)
-      if (changed) {
-        setRefreshError(null)
-        const target = selectedTargetRef.current
-        if (target) void loadDetail(target)
-      }
+      if (event.type !== FLEET_CHANGED_EVENT || !('data' in event) || !isFleetSnapshot(event.data)) return
+      const generation = selectionRef.current.generation
+      if (!acceptSnapshotRef.current(event.data)) return
+      setFleetError(null)
+      const selected = selectionRef.current
+      if (selected.target && selected.generation && selected.generation === generation) void loadDetailRef.current(selected.target, selected.generation)
     })
     const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void refreshFleet()
+      if (status === 'connected') void refreshFleetRef.current()
     })
     return () => {
-      unsubscribe()
-      unsubscribeConnection()
       latestDetailRequest.current += 1
       latestFleetRequest.current += 1
+      unsubscribe()
+      unsubscribeConnection()
     }
-  }, [accept, context, loadDetail, refreshFleet])
+  }, [context])
 
   useEffect(() => {
-    if (!selectedTarget || !snapshot) return
-    const replacement = snapshot.rows.find((row) => sameTargetOwner(row.target, selectedTarget))
-    if (replacement && targetKey(replacement.target) !== targetKey(selectedTarget)) setSelectedTarget(replacement.target)
-  }, [selectedTarget, snapshot])
-
-  useEffect(() => {
-    if (selectedTarget) void loadDetail(selectedTarget)
-    else {
+    if (selection.target && selection.generation) {
+      void loadDetailRef.current(selection.target, selection.generation)
+    } else {
       latestDetailRequest.current += 1
-      setDetail(null)
+      latestDetailRef.current = null
+      setLoadedDetail(null)
+      setDetailMissing(false)
       setDetailError(null)
       setDetailBusy(false)
     }
-  }, [loadDetail, selectedTarget])
+  }, [selection.generation])
 
-  useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      if (selectedTarget !== null) setSelectedTarget(null)
-      else context.closeView()
-    }
-    window.addEventListener('keydown', keydown)
-    return () => window.removeEventListener('keydown', keydown)
-  }, [context, selectedTarget])
-
+  const selectedTarget = selection.target
+  const currentDetail = loadedDetail?.generation === selection.generation ? loadedDetail : null
+  const detail = currentDetail?.detail ?? null
   const orderedRows = useMemo(() => snapshot ? sortFleetRows(snapshot.rows) : [], [snapshot])
   const selectedRow = selectedTarget ? snapshot?.rows.find((row) => targetKey(row.target) === targetKey(selectedTarget)) : undefined
-  const canCommand = Boolean(
-    detail && !detail.readOnly && !detail.enrollment.malformed && detail.ownerContact === 'live' &&
-    (!isRemoteTarget(detail.target) || Boolean(detail.ownerIncarnation))
-  )
+  const canCommand = Boolean(detail && canControlDetail(detail))
+  const renderedOwner: OperationOwner | null = currentDetail
+    ? { generation: currentDetail.generation, ownerEpoch: currentDetail.ownerEpoch }
+    : null
+  const ownerIsCurrent = (owner: OperationOwner): boolean => {
+    const latest = latestDetailRef.current
+    return !signal.aborted && selectionRef.current.generation === owner.generation &&
+      latest?.generation === owner.generation && latest.ownerEpoch === owner.ownerEpoch
+  }
+  const requestKey = (target: WatcherTarget, epoch: string): string => JSON.stringify([targetKey(target), epoch])
+  const currentReservationKey = detail ? requestKey(detail.target, currentDetail!.ownerEpoch) : null
 
+  const reserveOperation = (target: WatcherTarget, epoch: string): Reservation | null => {
+    const key = requestKey(target, epoch)
+    if (reservationsRef.current.has(key)) return null
+    const token = crypto.randomUUID()
+    reservationsRef.current.set(key, token)
+    setReservedKeys(new Set(reservationsRef.current.keys()))
+    return { key, token }
+  }
+  const releaseOperation = (reservation: Reservation): void => {
+    if (reservationsRef.current.get(reservation.key) !== reservation.token) return
+    reservationsRef.current.delete(reservation.key)
+    setReservedKeys(new Set(reservationsRef.current.keys()))
+  }
+  const makeCommandRequest = (source: WatcherDetail, command: WatcherCommand): OwnerCommandRequest => ({
+    target: source.target,
+    expectedOwner: source.ownerFence,
+    command,
+    ...(isRemoteTarget(source.target) && source.ownerIncarnation ? { expectedIncarnation: source.ownerIncarnation } : {})
+  })
 
-  const sendCommand = async (command: WatcherCommand, label: string, confirmedDelete = false) => {
-    if (!detail) return
-    const request: CommandRequest = { target: detail.target, expectedOwner: detail.ownerFence, command }
+  const sendCommand = async (
+    command: WatcherCommand,
+    label: string,
+    request: OwnerCommandRequest,
+    owner: OperationOwner,
+    confirmedDelete = false
+  ): Promise<void> => {
     let result: CommandResult
     try {
-      const params = {
-        ...request,
-        ...(isRemoteTarget(detail.target) && detail.ownerIncarnation ? { expectedIncarnation: detail.ownerIncarnation } : {}),
-        ...(confirmedDelete ? { yes: true } : {})
-      }
+      const params = confirmedDelete ? { ...request, yes: true } : request
       const response = await context.call('quirky.heimdall/command', params)
-      result = isCommandResult(response) ? response : { kind: 'indeterminate', detail: 'The owner returned an unrecognized result; the command outcome could not be confirmed.' }
+      result = isCommandResult(response) ? response : {
+        kind: 'indeterminate',
+        detail: 'The owner returned an unrecognized result; the command outcome could not be confirmed.'
+      }
     } catch (error) {
       result = { kind: 'indeterminate', detail: `The command reply could not be confirmed: ${messageOf(error)}` }
     }
-    setFeedback({ command: label, result })
+
+    if (ownerIsCurrent(owner)) setFeedback({ command: label, result, owner })
     if (result.kind === 'applied') {
       context.toast(`${label} applied`, formatCommandResult(result), { kind: 'success' })
-      if (command.kind === 'delete') setSelectedTarget(null)
-      void refreshFleet()
-      if (command.kind !== 'delete') void loadDetail(detail.target)
+      if (ownerIsCurrent(owner)) {
+        if (command.kind === 'delete') context.openView(FLEET_VIEW_ID)
+        else {
+          void refreshFleetRef.current()
+          void loadDetailRef.current(request.target, owner.generation)
+        }
+      }
     } else if (result.kind === 'refused') {
       context.toast(`${label} refused`, `${result.reason}: ${result.detail}`, { kind: 'warning' })
     } else {
@@ -868,38 +1138,191 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
     }
   }
 
-  const submitCommand = async (command: WatcherCommand, label: string) => {
-    if (pendingRef.current || !canCommand) return
-    pendingRef.current = true
+  const submitCommand = async (command: WatcherCommand, label: string, receipt: CommandReceipt = { kind: 'none' }): Promise<void> => {
+    if (!renderedOwner || !ownerIsCurrent(renderedOwner)) return
+    const latest = latestDetailRef.current
+    if (!latest || latest.generation !== renderedOwner.generation) return
+    const reason = commandEligibility(command, receipt, latest.detail)
+    if (reason) {
+      context.toast(`${label} not sent`, `${reason}; review it and try again.`, { kind: 'error' })
+      return
+    }
+    if (!canControlDetail(latest.detail) || latest.detail.pendingControls.length > 0 || !ownerIsCurrent(renderedOwner)) return
+    const request = makeCommandRequest(latest.detail, command)
+    const reservation = reserveOperation(latest.detail.target, latest.ownerEpoch)
+    if (!reservation) return
     setFeedback(null)
-    setPending(true)
     try {
-      await sendCommand(command, label)
+      await sendCommand(command, label, request, renderedOwner)
     } finally {
-      pendingRef.current = false
-      setPending(false)
+      releaseOperation(reservation)
     }
   }
 
-  const deleteWatcher = async () => {
-    if (pendingRef.current || !detail || !canCommand) return
-    pendingRef.current = true
-    setPending(true)
+  const deleteWatcher = async (): Promise<void> => {
+    if (!renderedOwner || !ownerIsCurrent(renderedOwner)) return
+    const latest = latestDetailRef.current
+    if (!latest || latest.generation !== renderedOwner.generation || !canControlDetail(latest.detail) || latest.detail.pendingControls.length > 0) return
+    const request = makeCommandRequest(latest.detail, { kind: 'delete' })
+    const reservation = reserveOperation(latest.detail.target, latest.ownerEpoch)
+    if (!reservation) return
     setFeedback(null)
     try {
+      const preview = await context.call('quirky.heimdall/describeCommand', request)
+      if (signal.aborted) return
+      const described = latestDetailRef.current
+      if (!ownerIsCurrent(renderedOwner) || !described || !sameCommandOwner(request, described.detail)) {
+        context.toast('Delete watcher not sent', `The watcher's owner changed; review it and try again.`, { kind: 'warning' })
+        return
+      }
+      if (typeof preview !== 'string') {
+        context.toast('Delete watcher refused', 'The owner could not provide an applicable deletion preview.', { kind: 'warning' })
+        return
+      }
       const confirmed = await context.confirm({
         title: 'Delete watcher?',
-        body: `The watcher “${detail.name}” and its saved history will be permanently removed. Worker terminals will not be stopped.`,
+        body: preview,
         confirmLabel: 'Delete watcher'
       })
-      if (confirmed) await sendCommand({ kind: 'delete' }, 'Delete watcher', true)
+      if (signal.aborted) return
+      const confirmedDetail = latestDetailRef.current
+      if (!ownerIsCurrent(renderedOwner) || !confirmedDetail || !sameCommandOwner(request, confirmedDetail.detail)) {
+        context.toast('Delete watcher not sent', `The watcher's owner changed; review it and try again.`, { kind: 'warning' })
+        return
+      }
+      if (confirmed && canControlDetail(confirmedDetail.detail) && confirmedDetail.detail.pendingControls.length === 0) {
+        await sendCommand({ kind: 'delete' }, 'Delete watcher', request, renderedOwner, true)
+      }
     } catch (error) {
-      context.toast('Could not confirm watcher deletion', messageOf(error), { kind: 'error' })
+      if (ownerIsCurrent(renderedOwner)) context.toast('Could not confirm watcher deletion', messageOf(error), { kind: 'error' })
     } finally {
-      pendingRef.current = false
-      setPending(false)
+      releaseOperation(reservation)
     }
   }
+
+  const controlSessionIsCurrent = (args: FleetControlArgs): boolean => {
+    if (signal.aborted || args.instance !== instance || selectionRef.current.generation !== args.generation) return false
+    const currentRevision = args.action === 'cancel-concurrency'
+      ? concurrencyRevisionRef.current
+      : budgetEditorRevisionRef.current
+    return currentRevision === args.revision
+  }
+  const requestControl = async (action: FleetControlAction, revision: number, title: string): Promise<void> => {
+    const generation = selectionRef.current.generation
+    if (!generation) return
+    const args: FleetControlArgs = { action, instance, generation, revision }
+    try {
+      const result = await requestFleetControl(context, args, signal)
+      if (result.delivered === 0 && controlSessionIsCurrent(args)) {
+        context.toast(title, 'The watcher view changed before the control arrived.', { kind: 'error' })
+      }
+    } catch (error) {
+      if (controlSessionIsCurrent(args)) context.toast(title, messageOf(error), { kind: 'error' })
+    }
+  }
+  const dispatchControl = (args: FleetControlArgs): boolean => {
+    if (signal.aborted) return false
+    const current = selectionRef.current
+    const latest = latestDetailRef.current
+    if (!latest || !current.target || current.generation !== args.generation || latest.generation !== args.generation) return false
+    if (args.instance !== instance) return false
+    const detailForControl = latest.detail
+    const key = requestKey(detailForControl.target, latest.ownerEpoch)
+    const pending = reservationsRef.current.has(key) || detailForControl.pendingControls.length > 0
+
+    if (args.action === 'edit-budget') {
+      if (args.revision !== budgetEditorRevisionRef.current || editingBudgetRef.current || pending || !canControlDetail(detailForControl)) return false
+      setBudgetDraft(confirmedBudget(detailForControl))
+      setBudgetError(null)
+      changeBudgetEditor(true)
+      return true
+    }
+    if (args.action === 'cancel-budget') {
+      if (args.revision !== budgetEditorRevisionRef.current || !editingBudgetRef.current || pending) return false
+      setBudgetDraft(confirmedBudget(detailForControl))
+      setBudgetError(null)
+      changeBudgetEditor(false)
+      return true
+    }
+    if (args.action === 'cancel-concurrency') {
+      if (
+        args.revision !== concurrencyRevisionRef.current || !capDirtyRef.current || pending ||
+        detailForControl.enrollment.kind !== 'objective'
+      ) return false
+      const cap = latest.concurrency
+      changeConcurrencyDraft(cap === null ? '' : String(cap))
+      setConcurrencyError(null)
+      return true
+    }
+    return false
+  }
+  const dispatchControlRef = useRef<(args: FleetControlArgs) => boolean>(() => false)
+  dispatchControlRef.current = dispatchControl
+
+  const controlHandler = (args: FleetControlArgs): boolean => dispatchControlRef.current(args)
+  useEffect(() => registerFleetControl(context, instance, controlHandler), [context, instance])
+
+  const selectWatcher = (row: FleetRow): void => {
+    setFeedback(null)
+    context.openView(FLEET_VIEW_ID, { target: row.target })
+  }
+  const backToFleet = (): void => context.openView(FLEET_VIEW_ID)
+  const refreshFleetAction = (): void => { void refreshFleet() }
+  const retryDetails = (): void => {
+    const current = selectionRef.current
+    if (current.target && current.generation) void loadDetail(current.target, current.generation)
+  }
+
+  const concurrencyDraftState = selectedTarget === null
+    ? 'unavailable'
+    : detail?.enrollment.kind === 'objective'
+      ? capDirtyRef.current ? 'changed' : 'clean'
+      : 'unavailable'
+  useEffect(() => {
+    report?.({
+      view: selection.target ? 'detail' : 'fleet',
+      instance,
+      generation: selection.generation,
+      target: selection.target,
+      budgetEditor: selection.target ? editingBudget ? 'open' : 'closed' : 'unavailable',
+      budgetEditorRevision: selection.target ? budgetEditorRevision : null,
+      concurrencyDraft: concurrencyDraftState,
+      concurrencyRevision: selection.target ? concurrencyRevision : null
+    })
+  }, [report, instance, selection, editingBudget, budgetEditorRevision, concurrencyDraftState, concurrencyRevision])
+
+  useEffect(() => {
+    if (!selection.target) return
+    const returnOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      context.openView(FLEET_VIEW_ID)
+    }
+    window.addEventListener('keydown', returnOnEscape)
+    return () => window.removeEventListener('keydown', returnOnEscape)
+  }, [context, selection.target !== null])
+  useEffect(() => {
+    if (selection.target) return
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      context.closeView()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [context, selection.target === null])
+
+  const pendingForCurrent = currentReservationKey !== null && reservedKeys.has(currentReservationKey)
+  const fleetErrorMessage = fleetError
+    ? snapshot
+      ? `Fleet refresh failed; showing the last confirmed snapshot: ${fleetError}`
+      : `Could not load the Heimdall fleet: ${fleetError}`
+    : null
+  const detailErrorMessage = detailError
+    ? currentDetail
+      ? `Could not refresh watcher details; showing the last confirmed state: ${detailError}`
+      : `Could not load watcher details: ${detailError}`
+    : null
 
   return (
     <main className="ui-stack" style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }} aria-label="Heimdall fleet">
@@ -907,51 +1330,58 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
         title="Heimdall fleet"
         actions={
           <div className="ui-cluster">
-            {selectedTarget !== null && <Button onClick={() => setSelectedTarget(null)}>Back to fleet</Button>}
-            {selectedTarget === null && <Button disabled={refreshing} onClick={() => void refreshFleet()}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</Button>}
+            {selectedTarget !== null && <Button onClick={backToFleet}>Back to fleet</Button>}
+            {selectedTarget === null && <Button disabled={refreshing} onClick={refreshFleetAction}>{refreshing ? 'Refreshing…' : 'Refresh fleet'}</Button>}
           </div>
         }
       >
         <div className="ui-stack" style={{ padding: 'var(--ui-space-8)' }}>
           {snapshot && <div><Badge tone={snapshot.attentionCount > 0 ? 'needs-you' : 'neutral'}><span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{snapshot.activeCount} active · {snapshot.attentionCount} need attention</span></Badge></div>}
-          {refreshError && (
-            <div role="alert" className="ui-error-text">
-              Fleet refresh failed; {snapshot ? 'showing the last confirmed snapshot' : 'no confirmed snapshot is available'}: {refreshError}
-            </div>
-          )}
-          {!snapshot && !refreshError && <EmptyState message="Loading Heimdall fleet…" />}
+          {fleetErrorMessage && <InlineError message={fleetErrorMessage} action={{ label: 'Retry', onAction: refreshFleetAction }} />}
+          {!snapshot && !fleetError && <NoticeLine>Loading Heimdall fleet…</NoticeLine>}
           {selectedTarget === null && snapshot && (
             <div className="ui-stack">
               <SectionHeader title="Watcher fleet" />
-              <FleetTable rows={orderedRows} now={now} selectedId={null} onSelect={(row) => { setFeedback(null); setSelectedTarget(row.target) }} />
+              <FleetTable rows={orderedRows} now={now} selectedId={null} onSelect={selectWatcher} />
               <ActionHistory items={snapshot.actionHistory} />
             </div>
           )}
           {selectedTarget !== null && (
             <div className="ui-stack">
-              {detailBusy && !detail && <EmptyState message="Loading watcher details…" />}
-              {detailError && (
-                <div role="alert" className="ui-stack">
-                  <span className="ui-error-text">Could not load watcher details: {detailError}</span>
-                  <div className="ui-cluster">
-                    <Button onClick={() => void loadDetail(selectedTarget)}>Retry details</Button>
-                  </div>
-                </div>
-              )}
-              {detail && (
+              {detailBusy && !currentDetail && !detailMissing && !detailError && <NoticeLine>Loading watcher details…</NoticeLine>}
+              {detailMissing && <EmptyState message="This watcher is no longer available in the fleet." />}
+              {detailErrorMessage && <InlineError message={detailErrorMessage} action={{ label: 'Retry details', onAction: retryDetails }} />}
+              {currentDetail && renderedOwner && (
                 <WatcherDetailPane
+                  key={currentDetail.generation}
                   context={context}
-                  detail={detail}
+                  detail={currentDetail.detail}
                   row={selectedRow}
-                  pending={pending}
+                  pending={pendingForCurrent}
                   canCommand={canCommand}
-                  feedback={feedback}
+                  feedback={feedback && sameOperationOwner(feedback.owner, renderedOwner) ? feedback : null}
                   now={now}
-                  onCommand={(command, label) => void submitCommand(command, label)}
-                  onDelete={() => void deleteWatcher()}
+                  owner={renderedOwner}
+                  ownerEpoch={currentDetail.ownerEpoch}
+                  budgetDraft={budgetDraft}
+                  editingBudget={editingBudget}
+                  budgetEditorRevision={budgetEditorRevision}
+                  budgetError={budgetError}
+                  capDraft={capDraft}
+                  concurrencyRevision={concurrencyRevision}
+                  concurrencyError={concurrencyError}
+                  setBudgetDraft={setBudgetDraft}
+                  setBudgetError={setBudgetError}
+                  setConcurrencyError={setConcurrencyError}
+                  changeBudgetEditor={changeBudgetEditor}
+                  changeConcurrencyDraft={changeConcurrencyDraft}
+                  requestControl={(action, revision, title) => { void requestControl(action, revision, title) }}
+                  submitCommand={submitCommand}
+                  deleteWatcher={deleteWatcher}
+                  ownerIsCurrent={ownerIsCurrent}
                 />
               )}
-              <ActionHistory items={snapshot?.actionHistory ?? []} />
+              {snapshot && <ActionHistory items={snapshot.actionHistory} />}
             </div>
           )}
         </div>
@@ -962,6 +1392,7 @@ function HeimdallFleet({ context, input }: { context: UiPluginContext; input: un
 
 /** Activates the built-in fleet navigation entry and its full-window operator view. */
 export function activate(context: UiPluginContext): void {
+  context.provide(UI_CONTROL_COMMAND, (args: unknown) => dispatchFleetControl(context, args))
   context.provide(NAVIGATION_ID, (element: HTMLElement) => {
     const root = createRoot(element)
     root.render(<NavigationEntry context={context} />)
@@ -970,7 +1401,14 @@ export function activate(context: UiPluginContext): void {
   context.provide(FLEET_VIEW_ID, (element: HTMLElement, props: MountProps) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
     const root = createRoot(element)
-    root.render(<HeimdallFleet context={context} input={props.input} />)
-    return () => queueMicrotask(() => root.unmount())
+    const lifetime = new AbortController()
+    const updateInputRef: { current(input: unknown): boolean } = { current: () => false }
+    root.render(<HeimdallFleet context={context} input={props.input} instance={crypto.randomUUID()} report={props.report} updateInputRef={updateInputRef} signal={lifetime.signal} />)
+    const cleanup = (() => {
+      lifetime.abort()
+      queueMicrotask(() => root.unmount())
+    }) as MountCleanup
+    cleanup.updateInput = (input) => !lifetime.signal.aborted && updateInputRef.current(input)
+    return cleanup
   })
 }

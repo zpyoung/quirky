@@ -29,7 +29,8 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
   'packages/ui/src/design-system/icons/icons.css',
-  'packages/ui/src/design-system/worktree-tree.css'
+  'packages/ui/src/design-system/worktree-tree.css',
+  'packages/ui/src/design-system/worktree-primitives.css'
 ]
 const HEIGHT = 768
 const GUTTER = 42
@@ -38,6 +39,8 @@ const CENTER_WIDTH = 330
 let browser: Browser | null = null
 let browserBundle = ''
 let panelHeaderRegressionBundle = ''
+let previousQuirkyHome: string | undefined
+let isolatedHome = ''
 
 function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
@@ -46,6 +49,7 @@ function browserEntry(): string {
   const worktreeBoardModule = join(ROOT, 'plugins/quirky.worktree/src/WorktreeBoard.tsx')
   const filterMenuModule = join(ROOT, 'plugins/quirky.worktree/src/FilterMenu.tsx')
   const viewTypesModule = join(ROOT, 'plugins/quirky.worktree/src/view-types.ts')
+  const uiControlModule = join(ROOT, 'plugins/quirky.worktree/src/ui-control.ts')
   return `
     import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
@@ -54,9 +58,12 @@ function browserEntry(): string {
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
     import { FilterMenu } from ${JSON.stringify(filterMenuModule)}
     import { DEFAULT_ACTIVITY_PREFERENCES } from ${JSON.stringify(viewTypesModule)}
+    import { dispatchUiControl, UI_CONTROL_COMMAND } from ${JSON.stringify(uiControlModule)}
     import { Badge, Button, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     function FilterMenuRegressionFixture() {
+      const emptyTags = document.documentElement.dataset.filterMenuNoTags === 'true'
+      const activityError = document.documentElement.dataset.filterMenuActivityError ?? null
       const [open, setOpen] = useState(false)
       const [filter, setFilter] = useState({
         tagIds: [],
@@ -81,7 +88,8 @@ function browserEntry(): string {
         open ? h(FilterMenu, {
           anchor,
           filter,
-          tags: [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          tags: emptyTags ? [] : [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          activityError,
           sections: [{ id: 'g1', name: 'Release 2.4' }],
           repos: [{ id: 'r1', name: 'harbor-api', displayName: null }],
           statuses: [{ id: 'todo', label: 'Todo' }, { id: 'in-progress', label: 'In progress' }],
@@ -101,13 +109,24 @@ function browserEntry(): string {
     projectActionResult.hidden = true
     projectActionResult.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:10;padding:4px;background:white;color:black'
     document.body.append(projectActionResult)
+    const currentWindow = window as Window & { dispatchUiControl?: typeof dispatchUiControl }
+    currentWindow.dispatchUiControl = dispatchUiControl
     const treeContext = {
-      call: async () => [],
+      call: async (method, params = {}) => {
+        if (method === 'ui.window.self') return { connId: 1 }
+        if (method === 'ui.window.command.run') {
+          if (params.connId !== 1 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+          const dispatch = currentWindow.dispatchUiControl
+          if (!dispatch) throw new Error('dispatchUiControl is not exposed on the current window')
+          return { result: dispatch(treeContext, params.args) }
+        }
+        return []
+      },
       toast: () => {},
       log: () => {},
       subscribe: () => () => {},
       onConnection: () => () => {}
-    }
+    } as Parameters<typeof dispatchUiControl>[0]
     const worktreeRows = [
       { id: 'primary', name: 'main', primary: true },
       { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, needsYou: true },
@@ -404,6 +423,9 @@ function pageMarkup(): string {
 
 beforeAll(async () => {
   if (!existsSync(chromium.executablePath())) return
+  previousQuirkyHome = process.env.QUIRKY_HOME
+  isolatedHome = mkdtempSync(join(tmpdir(), 'quirky-g3-51-narrow-sidebar-home-'))
+  process.env.QUIRKY_HOME = isolatedHome
   const tempDir = mkdtempSync(join(tmpdir(), 'quirky-worktree-narrow-sidebar-'))
   try {
     const entrypoint = join(tempDir, 'browser-entry.ts')
@@ -443,7 +465,15 @@ beforeAll(async () => {
 }, 60_000)
 
 afterAll(async () => {
-  await browser?.close()
+  try {
+    await browser?.close()
+  } finally {
+    if (isolatedHome) {
+      rmSync(isolatedHome, { recursive: true, force: true })
+      if (previousQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+      else process.env.QUIRKY_HOME = previousQuirkyHome
+    }
+  }
 }, 60_000)
 
 test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project headers readable in two narrow side panels', async () => {
@@ -706,6 +736,183 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         expectContained({ left: hovered!.x, top: hovered!.y, right: hovered!.x + hovered!.width, bottom: hovered!.y + hovered!.height }, hoveredLayout.frame)
         expect(overlaps(hoveredLayout.toolTitle, hoveredLayout.toolActions)).toBe(false)
       }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('shows a visible project name prefix beside the tile, count and actions in a narrow sidebar', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('heading', { name: /QuirkyWorktreeProject/ }).waitFor()
+
+    const expectContained = (
+      inner: { left: number; top: number; right: number; bottom: number },
+      outer: { left: number; top: number; right: number; bottom: number }
+    ) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+
+    for (const sidebarWidth of [116, 160]) {
+      const viewportWidth = GUTTER * 2 + CENTER_WIDTH + sidebarWidth * 2
+      await page.setViewportSize({ width: viewportWidth, height: HEIGHT })
+      await page.locator('#layout').evaluate((element, width) => {
+        ;(element as HTMLElement).style.setProperty('--sidebar-width', `${width}px`)
+      }, sidebarWidth)
+
+      const layout = await page.evaluate(() => {
+        const bounds = (element: Element) => {
+          const rect = element.getBoundingClientRect()
+          return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }
+        }
+        const header = document.querySelector<HTMLElement>('.project-header')!
+        const title = header.querySelector<HTMLElement>('.ui-section-header__title')!
+        const tile = title.querySelector<HTMLElement>('.ui-project-tile')!
+        const projectName = title.querySelector<HTMLElement>('.project-name')!
+        const count = title.querySelector<HTMLElement>('.worktree-attention')!
+        const actions = header.querySelector<HTMLElement>('.ui-section-header__actions')!
+        const firstGlyphRange = document.createRange()
+        firstGlyphRange.setStart(projectName.firstChild!, 0)
+        firstGlyphRange.setEnd(projectName.firstChild!, 1)
+        const firstGlyph = firstGlyphRange.getBoundingClientRect()
+        const ellipsisProbe = document.createElement('span')
+        ellipsisProbe.textContent = '…'
+        ellipsisProbe.style.cssText = `position: absolute; left: -10000px; top: 0; white-space: pre; font: ${getComputedStyle(projectName).font};`
+        document.body.append(ellipsisProbe)
+        const ellipsisWidth = ellipsisProbe.getBoundingClientRect().width
+        ellipsisProbe.remove()
+        return {
+          header: bounds(header),
+          title: bounds(title),
+          tile: bounds(tile),
+          tileDisplay: getComputedStyle(tile).display,
+          tileText: tile.textContent?.trim(),
+          projectName: bounds(projectName),
+          firstGlyph: { left: firstGlyph.left, top: firstGlyph.top, width: firstGlyph.width, height: firstGlyph.height },
+          ellipsisWidth,
+          glyphHitsName: document.elementFromPoint(
+            firstGlyph.left + firstGlyph.width / 2,
+            firstGlyph.top + firstGlyph.height / 2
+          ) === projectName,
+          count: bounds(count),
+          buttons: [...actions.querySelectorAll<HTMLElement>('button')].map(bounds)
+        }
+      })
+
+      expect(layout.tileDisplay).not.toBe('none')
+      expect(layout.tileText).toBe('QU')
+      expect(layout.tile.width).toBeGreaterThanOrEqual(12)
+      expect(layout.tile.height).toBeGreaterThanOrEqual(12)
+      expect(layout.tile.right).toBeLessThan(layout.projectName.left)
+      expect(layout.firstGlyph.width).toBeGreaterThan(0)
+      expect({
+        sidebarWidth,
+        roomForGlyphAndEllipsis: layout.projectName.width >= layout.firstGlyph.width + layout.ellipsisWidth,
+        projectNameWidth: layout.projectName.width,
+        firstGlyphWidth: layout.firstGlyph.width,
+        ellipsisWidth: layout.ellipsisWidth
+      }).toMatchObject({ sidebarWidth, roomForGlyphAndEllipsis: true })
+      expect(layout.glyphHitsName).toBe(true)
+      expect(layout.projectName.right).toBeLessThan(layout.count.left)
+      expectContained(layout.count, layout.title)
+      expect(layout.buttons).toHaveLength(2)
+      for (const button of layout.buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(layout.title.right - 0.5)
+        expectContained(button, layout.header)
+      }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('keeps project header focus rings inside the tree scroller in a narrow sidebar', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    const collapseButton = page.getByRole('button', { name: 'Collapse project QuirkyWorktreeProject', exact: true })
+    await collapseButton.waitFor()
+
+    const expectFocusedHeaderButton = async (buttonName: string, sidebarWidth: number) => {
+      const state = await page.getByRole('button', { name: buttonName, exact: true }).evaluate((element) => {
+        const outline = getComputedStyle(element)
+        const outlineWidth = Number.parseFloat(outline.outlineWidth)
+        const outlineExtent = Math.max(0, outlineWidth + Number.parseFloat(outline.outlineOffset))
+        const rect = element.getBoundingClientRect()
+        const ring = {
+          left: rect.left - outlineExtent,
+          top: rect.top - outlineExtent,
+          right: rect.right + outlineExtent,
+          bottom: rect.bottom + outlineExtent
+        }
+        let clipped: string | null = null
+        for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor)
+          const bounds = ancestor.getBoundingClientRect()
+          const clipLeft = bounds.left + ancestor.clientLeft
+          const clipTop = bounds.top + ancestor.clientTop
+          const clipRight = clipLeft + ancestor.clientWidth
+          const clipBottom = clipTop + ancestor.clientHeight
+          if (style.overflowX !== 'visible' && (ring.left < clipLeft - 0.5 || ring.right > clipRight + 0.5)) {
+            clipped = `${ancestor.className}: horizontal clip`
+            break
+          }
+          if (style.overflowY !== 'visible' && (ring.top < clipTop - 0.5 || ring.bottom > clipBottom + 0.5)) {
+            clipped = `${ancestor.className}: vertical clip`
+            break
+          }
+        }
+        return {
+          active: document.activeElement === element,
+          focusVisible: element.matches(':focus-visible'),
+          outlineWidth,
+          outlineStyle: outline.outlineStyle,
+          clipped
+        }
+      })
+      expect({
+        sidebarWidth,
+        buttonName,
+        active: state.active,
+        focusVisible: state.focusVisible,
+        hasOutline: state.outlineStyle !== 'none' && state.outlineWidth > 0,
+        clipped: state.clipped
+      }).toMatchObject({
+        sidebarWidth,
+        buttonName,
+        active: true,
+        focusVisible: true,
+        hasOutline: true,
+        clipped: null
+      })
+    }
+
+    for (const sidebarWidth of [240, 160, 116]) {
+      await page.locator('#layout').evaluate((element, width) => {
+        ;(element as HTMLElement).style.setProperty('--worktree-sidebar-width', `${width}px`)
+      }, sidebarWidth)
+      await page.mouse.move(0, 0)
+      await collapseButton.focus()
+      await expectFocusedHeaderButton('Collapse project QuirkyWorktreeProject', sidebarWidth)
+      await page.keyboard.press('Tab')
+      await expectFocusedHeaderButton('New worktree in QuirkyWorktreeProject', sidebarWidth)
+      await page.keyboard.press('Tab')
+      await expectFocusedHeaderButton('Actions for QuirkyWorktreeProject', sidebarWidth)
     }
   } finally {
     await context.close()
@@ -1575,6 +1782,74 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the Filter menu insid
         await filterButton.click()
       }
     }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('renders shared Filter empty and error states with reachable activity controls', async () => {
+  const context = await browser!.newContext({ viewport: { width: 360, height: 900 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    await page.evaluate(() => {
+      document.documentElement.dataset.filterMenuRegression = 'true'
+      document.documentElement.dataset.filterMenuNoTags = 'true'
+      document.documentElement.dataset.filterMenuActivityError = 'Projection offline'
+    })
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('button', { name: 'Filter', exact: true }).click()
+
+    const popover = page.getByRole('dialog', { name: 'Filter' })
+    await popover.waitFor({ state: 'visible' })
+    const empty = popover.locator('.ui-empty-state')
+    await empty.waitFor({ state: 'visible' })
+    await empty.scrollIntoViewIfNeeded()
+    expect(await empty.getByText('No tags yet.', { exact: true }).isVisible()).toBe(true)
+    const activityError = popover.locator('.ui-inline-error[role="alert"]')
+    await activityError.waitFor({ state: 'visible' })
+    await activityError.scrollIntoViewIfNeeded()
+    expect(await activityError.textContent()).toContain('Workspace activity filters unavailable: Projection offline')
+
+    const activity = popover.getByRole('combobox', { name: 'Activity window' })
+    await activity.scrollIntoViewIfNeeded()
+    expect(await activity.isVisible()).toBe(true)
+    expect(await activity.locator('option').allTextContents()).toEqual([
+      'All',
+      'Live only',
+      'Past 24 hours',
+      'Past 7 days',
+      'Past 30 days',
+      'Custom'
+    ])
+    await activity.selectOption('custom')
+    const customDays = popover.getByRole('textbox', { name: 'Custom days' })
+    await customDays.scrollIntoViewIfNeeded()
+    expect(await customDays.isVisible()).toBe(true)
+    const geometry = await page.evaluate(() => {
+      const element = document.querySelector<HTMLElement>('.ui-popover')!
+      const select = element.querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')!
+      const popup = element.getBoundingClientRect()
+      const control = select.getBoundingClientRect()
+      return {
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        popup: { left: popup.left, top: popup.top, right: popup.right, bottom: popup.bottom },
+        select: { left: control.left, top: control.top, right: control.right, bottom: control.bottom }
+      }
+    })
+    expect(geometry.popup.left).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry.popup.top).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry.popup.right).toBeLessThanOrEqual(geometry.viewport.width + 0.5)
+    expect(geometry.popup.bottom).toBeLessThanOrEqual(geometry.viewport.height + 0.5)
+    expect(geometry.select.left).toBeGreaterThanOrEqual(geometry.popup.left - 0.5)
+    expect(geometry.select.right).toBeLessThanOrEqual(geometry.popup.right + 0.5)
+
+    await popover.evaluate((element) => { (element as HTMLElement).scrollTop = 0 })
+    const screenshotPath = process.env.QUIRKY_UI_SCREENSHOT
+    if (screenshotPath) await page.screenshot({ path: screenshotPath })
   } finally {
     await context.close()
   }

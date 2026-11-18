@@ -36,7 +36,8 @@ const KIND_SPECIFIC_FLAGS: Record<string, true> = {
   gate: true,
   'no-lanes': true,
   'branch-update': true,
-  'merge-method': true
+  'merge-method': true,
+  'merge-check-scope': true
 }
 const CONTROL_COMMANDS = ['pause', 'resume', 'disarm', 'rm', 'approve', 'answer', 'answer-escalation', 'budget', 'stop-worker', 'set-concurrency'] as const
 
@@ -223,7 +224,9 @@ async function objective(args: CliArgs, ctx: CliContext): Promise<void> {
   requireNoExtraPositionals(args, 1, ctx)
   const detail = await detailFor(ctx, watcherId)
   if (detail.enrollment.kind !== 'objective') usage(ctx, `watcher ${watcherId} is ${detail.enrollment.kind}, not objective`)
-  const value = await ctx.call(`${PLUGIN_ID}/objectiveDetail`, { target: detail.target })
+  if (detail.target.connectionId) usage(ctx, 'objective detail is available only for local watchers')
+  const value = await ctx.call('quirky.objective/detail', { watcherId: detail.target.watcherId })
+  if (value === null) fail(ctx, `Watcher not found: ${watcherId}`)
   ctx.out.result(value, () => JSON.stringify(value, null, 2))
 }
 
@@ -460,7 +463,7 @@ async function stringPayload(specValue: unknown, kind: string, args: CliArgs, ct
       usage(ctx, 'create objective requires --objective, --objective-file or --spec.kindPayload.objectiveText')
     }
   } else if (kind === 'hosted-review') {
-    Object.assign(result, { branchUpdateMode: 'merge-base-update', mergeMethod: null }, payload)
+    Object.assign(result, { branchUpdateMode: 'merge-base-update', mergeMethod: null, mergeCheckScope: 'all' }, payload)
     const branchUpdate = flagString(args, 'branch-update', ctx)
     if (branchUpdate !== undefined) {
       if (branchUpdate !== 'merge-base-update' && branchUpdate !== 'rebase') {
@@ -474,6 +477,13 @@ async function stringPayload(specValue: unknown, kind: string, args: CliArgs, ct
         usage(ctx, '--merge-method must be default, merge, squash or rebase')
       }
       result.mergeMethod = mergeMethod === 'default' ? null : mergeMethod
+    }
+    const mergeCheckScope = flagString(args, 'merge-check-scope', ctx)
+    if (mergeCheckScope !== undefined) {
+      if (mergeCheckScope !== 'all' && mergeCheckScope !== 'required') {
+        usage(ctx, '--merge-check-scope must be all or required')
+      }
+      result.mergeCheckScope = mergeCheckScope
     }
   } else if (Object.keys(args.flags).some((key) => Object.hasOwn(KIND_SPECIFIC_FLAGS, key))) {
     usage(ctx, `create ${kind} does not define kind-specific flags; pass its registered payload with --spec`)

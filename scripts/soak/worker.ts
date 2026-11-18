@@ -1,5 +1,78 @@
 import { accessSync, appendFileSync, constants } from 'node:fs'
 import { delimiter, join } from 'node:path'
+import { createInterface } from 'node:readline'
+
+export const DEFAULT_BEAT_MS = 10_000
+const PING_LINE = /^soak-ping ([0-9a-f]{8}-[1-9]\d{0,8})$/
+
+export function pongFor(line: string): string | null {
+  const match = PING_LINE.exec(line)
+  if (match === null || match[0] !== line) return null
+  return `\nsoak-pong ${match[1]}\n`
+}
+
+const SPINNER_REDRAW_PREFIX = '\x1b[24;1H\x1b[2K'
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸']
+
+export function agentCycleChunks(worker: number, cycle: number): string[] {
+  const frameRows = [
+    '╭─ SOAK AGENT ────────────────────────────────────────────────────────────────╮',
+    `│  worker ${worker}  ·  cycle ${cycle}                                           │`,
+    '├─ Task ──────────────────────────────────────────────────────────────────────┤',
+    '│                                                                              │',
+    '│  > Inspecting the current worktree                                           │',
+    '│    Checking repository state and project instructions                       │',
+    '│                                                                              │',
+    '│  > Reading implementation and tests                                         │',
+    '│    Following existing worker timing and subprocess behavior                 │',
+    '│                                                                              │',
+    '│  ● Working                                                                   │',
+    '│    ├─ Reviewing source                                                       │',
+    '│    ├─ Preparing terminal updates                                            │',
+    '│    └─ Preserving the beat schedule                                          │',
+    '│                                                                              │',
+    '│  Changes                                                                     │',
+    '│    + agent-style screen frames                                              │',
+    '│    + paced spinner redraws                                                  │',
+    '│    + concise completion output                                             │',
+    '│                                                                              │',
+    '│  Tools  0  │  Tokens  —  │  Context  ███████░░░                             │',
+    '│  Press Ctrl-C to interrupt                                                  │',
+    '│                                                                              │',
+    '╰──────────────────────────────────────────────────────────────────────────────╯'
+  ]
+  const chunks = [
+    `\x1b]0;soak agent ${worker} cycle ${cycle}\x07`,
+    '\x1b[?1049h',
+    '\x1b[?25l',
+    '\x1b[2J\x1b[H',
+    ...frameRows.map((line, index) => `\x1b[${index + 1};1H${line}\x1b[K`),
+    ...Array.from({ length: 40 }, (_, index) =>
+      `${SPINNER_REDRAW_PREFIX}${SPINNER_FRAMES[index % SPINNER_FRAMES.length]} Working · cycle ${cycle} · ${index + 1}/40`
+    ),
+    Array.from({ length: 200 }, (_, index) =>
+      `\x1b[${30 + index % 8}msoak agent ${worker} cycle ${cycle} output ${index + 1}\x1b[0m`
+    ).join('\n') + '\n',
+    '\x1b[?25h',
+    '\x1b[?1049l',
+    Array.from({ length: 40 }, (_, index) =>
+      `soak worker ${worker} cycle ${cycle} line ${index + 1}`
+    ).join('\n') + '\n'
+  ]
+  return chunks
+}
+
+async function writeAgentCycle(worker: number, cycle: number, beat: number): Promise<void> {
+  const spinnerDelayMs = Math.max(1, Math.floor(beat / 400))
+  let spinnerRedraws = 0
+  for (const chunk of agentCycleChunks(worker, cycle)) {
+    if (chunk.startsWith(SPINNER_REDRAW_PREFIX)) {
+      if (spinnerRedraws > 0) await Bun.sleep(spinnerDelayMs)
+      spinnerRedraws++
+    }
+    process.stdout.write(chunk)
+  }
+}
 
 const workerIndex = Number.isSafeInteger(Number(process.argv[2])) && Number(process.argv[2]) >= 0
   ? Number(process.argv[2])
@@ -68,8 +141,8 @@ async function attempt(step: string, operation: () => Promise<void>): Promise<vo
   }
 }
 
-async function runCycle(cycle: number): Promise<void> {
-  for (let line = 1; line <= 40; line++) console.log(`soak worker ${workerIndex} cycle ${cycle} line ${line}`)
+async function runCycle(cycle: number, beat: number): Promise<void> {
+  await writeAgentCycle(workerIndex, cycle, beat)
 
   try {
     appendFileSync(join(worktreePath, 'soak-heartbeat.log'), `cycle ${cycle} ${new Date().toISOString()}\n`)
@@ -86,14 +159,36 @@ async function runCycle(cycle: number): Promise<void> {
 }
 async function run(): Promise<void> {
   let cycle = 1
-  let nextStart = launchAt + workerIndex * 1000
+  const configuredBeat = Number(process.env.QUIRKY_SOAK_BEAT_MS)
+  const beat = Number.isSafeInteger(configuredBeat) && configuredBeat > 0 ? configuredBeat : DEFAULT_BEAT_MS
+  let nextStart = launchAt + workerIndex * (beat / 10)
   for (;;) {
     const delay = nextStart - performance.now()
     if (delay > 0) await Bun.sleep(delay)
-    await runCycle(cycle)
+    await runCycle(cycle, beat)
     cycle++
-    nextStart += 10_000
+    nextStart += beat
+    const now = performance.now()
+    if (nextStart <= now) {
+      // leave a full beat after an overrun so recovery cannot compress the next hook interval
+      const skipped = Math.ceil((now + beat - nextStart) / beat)
+      nextStart += skipped * beat
+      try {
+        appendFileSync(join(worktreePath, 'soak-skips.log'), `skipped ${skipped} ${new Date().toISOString()}\n`)
+      } catch (error) {
+        reportFailure('skipped beats', error)
+      }
+    }
   }
 }
 
-void run()
+if (import.meta.main) {
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
+  process.stdin.on('error', () => undefined)
+  input.on('error', () => undefined)
+  input.on('line', (line) => {
+    const pong = pongFor(line)
+    if (pong !== null) process.stdout.write(pong)
+  })
+  void run()
+}

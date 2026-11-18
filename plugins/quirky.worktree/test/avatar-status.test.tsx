@@ -9,6 +9,7 @@ import { buildTree } from '../src/view-model'
 import { allSpecFromStock, DEFAULT_ACTIVITY_PREFERENCES, type ActivityMarkState } from '../src/view-types'
 import type { TreeData } from '../src/useTree'
 import { useAvatarHandoff } from '../src/useAvatarHandoff'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 
 const NOW = 10_000_000
 const REPO: Repo = { id: 'r1', name: 'QuirkyApp', path: '/repo/QuirkyApp', addedAt: 1, kind: 'git', displayName: null, groupId: null }
@@ -79,7 +80,10 @@ function harness(options: HarnessOptions = {}): Harness {
         case 'quirky.worktree/origins': return []
         case 'quirky.session/list': return []
         case 'quirky.heimdall/fleet': return { generatedAtMs: 0, rows: [] }
-        case 'ui.window.self': return {}
+        case 'ui.window.command.run':
+          if (params?.connId !== 7 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+          return { result: dispatchUiControl(context, params.args) }
+        case 'ui.window.self': return { connId: 7 }
         default: return []
       }
     },

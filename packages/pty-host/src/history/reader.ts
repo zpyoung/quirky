@@ -1,6 +1,6 @@
 import type { SerializeAddon } from '@xterm/addon-serialize'
 import { Screen } from '../screen'
-import { type HistoryLog, LogReader, newestClearOffset } from './log'
+import { type HistoryLog, type StoredLogIndex, LogReader, newestClearOffset } from './log'
 
 /** The most output bytes one window reads, so a single page or attach stays bounded. */
 const READ_CAP_BYTES = 8 * 1024 * 1024
@@ -43,7 +43,7 @@ type Window = Located & { size: Size | null; events: WindowEvent[]; lead: Uint8A
 export type HistoryPage = { lines: string[]; cursor: string | null }
 
 /** A live writer's index, or a stored session's history directory. */
-export type LogSource = string | HistoryLog
+export type LogSource = string | HistoryLog | StoredLogIndex
 
 /** The opaque paging token for the output position where a page's window begins. */
 export function formatCursor(offset: number): string {

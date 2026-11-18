@@ -8,6 +8,9 @@ import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { call, failure, git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { startPluginHarness } from '../../quirky.repo/test/harness'
 import { addExternalWorktree, listWorktrees, startRealProject, storedRows, type RealProject } from './fixtures/real-project'
+import { folderStateOf } from '../src/daemon/list'
+import { instanceIdFor, type DirectoryIdentitySource } from '../src/daemon/identity'
+import type { WorktreeRow } from '../src/daemon/store'
 
 const { scratch } = isolateGitConfig()
 let p: RealProject | undefined
@@ -166,5 +169,27 @@ describe('store migration 2', () => {
     expect(storedRows(home, 'id = ?', idOf(external))).toMatchObject([
       { kind: 'git', status: 'in-progress', created_by: 'external', birthtime: Math.round(statSync(external).birthtimeMs), path: external }
     ])
+  })
+})
+
+describe('stored folder identity state', () => {
+  const identity = { device: '1', inode: '2', birthtimeMs: 123 }
+  const row = { birthtime: 123, instance_id: instanceIdFor(identity) } as WorktreeRow
+  const source: DirectoryIdentitySource = {
+    stat: () => identity,
+    open: () => { throw new Error('read-only folder checks never open handles') }
+  }
+
+  test('distinguishes missing folders from unchanged stored identities', () => {
+    expect(folderStateOf(row, '/fixture/folder', source)).toBe('same')
+    expect(folderStateOf(row, null, source)).toBe('missing')
+    expect(folderStateOf(row, '/fixture/missing', { ...source, stat: () => null })).toBe('missing')
+  })
+
+  test('detects replacement by birthtime or instance without rejecting unverified IDs', () => {
+    expect(folderStateOf({ ...row, birthtime: 122 }, '/fixture/folder', source)).toBe('replaced')
+    expect(folderStateOf({ ...row, instance_id: 'fs:1:3:123' }, '/fixture/folder', source)).toBe('replaced')
+    expect(folderStateOf({ ...row, instance_id: 'unverified:legacy' }, '/fixture/folder', source)).toBe('same')
+    expect(folderStateOf({ ...row, birthtime: null, instance_id: '' }, '/fixture/folder', source)).toBe('same')
   })
 })

@@ -12,9 +12,14 @@ If a daemon plugin needs a subprocess, use `context.process.run` for aggregated 
 See the [process runner](../docs/plugin-api.md#api-14-process-runner) and
 [spawn reference](../docs/plugin-api.md#api-16-streaming-and-session-length-processes).
 
-Avatar's Claude version probes and review diffs use `run` and require API 1.4.0.
-Structured Pi and Oh My Pi sessions require API 1.6.0: login-shell lookup uses `run`,
-and RPC children use `spawn` with process-group shutdown and a bounded stderr tail.
+Login PATH detection, structured executable lookup, Claude version probes and loop Git
+evidence use the plugin-owned runner, so unload and daemon shutdown stop their process groups.
+Probes cap each output stream at 1 MiB: login PATH detection allows five seconds, version
+probes three seconds, and structured executable lookup thirty seconds. Background jobs in
+the probe's process group are killed when its shell exits. Loop Git evidence retains its
+shared thirty-second deadline and 16 MiB per-stream limit; only side-effect-free reference
+reads may rerun. Whole-call abort signals keep these deadlines even after the leader exits
+while another process holds its output open.
 
 ## Removing a project
 
@@ -526,6 +531,22 @@ workspace composer; they do not silently create or switch branches. Provider
 identity remains explicit when origin and upstream reuse a PR number. Merge and
 comment deletion retain kernel confirmation and canonical provider validation;
 queued merge is not displayed as completed merge.
+
+When Heimdall is available, Checks includes **PR Sitter** controls and a fleet-wide
+**Stop all PR Sitters** safety strip, even with no review selected. The dialog
+arms or re-arms a sitter, shows its status and activity, approves a specific held
+action, stops the watcher, and copies its debug report. Permissions start at Off;
+Ask holds an action for approval. Active-time budgets count only worker/action time.
+An unreachable owner makes approval, stop and re-arm read-only until contact returns.
+Stopping prevents new actions; an in-flight provider operation may finish.
+Closing the dialog stops activity-detail fetches, including when an action is still
+pending. Fleet status updates continue without loading the activity journal.
+
+The same actions are available through `reviews checks-sitter-state`,
+`checks-sitter-arm`, `checks-sitter-approve`, `checks-sitter-stop`,
+`checks-sitter-stop-all` and `checks-sitter-debug-report`. Worktree-scoped commands
+accept `--worktree <id>`; the API catalog describes enrollment and approval arguments.
+The debug-report CLI prints JSON rather than writing the clipboard.
 
 Creation rechecks the exact branch/head and eligibility, pushes first only when
 required, preserves an existing review, and reports a created PR separately from

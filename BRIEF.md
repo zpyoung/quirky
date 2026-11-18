@@ -64,7 +64,7 @@ Kept (28 features, about 1.2M lines of Orca's feature code):
 - Fork features: Heimdall, the PR sitter, the objective runner, loops, `orca ask`, the ledger,
   session handoff, the terminal dock, session info, launch settings, the sidebar extras
 
-Dropped: quick open, Jira and Linear, native chat, artifacts, computer use, dictation, the skills
+Dropped: quick open, Jira and Linear, artifacts, computer use, dictation, the skills
 catalog, SSH and WSL remote, onboarding and telemetry, input quarantine, artifact passwords, the
 native-chat extras and the skill-picker extras.
 

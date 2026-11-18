@@ -1,12 +1,19 @@
 import { inspect } from 'node:util'
-import { daemonEntryHash, ensureHome, installProcessErrorGuards, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
-import { startDaemon } from './daemon'
+import { stopAllProcesses } from '@quirky/process'
+import { daemonEntryHash, ensureHome, installProcessErrorGuards, isDaemonAlive, parseExitWithParent, quirkyHome, readRuntime, runtimeFilePath, watchParent } from '@quirky/protocol/node'
+import { startDaemon, type DaemonHandle } from './daemon'
+import { createShutdown } from './shutdown'
 import { acquireDaemonLock, type DaemonLock } from './lock'
 
 installProcessErrorGuards({ label: 'quirkyd' })
 
 let lock: DaemonLock | null = null
 try {
+  const parentPid = parseExitWithParent(process.argv)
+  if (parentPid !== null && process.ppid !== parentPid) {
+    console.error('[quirkyd] the process that started this daemon has exited; exiting')
+    process.exit(0)
+  }
   const home = ensureHome(quirkyHome())
   if (await isDaemonAlive(readRuntime(home))) {
     console.error('[quirkyd] a daemon already owns this home; exiting')
@@ -22,23 +29,36 @@ try {
   const safeMode = process.argv.includes('--disable-plugins') || process.env.QUIRKY_DISABLE_PLUGINS === '1'
   if (safeMode) console.error('[quirkyd] safe mode: installed plugins and disables are off for this run')
 
-  const daemon = await startDaemon({
+  const { promise: listening, resolve: publish } = Promise.withResolvers<DaemonHandle>()
+  const shutdown = createShutdown({
+    stop: async () => { await (await listening).stop() },
+    release: () => ownedLock.release(),
+    exit: (code) => process.exit(code),
+    onDeadline: () => { void stopAllProcesses() },
+    log: (message) => console.error(`[quirkyd] ${message}`)
+  })
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
+  if (parentPid !== null) {
+    watchParent({
+      parentPid,
+      onLost: () => {
+        console.error('[quirkyd] parent process exited; stopping')
+        void shutdown()
+      }
+    })
+  }
+  await startDaemon({
     home,
     entryHash: daemonEntryHash(process.argv[1]!),
     safeMode,
     interactivePath: true,
-    onStopRequested: () => shutdown()
+    onStopRequested: shutdown,
+    onListening: (handle) => {
+      publish(handle)
+      console.log(`quirkyd listening on http://127.0.0.1:${handle.port}; connection details are in ${runtimeFilePath(home)}`)
+    }
   })
-  console.log(`quirkyd listening on http://127.0.0.1:${daemon.port}; connection details are in ${runtimeFilePath(home)}`)
-
-  const shutdown = () => {
-    void daemon.stop().finally(() => {
-      ownedLock.release()
-      process.exit(0)
-    })
-  }
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT', shutdown)
 } catch (error) {
   lock?.release()
   console.error(`[quirkyd] startup failed: ${inspect(error)}`)

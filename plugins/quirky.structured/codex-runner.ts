@@ -1,13 +1,32 @@
-import type { AskEnvelope, AskSpec, Session, SessionProviderSession } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
-import type { StructuredContext, StructuredLaunchOptions, StructuredRunner, StructuredStartOptions, ToolPolicy, TurnUsage } from './runner'
-import { nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
+import {
+  CallTracker,
+  ProseStream,
+  closingEntries,
+  codexEntries,
+  codexPlanEntry,
+  errorItem,
+  statusItem,
+  stderrLines,
+  turnEndItem,
+  userItem,
+  type ItemEntry
+} from './items'
+import { mentionsCommand, referencedCommands } from './slash-commands'
+import type {
+  StructuredContext,
+  StructuredLaunchOptions,
+  StructuredRunner,
+  StructuredSendOptions,
+  StructuredSettings,
+  StructuredStartOptions,
+  ToolPolicy,
+  TurnUsage
+} from './runner'
+import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
-const APPROVAL_POLICY = 'on-request'
-const SANDBOX = 'workspace-write'
-const DENY_ALL_APPROVAL_POLICY = 'untrusted'
-const DENY_ALL_SANDBOX = 'read-only'
 const TOOLS_DISABLED = 'tools are disabled for this session'
 const MCP_CONFIG_FAILURE = "could not read Codex's MCP servers, so a session without tools can't start"
 const TOOL_STOP_FAILURE = 'could not stop a tool in a session without tools'
@@ -44,6 +63,49 @@ const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
 
+type CodexPermissions = {
+  approvalPolicy: 'on-request' | 'never' | 'untrusted'
+  sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'
+  approvalsReviewer: 'user' | 'auto_review'
+}
+
+/** Internal mode of a `deny-all` session; no catalog capability offers it. */
+const DENY_ALL_MODE = 'deny-all'
+
+/** What each permission mode in the Codex capabilities asks of app-server, matching Codex's `/permissions` presets. */
+const PERMISSIONS: Record<string, CodexPermissions> = {
+  default: { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'user' },
+  'read-only': { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' },
+  'auto-review': { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' },
+  'full-access': { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' },
+  [DENY_ALL_MODE]: { approvalPolicy: 'untrusted', sandbox: 'read-only', approvalsReviewer: 'user' }
+}
+const DEFAULT_PERMISSION_MODE = 'default'
+
+const SANDBOX_POLICY_TYPES: Record<CodexPermissions['sandbox'], string> = {
+  'read-only': 'readOnly',
+  'workspace-write': 'workspaceWrite',
+  'danger-full-access': 'dangerFullAccess'
+}
+
+function permissionsFor(mode: string): CodexPermissions {
+  const found = PERMISSIONS[mode]
+  if (!found) throw new Error(`Codex has no permission mode ${mode}`)
+  return found
+}
+
+/** The thread-level fields for `thread/start` and `thread/resume`; the default reviewer is left to app-server. */
+function threadPermissions(mode: string): Record<string, string> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandbox, ...(approvalsReviewer === 'user' ? {} : { approvalsReviewer }) }
+}
+
+/** The `turn/start` overrides, which app-server keeps for later turns too. */
+function turnPermissions(mode: string): Record<string, unknown> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandboxPolicy: { type: SANDBOX_POLICY_TYPES[sandbox] }, approvalsReviewer }
+}
+
 function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
   if (patch === undefined) return base
   const env = { ...base }
@@ -75,17 +137,6 @@ function tokenCounts(value: unknown): TokenCounts | null {
     if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) counts[key] = count
   }
   return Object.keys(counts).length === 0 ? null : counts
-}
-
-function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): TokenCounts | null {
-  if (baseline === null) return null
-  const delta: TokenCounts = {}
-  for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens', 'reasoningOutputTokens'] as const) {
-    const current = total[key]
-    const before = baseline[key] ?? 0
-    if (current !== undefined && current >= before) delta[key] = current - before
-  }
-  return Object.keys(delta).length === 0 ? null : delta
 }
 
 function turnContextUsage(update: Record<string, unknown>, last: TokenCounts | null, delta: TokenCounts | null): TurnUsage | null {
@@ -129,19 +180,59 @@ async function readDisabledMcpServers(
   }
 }
 
+function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): TokenCounts | null {
+  if (baseline === null) return null
+  const delta: TokenCounts = {}
+  for (const key of ['inputTokens', 'outputTokens', 'cachedInputTokens', 'reasoningOutputTokens'] as const) {
+    const current = total[key]
+    const before = baseline[key] ?? 0
+    if (current !== undefined && current >= before) delta[key] = current - before
+  }
+  return Object.keys(delta).length === 0 ? null : delta
+}
+
+/** The enabled skills in a `skills/list` response; plugin skills (named `plugin:skill`) are marked as plugin entries. */
+export function codexSkills(response: unknown): Map<string, { command: AgentCommand; path: string }> {
+  const skills = new Map<string, { command: AgentCommand; path: string }>()
+  const data = typeof response === 'object' && response !== null ? (response as { data?: unknown }).data : undefined
+  for (const entry of Array.isArray(data) ? data : []) {
+    const list = typeof entry === 'object' && entry !== null ? (entry as { skills?: unknown }).skills : undefined
+    for (const skill of Array.isArray(list) ? list : []) {
+      if (typeof skill !== 'object' || skill === null) continue
+      const { name, description, shortDescription, path, enabled, pluginId } = skill as Record<string, unknown>
+      if (typeof name !== 'string' || name === '' || typeof path !== 'string' || enabled === false || skills.has(name)) continue
+      const summary = typeof shortDescription === 'string' && shortDescription !== '' ? shortDescription : typeof description === 'string' ? description : ''
+      skills.set(name, {
+        path,
+        command: { name, kind: typeof pluginId === 'string' && pluginId !== '' ? 'plugin' : 'skill', ...(summary === '' ? {} : { description: summary }) }
+      })
+    }
+  }
+  return skills
+}
+
 type Running = {
   sessionId: string
   toolPolicy: ToolPolicy
   turnUsage: TurnUsage | null
-  threadId: string
-  connection: CodexConnection
-  options: StructuredLaunchOptions
-  totalTokenUsage: TokenCounts | null
-  turnUsageBaseline: TokenCounts | null
-  activeTurnId: string | null
   refusedTurnId: string | null
   readingMcpConfig: boolean
   pendingToolInterrupts: number
+  threadId: string
+  cwd: string
+  /** The enabled skills `skills/list` reported, by name, with the path a `skill` input item needs. */
+  skills: Map<string, { command: AgentCommand; path: string }>
+  /** Settles once the first `skills/list` has answered or failed; only a message naming a command waits on it. */
+  skillsLoaded: Promise<void>
+  connection: CodexConnection
+  options: StructuredLaunchOptions
+  /** The permission mode the next turn runs in. */
+  permissionMode: string
+  /** The permission mode app-server last applied; a differing `permissionMode` goes out with the next `turn/start`. */
+  appliedPermissionMode: string
+  totalTokenUsage: TokenCounts | null
+  turnUsageBaseline: TokenCounts | null
+  activeTurnId: string | null
   pendingApprovalCount: number
   pendingCompletion: PendingCompletion | null
   inputQueue: Promise<void>
@@ -151,13 +242,21 @@ type Running = {
   emittedAssistantIds: Set<string>
   emittedToolIds: Set<string>
   toolOutput: Map<string, string>
+  calls: CallTracker
+  stream: ProseStream
+  turnStartedAt: number | null
+  deniedReasons: string[]
   startupFailure: Error | null
   ready: boolean
   failed: boolean
   stopped: boolean
+  /** The turn an interrupt ended; its `interrupted` completion is expected and not a failure. */
+  interruptedTurnId: string | null
 }
 
 type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running }
+
+const SKILLS_TIMEOUT_MS = 5_000
 
 export type CodexRunnerDeps = {
   /** A per-run child environment for isolated process tests. Production inherits the daemon environment. */
@@ -196,9 +295,11 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
       const toolPolicy = startOptions.toolPolicy ?? 'default'
-      const approvalPolicy = toolPolicy === 'deny-all' ? DENY_ALL_APPROVAL_POLICY : APPROVAL_POLICY
-      const sandbox = toolPolicy === 'deny-all' ? DENY_ALL_SANDBOX : SANDBOX
+      const permissionMode = toolPolicy === 'deny-all' ? DENY_ALL_MODE : (startOptions.permissionMode ?? DEFAULT_PERMISSION_MODE)
+      const permissions = threadPermissions(permissionMode)
       const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env, toolPolicy)
+      run.permissionMode = permissionMode
+      run.appliedPermissionMode = permissionMode
       startup.run = run
       startup.connection = run.connection
       const connection = run.connection
@@ -221,8 +322,7 @@ class CodexRunner implements StructuredRunner {
         const response = await connection.request('thread/resume', {
           threadId: providerSession.id,
           cwd: session.cwd,
-          approvalPolicy,
-          sandbox,
+          ...permissions,
           ...(threadConfig === undefined ? {} : { config: threadConfig }),
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
@@ -238,8 +338,7 @@ class CodexRunner implements StructuredRunner {
       } else {
         const response = await connection.request('thread/start', {
           cwd: session.cwd,
-          approvalPolicy,
-          sandbox,
+          ...permissions,
           ...(threadConfig === undefined ? {} : { config: threadConfig }),
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -248,6 +347,7 @@ class CodexRunner implements StructuredRunner {
       }
       if (startup.stopped) return
       if (run.startupFailure) throw run.startupFailure
+      run.skillsLoaded = this.loadSkills(run)
       this.running.set(session.id, run)
 
       if (prompt === undefined || prompt === '') {
@@ -275,15 +375,59 @@ class CodexRunner implements StructuredRunner {
     }
   }
 
-  async send(sessionId: string, text: string): Promise<void> {
+  async configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.failed) throw new Error('session is not running')
+    if (settings.model !== undefined) run.options = { ...run.options, model: settings.model }
+    if (settings.effort !== undefined) run.options = { ...run.options, effort: settings.effort }
+    if (settings.permissionMode !== undefined) {
+      if (run.toolPolicy === 'deny-all') throw new Error('a session without tools has no permission modes')
+      if (settings.permissionMode === DENY_ALL_MODE) throw new Error(`Codex has no permission mode ${settings.permissionMode}`)
+      permissionsFor(settings.permissionMode)
+      run.permissionMode = settings.permissionMode
+    }
+    return {
+      ...(run.options.model === undefined ? {} : { model: run.options.model }),
+      ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+      permissionMode: run.permissionMode
+    }
+  }
+
+  async send(sessionId: string, text: string, options: StructuredSendOptions = {}): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.failed || !run.ready) throw new Error('session is not running')
-    const operation = run.inputQueue.then(() => this.submitInput(run, text))
+    const operation = run.inputQueue.then(() => this.submitInput(run, text, false, options))
     run.inputQueue = operation.then(
       () => undefined,
       () => undefined
     )
     return operation
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.failed || !run.ready || run.turnStartedAt === null) return
+    const turnId = run.activeTurnId
+    run.activeTurnId = null
+    run.pendingCompletion = null
+    this.flushAssistantDeltas(run)
+    this.closeTurn(run, 'stopped')
+    run.assistantDeltas.clear()
+    run.emittedAssistantIds.clear()
+    run.emittedToolIds.clear()
+    run.toolOutput.clear()
+    if (turnId !== null) {
+      run.interruptedTurnId = turnId
+      try {
+        await run.connection.request('turn/interrupt', { threadId: run.threadId, turnId }, INTERRUPT_TIMEOUT_MS)
+      } catch {
+        run.interruptedTurnId = null
+        await this.stop(sessionId)
+        return
+      }
+    }
+    if (run.stopped || run.failed) return
+    this.context.setStatus(sessionId, 'done')
   }
 
   async stop(sessionId: string): Promise<void> {
@@ -316,6 +460,7 @@ class CodexRunner implements StructuredRunner {
   }
 
   private async stopRun(run: Running): Promise<void> {
+    this.closeTurn(run, 'stopped')
     if (run.activeTurnId !== null && !run.pendingCompletion) {
       try {
         await run.connection.request(
@@ -357,6 +502,7 @@ class CodexRunner implements StructuredRunner {
   ): Running {
     let run!: Running
     const connection = new CodexConnection(
+      this.context.process,
       executable,
       session.cwd,
       environmentWithPatch(this.deps.env ?? process.env, envPatch),
@@ -371,15 +517,20 @@ class CodexRunner implements StructuredRunner {
       sessionId: session.id,
       toolPolicy,
       turnUsage: null,
-      threadId,
-      connection,
-      options,
-      totalTokenUsage: null,
-      turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
-      activeTurnId: null,
       refusedTurnId: null,
       readingMcpConfig: false,
       pendingToolInterrupts: 0,
+      threadId,
+      cwd: session.cwd,
+      skills: new Map(),
+      skillsLoaded: Promise.resolve(),
+      connection,
+      options,
+      permissionMode: DEFAULT_PERMISSION_MODE,
+      appliedPermissionMode: DEFAULT_PERMISSION_MODE,
+      totalTokenUsage: null,
+      turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
+      activeTurnId: null,
       pendingApprovalCount: 0,
       pendingCompletion: null,
       inputQueue: Promise.resolve(),
@@ -389,12 +540,32 @@ class CodexRunner implements StructuredRunner {
       emittedAssistantIds: new Set(),
       emittedToolIds: new Set(),
       toolOutput: new Map(),
+      calls: new CallTracker(),
+      stream: new ProseStream(),
+      turnStartedAt: null,
+      deniedReasons: [],
       startupFailure: null,
       ready: false,
       failed: false,
-      stopped: false
+      stopped: false,
+      interruptedTurnId: null
     }
     return run
+  }
+
+  /**
+   * Reports the skills Codex offers for the session's folder; Codex has no listing for its TUI
+   * slash commands or custom prompts, so skills are the whole list. A failure leaves the list as it was.
+   */
+  private async loadSkills(run: Running): Promise<void> {
+    try {
+      const response = await run.connection.request('skills/list', { cwds: [run.cwd] }, SKILLS_TIMEOUT_MS, { optional: true })
+      if (run.stopped || run.failed) return
+      run.skills = codexSkills(response)
+      this.context.reportCommands?.(run.sessionId, [...run.skills.values()].map((skill) => skill.command))
+    } catch {
+      // an app-server without skills/list offers no commands
+    }
   }
 
   private threadIdFromResponse(response: unknown, method: string): string {
@@ -410,24 +581,38 @@ class CodexRunner implements StructuredRunner {
     return id
   }
 
-  private async submitInput(run: Running, text: string, deferEventsUntilReady = false): Promise<void> {
+  private async submitInput(
+    run: Running,
+    text: string,
+    deferEventsUntilReady = false,
+    options: StructuredSendOptions = {}
+  ): Promise<void> {
+    if (mentionsCommand(text)) await run.skillsLoaded
     if (run.stopped || run.failed || !run.ready && !this.starting.has(run.sessionId)) {
       throw new Error('session is not running')
     }
     if (run.pendingApprovalCount > 0 || run.pendingCompletion) throw new Error('session is waiting for approval')
     const expectedTurnId = run.activeTurnId
     const method = expectedTurnId === null ? 'turn/start' : 'turn/steer'
+    const commands = [...run.skills.values()].map((skill) => skill.command)
+    const input = [
+      ...(text === '' ? [] : [{ type: 'text', text }]),
+      ...(options.images ?? []).map((path) => ({ type: 'localImage', path })),
+      ...referencedCommands(text, commands).map((name) => ({ type: 'skill', name, path: run.skills.get(name)!.path }))
+    ]
+    const sentPermissionMode = run.permissionMode
     const params =
       method === 'turn/start'
         ? {
             threadId: run.threadId,
-            input: [{ type: 'text', text }],
+            input,
             ...(run.options.model === undefined ? {} : { model: run.options.model }),
-            ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
+            ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+            ...(sentPermissionMode === run.appliedPermissionMode ? {} : turnPermissions(sentPermissionMode))
           }
         : {
             threadId: run.threadId,
-            input: [{ type: 'text', text }],
+            input,
             expectedTurnId
           }
     if (run.totalTokenUsage !== null) run.turnUsageBaseline = { ...run.totalTokenUsage }
@@ -446,6 +631,8 @@ class CodexRunner implements StructuredRunner {
         const turnId = (turn as Record<string, unknown>).id
         if (typeof turnId !== 'string' || turnId.length === 0) throw new Error('Codex app-server turn/start returned an invalid turn ID')
         run.activeTurnId = turnId
+        run.turnStartedAt ??= Date.now()
+        run.appliedPermissionMode = sentPermissionMode
       } else {
         if (typeof response !== 'object' || response === null || Array.isArray(response)) {
           throw new Error('Codex app-server turn/steer returned an invalid response')
@@ -457,7 +644,8 @@ class CodexRunner implements StructuredRunner {
         sessionId: run.sessionId,
         role: 'user',
         text,
-        data: { method, threadId: run.threadId, ...(expectedTurnId ? { expectedTurnId } : {}) }
+        data: { method, threadId: run.threadId, ...(expectedTurnId ? { expectedTurnId } : {}) },
+        item: userItem(text, options.images, options.queuedId)
       })
       this.context.setStatus(run.sessionId, 'working')
       run.inputPending = false
@@ -536,6 +724,9 @@ class CodexRunner implements StructuredRunner {
     if (foreignThread) return
 
     switch (method) {
+      case 'skills/changed':
+        void this.loadSkills(run)
+        return
       case 'thread/tokenUsage/updated': {
         const rawUsage = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
           ? (rawParams as Record<string, unknown>).tokenUsage
@@ -555,7 +746,8 @@ class CodexRunner implements StructuredRunner {
             type: 'thread/tokenUsage/updated',
             tokenUsage: rawUsage,
             ...(turnUsage ? { turnUsage } : {})
-          }
+          },
+          item: statusItem('Codex token usage updated')
         })
         return
       }
@@ -564,7 +756,8 @@ class CodexRunner implements StructuredRunner {
           sessionId: run.sessionId,
           role: 'system',
           text: 'Codex account rate limits updated',
-          data: { method, params: rawParams }
+          data: { method, params: rawParams },
+          item: statusItem('Codex account rate limits updated')
         })
         return
       case 'turn/started': {
@@ -585,13 +778,15 @@ class CodexRunner implements StructuredRunner {
         const delta = params.delta
         if (typeof itemId !== 'string' || typeof delta !== 'string') return
         run.assistantDeltas.set(itemId, (run.assistantDeltas.get(itemId) ?? '') + delta)
-        return
-      }
-      case 'item/started': {
-        const item = params.item
-        if (run.toolPolicy === 'deny-all' && isPlainMap(item)) {
-          const type = item.type
-          if (typeof type !== 'string' || !Object.hasOwn(NON_TOOL_ITEM_TYPES, type)) this.refuseToolItem(run, params, item)
+        const partial = run.stream.push(itemId, delta, Date.now())
+        if (partial && partial.kind === 'prose') {
+          this.context.appendMessage({
+            sessionId: run.sessionId,
+            role: 'system',
+            text: partial.text,
+            data: { itemId, streaming: true },
+            item: partial
+          })
         }
         return
       }
@@ -602,6 +797,24 @@ class CodexRunner implements StructuredRunner {
         run.toolOutput.set(itemId, (run.toolOutput.get(itemId) ?? '') + delta)
         return
       }
+      case 'item/started': {
+        const item = params.item
+        if (typeof item !== 'object' || item === null || Array.isArray(item)) return
+        if (run.toolPolicy === 'deny-all' && isPlainMap(item)) {
+          const type = item.type
+          if (typeof type !== 'string' || !Object.hasOwn(NON_TOOL_ITEM_TYPES, type)) {
+            this.refuseToolItem(run, params, item)
+            return
+          }
+        }
+        this.journalStarted(run, item as Record<string, unknown>)
+        return
+      }
+      case 'turn/plan/updated': {
+        const turnId = typeof params.turnId === 'string' ? params.turnId : (run.activeTurnId ?? 'turn')
+        this.append(run, codexPlanEntry(`plan-${turnId}`, params.plan))
+        return
+      }
       case 'item/completed': {
         const item = params.item
         if (!isPlainMap(item)) return
@@ -609,6 +822,7 @@ class CodexRunner implements StructuredRunner {
         if (run.toolPolicy === 'deny-all' && (typeof type !== 'string' || !Object.hasOwn(NON_TOOL_ITEM_TYPES, type))) {
           this.refuseToolItem(run, params, item)
         }
+        if (run.toolPolicy === 'deny-all' && typeof type !== 'string') return
         this.journalItem(run, item)
         return
       }
@@ -618,7 +832,13 @@ class CodexRunner implements StructuredRunner {
           typeof error === 'object' && error !== null && !Array.isArray(error) && typeof (error as Record<string, unknown>).message === 'string'
             ? (error as Record<string, unknown>).message as string
             : 'Codex reported an unspecified error'
-        this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: `Codex error: ${message}`, data: message })
+        this.context.appendMessage({
+          sessionId: run.sessionId,
+          role: 'system',
+          text: `Codex error: ${message}`,
+          data: message,
+          item: statusItem(`Codex error: ${message}`)
+        })
         return
       }
     }
@@ -626,6 +846,10 @@ class CodexRunner implements StructuredRunner {
 
   private completeTurnNotification(run: Running, turn: Record<string, unknown>): void {
     const turnId = turn.id
+    if (turnId === run.interruptedTurnId) {
+      run.interruptedTurnId = null
+      return
+    }
     if (typeof turnId !== 'string' || (run.activeTurnId !== null && turnId !== run.activeTurnId)) return
     if (Array.isArray(turn.items)) {
       for (const item of turn.items) {
@@ -659,6 +883,7 @@ class CodexRunner implements StructuredRunner {
   private finishCompletedTurn(run: Running, turn: Record<string, unknown>): void {
     this.flushAssistantDeltas(run)
     run.pendingCompletion = null
+    for (const entry of closingEntries(run.calls, 'done')) this.append(run, entry)
     run.refusedTurnId = null
     const usage = run.turnUsage
     run.turnUsage = null
@@ -666,9 +891,12 @@ class CodexRunner implements StructuredRunner {
       sessionId: run.sessionId,
       role: 'result',
       text: 'Codex turn completed',
-      data: usage ? { ...turn, contextUsage: usage } : turn
+      data: usage ? { ...turn, contextUsage: usage } : turn,
+      item: turnEndItem('done', run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
     })
+    run.turnStartedAt = null
     this.context.setStatus(run.sessionId, 'done')
+    run.stream.reset()
     run.assistantDeltas.clear()
     run.emittedAssistantIds.clear()
     run.emittedToolIds.clear()
@@ -682,10 +910,33 @@ class CodexRunner implements StructuredRunner {
         sessionId: run.sessionId,
         role: 'assistant',
         text,
-        data: { itemId, streamed: true }
+        data: { itemId, streamed: true },
+        item: { kind: 'prose', text }
       })
       run.emittedAssistantIds.add(itemId)
     }
+  }
+
+  private append(run: Running, entry: ItemEntry): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: entry.role, text: entry.text, data: entry.data, item: entry.item })
+  }
+
+  /** Closes calls still running and ends the turn when one is open; a turn that is not open is left alone. */
+  private closeTurn(run: Running, state: 'stopped' | 'failed'): void {
+    if (run.turnStartedAt === null) return
+    for (const entry of closingEntries(run.calls, state)) this.append(run, entry)
+    this.context.appendMessage({
+      sessionId: run.sessionId,
+      role: 'result',
+      text: state === 'stopped' ? 'Turn stopped' : 'Turn failed',
+      item: turnEndItem(state, Date.now() - run.turnStartedAt)
+    })
+    run.turnStartedAt = null
+    run.stream.reset()
+  }
+
+  private journalStarted(run: Running, item: Record<string, unknown>): void {
+    for (const entry of codexEntries(item, 'started', run.calls)) this.append(run, entry)
   }
 
   /**
@@ -695,13 +946,13 @@ class CodexRunner implements StructuredRunner {
   private refuseToolItem(run: Running, params: Record<string, unknown>, item: object): void {
     const turnId = typeof params.turnId === 'string' ? params.turnId : run.activeTurnId
     if (turnId === null) {
-      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item })
+      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item, item: statusItem(TOOLS_DISABLED) })
       this.failRun(run, new Error(TOOL_STOP_FAILURE))
       return
     }
     if (run.refusedTurnId === turnId) return
     run.refusedTurnId = turnId
-    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item })
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item, item: statusItem(TOOLS_DISABLED) })
     run.pendingToolInterrupts++
     void run.connection
       .request('turn/interrupt', { threadId: run.threadId, turnId }, INTERRUPT_TIMEOUT_MS)
@@ -710,7 +961,7 @@ class CodexRunner implements StructuredRunner {
   }
 
   private refuseSecondAgent(run: Running, data: unknown): void {
-    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data })
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data, item: statusItem(TOOLS_DISABLED) })
     this.failRun(run, new Error('Codex started a second agent in a session without tools'))
   }
   private journalItem(run: Running, item: Record<string, unknown>): void {
@@ -719,34 +970,24 @@ class CodexRunner implements StructuredRunner {
     if (type === 'agentMessage') {
       if (id && run.emittedAssistantIds.has(id)) return
       const text = typeof item.text === 'string' ? item.text : (id ? run.assistantDeltas.get(id) : undefined) ?? ''
-      if (text.length > 0) this.context.appendMessage({ sessionId: run.sessionId, role: 'assistant', text, data: item })
-      if (id) run.emittedAssistantIds.add(id)
+      if (text.length > 0) {
+        this.context.appendMessage({ sessionId: run.sessionId, role: 'assistant', text, data: item, item: { kind: 'prose', text } })
+      }
+      if (id) {
+        run.emittedAssistantIds.add(id)
+        run.stream.reset(id)
+      }
       return
     }
     if (type === 'commandExecution' || type === 'fileChange') {
       if (id && run.emittedToolIds.has(id)) return
       const output = id ? run.toolOutput.get(id) : undefined
-      let summary: string
-      if (type === 'commandExecution') {
-        const command = typeof item.command === 'string' ? item.command : 'Codex command'
-        summary = [command, typeof item.aggregatedOutput === 'string' ? item.aggregatedOutput : output].filter(Boolean).join('\n')
-      } else {
-        const changes = Array.isArray(item.changes)
-          ? item.changes.map((change) => {
-              if (typeof change !== 'object' || change === null || Array.isArray(change)) return ''
-              const path = (change as Record<string, unknown>).path
-              return typeof path === 'string' ? path : ''
-            }).filter(Boolean).join('\n')
-          : ''
-        summary = changes ? `Codex file changes:\n${changes}` : 'Codex file change'
-      }
-      this.context.appendMessage({ sessionId: run.sessionId, role: 'tool', text: summary || String(type), data: item })
+      for (const entry of codexEntries(item, 'completed', run.calls, output)) this.append(run, entry)
       if (id) run.emittedToolIds.add(id)
       return
     }
-    if (typeof type === 'string' && type !== 'reasoning') {
-      this.context.appendMessage({ sessionId: run.sessionId, role: 'tool', text: `Codex ${type}`, data: item })
-    }
+    if (type === 'reasoning') return
+    for (const entry of codexEntries(item, 'completed', run.calls)) this.append(run, entry)
   }
 
   private async handleNativeQuestion(run: Running, request: { id: CodexRpcId; method: string; params: unknown }): Promise<void> {
@@ -845,29 +1086,15 @@ class CodexRunner implements StructuredRunner {
       request.method === 'item/commandExecution/requestApproval'
         ? `Allow Codex to run ${summary || 'this command'}? ${reason}`.trim()
         : `Allow Codex to apply the proposed file changes? ${reason}`.trim()
-    const spec: AskSpec = {
-      questions: [
-        {
-          id: 'decision',
-          type: 'select',
-          question,
-          options: [
-            { value: 'allow', label: 'Allow' },
-            { value: 'deny', label: 'Deny' },
-            { value: 'always', label: 'Allow for this session' }
-          ]
-        }
-      ]
-    }
     let envelope: AskEnvelope | null = null
     try {
-      envelope = await this.context.createAsk(spec, run.sessionId)
+      envelope = await this.context.createAsk(approvalSpec(question), run.sessionId)
     } catch {
       envelope = null
     }
-    const answer = envelope?.status === 'answered' ? envelope.answers.decision : undefined
-    const value = answer && 'value' in answer ? answer.value : undefined
-    const decision = value === 'allow' ? 'accept' : value === 'always' ? 'acceptForSession' : 'decline'
+    const outcome = approvalOutcome(envelope, true)
+    const decision = outcome.decision === 'allow' ? 'accept' : outcome.decision === 'always' ? 'acceptForSession' : 'decline'
+    if (outcome.reason !== undefined) run.deniedReasons.push(outcome.reason)
     try {
       if (!run.stopped && !run.failed) run.connection.respond(request.id, { decision })
     } catch (error) {
@@ -877,8 +1104,16 @@ class CodexRunner implements StructuredRunner {
       if (!run.stopped && !run.failed && run.pendingApprovalCount === 0) {
         if (run.pendingCompletion) this.finishCompletedTurn(run, run.pendingCompletion.turn)
         else if (run.activeTurnId !== null) this.context.setStatus(run.sessionId, 'working')
+        this.sendDenialReasons(run)
       }
     }
+  }
+
+  /** Tells the agent why a command was declined, once no approval is still pending. */
+  private sendDenialReasons(run: Running): void {
+    if (run.deniedReasons.length === 0) return
+    const text = run.deniedReasons.splice(0).map((reason) => `Denied: ${reason}`).join('\n')
+    void this.send(run.sessionId, text).catch(() => {})
   }
 
   private failRun(run: Running, error: Error): void {
@@ -891,10 +1126,12 @@ class CodexRunner implements StructuredRunner {
       run.startupFailure = error
       return
     }
+    this.closeTurn(run, 'failed')
     this.context.appendMessage({
       sessionId: run.sessionId,
       role: 'system',
-      text: `Codex app-server failed: ${error.message}${run.connection.stderrTail ? `; stderr: ${run.connection.stderrTail}` : ''}`
+      text: `Codex app-server failed: ${error.message}${run.connection.stderrTail ? `; stderr: ${run.connection.stderrTail}` : ''}`,
+      item: errorItem('exited', stderrLines(run.connection.stderrTail || error.message), run.threadId !== '')
     })
     this.context.setStatus(run.sessionId, 'exited')
     void this.closeRun(run)

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import type { ProjectGroup, Repo, Session, UiPluginContext, Worktree } from '@quirky/protocol'
-import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'
+import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type StockWorktreeOptions, type WorktreeControl } from './control-types'
 import { isAvatarWorktreeStatus, type AvatarWorktreeStatus, type HeimdallWorktreeStatus } from './useTree'
 import { resolveMembershipTarget, type MembershipTarget } from './membership'
 import { changeGroup, copyText, currentWindowId, setWorkspaceSleeping, setWorktree } from './actions'
 import { groupMenu, NEW_SECTION, projectMenu, UNARCHIVE, WITH_DESCENDANTS, workspaceMenu, type RowAction } from './Menu'
+import { registerUiControlScope, requestUiControl, UI_CONTROL_COMMAND, type ScopedUiControlArgs } from './ui-control'
 import { canonicalDescendants, projectSeparatorBoundaries, repoLabel, type AutomationAvailabilitySnapshot, type DialogState, type PendingCreate } from './report'
 import type { WorktreeProjectIdentity, WorktreeStatusDefinition } from './parity-types'
 import { markLabel, UnreadDot } from './StatusDot'
@@ -20,7 +21,7 @@ import type { GroupBy, RowFact, Tag } from './view-types'
 export type { RowAction } from './Menu'
 export type GroupAction = 'new-worktree' | 'new-section' | 'rename' | 'delete' | 'open-ledger'
 
-export type TreeProps = {
+type TreeBaseProps = {
   context: UiPluginContext
   model: ViewTree
   tagsById: ReadonlyMap<string, Tag>
@@ -67,19 +68,54 @@ export type TreeProps = {
   projectIdentities: Record<string, WorktreeProjectIdentity>
   allWorktrees?: WorktreeControl[]
   onReorder?(worktrees: string[]): void
-  openDialog(dialog: DialogState): void
-  /** Starts a delete of `worktree`, with the workspaces nested below it when `descendants` is above 0. */
-  requestDelete(worktree: Worktree, descendants: number): void
   onDropPreviewChange(target: MembershipTarget | null): void
   onSeparatorStateChange(state: { enabled: boolean; eligibleBoundaries: string[] }): void
   loopsByWorktree?: ReadonlyMap<string, LoopProjection>
 }
 
-type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[]; returnFocusTo?: HTMLElement }
+type DialogHandler = (dialog: DialogState) => void
+/** Starts a delete of `worktree`, with the workspaces nested below it when `descendants` is above 0. */
+type DeleteHandler = (worktree: Worktree, descendants: number) => void
+export type TreeProps = TreeBaseProps & (
+  | { openDialog: DialogHandler; requestDelete: DeleteHandler; onOpenDialog?: DialogHandler; onRequestDelete?: DeleteHandler }
+  | { onOpenDialog: DialogHandler; onRequestDelete: DeleteHandler; openDialog?: DialogHandler; requestDelete?: DeleteHandler }
+)
+
+type OpenMenu = {
+  x: number
+  y: number
+  label: string
+  items: ContextMenuItem[]
+  seq: number
+  targetId: string
+  returnFocusTo?: HTMLElement
+  originRow?: HTMLElement
+}
 
 const HOVER_CARD_DELAY_MS = 400
 const EMPTY_LOOP_PROJECTIONS: ReadonlyMap<string, LoopProjection> = new Map()
 const EMPTY_SET: ReadonlySet<string> = new Set()
+function isPlainPayload(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  try {
+    const prototype = Object.getPrototypeOf(value)
+    return prototype === Object.prototype || prototype === null
+  } catch {
+    return false
+  }
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  try {
+    return Reflect.ownKeys(value).every((key) => typeof key === 'string' && allowed.includes(key))
+  } catch {
+    return false
+  }
+}
+
+function isSequence(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+}
 const ACTIVITY_LABELS: Record<string, string> = {
   waiting: 'Needs you',
   permission: 'Permission needed',
@@ -252,10 +288,11 @@ type HoverCardBodyProps = {
   statusLabel: string
   agent: string
   checks: ChecksState | null
+  showNotes: boolean
   now: number
 }
 
-function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, checks, now }: HoverCardBodyProps) {
+function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, checks, now, showNotes }: HoverCardBodyProps) {
   const review = worktree.linkedPR
     ? [`#${worktree.linkedPR.number} ${worktree.linkedPR.title}`, checks ? CHECKS_WORDS[checks] : null].filter(Boolean).join(' · ')
     : checks
@@ -272,6 +309,12 @@ function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, check
         <dd>{worktree.archivedAt !== null ? `${statusLabel} · Archived` : statusLabel}</dd>
         <dt>Agent</dt>
         <dd>{agent}</dd>
+        {showNotes && worktree.comment.trim() !== '' && (
+          <>
+            <dt>Notes</dt>
+            <dd>{worktree.comment}</dd>
+          </>
+        )}
         {review !== null && (
           <>
             <dt>Review</dt>
@@ -299,6 +342,7 @@ type RowProps = {
   selected: boolean
   multi: boolean
   collapsed: boolean
+  renameDone: { current: boolean }
   renaming: boolean
   suspendHover: boolean
   pendingAsks: number
@@ -309,12 +353,13 @@ type RowProps = {
   orchestrationWorkers: readonly OrchestrationWorkerRow[]
   loop?: LoopProjection
   now: number
+  showNotes: boolean
   automationExpanded: boolean
   automationAvailability: AutomationAvailabilitySnapshot | null
   onClick(event: MouseEvent<HTMLButtonElement>): void
   onToggleFold(): void
   onToggleAutomationDetails(): void
-  onMenu(worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement): void
+  onMenu(worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement, originRow?: HTMLElement): void
   onRenameCommit(name: string): void
   onRenameCancel(): void
   onDragStart(worktree: Worktree, event: DragEvent<HTMLLIElement>): void
@@ -330,6 +375,7 @@ function WorktreeRowView({
   multi,
   collapsed,
   renaming,
+  renameDone,
   suspendHover,
   pendingAsks,
   checks,
@@ -339,6 +385,7 @@ function WorktreeRowView({
   orchestrationWorkers,
   loop,
   now,
+  showNotes,
   automationExpanded,
   automationAvailability,
   onClick,
@@ -354,7 +401,6 @@ function WorktreeRowView({
   const [rowElement, setRowElement] = useState<HTMLElement | null>(null)
   const [hovered, setHovered] = useState(false)
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const renameDone = useRef(false)
   const armHover = () => {
     if (hoverTimer.current !== null) return
     hoverTimer.current = setTimeout(() => {
@@ -415,6 +461,22 @@ function WorktreeRowView({
     })
   }
   const childLabel = `${childCount} ${childCount === 1 ? 'child' : 'children'} of ${worktree.name}${childAttention === 'error' ? ', one errored' : childAttention === 'waiting' ? ', one waiting on you' : ''}`
+  const onRowContextMenu = (event: MouseEvent<HTMLLIElement>) => {
+    event.preventDefault()
+    disarmHover()
+    onMenu(worktree, event.clientX, event.clientY, undefined, event.currentTarget)
+  }
+  const onMenuButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    disarmHover()
+    onMenu(
+      worktree,
+      bounds.left,
+      bounds.bottom,
+      event.currentTarget,
+      event.currentTarget.closest<HTMLElement>('[data-worktree-id]') ?? undefined
+    )
+  }
 
   const finishRename = (value: string | null) => {
     if (renameDone.current) return
@@ -422,9 +484,6 @@ function WorktreeRowView({
     if (value === null) onRenameCancel()
     else onRenameCommit(value)
   }
-  useEffect(() => {
-    if (renaming) renameDone.current = false
-  }, [renaming])
 
   return (
     <li
@@ -436,11 +495,7 @@ function WorktreeRowView({
       draggable={worktree.kind === 'git' && !renaming}
       onDragStart={(event) => onDragStart(worktree, event)}
       onDragEnd={onDragEnd}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        disarmHover()
-        onMenu(worktree, event.clientX, event.clientY)
-      }}
+      onContextMenu={onRowContextMenu}
     >
       <div
         className="worktree-row"
@@ -455,7 +510,6 @@ function WorktreeRowView({
             className="worktree-rename"
             aria-label={`Rename ${worktree.name}`}
             defaultValue={worktree.name}
-            autoFocus
             spellCheck={false}
             onFocus={(event) => event.currentTarget.select()}
             onKeyDown={(event) => {
@@ -524,11 +578,7 @@ function WorktreeRowView({
                 className="worktree-menu"
                 label={`Actions for ${worktree.name}`}
                 aria-haspopup="menu"
-                onClick={(event) => {
-                  const box = event.currentTarget.getBoundingClientRect()
-                  disarmHover()
-                  onMenu(worktree, box.left, box.bottom, event.currentTarget)
-                }}
+                onClick={onMenuButtonClick}
               >
                 ⋯
               </IconButton>
@@ -540,6 +590,7 @@ function WorktreeRowView({
       <HoverCard anchor={rowElement} open={hovered && !suspendHover && !renaming}>
         <HoverCardBody
           worktree={worktree}
+          showNotes={showNotes}
           tags={tags}
           projectLabel={projectLabel}
           statusLabel={statusLabel}
@@ -554,17 +605,21 @@ function WorktreeRowView({
           <p><strong>Automation name:</strong> {provenance.automationName}</p>
           <p><strong>Run:</strong> {provenance.runTitle}</p>
           {(definitionStatus === 'checking' || runHistoryStatus === 'checking') && (
-            <p className="ui-text-muted" role="status">Checking automation availability...</p>
+            <div role="status"><NoticeLine>Checking automation availability...</NoticeLine></div>
           )}
           {definitionStatus === 'available' && <p className="ui-text-muted" role="status">Automation available.</p>}
           {runHistoryStatus === 'available' && <p className="ui-text-muted" role="status">Run history available.</p>}
-          {definitionStatus === 'missing' && <p className="ui-text-muted" role="status">Automation no longer available.</p>}
-          {runHistoryStatus === 'missing' && <p className="ui-text-muted" role="status">Run history no longer available.</p>}
+          {definitionStatus === 'missing' && (
+            <div role="status"><NoticeLine>Automation no longer available.</NoticeLine></div>
+          )}
+          {runHistoryStatus === 'missing' && (
+            <div role="status"><NoticeLine>Run history no longer available.</NoticeLine></div>
+          )}
           {(definitionStatus === 'error' || runHistoryStatus === 'error') && (
-            <p className="ui-text-muted" role="status">Automation availability could not be checked.</p>
+            <InlineError message="Automation availability could not be checked." />
           )}
           {(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') && (
-            <p className="ui-text-muted" role="status">Automations plugin unavailable.</p>
+            <div role="status"><NoticeLine>Automations plugin unavailable.</NoticeLine></div>
           )}
           <div className="ui-actions">
             <Button onClick={openAutomation} disabled={definitionStatus !== 'available'}>Open automation</Button>
@@ -688,13 +743,18 @@ export function Tree({
   projectIdentities,
   allWorktrees = [],
   onReorder = () => {},
-  openDialog,
-  requestDelete,
+  openDialog: legacyOpenDialog,
+  requestDelete: legacyRequestDelete,
+  onOpenDialog,
+  onRequestDelete,
   onDropPreviewChange,
   onSeparatorStateChange,
   loopsByWorktree = EMPTY_LOOP_PROJECTIONS
 }: TreeProps) {
+  const openDialog = onOpenDialog ?? legacyOpenDialog!
+  const requestDelete = onRequestDelete ?? legacyRequestDelete!
   const orchestrationWorkers = useOrchestrationRows(context)
+  const showNotes = options.showComment && options.showProperties.includes('notes')
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
@@ -705,6 +765,64 @@ export function Tree({
   const previousFocusOwner = useRef<HTMLElement | null>(null)
   const draggedWorktree = useRef<Worktree | null>(null)
   const previewRef = useRef<MembershipTarget | null>(null)
+  const [renameSession, setRenameSession] = useState<{ worktreeId: string; seq: number } | null>(null)
+  const menuRef = useRef<OpenMenu | null>(null)
+  const menuSeqRef = useRef(0)
+  const renameRef = useRef<{ worktreeId: string; seq: number } | null>(null)
+  const renameSeqRef = useRef(0)
+  const renameDone = useRef(false)
+  const renameFocusRef = useRef<{ seq: number; input: HTMLInputElement } | null>(null)
+  const renameFocusRowRef = useRef<HTMLElement | null>(null)
+  const requestedMenuRef = useRef<{ targetId: string; trigger?: HTMLElement; originRow?: HTMLElement } | null>(null)
+  const treeControlHandlerRef = useRef<{
+    context: UiPluginContext
+    handler: (args: ScopedUiControlArgs) => boolean
+  }>({ context, handler: () => false })
+  useEffect(() => {
+    const registeredContext = context
+    return registerUiControlScope(context, 'tree', (args) => {
+      const controller = treeControlHandlerRef.current
+      return controller.context === registeredContext ? controller.handler(args) : false
+    })
+  }, [context])
+  useLayoutEffect(() => {
+    if (!renameSession) {
+      renameFocusRef.current = null
+      return
+    }
+    const previous = renameFocusRef.current
+    const newSession = previous?.seq !== renameSession.seq
+    const preferred = renameFocusRowRef.current
+    let input = renameInputFor(renameSession.worktreeId)
+    if (input !== document.activeElement) {
+      const previousInput = newSession ? null : previous?.input
+      input = previousInput && treeRoot.current?.contains(previousInput)
+        ? previousInput
+        : preferred?.querySelector<HTMLInputElement>('.worktree-rename') ?? input
+    }
+    renameFocusRowRef.current = null
+    if (!input) return
+    if (newSession || previous?.input !== input) renameFocusRef.current = { seq: renameSession.seq, input }
+    if (document.activeElement === input) {
+      if (newSession) input.select()
+      return
+    }
+    const { selectionStart, selectionEnd, selectionDirection } = input
+    input.focus()
+    if (newSession) input.select()
+    else if (selectionStart !== null && selectionEnd !== null) input.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? 'none')
+  }, [renameSession, model])
+  const installMenu = (next: Omit<OpenMenu, 'seq'> | null) => {
+    if (next === null) {
+      menuRef.current = null
+      setMenu(null)
+      return
+    }
+    const opened = { ...next, seq: menuSeqRef.current + 1 }
+    menuSeqRef.current = opened.seq
+    menuRef.current = opened
+    setMenu(opened)
+  }
   const mode: GroupBy = groupBy ?? (options.groupBy === 'project' ? 'section-project' : options.groupBy === 'pr' ? 'pull-request' : options.groupBy)
   const sectionMode = mode === 'section-project'
   const folded = collapsed ?? localCollapsed
@@ -789,6 +907,10 @@ export function Tree({
   useLayoutEffect(() => {
     const pendingFocus = menuActionFocus.current
     if (menu !== null || pendingFocus === null) return
+    if (renameSession !== null) {
+      menuActionFocus.current = null
+      return
+    }
     const afterRefresh = pendingFocus.closed
     pendingFocus.closed = true
     if (afterRefresh || pendingFocus.skipRows) menuActionFocus.current = null
@@ -814,7 +936,7 @@ export function Tree({
       }
     }
     if (previousFocusOwner.current?.isConnected) previousFocusOwner.current.focus()
-  }, [menu, model])
+  }, [menu, model, renameSession])
 
   useEffect(() => {
     onSeparatorStateChange({ enabled: separatorEnabled, eligibleBoundaries })
@@ -883,12 +1005,13 @@ export function Tree({
     return null
   }
 
-  const runRowAction = (worktree: Worktree, action: RowAction, arg?: string | null) => {
+  const runRowAction = (worktree: Worktree, action: RowAction, arg?: string | null, originRow?: HTMLElement) => {
     if (onMenuAction?.(worktree.id, action, arg) === true) return
     const repo = repoById.get(worktree.repoId)
     switch (action) {
       case 'rename':
-        setRenamingId(worktree.id)
+        renameFocusRowRef.current = originRow ?? menuRef.current?.originRow ?? rowElementOf(worktree.id)
+        void requestTreeControl(worktree.id, 'start-rename')
         break
       case 'tags': {
         const anchor = rowElementOf(worktree.id)
@@ -939,10 +1062,10 @@ export function Tree({
         break
       }
       case 'copy-path':
-        void copyText(context, worktree.path)
+        void requestTreeControl(worktree.id, 'copy-path')
         break
       case 'copy-name':
-        void copyText(context, worktree.name)
+        void requestTreeControl(worktree.id, 'copy-name')
         break
       case 'set-parent':
         openDialog({ kind: 'parent', worktreeId: worktree.id })
@@ -1001,23 +1124,29 @@ export function Tree({
     }
   }
 
-  const openWorkspaceMenu = (worktree: Worktree, x: number, y: number, returnFocusTo?: HTMLElement) => {
-    setMenu({
-      x,
-      y,
-      returnFocusTo,
-      label: `Actions for ${worktree.name}`,
-      items: workspaceMenu(
-        worktree,
-        descendantsOf.get(worktree.id)?.length ?? 0,
-        groups,
-        repoById.get(worktree.repoId),
-        (action, arg) => runRowAction(worktree, action, arg),
-        statusDefinitions,
-        { handoffToAvatar: onHandoffToAvatar !== undefined }
-      )
-    })
-  }
+  const openWorkspaceMenu = (
+    worktree: Worktree,
+    x: number,
+    y: number,
+    returnFocusTo?: HTMLElement,
+    originRow?: HTMLElement
+  ) => installMenu({
+    targetId: worktree.id,
+    x,
+    y,
+    returnFocusTo,
+    originRow,
+    label: `Actions for ${worktree.name}`,
+    items: workspaceMenu(
+      worktree,
+      descendantsOf.get(worktree.id)?.length ?? 0,
+      groups,
+      repoById.get(worktree.repoId),
+      (action, arg) => runRowAction(worktree, action, arg, originRow),
+      statusDefinitions,
+      { handoffToAvatar: onHandoffToAvatar !== undefined }
+    )
+  })
 
   const reorderOf = (repo: Repo) => {
     if (options.projectOrderBy !== 'manual' || !onReorderProjects || !projectOrder) return undefined
@@ -1026,50 +1155,73 @@ export function Tree({
     const swap = (neighbor: string | undefined) => {
       if (neighbor === undefined) return null
       return () => {
-        const next = [...projectOrder]
-        const from = next.indexOf(repo.id)
-        const to = next.indexOf(neighbor)
+        const from = projectOrder.indexOf(repo.id)
+        const to = projectOrder.indexOf(neighbor)
         if (from < 0 || to < 0) return
-        next[from] = neighbor
-        next[to] = repo.id
+        const next = projectOrder.map((id, index) =>
+          index === from ? neighbor : index === to ? repo.id : id
+        )
         onReorderProjects(next)
       }
     }
     return at < 0 ? undefined : { up: swap(shown[at - 1]), down: swap(shown[at + 1]) }
   }
 
-  const openProjectMenu = (repo: Repo, x: number, y: number, returnFocusTo?: HTMLElement) =>
-    setMenu({
+  const openProjectMenu = (
+    repo: Repo,
+    x: number,
+    y: number,
+    returnFocusTo?: HTMLElement,
+    originRow?: HTMLElement
+  ) => {
+    const reorder = reorderOf(repo)
+    installMenu({
+      targetId: repo.id,
       x,
       y,
       returnFocusTo,
+      originRow,
       label: `Actions for ${repoLabel(repo)}`,
       items: projectMenu(repo, groups, {
         openDialog,
-        openLedger: () => context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'project', id: repo.id } } }),
+        openLedger: () => { void context.openView('view:quirky.ledger/ledger', { target: { owner: { tier: 'project', id: repo.id } } }) },
         moveToGroup: moveProject,
-        reorder: reorderOf(repo)
+        reorder
       })
     })
+  }
 
-  const openGroupMenu = (group: ViewGroup, projectGroup: ProjectGroup, x: number, y: number, returnFocusTo?: HTMLElement) =>
-    setMenu({
-      x,
-      y,
-      returnFocusTo,
-      label: `Actions for group ${projectGroup.name}`,
-      items: groupMenu(
-        projectGroup,
-        (dialog) => {
-          if (dialog.kind === 'group' && dialog.action === 'rename') runGroupAction(group, 'rename')
-          else if (dialog.kind === 'group' && dialog.action === 'delete') runGroupAction(group, 'delete')
-          else openDialog(dialog)
-        },
-        () => runGroupAction(group, 'open-ledger')
-      )
-    })
+  const openGroupMenu = (
+    group: ViewGroup,
+    projectGroup: ProjectGroup,
+    x: number,
+    y: number,
+    returnFocusTo?: HTMLElement,
+    originRow?: HTMLElement
+  ) => installMenu({
+    targetId: projectGroup.id,
+    x,
+    y,
+    returnFocusTo,
+    originRow,
+    label: `Actions for group ${projectGroup.name}`,
+    items: groupMenu(
+      projectGroup,
+      (dialog) => {
+        if (dialog.kind === 'group' && dialog.action === 'rename') runGroupAction(group, 'rename')
+        else if (dialog.kind === 'group' && dialog.action === 'delete') runGroupAction(group, 'delete')
+        else openDialog(dialog)
+      },
+      () => runGroupAction(group, 'open-ledger')
+    )
+  })
 
   const commitRename = (worktree: Worktree, name: string) => {
+    renameDone.current = true
+    if (renameRef.current?.worktreeId === worktree.id) {
+      renameRef.current = null
+      setRenameSession(null)
+    }
     setRenamingId(null)
     const next = name.trim()
     if (next === '' || next === worktree.name) return
@@ -1101,17 +1253,20 @@ export function Tree({
 
   const rowList = (group: ViewGroup, pendingCreates: PendingCreate[] = []) => {
     const showProject = group.kind !== 'project' && group.kind !== 'section'
-    const lineage: string[] = []
-    const items: ReactNode[] = []
-    for (const row of group.rows) {
+    const lineage = new Map<number, string>()
+    const items = group.rows.flatMap((row): ReactNode[] => {
       const worktree = row.worktree
-      lineage.length = row.depth
-      const hidden = lineage.some((id) => folded.has(id))
-      lineage[row.depth] = worktree.id
-      if (hidden) continue
+      for (const depth of lineage.keys()) {
+        if (depth >= row.depth) lineage.delete(depth)
+      }
+      const hidden = [...lineage.values()].some((id) => folded.has(id))
+      lineage.set(row.depth, worktree.id)
+      if (hidden) return []
       const repo = repoById.get(worktree.repoId)
       const projectName = repo ? repoLabel(repo) : worktree.repoId
-      items.push(
+      const onRenameCommit = (name: string) => commitRename(worktree, name)
+      const onRenameCancel = () => { void requestRenameCancel(worktree.id) }
+      return [
         <WorktreeRowView
           key={worktree.id}
           context={context}
@@ -1121,6 +1276,7 @@ export function Tree({
           selected={worktree.id === selectedId}
           multi={multiSelected.has(worktree.id)}
           collapsed={folded.has(worktree.id)}
+          renameDone={renameDone}
           renaming={renamingId === worktree.id}
           suspendHover={menu !== null || draggedWorktree.current !== null}
           pendingAsks={pendingAsks?.get(worktree.id) ?? 0}
@@ -1131,14 +1287,17 @@ export function Tree({
           orchestrationWorkers={orchestrationWorkers}
           loop={loopsByWorktree.get(worktree.id)}
           now={now}
+          showNotes={showNotes}
           automationExpanded={automationExpandedId === worktree.id}
           automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
           onClick={(event) => click(worktree, event)}
-          onToggleFold={() => toggleFold(worktree.id)}
+          onToggleFold={() => requestTreeControl(worktree.id, 'toggle-fold')}
           onToggleAutomationDetails={() => onToggleAutomationDetails(worktree.id)}
-          onMenu={openWorkspaceMenu}
-          onRenameCommit={(name) => commitRename(worktree, name)}
-          onRenameCancel={() => setRenamingId(null)}
+          onMenu={(item, x, y, trigger, originRow) =>
+            requestContextMenuAt('workspace', item.id, x, y, trigger !== undefined, trigger, originRow)
+          }
+          onRenameCommit={onRenameCommit}
+          onRenameCancel={onRenameCancel}
           onDragStart={(item, event) => {
             if (item.kind !== 'git') return
             draggedWorktree.current = item
@@ -1151,10 +1310,9 @@ export function Tree({
             updatePreview(null)
           }}
         />
-      )
-    }
-    for (const create of pendingCreates) items.push(<PendingCard key={`pending:${create.repoId}:${create.name}`} name={create.name} />)
-    return items
+      ]
+    })
+    return [...items, ...pendingCreates.map((create) => <PendingCard key={`pending:${create.repoId}:${create.name}`} name={create.name} />)]
   }
 
   const header = (props: {
@@ -1168,7 +1326,8 @@ export function Tree({
     attention: Attention
     count: number
     actions?: ReactNode
-    attributes?: Record<string, string>
+    repoTarget?: string
+    groupTarget?: string
     onContextMenu?(event: MouseEvent<HTMLElement>): void
   }) => (
     <SectionHeader
@@ -1201,7 +1360,8 @@ export function Tree({
       titleTooltip={props.tooltip}
       onContextMenu={props.onContextMenu}
       actions={props.actions}
-      {...props.attributes}
+      data-repo-target={props.repoTarget}
+      data-group-target={props.groupTarget}
     />
   )
 
@@ -1228,14 +1388,14 @@ export function Tree({
           className: 'project-header',
           foldLabel: `project ${label}`,
           folded: isFolded,
-          onFold: () => toggleFold(group.key),
+          onFold: () => requestTreeControl(group.key, 'toggle-fold'),
           attention: group.attention,
           count: group.attentionCount,
-          attributes: { 'data-repo-target': repoId },
+          repoTarget: repoId,
           onContextMenu: repo
             ? (event) => {
                 event.preventDefault()
-                openProjectMenu(repo, event.clientX, event.clientY)
+                requestContextMenuAt('project', repo.id, event.clientX, event.clientY, false)
               }
             : undefined,
           actions: (
@@ -1246,7 +1406,7 @@ export function Tree({
                 className="worktree-header-button"
                 label={`New worktree in ${label}`}
                 title="New worktree"
-                onClick={() => runGroupAction(group, 'new-worktree')}
+                onClick={() => requestTreeControl(repoId, 'new-worktree')}
               >
                 +
               </IconButton>
@@ -1255,10 +1415,7 @@ export function Tree({
                   className="worktree-header-button project-menu"
                   label={`Actions for ${label}`}
                   aria-haspopup="menu"
-                  onClick={(event) => {
-                    const bounds = event.currentTarget.getBoundingClientRect()
-                    openProjectMenu(repo, bounds.left, bounds.bottom, event.currentTarget)
-                  }}
+                  onClick={(event) => requestMenuFromButton('project', repo.id, event.currentTarget)}
                 >
                   ⋯
                 </IconButton>
@@ -1289,6 +1446,19 @@ export function Tree({
     }
     return { attention, count }
   }
+  const sectionViewGroup = (
+    entry: SectionEntry,
+    title: string,
+    attention: Attention,
+    count: number
+  ): ViewGroup => entry.group ?? {
+    key: `section:${entry.sectionId}`,
+    kind: 'section',
+    title,
+    attention,
+    attentionCount: count,
+    rows: []
+  }
 
   const sectionBlock = (entry: SectionEntry, depth = 0) => {
     const projectGroup = groupById.get(entry.sectionId)
@@ -1298,7 +1468,7 @@ export function Tree({
     const isFolded = projectGroup?.collapsed ?? false
     const previewing = dropPreview?.kind === 'group' && dropPreview.id === entry.sectionId
     const className = ['group', 'ui-stack', 'ui-indent', topLevel && eligibleBoundaries.includes(entry.key) && 'ui-section-separated'].filter(Boolean).join(' ')
-    const syntheticGroup: ViewGroup = entry.group ?? { key: `section:${entry.sectionId}`, kind: 'section', title, attention, attentionCount: count, rows: [] }
+    const syntheticGroup = sectionViewGroup(entry, title, attention, count)
     return (
       <section className={className} key={entry.key} data-top-level-section={topLevel ? entry.key : undefined} style={{ '--depth': topLevel ? 0 : 1 } as CSSProperties}>
         {header({
@@ -1313,11 +1483,11 @@ export function Tree({
           },
           attention,
           count,
-          attributes: { 'data-group-target': entry.sectionId },
+          groupTarget: entry.sectionId,
           onContextMenu: projectGroup
             ? (event) => {
                 event.preventDefault()
-                openGroupMenu(syntheticGroup, projectGroup, event.clientX, event.clientY)
+                requestContextMenuAt('group', entry.sectionId, event.clientX, event.clientY, false)
               }
             : undefined,
           actions: (
@@ -1327,7 +1497,7 @@ export function Tree({
                 className="worktree-header-button"
                 label="New section"
                 title="New section"
-                onClick={() => runGroupAction(syntheticGroup, 'new-section')}
+                onClick={() => requestTreeControl(entry.sectionId, 'new-section')}
               >
                 +
               </IconButton>
@@ -1336,10 +1506,7 @@ export function Tree({
                   className="worktree-header-button group-menu"
                   label={`Actions for group ${projectGroup.name}`}
                   aria-haspopup="menu"
-                  onClick={(event) => {
-                    const bounds = event.currentTarget.getBoundingClientRect()
-                    openGroupMenu(syntheticGroup, projectGroup, bounds.left, bounds.bottom, event.currentTarget)
-                  }}
+                  onClick={(event) => requestMenuFromButton('group', projectGroup.id, event.currentTarget)}
                 >
                   ⋯
                 </IconButton>
@@ -1359,6 +1526,337 @@ export function Tree({
     )
   }
 
+  const runTreeControl = async (
+    target: string,
+    operation: string,
+    payload: Record<string, unknown> = {}
+  ): Promise<boolean> => {
+    try {
+      const result = await requestUiControl(context, {
+        action: 'control',
+        scope: 'tree',
+        target,
+        operation,
+        payload
+      })
+      return result.delivered > 0
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (operation === 'close-menu') context.log(`${UI_CONTROL_COMMAND} close-menu failed: ${message}`)
+      else context.toast('Could not update tree control', message)
+      return false
+    }
+  }
+
+  const requestTreeControl = (
+    target: string,
+    operation: string,
+    payload: Record<string, unknown> = {}
+  ) => {
+    void runTreeControl(target, operation, payload)
+  }
+
+  type MenuKind = 'workspace' | 'project' | 'group'
+  const requestContextMenuAt = (
+    kind: MenuKind,
+    target: string,
+    x: number,
+    y: number,
+    focus: boolean,
+    trigger?: HTMLElement,
+    originRow?: HTMLElement
+  ) => {
+    requestedMenuRef.current = { targetId: target, trigger, originRow }
+    const operation = kind === 'workspace' ? 'open-workspace-menu' : kind === 'project' ? 'open-project-menu' : 'open-group-menu'
+    void runTreeControl(target, operation, { x, y, focus }).then((accepted) => {
+      if (!accepted && requestedMenuRef.current?.targetId === target) requestedMenuRef.current = null
+    })
+  }
+
+  const requestMenuFromButton = (kind: MenuKind, target: string, button: HTMLElement) => {
+    const bounds = button.getBoundingClientRect()
+    const originRow = button.closest<HTMLElement>('[data-worktree-id]') ?? undefined
+    requestContextMenuAt(kind, target, bounds.left, bounds.bottom, true, button, originRow)
+  }
+
+  const renameInputFor = (target: string): HTMLInputElement | null => {
+    const active = document.activeElement
+    const root = treeRoot.current
+    if (active instanceof HTMLInputElement && root?.contains(active) &&
+      active.classList.contains('worktree-rename') &&
+      active.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === target) return active
+    for (const input of root?.querySelectorAll<HTMLInputElement>('.worktree-rename') ?? []) {
+      if (input.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === target) return input
+    }
+    return null
+  }
+
+  const requestRenameCancel = (target: string): Promise<boolean> => {
+    const session = renameRef.current
+    if (!session || session.worktreeId !== target) return Promise.resolve(false)
+    const input = renameInputFor(target)
+    renameDone.current = true
+    return runTreeControl(target, 'cancel-rename', { seq: session.seq }).then((accepted) => {
+      if (!accepted && renameRef.current?.seq === session.seq) {
+        if (input?.isConnected) input.focus()
+        else renameInputFor(target)?.focus()
+        renameDone.current = false
+      }
+      return accepted
+    })
+  }
+
+  const visibleTreeEntries = () => {
+    const root = treeRoot.current
+    const visibleWorktrees = new Set<string>()
+    const visibleRepos = new Set<string>()
+    const visibleSections = new Set<string>()
+    const visibleFoldKeys = new Set<string>()
+    if (!root) return { visibleWorktrees, visibleRepos, visibleSections, visibleFoldKeys }
+
+    for (const row of root.querySelectorAll<HTMLElement>('[data-worktree-id]')) {
+      if (row.dataset.worktreeId) visibleWorktrees.add(row.dataset.worktreeId)
+    }
+    for (const header of root.querySelectorAll<HTMLElement>('[data-repo-target]')) {
+      if (header.dataset.repoTarget) visibleRepos.add(header.dataset.repoTarget)
+    }
+    for (const header of root.querySelectorAll<HTMLElement>('[data-group-target]')) {
+      if (header.dataset.groupTarget) visibleSections.add(header.dataset.groupTarget)
+    }
+
+    const collapsibleWorktrees = new Set<string>()
+    for (const group of model.groups) {
+      for (const row of group.rows) {
+        if (row.childCount > 0) collapsibleWorktrees.add(row.worktree.id)
+      }
+    }
+    for (const target of visibleWorktrees) {
+      if (collapsibleWorktrees.has(target)) visibleFoldKeys.add(target)
+    }
+    if (root.querySelector('[data-top-level-section="pinned"]')) visibleFoldKeys.add('pinned')
+    for (const target of visibleRepos) visibleFoldKeys.add(`project:${target}`)
+    for (const lane of root.querySelectorAll<HTMLElement>('.worktree-status-lane[data-top-level-section]')) {
+      const key = lane.dataset.topLevelSection
+      if (key) visibleFoldKeys.add(key)
+    }
+    return { visibleWorktrees, visibleRepos, visibleSections, visibleFoldKeys }
+  }
+
+  const worktreeFor = (target: string): Worktree | null => {
+    const current = allWorktrees.find((worktree) => worktree.id === target)
+    if (current) return current
+    for (const group of model.groups) {
+      const row = group.rows.find((item) => item.worktree.id === target)
+      if (row) return row.worktree
+    }
+    return null
+  }
+
+  const projectGroupFor = (target: string, source: readonly Entry[] = entries): ViewGroup | null => {
+    for (const entry of source) {
+      if (entry.kind === 'project' && projectKeyOf(entry.group) === target) return entry.group
+      if (entry.kind !== 'section' || groupById.get(entry.sectionId)?.collapsed) continue
+      const member = entry.members.find((group) => projectKeyOf(group) === target)
+      if (member) return member
+      const nested = projectGroupFor(target, entry.children)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  const sectionEntryFor = (target: string, source: readonly Entry[] = entries): SectionEntry | null => {
+    for (const entry of source) {
+      if (entry.kind !== 'section') continue
+      if (entry.sectionId === target) return entry
+      if (groupById.get(entry.sectionId)?.collapsed) continue
+      const nested = sectionEntryFor(target, entry.children)
+      if (nested) return nested
+    }
+    return null
+  }
+
+  const menuSourceFor = (
+    kind: MenuKind,
+    target: string,
+    requested: { targetId: string; trigger?: HTMLElement; originRow?: HTMLElement } | null
+  ): { anchor: HTMLElement; trigger: HTMLElement | null; originRow?: HTMLElement } | null => {
+    const root = treeRoot.current
+    if (!root) return null
+    if (kind === 'workspace') {
+      const rows = [...root.querySelectorAll<HTMLElement>('[data-worktree-id]')].filter((row) => row.dataset.worktreeId === target)
+      const requestedRow = requested?.originRow && root.contains(requested.originRow) ? requested.originRow : null
+      const anchor = requestedRow ?? rows[0]
+      if (!anchor) return null
+      const requestedTrigger = requested?.trigger && root.contains(requested.trigger) ? requested.trigger : null
+      return {
+        anchor,
+        trigger: requestedTrigger ?? anchor.querySelector<HTMLElement>('.worktree-menu'),
+        originRow: anchor
+      }
+    }
+    const selector = kind === 'project' ? '[data-repo-target]' : '[data-group-target]'
+    const attribute = kind === 'project' ? 'repoTarget' : 'groupTarget'
+    const anchor = [...root.querySelectorAll<HTMLElement>(selector)].find((item) => item.dataset[attribute] === target)
+    if (!anchor) return null
+    const action = kind === 'project' ? '.project-menu' : '.group-menu'
+    return {
+      anchor,
+      trigger: anchor.querySelector<HTMLElement>(action),
+      originRow: requested?.originRow && root.contains(requested.originRow) ? requested.originRow : undefined
+    }
+  }
+
+  const parseMenuPayload = (payload: Record<string, unknown>) => {
+    if (!hasOnlyKeys(payload, ['x', 'y', 'focus'])) return null
+    const hasX = Object.prototype.hasOwnProperty.call(payload, 'x')
+    const hasY = Object.prototype.hasOwnProperty.call(payload, 'y')
+    const hasFocus = Object.prototype.hasOwnProperty.call(payload, 'focus')
+    if (hasX !== hasY) return null
+    const xValue = payload.x
+    const yValue = payload.y
+    if (hasX && (typeof xValue !== 'number' || !Number.isFinite(xValue))) return null
+    if (hasY && (typeof yValue !== 'number' || !Number.isFinite(yValue))) return null
+    const focusValue = hasFocus ? payload.focus : true
+    if (typeof focusValue !== 'boolean') return null
+    return {
+      focus: focusValue,
+      x: typeof xValue === 'number' ? xValue : undefined,
+      y: typeof yValue === 'number' ? yValue : undefined,
+      hasCoordinates: hasX
+    }
+  }
+
+  const openMenuControl = (args: ScopedUiControlArgs, kind: MenuKind): boolean => {
+    const parsed = parseMenuPayload(args.payload)
+    if (!parsed) return false
+    const visible = visibleTreeEntries()
+    const eligible = kind === 'workspace'
+      ? visible.visibleWorktrees.has(args.target)
+      : kind === 'project'
+        ? visible.visibleRepos.has(args.target)
+        : visible.visibleSections.has(args.target)
+    if (!eligible) return false
+    const requested = requestedMenuRef.current?.targetId === args.target ? requestedMenuRef.current : null
+    const source = menuSourceFor(kind, args.target, requested)
+    if (!source) return false
+    const requestedTrigger = requested?.trigger && treeRoot.current?.contains(requested.trigger) ? requested.trigger : null
+    const trigger = parsed.focus ? requestedTrigger ?? source.trigger ?? undefined : undefined
+    if (!parsed.hasCoordinates && parsed.focus && !trigger) return false
+    let x = parsed.x
+    let y = parsed.y
+    if (!parsed.hasCoordinates) {
+      const bounds = (trigger ?? source.anchor).getBoundingClientRect()
+      if (!Number.isFinite(bounds.left) || !Number.isFinite(bounds.bottom)) return false
+      x = bounds.left
+      y = bounds.bottom
+    }
+    if (x === undefined || y === undefined) return false
+    if (requested) requestedMenuRef.current = null
+    const originRow = source.originRow
+    if (kind === 'workspace') {
+      const worktree = worktreeFor(args.target)
+      if (!worktree) return false
+      openWorkspaceMenu(worktree, x, y, trigger, originRow)
+      return true
+    }
+    if (kind === 'project') {
+      const repo = repoById.get(args.target)
+      if (!repo) return false
+      openProjectMenu(repo, x, y, trigger, originRow)
+      return true
+    }
+    const projectGroup = groupById.get(args.target)
+    const entry = sectionEntryFor(args.target)
+    if (!projectGroup || !entry) return false
+    const title = projectGroup.name ?? entry.group?.title ?? entry.sectionId
+    const { attention, count } = sectionAttention(entry)
+    openGroupMenu(sectionViewGroup(entry, title, attention, count), projectGroup, x, y, trigger, originRow)
+    return true
+  }
+
+  const handleTreeControl = (args: ScopedUiControlArgs): boolean => {
+    const payload = args.payload
+    if (!isPlainPayload(payload)) return false
+
+    if (args.operation === 'close-menu') {
+      if (!hasOnlyKeys(payload, ['seq'])) return false
+      const hasSeq = Object.prototype.hasOwnProperty.call(payload, 'seq')
+      if (hasSeq && !isSequence(payload.seq)) return false
+      const current = menuRef.current
+      if (!current || current.targetId !== args.target || (hasSeq && current.seq !== payload.seq)) return false
+      installMenu(null)
+      return true
+    }
+
+    if (args.operation === 'open-workspace-menu') return openMenuControl(args, 'workspace')
+    if (args.operation === 'open-project-menu') return openMenuControl(args, 'project')
+    if (args.operation === 'open-group-menu') return openMenuControl(args, 'group')
+
+    if (args.operation === 'cancel-rename') {
+      if (!hasOnlyKeys(payload, ['seq'])) return false
+      const hasSeq = Object.prototype.hasOwnProperty.call(payload, 'seq')
+      if (hasSeq && !isSequence(payload.seq)) return false
+      const session = renameRef.current
+      if (!session || session.worktreeId !== args.target) return false
+      if (hasSeq && session.seq !== payload.seq) return false
+      if (!visibleTreeEntries().visibleWorktrees.has(args.target)) return false
+      renameDone.current = true
+      renameRef.current = null
+      setRenameSession(null)
+      setRenamingId(null)
+      return true
+    }
+
+    if (!hasOnlyKeys(payload, [])) return false
+    if (args.operation === 'start-rename') {
+      if (!visibleTreeEntries().visibleWorktrees.has(args.target)) return false
+      const preferred = renameFocusRowRef.current
+      const preferredId = preferred?.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId
+      if (!preferred?.isConnected || preferredId !== args.target) renameFocusRowRef.current = rowElementOf(args.target)
+      const session = { worktreeId: args.target, seq: renameSeqRef.current + 1 }
+      renameSeqRef.current = session.seq
+      renameRef.current = session
+      renameDone.current = false
+      setRenameSession(session)
+      setRenamingId(args.target)
+      return true
+    }
+
+    if (args.operation === 'copy-path' || args.operation === 'copy-name') {
+      if (!visibleTreeEntries().visibleWorktrees.has(args.target)) return false
+      const worktree = worktreeFor(args.target)
+      if (!worktree) return false
+      void copyText(context, args.operation === 'copy-path' ? worktree.path : worktree.name)
+      return true
+    }
+
+    if (args.operation === 'new-worktree') {
+      if (!visibleTreeEntries().visibleRepos.has(args.target)) return false
+      const group = projectGroupFor(args.target)
+      if (!group) return false
+      runGroupAction(group, 'new-worktree')
+      return true
+    }
+
+    if (args.operation === 'new-section') {
+      if (!visibleTreeEntries().visibleSections.has(args.target)) return false
+      const entry = sectionEntryFor(args.target)
+      if (!entry) return false
+      const projectGroup = groupById.get(args.target)
+      const title = projectGroup?.name ?? entry.group?.title ?? entry.sectionId
+      const { attention, count } = sectionAttention(entry)
+      runGroupAction(sectionViewGroup(entry, title, attention, count), 'new-section')
+      return true
+    }
+
+    if (args.operation === 'toggle-fold') {
+      if (!visibleTreeEntries().visibleFoldKeys.has(args.target)) return false
+      toggleFold(args.target)
+      return true
+    }
+
+    return false
+  }
   const pinnedBlock = (group: ViewGroup) => {
     const isFolded = folded.has('pinned')
     return (
@@ -1372,7 +1870,7 @@ export function Tree({
           className: 'pinned-header',
           foldLabel: 'Pinned',
           folded: isFolded,
-          onFold: () => toggleFold('pinned'),
+          onFold: () => requestTreeControl('pinned', 'toggle-fold'),
           attention: group.attention,
           count: group.attentionCount
         })}
@@ -1402,7 +1900,7 @@ export function Tree({
           className: 'lane-header',
           foldLabel: group.title,
           folded: isFolded,
-          onFold: () => toggleFold(group.key),
+          onFold: () => requestTreeControl(group.key, 'toggle-fold'),
           attention: group.attention,
           count: group.attentionCount
         })}
@@ -1494,6 +1992,7 @@ export function Tree({
     updatePreview(null)
   }
 
+  treeControlHandlerRef.current = { context, handler: handleTreeControl }
   return (
     <div
       className="worktree-tree ui-stack"
@@ -1526,7 +2025,16 @@ export function Tree({
             return laneBlock(entry)
         }
       })}
-      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ContextMenu
+          items={menu.items}
+          label={menu.label}
+          x={menu.x}
+          y={menu.y}
+          returnFocusTo={menu.returnFocusTo}
+          onClose={() => requestTreeControl(menu.targetId, 'close-menu', { seq: menu.seq })}
+        />
+      )}
     </div>
   )
 }

@@ -1,24 +1,15 @@
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { isAbsolute, join, resolve as resolvePath } from 'node:path'
-import { promisify } from 'node:util'
 import type { PluginCaller, PluginContext, PluginErrorKind, Worktree } from '@quirky/protocol'
 import { isHost, type AuthAccount } from './auth-inventory'
 import { isRecord } from './data'
 import { parseRemoteIdentity, resolveTrustedIdentity } from './identity-remote'
 import { createRuntimeRunner, type RateLimitSnapshot, type RuntimeRunner } from './runtime-runner'
 
-const execFileAsync = promisify(execFile)
 const REMOTE_URL_TTL_MS = 5_000
 const REMOTE_URL_CACHE_LIMIT = 256
 
-export type GitExec = (
-  file: 'git',
-  args: string[],
-  options: { cwd: string; timeout: number; maxBuffer: number; windowsHide: boolean }
-) => Promise<{ stdout: string }>
-export type EnvOptions = { exec?: GitExec }
 export type IssueSourcePreference = 'auto' | 'origin' | 'upstream'
 function isPreference(value: unknown): value is IssueSourcePreference {
   return value === 'auto' || value === 'origin' || value === 'upstream'
@@ -84,8 +75,7 @@ type PendingEntry = { promise: Promise<unknown>; generation: number; scopeGenera
 type RemoteUrlEntry = { value: string | null; stamp: string; expiresAt: number }
 type RemoteUrlPending = { promise: Promise<string | null>; stamp: string }
 
-export function createEnv(context: PluginContext, options: EnvOptions = {}): HostingEnv {
-  const exec: GitExec = options.exec ?? ((file, args, execOptions) => execFileAsync(file, args, { ...execOptions, encoding: 'utf8' }))
+export function createEnv(context: PluginContext): HostingEnv {
   const store = context.openStore([
     `CREATE TABLE IF NOT EXISTS hosting_preferences (
       repo_id TEXT PRIMARY KEY,
@@ -227,7 +217,7 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
     const parsedOrigin = parseRemoteIdentity(originUrl)
     if (!parsedOrigin) throw invalid('unsupported_provider', 'The origin remote is not a supported GitHub repository URL.')
     const provisional = provisionalScope(rawWorktree, parsedOrigin.identity, stored)
-    const origin = await resolveTrustedIdentity(parsedOrigin, async () => runtime.authAccounts(provisional))
+    const origin = await resolveTrustedIdentity(context.process, parsedOrigin, async () => runtime.authAccounts(provisional))
     if (!origin) throw invalid('unsupported_provider', 'The origin remote is not GitHub.com or a host authenticated by gh.')
 
     const upstreamUrl = await remoteUrl(rawWorktree, 'upstream')
@@ -236,7 +226,7 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
       const parsedUpstream = parseRemoteIdentity(upstreamUrl)
       if (parsedUpstream) {
         const upstreamScope = provisionalScope(rawWorktree, parsedUpstream.identity, stored)
-        upstream = await resolveTrustedIdentity(parsedUpstream, async () => runtime.authAccounts(upstreamScope))
+        upstream = await resolveTrustedIdentity(context.process, parsedUpstream, async () => runtime.authAccounts(upstreamScope))
       }
     }
 
@@ -271,13 +261,15 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
       throw invalid('invalid_git_args', 'The local Git request is invalid.')
     }
     try {
-      const result = await exec('git', args, {
+      const result = await context.process.run(['git', ...args], {
         cwd: worktree.path,
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
-        windowsHide: true
+        timeoutMs: 30_000,
+        maxOutputBytes: 2 * 1024 * 1024
       })
-      return result.stdout
+      if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) {
+        throw new Error('Git runner failed')
+      }
+      return result.stdoutText
     } catch {
       throw reasoned('conflict', 'git_failed', 'The local Git query failed.')
     }
@@ -322,13 +314,13 @@ export function createEnv(context: PluginContext, options: EnvOptions = {}): Hos
 
   async function spawnRemoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
     try {
-      const result = await exec('git', ['remote', 'get-url', remote], {
+      const result = await context.process.run(['git', 'remote', 'get-url', remote], {
         cwd: worktree.path,
-        timeout: 30_000,
-        maxBuffer: 64 * 1024,
-        windowsHide: true
+        timeoutMs: 30_000,
+        maxOutputBytes: 64 * 1024
       })
-      const value = result.stdout.trim()
+      if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) return null
+      const value = result.stdoutText.trim()
       return value.length > 0 ? value : null
     } catch {
       return null

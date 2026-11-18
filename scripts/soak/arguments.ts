@@ -24,7 +24,18 @@ export class UsageError extends Error {
 export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>] [--windows <0-7>]
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
                     [--max-events-per-5s <n>] [--max-stall-ms <n>]
-                    [--fault leak|zombies|storm|block] [--help]`
+                    [--max-unanswered <n>] [--max-window-requests-per-minute <n>] [--slow-git <ms>]
+                    [--fault leak|zombies|storm|block|slow-git|feedback|flood|pty-pause] [--help]`
+
+function parsePositiveInteger(value: string | undefined, flag: string, fallback: number | null): number | null {
+  if (value === undefined) return fallback
+  const text = value.trim()
+  const number = text === '' ? NaN : Number(text)
+  if (!Number.isSafeInteger(number) || number <= 0) {
+    throw new UsageError(`${flag} must be a whole positive number`)
+  }
+  return number
+}
 
 function parseNumber(value: string | undefined, flag: string, fallback: number, allowZero: boolean): number {
   if (value === undefined) return fallback
@@ -37,6 +48,12 @@ function parseNumber(value: string | undefined, flag: string, fallback: number, 
   }
   return number
 }
+function parseInteger(value: string | undefined, flag: string, fallback: number, allowZero: boolean): number {
+  const number = parseNumber(value, flag, fallback, allowZero)
+  if (!Number.isSafeInteger(number)) throw new UsageError(`${flag} must be a whole number`)
+  return number
+}
+
 
 function parseWindows(value: string | undefined): number {
   if (value === undefined) return DEFAULT_WINDOWS
@@ -92,6 +109,16 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     if (argv[index] === '--windows' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
       throw new UsageError(windowsError)
     }
+    if (argv[index] === '--slow-git' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
+      throw new UsageError('--slow-git must be a whole positive number')
+    }
+    if (argv[index] === '--max-unanswered' && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
+      throw new UsageError('--max-unanswered must be a whole nonnegative number')
+    }
+    if (argv[index] === '--max-window-requests-per-minute'
+      && (argv[index + 1] === undefined || argv[index + 1].startsWith('-'))) {
+      throw new UsageError('--max-window-requests-per-minute must be a whole positive number')
+    }
   }
 
   let values
@@ -108,7 +135,10 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
         'max-growth': { type: 'string' },
         'max-zombies': { type: 'string' },
         'max-events-per-5s': { type: 'string' },
-        'max-stall-ms': { type: 'string' }
+        'max-stall-ms': { type: 'string' },
+        'max-unanswered': { type: 'string' },
+        'max-window-requests-per-minute': { type: 'string' },
+        'slow-git': { type: 'string' },
       },
       allowPositionals: false,
       strict: true
@@ -123,6 +153,13 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     ? undefined
     : FAULT_KINDS.find((kind) => kind === values.fault)
   if (values.fault !== undefined && fault === undefined) throw new UsageError(faultError)
+  if (fault === 'feedback' && windows < 2) {
+    throw new UsageError('--fault feedback needs --windows 2 or more')
+  }
+  if (fault === 'flood' && windows < 2) {
+    throw new UsageError('--fault flood needs --windows 2 or more')
+  }
+
 
 
   const minutes = parseNumber(values.minutes, '--minutes', QUALIFYING_MINUTES, false)
@@ -135,14 +172,28 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     maxGrowth: parseNumber(values['max-growth'], '--max-growth', DEFAULT_LIMITS.maxGrowth, true),
     maxZombies: parseNumber(values['max-zombies'], '--max-zombies', DEFAULT_LIMITS.maxZombies, true),
     maxEventsPer5s: parseNumber(values['max-events-per-5s'], '--max-events-per-5s', DEFAULT_LIMITS.maxEventsPer5s, true),
-    maxStallMs: parseNumber(values['max-stall-ms'], '--max-stall-ms', DEFAULT_LIMITS.maxStallMs, true)
+    maxStallMs: parseNumber(values['max-stall-ms'], '--max-stall-ms', DEFAULT_LIMITS.maxStallMs, true),
+    maxUnanswered: parseInteger(values['max-unanswered'], '--max-unanswered', DEFAULT_LIMITS.maxUnanswered, true),
+    maxWindowRequestsPerMinute: parsePositiveInteger(
+      values['max-window-requests-per-minute'],
+      '--max-window-requests-per-minute',
+      DEFAULT_LIMITS.maxWindowRequestsPerMinute,
+    ),
   }
 
+  const slowGitMs = values['slow-git'] === undefined
+    ? undefined
+    : parseInteger(values['slow-git'], '--slow-git', 0, false)
   const out = values.out === undefined
     ? mkdtempSync(join(tmpdir(), 'quirky-soak-'))
     : validateOutDirectory(values.out)
 
-  return fault === undefined
-    ? { minutes, out, limits, windows }
-    : { minutes, out, limits, windows, fault }
+  return {
+    minutes,
+    out,
+    limits,
+    windows,
+    ...(fault === undefined ? {} : { fault }),
+    ...(slowGitMs === undefined ? {} : { slowGitMs }),
+  }
 }

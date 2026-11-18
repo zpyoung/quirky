@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite'
 import type { DistroManifest } from '@quirky/protocol'
-import { openSqlite } from './sqlite'
+import { openSqliteOrRecover, type SqliteRecovery } from './sqlite'
 
 type Row = Record<string, any>
 
@@ -52,6 +52,8 @@ export interface RuntimeAuthorityRow {
 export interface StoreOptions {
   /** Lock wait in milliseconds for this connection; defaults to 5000. */
   busyTimeoutMs?: number
+  /** Called once, after the store is ready, when the file had to be repaired or quarantined. */
+  onRecover?: (recovery: SqliteRecovery) => void
 }
 
 /**
@@ -62,9 +64,11 @@ export class Store {
   private readonly db: Database
 
   constructor(path: string, options?: StoreOptions) {
-    this.db = openSqlite(path, { busyTimeoutMs: options?.busyTimeoutMs })
+    const opened = openSqliteOrRecover(path, { busyTimeoutMs: options?.busyTimeoutMs })
+    this.db = opened.db
     try {
       this.setup()
+      if (opened.recovery) options?.onRecover?.(opened.recovery)
     } catch (error) {
       try {
         this.db.close()

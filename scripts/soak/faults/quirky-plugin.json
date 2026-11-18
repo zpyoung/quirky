@@ -5,6 +5,7 @@
   "apiVersion": "1.0.0",
   "description": "Injects controlled faults into a throwaway soak daemon.",
   "main": "main.ts",
+  "ui": "dist/ui.js",
   "contributes": {
     "method": [
       {
@@ -64,6 +65,130 @@
           "properties": {},
           "required": []
         }
+      },
+      {
+        "id": "feedbackStart",
+        "description": "Arms one bounded two-worktree feedback sequence.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["worktrees"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "started": { "type": "boolean" } },
+          "required": ["started"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackRefresh",
+        "description": "Accepts the expected next owner in the armed feedback sequence.",
+        "params": {
+          "type": "object",
+          "properties": { "owner": { "type": "string" } },
+          "required": ["owner"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 17 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackReport",
+        "description": "Returns the bounded feedback fixture's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktrees": { "items": { "type": "string" } },
+            "refreshes": { "type": "integer", "minimum": 0, "maximum": 17 },
+            "active": { "type": "boolean" }
+          },
+          "required": ["worktrees", "refreshes", "active"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodStart",
+        "description": "Arms one bounded renderer request flood for a worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "requests": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["worktree", "requests"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "started": { "type": "boolean" } },
+          "required": ["started"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodTick",
+        "description": "Accepts one unique sequence in an armed renderer request flood.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodReport",
+        "description": "Returns the bounded renderer flood fixture's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktree": {},
+            "expected": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "requests": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "active": { "type": "boolean" }
+          },
+          "required": ["worktree", "expected", "requests", "active"],
+          "additionalProperties": false
+        }
       }
     ],
     "event": [
@@ -77,6 +202,67 @@
           },
           "required": ["owner"]
         }
+      },
+      {
+        "id": "feedbackStarted",
+        "description": "Seeds the first owner for the bounded feedback sequence.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "first": { "type": "string" }
+          },
+          "required": ["worktrees", "first"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackChanged",
+        "description": "Reports one completed refresh in the bounded feedback sequence.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 17 }
+          },
+          "required": ["worktrees", "owner", "sequence"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "floodStarted",
+        "description": "Routes the single flood arm event to its selected worktree panel.",
+        "worktree": "worktree",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktree": { "type": "string" },
+            "requests": { "type": "integer", "minimum": 1, "maximum": 10000 }
+          },
+          "required": ["worktree", "requests"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "panel": [
+      {
+        "id": "feedback",
+        "title": "Feedback fixture",
+        "description": "Passive two-worktree feedback detector fixture.",
+        "defaultSlot": "right-bottom"
+      },
+      {
+        "id": "flood",
+        "title": "Renderer flood fixture",
+        "description": "Passive bounded request flood diagnostic fixture.",
+        "defaultSlot": "right-bottom"
       }
     ]
   }

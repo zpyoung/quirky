@@ -1,11 +1,13 @@
 import { act } from 'react'
-import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
+import type { MountCleanup } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, validateValue, type Schema, type Session } from '@quirky/protocol'
 import * as ops from '../../src/layout/ops'
 import { sequentialIds } from '../../src/layout/tree'
 import { isTerminalTab } from '../../src/layout/types'
 import type { Group, GroupNode, PaneLeaf, PaneNode, Tab, TerminalTab, Workspace } from '../../src/layout/types'
 import { fakeContext, paneHandlers, settle, type FakeContext } from '../ui-fake'
 import { loadPane, startRecording, stopRecording, terminals, unloadPane } from './pane-support'
+import terminalManifest from '../../quirky-plugin.json'
 
 type Handler = (params: Record<string, any>) => unknown
 type WorkspaceModule = typeof import('../../src/window/workspace')
@@ -41,6 +43,8 @@ export async function loadWorkspace(): Promise<WorkspaceModule> {
     Element.prototype.getBoundingClientRect = original
   }
   workspace = await import('../../src/window/workspace')
+  // commands.ts reaches xterm during evaluation, so import it only after happy-dom is registered.
+  await import('../../src/window/commands')
   return workspace
 }
 
@@ -250,19 +254,63 @@ export const notFound = (message: string) => new RpcError(RpcErrorCode.NotFound,
 
 export type MountedWorkspace = Awaited<ReturnType<typeof mountFixture>>
 
+/** Dispatches local RPCs to the real window handlers without changing external command routing. */
+export function installWindowCommands(fake: FakeContext): void {
+  const call = fake.context.call.bind(fake.context)
+  fake.context.call = async (method, params = {}) => {
+    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call(method, params)
+    fake.calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: 41 }
+    if (params.connId !== 41) throw new Error('unknown window connection')
+    const id = String(params.id)
+    if (id.startsWith('command:quirky.terminal/')) {
+      const declaration = terminalManifest.contributes.command.find((entry) => id === `command:quirky.terminal/${entry.id}`)
+      if (!declaration) throw new Error(`unknown command: ${id}`)
+      const problem = validateValue((declaration.args ?? { type: 'object' }) as Schema, params.args ?? {}, 'args')
+      if (problem) throw new RpcError(RpcErrorCode.InvalidParams, problem)
+    }
+    let handler = fake.provided.get(id)
+    if (!handler) {
+      // the workspace import reaches xterm, so handlers need happy-dom's window before evaluation
+      const { terminalCommands, sessionCommands } = await import('../../src/window/commands')
+      if (id.startsWith('command:quirky.terminal/')) handler = terminalCommands(fake.context)[id.slice('command:quirky.terminal/'.length)]
+      else if (id.startsWith('command:quirky.session/')) handler = sessionCommands(fake.context)[id.slice('command:quirky.session/'.length)]
+    }
+    if (!handler) throw new Error(`unknown command: ${id}`)
+    return { result: await handler(params.args) }
+  }
+}
+
 /** Mounts the workspace view over `daemon` and waits until it has loaded. */
 export async function mountFixture(
   daemon: FakeDaemon,
-  options: { input?: unknown; settings?: Record<string, unknown>; extra?: Record<string, Handler>; view?: Record<string, unknown> } = {}
+  options: {
+    input?: unknown
+    settings?: Record<string, unknown>
+    extra?: Record<string, Handler>
+    view?: Record<string, unknown>
+    provider?: boolean
+  } = {}
 ) {
   const fake = fakeContext({ ...daemon.handlers, ...options.extra }, options.settings)
+  installWindowCommands(fake)
   const element = document.createElement('div')
   document.body.appendChild(element)
   const reports: any[] = []
   const input = options.input ?? { worktree: WORKTREE }
-  let cleanup: (() => void) | void = undefined
+  let cleanup: MountCleanup | undefined
   await act(async () => {
-    cleanup = workspace.mountWorkspace(fake.context, element, { input, report: (state) => void reports.push(state) }, options.view)
+    if (options.provider) {
+      // The pane module reads window at evaluation time, so activate only after happy-dom is registered.
+      const ui = await import('../../src/ui')
+      ui.activate(fake.context)
+      cleanup = fake.provided.get('view:quirky.session/worktree')!(element, {
+        input,
+        report: (state: unknown) => void reports.push(state)
+      })
+    } else {
+      cleanup = workspace.mountWorkspace(fake.context, element, { input, report: (state) => void reports.push(state) }, options.view)
+    }
   })
   await settle()
   await settle()
@@ -275,6 +323,14 @@ export async function mountFixture(
     controller: () => workspace.focusedController()!,
     q: <T extends Element = HTMLElement>(selector: string) => element.querySelector<T>(selector),
     qa: <T extends Element = HTMLElement>(selector: string) => [...element.querySelectorAll<T>(selector)],
+    updateInput: async (nextInput: unknown): Promise<boolean> => {
+      if (typeof cleanup?.updateInput !== 'function') return false
+      let accepted = false
+      await act(async () => {
+        accepted = cleanup!.updateInput!(nextInput)
+      })
+      return accepted
+    },
     unmount: async () => {
       await act(async () => cleanup?.())
       element.remove()

@@ -103,6 +103,23 @@ describe('method and event entries', () => {
     expect(result(contributes('method', { id: 'go', description: 'd' })).ok).toBe(true)
   })
 
+  test('accepts method timeouts on entries and overrides', () => {
+    expect(result(contributes('method', { id: 'wait', timeout: '75s' })).ok).toBe(true)
+    expect(result({ overrides: [{ id: 'method:acme.tools/wait', timeout: '75s' }] }).ok).toBe(true)
+  })
+
+  test('rejects method timeouts outside 1s to 24h', () => {
+    const message = ['method wait: timeout must be between 1s and 24h']
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: '500ms' }))).toEqual(message)
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: '25h' }))).toEqual(message)
+  })
+
+  test('requires method timeouts to be duration strings', () => {
+    const message = ['method wait: timeout must be a duration such as 30s, 5m or 2h']
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: 'soon' }))).toEqual(message)
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: 75 }))).toEqual(message)
+  })
+
   test('accepts event coalesce and worktree declarations, including overrides', () => {
     expect(result(contributes('event', { id: 'changed', coalesce: [] })).ok).toBe(true)
     expect(result(contributes('event', { id: 'changed', coalesce: ['sessionId', 'session.id'] })).ok).toBe(true)

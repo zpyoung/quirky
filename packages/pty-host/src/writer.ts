@@ -12,6 +12,7 @@ export class SocketWriter {
   private closeWhenEmpty = false
   private waiters: Array<() => void> = []
   private tagBytes = new Map<string, number>()
+  private remainingTagBytes = new Map<string, number>()
 
 
   constructor(
@@ -25,6 +26,10 @@ export class SocketWriter {
   queuedForTag(tag: string): number {
     return this.tagBytes.get(tag) ?? 0
   }
+  /** Returns all remaining queued bytes for a tag, including a partially-written head frame. */
+  remainingForTag(tag: string): number {
+    return this.remainingTagBytes.get(tag) ?? 0
+  }
 
   dropTag(tag: string): number {
     let dropped = 0
@@ -33,6 +38,7 @@ export class SocketWriter {
       if (entry.tag === tag && !entry.started) {
         dropped += entry.bytes.length
         this.queued -= entry.bytes.length
+        this.removeRemainingTagBytes(tag, entry.bytes.length)
       } else {
         this.queue[kept++] = entry
       }
@@ -47,6 +53,7 @@ export class SocketWriter {
     this.queue.length = 0
     this.queued = 0
     this.tagBytes.clear()
+    this.remainingTagBytes.clear()
     this.closeWhenEmpty = false
     this.settle()
   }
@@ -61,6 +68,7 @@ export class SocketWriter {
       this.queue.push(entry)
       this.queued += bytes.length
       this.addTagBytes(tag, bytes.length)
+      this.addRemainingTagBytes(tag, bytes.length)
       return true
     }
     const written = Math.max(0, this.socket.write(bytes))
@@ -73,6 +81,7 @@ export class SocketWriter {
       this.queue.push(entry)
       this.queued += rest.length
       if (!started) this.addTagBytes(tag, rest.length)
+      this.addRemainingTagBytes(tag, rest.length)
     } else {
       this.settle()
     }
@@ -85,6 +94,7 @@ export class SocketWriter {
       const head = this.queue[0]
       const written = Math.max(0, this.socket.write(head.bytes))
       this.queued -= written
+      this.removeRemainingTagBytes(head.tag, written)
       if (!head.started && written > 0) {
         this.removeTagBytes(head.tag, head.bytes.length)
         head.started = true
@@ -121,6 +131,17 @@ export class SocketWriter {
     const remaining = (this.tagBytes.get(tag) ?? 0) - bytes
     if (remaining === 0) this.tagBytes.delete(tag)
     else this.tagBytes.set(tag, remaining)
+  }
+  private addRemainingTagBytes(tag: string | undefined, bytes: number): void {
+    if (tag === undefined) return
+    this.remainingTagBytes.set(tag, (this.remainingTagBytes.get(tag) ?? 0) + bytes)
+  }
+
+  private removeRemainingTagBytes(tag: string | undefined, bytes: number): void {
+    if (tag === undefined) return
+    const remaining = (this.remainingTagBytes.get(tag) ?? 0) - bytes
+    if (remaining === 0) this.remainingTagBytes.delete(tag)
+    else this.remainingTagBytes.set(tag, remaining)
   }
 
   private settle(): void {

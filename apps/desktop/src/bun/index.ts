@@ -219,6 +219,16 @@ function createWindow(
     })
     return folderPickerResult(paths)
   }
+  const pickFiles = async (request: NativeBrowserHostRPC['bun']['requests']['pickFiles']['params']) => {
+    if (process.platform !== 'darwin') throw new Error('native file selection is unavailable on this platform')
+    const paths = await Utils.openFileDialog({
+      canChooseFiles: true,
+      canChooseDirectory: false,
+      allowsMultipleSelection: request.multiple ?? false,
+      ...(request.imagesOnly ? { allowedFileTypes: 'png,jpg,jpeg,gif,webp' } : {})
+    })
+    return folderPickerResult(paths)
+  }
   const openWindow = (input: NativeBrowserHostRPC['bun']['requests']['openWindow']['params']) => {
     if (process.platform !== 'darwin') throw new Error('native auxiliary windows are unavailable on this platform')
     if (!created || !currentUrl) throw new Error('the native desktop view is not ready')
@@ -269,6 +279,7 @@ function createWindow(
         prepareNativeBrowserPartition: nativeBrowserHandlers.prepare,
         clearNativeBrowserPartition: nativeBrowserHandlers.clear,
         pickFolder,
+        pickFiles,
         openWindow,
         closeWindow,
         readClipboardText: () => Utils.clipboardReadText() ?? '',

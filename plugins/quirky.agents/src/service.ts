@@ -66,6 +66,8 @@ type OptionsInfo = {
   models: { id: string; label: string; description: string | null; options: OptionInfo[] }[]
   unlisted: 'accept' | 'refuse'
   unlistedOptions: OptionInfo[]
+  /** The model a new launch starts on, present only when it is in `models`; null means the agent's own default. */
+  defaultModel: string | null
   structured: boolean
   extraArgs: ReturnType<typeof extrasSummary>
 }
@@ -210,7 +212,14 @@ function timeScaleFromEnv(): number {
 function optionInfo(decls: OptionDecl[], use: OptionUse): OptionInfo {
   const decl = decls.find((candidate) => candidate.id === use.id)!
   const choices = decl.choices && (use.choices ? decl.choices.filter((choice) => use.choices!.includes(choice.value)) : decl.choices)
-  return { id: decl.id, label: decl.label, type: decl.type, choices: choices ? choices.map(({ value, label }) => ({ value, label })) : null }
+  const offersDefault = decl.default !== undefined && choices?.some((choice) => choice.value === decl.default) === true
+  return {
+    id: decl.id,
+    label: decl.label,
+    type: decl.type,
+    choices: choices ? choices.map(({ value, label }) => ({ value, label })) : null,
+    ...(offersDefault ? { default: decl.default } : {})
+  }
 }
 
 function optionsInfo(entry: AgentEntry, host: string): OptionsInfo {
@@ -225,6 +234,7 @@ function optionsInfo(entry: AgentEntry, host: string): OptionsInfo {
     models: catalog ? catalog.models.map((model) => ({ id: model.id, label: model.label, description: model.description, options: info(model.options) })) : [],
     unlisted: catalog?.unlisted ?? 'refuse',
     unlistedOptions: catalog ? info(catalog.unlistedOptions) : [],
+    defaultModel: catalog?.models.some((model) => model.id === catalog.defaultModel) ? catalog.defaultModel! : null,
     structured: catalog?.model.structured != null,
     extraArgs: extrasSummary(entry)
   }
@@ -608,7 +618,7 @@ export class AgentsService {
   }
 
   private async detectInstalled(): Promise<void> {
-    const loginPath = await readLoginPath(this.context.launch.shell)
+    const loginPath = await readLoginPath(this.context.process, this.context.launch.shell)
     this.search = searchDirs({
       loginPath,
       fallbackPath: process.env.PATH ?? '',
@@ -823,6 +833,7 @@ export class AgentsService {
         }
         try {
           run = await runCodexAppServerModelProbe(
+            this.context.process,
             [executable, ...launch.tokens.slice(1), '-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'],
             declaration.timeoutMs,
             env,
@@ -840,6 +851,7 @@ export class AgentsService {
         }
         try {
           run = await runPiRpcModelProbe(
+            this.context.process,
             [executable, ...launch.tokens.slice(1), '--mode', 'rpc', '--no-session'],
             declaration.timeoutMs,
             materializeProviderEnvironment(process.env, [planned.launchEnv]),
@@ -850,7 +862,7 @@ export class AgentsService {
         }
       } else {
         try {
-          run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
+          run = await runModelProbe(this.context.process, [executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
         } catch {
           return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
         }
@@ -1020,7 +1032,7 @@ export class AgentsService {
       !isPlainObject(raw.extraArgs)) {
       throw this.context.error('conflict', 'The exact paired provider host returned invalid launch options.')
     }
-    return { ...raw, host } as unknown as OptionsInfo
+    return { ...raw, host, defaultModel: typeof raw.defaultModel === 'string' ? raw.defaultModel : null } as unknown as OptionsInfo
   }
 
   private async remoteResolveLaunch(agent: string, host: string, params: Params): Promise<ResolvedLaunch> {

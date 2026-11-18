@@ -1,5 +1,6 @@
 /** Domain types shared by the daemon, the PTY host, the UI, the CLI and the desktop shell. */
 
+import type { ChatItem } from './chat'
 import type { ExitCause } from './pty'
 
 export type Repo = {
@@ -472,7 +473,7 @@ export type GitCommit = {
 
 export type GitHistory = { commits: GitCommit[]; hasMore: boolean }
 
-export type GitDiffSource = 'unstaged' | 'staged' | 'branch' | 'commit' | 'review'
+export type GitDiffSource = 'unstaged' | 'staged' | 'branch' | 'commit' | 'review' | 'trees'
 
 /**
  * Both sides of a file diff. For `staged: true`, original is HEAD and modified is the index;
@@ -572,5 +573,7 @@ export type StructuredMessage = {
   text: string
   /** The agent's raw event, for views that want more than text. */
   data?: unknown
+  /** The typed chat item for this message; absent on journals written before items existed. */
+  item?: ChatItem
   at: number
 }

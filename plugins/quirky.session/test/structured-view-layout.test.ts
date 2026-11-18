@@ -57,13 +57,16 @@ let browser: Browser | null = null
 let browserBundle = ''
 
 function browserEntry(): string {
-  const structuredView = join(ROOT, 'plugins/quirky.session/src/window/StructuredView.tsx')
+  const chatView = join(ROOT, 'plugins/quirky.session/src/window/chat/ChatView.tsx')
+  const windowModel = join(ROOT, 'plugins/quirky.session/src/window/model.ts')
   const geometry = join(ROOT, 'plugins/quirky.terminal/src/window/floating/geometry.ts')
+  // under `bun test`, Bun.build cannot resolve ../model from window/chat unless window/ was read first
   return `
+    import ${JSON.stringify(windowModel)}
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
     import { IconButton } from '@quirky/ui'
-    import { StructuredView } from ${JSON.stringify(structuredView)}
+    import { ChatView } from ${JSON.stringify(chatView)}
     import { defaultButton } from ${JSON.stringify(geometry)}
 
     window.sentCalls = []
@@ -71,21 +74,24 @@ function browserEntry(): string {
 
     const context = {
       call(method: string, params?: Record<string, unknown>) {
-        if (method === 'quirky.structured/messages') return Promise.resolve([])
+        if (method === 'quirky.structured/messages' || method === 'quirky.structured/queue' || method === 'quirky.view/list') return Promise.resolve([])
         if (method === 'quirky.structured/send') {
           window.sentCalls.push(params)
           return Promise.resolve(null)
         }
         return Promise.resolve(null)
       },
+      executeCommand() { return Promise.resolve(null) },
       subscribe() { return () => {} },
       onConnection() { return () => {} },
-      toast() {}
+      toast() {},
+      log() {},
+      mountView() { return () => {} }
     }
-    const session = { id: 'structured-1', kind: 'structured', agent: 'claude', title: 'Claude', status: 'running' }
+    const session = { id: 'structured-1', worktreeId: 'wt-main', kind: 'structured', agent: 'claude', title: 'Claude', status: 'running' }
 
     createRoot(document.getElementById('structured-view')!).render(
-      createElement(StructuredView, { context, session })
+      createElement(ChatView, { context, session })
     )
 
     const anchor = document.querySelector<HTMLElement>('[data-overlay-button-anchor]')!
@@ -136,7 +142,7 @@ async function openComposer() {
     await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
   }
   await page.addScriptTag({ content: browserBundle })
-  await page.locator('textarea[placeholder^="Message"]').waitFor()
+  await page.getByRole('textbox', { name: 'Message' }).waitFor()
   await page.getByRole('button', { name: 'Show floating workspace' }).waitFor()
   return { context, page }
 }
@@ -162,14 +168,14 @@ async function assertComposerClearance() {
 
     const sendCenter = { x: sendBox.x + sendBox.width / 2, y: sendBox.y + sendBox.height / 2 }
     const hitTarget = await page.evaluate(({ x, y }) => {
-      return document.elementFromPoint(x, y)?.closest('button')?.textContent?.trim() ?? null
+      return document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label') ?? null
     }, sendCenter)
     expect(hitTarget).toBe('Send')
 
     await page.mouse.click(sendCenter.x, sendCenter.y)
     await page.waitForFunction(() => window.sentCalls.length === 1, undefined, { timeout: 2_000 })
     expect(await page.evaluate(() => window.sentCalls)).toEqual([
-      { session: 'structured-1', text: 'layout regression' }
+      { session: 'structured-1', text: 'layout regression', when: 'now' }
     ])
     expect(await page.evaluate(() => window.toggleCalls)).toEqual([])
   } finally {
@@ -205,20 +211,20 @@ afterAll(async () => {
   await browser?.close()
 }, 60_000)
 
-describe('the structured composer beside the floating workspace toggle', () => {
+describe('the chat composer beside the floating workspace toggle', () => {
   test.skipIf(!executable)('keeps Send clear and clickable in a narrow center workspace at the default window size', async () => {
     await assertComposerClearance()
   }, 60_000)
 
 })
 
-describe('the structured transcript header', () => {
+describe('the chat transcript header', () => {
   test.skipIf(!executable)('keeps the event filter inline, inset, and clear of the transcript', async () => {
     const { context, page } = await openComposer()
     try {
       const checkbox = page.getByRole('checkbox', { name: 'Show all events' })
       const label = page.getByText('Show all events', { exact: true })
-      const title = page.getByRole('heading', { name: 'Transcript', exact: true })
+      const title = page.getByRole('heading', { name: 'Claude', exact: true })
       const checkboxBox = await checkbox.boundingBox()
       const labelBox = await label.boundingBox()
       const titleBox = await title.boundingBox()

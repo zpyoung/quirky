@@ -49,14 +49,14 @@ export function ExpandingIconButton({ label, children, type = 'button', classNam
   )
 }
 
-export function TextField({ label, help, error, id: providedId, className, 'aria-describedby': describedBy, 'aria-invalid': invalid, ...props }: TextFieldProps) {
+export function TextField({ label, help, error, hideLabel = false, id: providedId, className, 'aria-describedby': describedBy, 'aria-invalid': invalid, ...props }: TextFieldProps) {
   const generatedId = useId()
   const id = providedId ?? generatedId
   const descriptions = [describedBy, help ? `${id}-help` : undefined, error ? `${id}-error` : undefined].filter(Boolean).join(' ')
 
   return (
     <div className="ui-text-field">
-      <label className="ui-text-field__label" htmlFor={id}>{label}</label>
+      <label className={classNames('ui-text-field__label', hideLabel && 'ui-text-field__label--hidden')} htmlFor={id}>{label}</label>
       <input
         autoCapitalize="off"
         autoCorrect="off"

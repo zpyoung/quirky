@@ -1,4 +1,4 @@
-import { Button } from '@quirky/ui'
+import { Button, EmptyState, InlineError } from '@quirky/ui'
 import type { IterationDetail } from '../src/types'
 
 export type LoopIterationDetailProps = {
@@ -76,11 +76,13 @@ export function LoopIterationDetail({ detail, onBack }: LoopIterationDetailProps
       </section>}
       <section className="ui-stack" aria-label="Errors">
         <h4>Errors</h4>
-        {errors.length === 0 ? <p>None recorded.</p> : <ul>{errors.map((error, index) => <li key={`${index}:${error}`}>{error}</li>)}</ul>}
+        {errors.length === 0
+          ? <EmptyState message="None recorded." />
+          : errors.map((error) => <InlineError key={error} message={error} />)}
       </section>
       <section className="ui-stack" aria-label="Iteration output tail">
         <h4>Output tail</h4>
-        {detail.outputTail.length === 0 ? <p>No output recorded.</p> : <pre className="ui-readout">{detail.outputTail}</pre>}
+        {detail.outputTail.length === 0 ? <EmptyState message="No output recorded." /> : <pre className="ui-readout">{detail.outputTail}</pre>}
       </section>
     </section>
   )

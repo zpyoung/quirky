@@ -2,6 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, WorkspaceOriginView, WorktreeAutomationProvenance } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
+import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { WorktreeControl } from '../src/control-types'
 import type { WorkspaceReport, WorktreesReport } from '../src/report'
 
@@ -123,6 +124,13 @@ function setup() {
       world.calls.push({ method, params })
       switch (method) {
         case 'ui.window.self': return { connId: 1 }
+        case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
+          const handler = provided.get(UI_CONTROL_COMMAND) as ((args: unknown) => unknown) | undefined
+          if (!handler) throw new Error(`unexpected command ${UI_CONTROL_COMMAND}`)
+          return { result: await handler(params.args) }
+        }
         case 'quirky.worktree/origins':
           return world.worktrees.map((item) => ({
             worktreeId: item.id,
@@ -185,7 +193,7 @@ function setup() {
     },
     subscribe(listener: (event: QuirkyEvent) => void | Promise<void>) { listeners.add(listener); return () => void listeners.delete(listener) },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
         ? input.worktree

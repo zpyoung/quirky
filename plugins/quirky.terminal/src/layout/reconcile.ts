@@ -34,12 +34,23 @@ function adoptedTitle(session: Session, existingTitles: readonly string[]): stri
   return generated ? nextTerminalTitle(existingTitles) : session.title
 }
 
-
+/**
+ * Whether a session no pane holds should get a tab of its own: any terminal session, and a
+ * structured (native chat) session until it exits, so chats started from the CLI, an API or
+ * another plugin show up. Background sessions never do; their owner shows them its own way.
+ */
+export function isAutoAdopted(session: Session): boolean {
+  if (session.background === true) return false
+  if (session.kind === 'terminal') return true
+  // exited chats from before structured sessions were adopted would otherwise flood the strip on upgrade
+  return session.kind === 'structured' && session.status !== 'exited'
+}
 
 /**
  * Brings one workspace in line with the session list: panes whose session is gone are removed,
- * sessions no pane holds get a tab at the end of the active group, and ended shells close their
- * pane (exit 0 after the person typed into it, or in a split) or keep it with the exit recorded.
+ * sessions no pane holds that `isAutoAdopted` accepts get a tab at the end of the active group,
+ * and ended shells close their pane (exit 0 after the person typed into it, or in a split) or
+ * keep it with the exit recorded.
  * A session lost with the PTY host changes nothing, since it cold-restores.
  */
 export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
@@ -63,7 +74,7 @@ export function reconcileWorkspace(input: ReconcileInput): ReconcileOutput {
 
   const held = new Set([...boundSessions(ws), ...boundElsewhere])
   const unbound = sessions
-    .filter((session) => session.worktreeId === ws.id && session.kind === 'terminal' && session.background !== true && !held.has(session.id))
+    .filter((session) => session.worktreeId === ws.id && isAutoAdopted(session) && !held.has(session.id))
     .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
   for (const session of unbound) {
     const titles = workspaceTabs(ws).filter(isTerminalTab).map((tab) => tab.defaultTitle)

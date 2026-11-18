@@ -3,6 +3,7 @@ import type { Worktree } from '@quirky/protocol'
 import type { Handler, HostingConfiguration, HostingEnv, Scope } from './env'
 import { isRecord, nonEmptyString, parseBranch, parseOid, parsePositiveInteger, parseIdentity, sameIdentity, providerReason, type IdentityValue } from './pr-data'
 import { parseRemoteIdentity, resolveTrustedIdentity } from './identity-remote'
+import { parseGitLabHosts, parseGitLabRemote } from './gitlab/identity'
 import { reviewParticipants, type ReviewParticipants } from './review-participants'
 import type { CachedReviewsResult, CachedWorkspaceReview } from './cached-review-types'
 
@@ -44,6 +45,16 @@ const PROVIDER_FAILURE_MESSAGES: Record<string, string> = {
 }
 export type ReviewState = 'open' | 'draft' | 'closed' | 'merged'
 export type CheckState = 'neutral' | 'pending' | 'success' | 'failure'
+export type MergeQueueEntry = {
+  id: string | null
+  state: string | null
+  position: number | null
+}
+type MergeQueueMembership = {
+  inMergeQueue: boolean
+  mergeQueueEntry: MergeQueueEntry | null
+  mergeQueueKnown: boolean
+}
 export type Review = {
   provider: 'github'
   number: number
@@ -64,6 +75,9 @@ export type Review = {
   stack: unknown
   mergeMethods: unknown
   mergeQueueRequired: boolean | null
+  inMergeQueue: boolean
+  mergeQueueEntry: MergeQueueEntry | null
+  mergeQueueKnown?: boolean
   autoMergeAllowed: boolean | null
   mergeMetadataKnown: boolean
   additions?: number
@@ -83,6 +97,19 @@ export type Lookup =
   | { kind: 'found'; review: Review; fetchedAt: number }
   | { kind: 'no-review'; fetchedAt: number }
   | { kind: 'unavailable'; reason: string; message: string; fetchedAt: number; retryDisabledUntil?: number; nextAutoRetryAt?: number }
+
+export type SnapshotResult =
+  | { kind: 'found'; review: Pick<Review, 'number' | 'url' | 'state' | 'checksStatus' | 'headRefName' | 'headRefOid'>; fetchedAt: number }
+  | { kind: 'no-review'; fetchedAt: number }
+  | { kind: 'unavailable'; message: string; fetchedAt: number }
+export type SnapshotRecorder = (result: SnapshotResult) => Promise<void>
+export type BeginReviewSnapshot = (
+  scope: Scope,
+  params: Record<string, unknown>,
+  caller: Parameters<Handler>[1],
+  mode: 'branch' | 'review'
+) => Promise<SnapshotRecorder>
+
 
 export type PRMergeMetadata = {
   known: boolean
@@ -116,6 +143,7 @@ export type PRLookup = {
   forBranch(params: Record<string, unknown>, caller: Parameters<Handler>[1], options?: { noCache?: boolean; strict?: boolean }): Promise<Lookup>
   review(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<Lookup>
   cachedReviews(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<CachedReviewsResult>
+  beginReviewSnapshot: BeginReviewSnapshot
   readFresh(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PRRead | null>
   pushRepository(params: Record<string, unknown>, caller: Parameters<Handler>[1]): Promise<PushRepositoryResult>
   invalidate(scope: Scope, data?: Record<string, unknown>): void
@@ -192,7 +220,7 @@ function mergeability(raw: Record<string, unknown>): Review['mergeable'] {
   return 'UNKNOWN'
 }
 
-function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, metadata: PRMergeMetadata, stack: unknown): Review | undefined {
+function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, metadata: PRMergeMetadata, stack: unknown, queueMembership: MergeQueueMembership): Review | undefined {
   const number = parsePositiveInteger(raw.number)
   const suppliedUrl = nonEmptyString(raw.url)
   const title = typeof raw.title === 'string' ? raw.title : undefined
@@ -230,6 +258,9 @@ function reviewFromRaw(raw: Record<string, unknown>, repository: IdentityValue, 
     stack,
     mergeMethods: metadata.mergeMethods,
     mergeQueueRequired: metadata.mergeQueueRequired,
+    inMergeQueue: queueMembership.inMergeQueue,
+    mergeQueueEntry: queueMembership.mergeQueueEntry,
+    mergeQueueKnown: queueMembership.mergeQueueKnown,
     autoMergeAllowed: metadata.autoMergeAllowed,
     mergeMetadataKnown: metadata.known
   }
@@ -306,6 +337,64 @@ function metadataFromResponse(value: unknown): PRMergeMetadata {
 
 function graphqlMetadataQuery(): string {
   return 'query HostingPRMergeMetadata($owner:String!,$name:String!,$branch:String!,$qualifiedBranch:String!){repository(owner:$owner,name:$name){viewerDefaultMergeMethod mergeCommitAllowed rebaseMergeAllowed squashMergeAllowed autoMergeAllowed defaultBranchRef{name} mergeQueue(branch:$branch){id} ref(qualifiedName:$qualifiedBranch){rules(first:50){nodes{type parameters{... on PullRequestParameters{requiredApprovingReviewCount}}}}}}}'
+}
+
+function graphqlPullRequestQueueQuery(): string {
+  return 'query HostingPRMergeQueueEntry($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){mergeQueueEntry{id state position}}}}'
+}
+
+function mergeQueueEntryFrom(value: unknown): MergeQueueEntry | null | undefined {
+  if (value === null) return null
+  if (!isRecord(value)) return undefined
+  return {
+    id: nonEmptyString(value.id) ?? null,
+    state: nonEmptyString(value.state) ?? null,
+    position: typeof value.position === 'number' && Number.isSafeInteger(value.position) ? value.position : null
+  }
+}
+
+function mergeQueueMembershipFromResponse(value: unknown): MergeQueueMembership | undefined {
+  if (!isRecord(value) || (Array.isArray(value.errors) && value.errors.length > 0)) return undefined
+  const root = isRecord(value.data) ? value.data : value
+  const repository = isRecord(root.repository) ? root.repository : undefined
+  const pull = repository && isRecord(repository.pullRequest) ? repository.pullRequest : undefined
+  if (!pull || !Object.hasOwn(pull, 'mergeQueueEntry')) return undefined
+  const mergeQueueEntry = mergeQueueEntryFrom(pull.mergeQueueEntry)
+  if (mergeQueueEntry === undefined) return undefined
+  return { inMergeQueue: mergeQueueEntry !== null, mergeQueueEntry, mergeQueueKnown: true }
+}
+
+async function readMergeQueueMembership(
+  env: HostingEnv,
+  scope: Scope,
+  repository: IdentityValue,
+  number: number,
+  raw: Record<string, unknown>,
+  metadata: PRMergeMetadata
+): Promise<MergeQueueMembership> {
+  const unknown: MergeQueueMembership = { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: false }
+  if (raw.mergeQueueEntry !== undefined) {
+    const mergeQueueEntry = mergeQueueEntryFrom(raw.mergeQueueEntry)
+    return mergeQueueEntry === undefined
+      ? unknown
+      : { inMergeQueue: mergeQueueEntry !== null, mergeQueueEntry, mergeQueueKnown: true }
+  }
+  if (stateOf(raw) !== 'open') {
+    return { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: true }
+  }
+  if (metadata.known && metadata.mergeQueueRequired === false) {
+    return { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: true }
+  }
+  try {
+    const response = await env.graphql(scope, graphqlPullRequestQueueQuery(), {
+      owner: repository.owner,
+      name: repository.repo,
+      number
+    }, { idempotent: true })
+    return mergeQueueMembershipFromResponse(response) ?? unknown
+  } catch {
+    return unknown
+  }
 }
 
 async function readMetadata(env: HostingEnv, scope: Scope, repository: IdentityValue, branch: string, fresh = false): Promise<PRMergeMetadata> {
@@ -420,7 +509,8 @@ async function enrichRead(env: HostingEnv, scope: Scope, repository: IdentityVal
     // A normal review lookup remains available when optional stack metadata cannot be read.
   }
   const metadata = await readMetadata(env, scope, repository, nonEmptyString(raw.baseRefName) ?? '', fresh)
-  const review = reviewFromRaw({ ...raw, stack }, repository, metadata, stack)
+  const queueMembership = await readMergeQueueMembership(env, scope, repository, number, raw, metadata)
+  const review = reviewFromRaw({ ...raw, stack }, repository, metadata, stack, queueMembership)
   if (!review) throw env.invalid('upstream_unavailable', 'GitHub returned incomplete pull request details.')
   return { scope, repository, raw, review, metadata, stackKnown }
 }
@@ -570,7 +660,7 @@ async function hideImplicit(env: HostingEnv, scope: Scope, read: PRRead, branch:
   return false
 }
 
-function cacheTtl(result: Lookup, active: boolean): number {
+function cacheTtl(result: Lookup | SnapshotResult, active: boolean): number {
   if (result.kind === 'no-review') return active ? ACTIVE_TTL : ABSENT_TTL
   if (result.kind === 'unavailable') return 5_000
   if (result.review.state === 'merged') return result.review.checksStatus === 'pending' ? ACTIVE_TTL : MERGED_TTL
@@ -591,6 +681,11 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     headOid: string
     remotes: { origin: string | null; upstream: string | null }
   }
+  type SnapshotValidation = {
+    configuration: HostingConfiguration
+    remotes: LocalIdentity['remotes']
+    hostStamp: string
+  }
   type ReviewSnapshot = {
     entry: CachedWorkspaceReview
     repoId: string
@@ -599,12 +694,16 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     scopeKey: string
     fetchedAt: number
     expiresAt: number
+    validation?: SnapshotValidation
+    captureSequence?: number
   }
   type StaleSnapshot = { repoId: string; expiresAt: number }
 
   const resultCache = new Map<string, CachedLookup>()
   const reviewCache = new Map<string, ReviewSnapshot>()
   const staleSnapshots = new Map<string, StaleSnapshot>()
+  const latestCaptureSequence = new Map<string, number>()
+  let nextCaptureSequence = 0
   let cacheGeneration = 0
   let reviewExpiryTimer: ReturnType<typeof setTimeout> | undefined
   let reviewExpiryAt: number | undefined
@@ -809,27 +908,71 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       remotes
     }
   }
+  const cloneConfiguration = (configuration: HostingConfiguration): HostingConfiguration => ({
+    issueSourcePreference: configuration.issueSourcePreference,
+    account: configuration.account ? { ...configuration.account } : null
+  })
+  const sameConfiguration = (left: HostingConfiguration, right: HostingConfiguration): boolean =>
+    left.issueSourcePreference === right.issueSourcePreference &&
+    JSON.stringify(left.account) === JSON.stringify(right.account)
+  const sameRemotes = (left: LocalIdentity['remotes'], right: LocalIdentity['remotes']): boolean =>
+    left.origin === right.origin && left.upstream === right.upstream
+  const sameLocalIdentity = (left: LocalIdentity, right: LocalIdentity): boolean =>
+    left.branch === right.branch && left.headOid === right.headOid && sameRemotes(left.remotes, right.remotes)
+  const gitLabHostStamp = (): string =>
+    JSON.stringify(env.context.getSetting('gitlabHosts') ?? 'gitlab.com')
+  const cloneScope = (scope: Scope): Scope => ({
+    ...scope,
+    worktree: { ...scope.worktree },
+    origin: { ...scope.origin },
+    repository: { ...scope.repository },
+    candidates: scope.candidates.map((candidate) => ({ ...candidate })),
+    issueRepository: { ...scope.issueRepository },
+    ...(scope.binding ? { binding: { ...scope.binding } } : {}),
+    ...(scope.remotes ? { remotes: { ...scope.remotes } } : {})
+  })
+  const scopeWithRemotes = (
+    scope: Scope,
+    worktree: Worktree,
+    remotes: LocalIdentity['remotes']
+  ): Scope => ({
+    ...scope,
+    worktree,
+    remotes: { origin: remotes.origin ?? '', upstream: remotes.upstream }
+  })
+
+  type CaptureOptions = {
+    local?: LocalIdentity
+    validation?: SnapshotValidation
+    sequence?: number
+    allowMergedInference?: boolean
+  }
 
   const snapshotSignature = (snapshot: ReviewSnapshot): string =>
     JSON.stringify({ entry: snapshot.entry, repoId: snapshot.repoId, path: snapshot.path, scopeKey: snapshot.scopeKey })
 
   const captureSnapshot = async (
-    result: Lookup,
+    result: Lookup | SnapshotResult,
     scope: Scope,
     request: NormalizedLookup,
     generation: number,
     mode: 'branch' | 'review',
     active: boolean,
-    expiresAt: number
+    expiresAt: number,
+    options?: CaptureOptions
   ): Promise<void> => {
-    if (generation !== cacheGeneration || scope.worktree.kind !== 'git') return
+    if (generation !== cacheGeneration || disposed || scope.worktree.kind !== 'git') return
     let local: LocalIdentity
-    try {
-      local = await localIdentity(scope.worktree)
-    } catch {
-      return
+    if (options?.local) {
+      local = options.local
+    } else {
+      try {
+        local = await localIdentity(scope.worktree)
+      } catch {
+        return
+      }
     }
-    if (generation !== cacheGeneration) return
+    if (generation !== cacheGeneration || disposed) return
     const requestHeadMatches = request.headOid === local.headOid
     if (request.branch !== undefined && request.branch !== local.branch) return
     if (result.kind === 'found' && request.branch === undefined && result.review.headRefName !== local.branch) return
@@ -840,7 +983,8 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     if (result.kind === 'unavailable') {
       error = result.message
     } else if (result.kind === 'found') {
-      const inferred = mode === 'branch' && request.linked === undefined && request.branch !== undefined
+      const inferred = options?.allowMergedInference !== false &&
+        mode === 'branch' && request.linked === undefined && request.branch !== undefined
       const matchingHead = result.review.headRefOid === local.headOid
       const matchingBranch = result.review.headRefName === local.branch
       const establishedMerged = result.review.state === 'merged' && inferred && request.headOid === local.headOid
@@ -873,7 +1017,9 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       scope,
       scopeKey: env.cacheKey(scope, 'cached-workspace-review'),
       fetchedAt: result.fetchedAt,
-      expiresAt
+      expiresAt,
+      ...(options?.validation ? { validation: options.validation } : {}),
+      ...(options?.sequence !== undefined ? { captureSequence: options.sequence } : {})
     }
     const previous = reviewCache.get(entry.worktreeId)
     if (previous && previous.fetchedAt > result.fetchedAt) return
@@ -891,13 +1037,135 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     }
   }
 
+
+  const ignoreSnapshot: SnapshotRecorder = async () => {}
+  const beginReviewSnapshot: BeginReviewSnapshot = async (scope, params, caller, mode) => {
+    const worktreeId = scope.worktree.id
+    const sequence = ++nextCaptureSequence
+    latestCaptureSequence.delete(worktreeId)
+    latestCaptureSequence.set(worktreeId, sequence)
+    while (latestCaptureSequence.size > REVIEW_CACHE_CAPACITY) {
+      const oldest = latestCaptureSequence.keys().next().value
+      if (oldest === undefined) break
+      latestCaptureSequence.delete(oldest)
+    }
+    const generation = cacheGeneration
+    if (disposed || scope.worktree.kind !== 'git') return ignoreSnapshot
+
+    let capturedLocal: LocalIdentity
+    let capturedScope: Scope
+    let capturedConfiguration: HostingConfiguration
+    let capturedHostStamp: string
+    let capturedScopeKey: string
+    let request: NormalizedLookup
+    try {
+      const worktree = { ...scope.worktree }
+      capturedLocal = await localIdentity(worktree)
+      if (disposed || generation !== cacheGeneration || latestCaptureSequence.get(worktreeId) !== sequence) {
+        return ignoreSnapshot
+      }
+      const remoteIdentity = capturedLocal.remotes.origin
+        ? parseGitLabRemote(capturedLocal.remotes.origin)
+        : null
+      const hostSetting = env.context.getSetting('gitlabHosts') ?? 'gitlab.com'
+      const hosts = parseGitLabHosts(hostSetting)
+      if (!remoteIdentity ||
+          remoteIdentity.host !== scope.origin.host ||
+          remoteIdentity.owner !== scope.origin.owner ||
+          remoteIdentity.repo !== scope.origin.repo ||
+          !hosts.includes(remoteIdentity.host)) return ignoreSnapshot
+
+      capturedConfiguration = cloneConfiguration(env.configuration(worktree))
+      capturedHostStamp = JSON.stringify(hostSetting)
+      capturedScope = scopeWithRemotes(cloneScope(scope), worktree, capturedLocal.remotes)
+      capturedScopeKey = env.cacheKey(capturedScope, 'cached-workspace-review')
+      const branch = mode === 'branch'
+        ? parseBranch(params.branch === undefined ? worktree.branch : params.branch)
+        : undefined
+      if (mode === 'branch' && !branch) return ignoreSnapshot
+      const linked = params.number === undefined ? undefined : parsePositiveInteger(params.number)
+      const fallback = params.fallbackPRNumber === undefined ? undefined : parsePositiveInteger(params.fallbackPRNumber)
+      request = {
+        params: { ...params, ...(branch !== undefined ? { branch } : {}) },
+        ...(branch !== undefined ? { branch } : {}),
+        ...(linked !== undefined ? { linked } : {}),
+        ...(fallback !== undefined ? { fallback } : {}),
+        headOid: capturedLocal.headOid
+      }
+    } catch {
+      return ignoreSnapshot
+    }
+
+    if (disposed || generation !== cacheGeneration || latestCaptureSequence.get(worktreeId) !== sequence) {
+      return ignoreSnapshot
+    }
+    const validation: SnapshotValidation = {
+      configuration: capturedConfiguration,
+      remotes: { ...capturedLocal.remotes },
+      hostStamp: capturedHostStamp
+    }
+    let settled = false
+    return async (result) => {
+      if (settled) return
+      settled = true
+      if (disposed || generation !== cacheGeneration || latestCaptureSequence.get(worktreeId) !== sequence) return
+      try {
+        const registered = await env.resolveWorktree(`id:${worktreeId}`, caller)
+        if (disposed || generation !== cacheGeneration || latestCaptureSequence.get(worktreeId) !== sequence ||
+            registered.kind !== 'git' ||
+            registered.id !== scope.worktree.id ||
+            registered.instanceId !== scope.worktree.instanceId ||
+            registered.path !== scope.worktree.path ||
+            registered.repoId !== scope.worktree.repoId) return
+        const currentLocal = await localIdentity(registered)
+        if (disposed || generation !== cacheGeneration || latestCaptureSequence.get(worktreeId) !== sequence ||
+            !sameLocalIdentity(capturedLocal, currentLocal)) return
+        const configuration = cloneConfiguration(env.configuration(registered))
+        const hostSetting = env.context.getSetting('gitlabHosts') ?? 'gitlab.com'
+        if (!sameConfiguration(capturedConfiguration, configuration) ||
+            JSON.stringify(hostSetting) !== capturedHostStamp) return
+        const currentScope = scopeWithRemotes(capturedScope, { ...registered }, currentLocal.remotes)
+        if (env.cacheKey(currentScope, 'cached-workspace-review') !== capturedScopeKey) return
+        if (!Number.isFinite(result.fetchedAt)) return
+        const active = params.active === true
+        const expiresAt = result.fetchedAt + cacheTtl(result, active)
+        await captureSnapshot(result, currentScope, request, generation, mode, active, expiresAt, {
+          local: currentLocal,
+          validation,
+          sequence,
+          allowMergedInference: false
+        })
+      } catch {
+        return
+      }
+    }
+  }
+
   const cachedForWorktree = async (worktree: Worktree): Promise<CachedWorkspaceReview> => {
     if (worktree.kind === 'folder') {
       return { worktreeId: worktree.id, instanceId: worktree.instanceId, branch: null, headOid: null, review: null, stale: true }
     }
+    const snapshot = reviewCache.get(worktree.id)
     let branch = worktree.branch === null ? null : parseBranch(worktree.branch) ?? null
     let headOid = /^0+$/u.test(worktree.head) ? undefined : parseOid(worktree.head)
-    if (!headOid) try {
+    let currentLocal: LocalIdentity | undefined
+    if (snapshot && snapshot.expiresAt > Date.now() && snapshot.validation) {
+      try {
+        currentLocal = await localIdentity(worktree)
+        branch = currentLocal.branch
+        headOid = currentLocal.headOid
+      } catch {
+        return {
+          worktreeId: worktree.id,
+          instanceId: worktree.instanceId,
+          branch: null,
+          headOid: null,
+          review: null,
+          stale: true,
+          error: 'The current local worktree identity could not be verified.'
+        }
+      }
+    } else if (!headOid) try {
       const [branchText, headText] = await Promise.all([
         env.gitWorktree(worktree, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => ''),
         env.gitWorktree(worktree, ['rev-parse', '--verify', 'HEAD'])
@@ -925,7 +1193,6 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       review: null,
       stale: false
     }
-    const snapshot = reviewCache.get(worktree.id)
     if (!snapshot) {
       const staleSnapshot = staleSnapshots.get(worktree.id)
       if (staleSnapshot && staleSnapshot.expiresAt > Date.now()) return { ...ordinaryMiss, stale: true }
@@ -934,18 +1201,27 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     if (snapshot.expiresAt <= Date.now()) {
       return ordinaryMiss
     }
+    const discardSnapshot = (): void => {
+      if (reviewCache.get(worktree.id) !== snapshot) return
+      reviewCache.delete(worktree.id)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+    }
 
     let configuration: HostingConfiguration
     try {
       configuration = env.configuration(worktree)
     } catch {
-      reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      discardSnapshot()
       return { ...ordinaryMiss, stale: true, error: 'Hosting configuration could not be verified.' }
     }
-    const currentScope = { ...snapshot.scope, worktree }
-    const configMatches = configuration.issueSourcePreference === snapshot.scope.issueSourcePreference &&
-      JSON.stringify(configuration.account) === JSON.stringify(snapshot.scope.binding ?? null)
+    const configMatches = snapshot.validation
+      ? sameConfiguration(configuration, snapshot.validation.configuration)
+      : configuration.issueSourcePreference === snapshot.scope.issueSourcePreference &&
+        JSON.stringify(configuration.account) === JSON.stringify(snapshot.scope.binding ?? null)
+    const currentScope = snapshot.validation && currentLocal
+      ? scopeWithRemotes(snapshot.scope, worktree, currentLocal.remotes)
+      : { ...snapshot.scope, worktree }
+    const hostMatches = !snapshot.validation || gitLabHostStamp() === snapshot.validation.hostStamp
     const currentScopeKey = env.cacheKey(currentScope, 'cached-workspace-review')
     let identityMatches = snapshot.entry.instanceId === worktree.instanceId &&
       snapshot.repoId === worktree.repoId &&
@@ -953,16 +1229,22 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       snapshot.entry.branch === branch &&
       snapshot.entry.headOid === headOid &&
       configMatches &&
+      hostMatches &&
       snapshot.scopeKey === currentScopeKey
     if (identityMatches) {
-      const remotes = await env.remoteUrls(worktree)
-      if (reviewCache.get(worktree.id) !== snapshot) return { ...ordinaryMiss, stale: true }
-      identityMatches = snapshot.scope.remotes?.origin === remotes.origin &&
-        snapshot.scope.remotes?.upstream === remotes.upstream
+      if (snapshot.validation) {
+        if (reviewCache.get(worktree.id) !== snapshot) return { ...ordinaryMiss, stale: true }
+        identityMatches = currentLocal !== undefined &&
+          sameRemotes(snapshot.validation.remotes, currentLocal.remotes)
+      } else {
+        const remotes = await env.remoteUrls(worktree)
+        if (reviewCache.get(worktree.id) !== snapshot) return { ...ordinaryMiss, stale: true }
+        identityMatches = snapshot.scope.remotes?.origin === remotes.origin &&
+          snapshot.scope.remotes?.upstream === remotes.upstream
+      }
     }
     if (!identityMatches) {
-      reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      discardSnapshot()
       return { ...ordinaryMiss, stale: true }
     }
     return { ...snapshot.entry }
@@ -1081,7 +1363,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       return { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a supported GitHub repository.' }
     }
     try {
-      const repository = await resolveTrustedIdentity(parsed, async () => await env.authAccounts(scope))
+      const repository = await resolveTrustedIdentity(env.context.process, parsed, async () => await env.authAccounts(scope))
       return repository
         ? { ready: true, repository, pushUrlFingerprint: createHash('sha256').update(urls[0]!).digest('hex') }
         : { ready: false, reason: 'unsupported_provider', message: 'The configured push URL is not a trusted GitHub repository.' }
@@ -1093,6 +1375,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
 
   env.onInvalidate((scope) => {
     cacheGeneration += 1
+    latestCaptureSequence.clear()
     resultCache.clear()
     clearReviewCache(scope)
   })
@@ -1102,10 +1385,11 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     reviewExpiryTimer = undefined
     reviewExpiryAt = undefined
     cacheGeneration += 1
+    latestCaptureSequence.clear()
     resultCache.clear()
     reviewCache.clear()
     staleSnapshots.clear()
   })
 
-  return { forBranch, review, cachedReviews, readFresh, pushRepository, invalidate }
+  return { forBranch, review, cachedReviews, beginReviewSnapshot, readFresh, pushRepository, invalidate }
 }

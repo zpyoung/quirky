@@ -29,6 +29,8 @@ type CodexAppServerOptions = {
   heldPrefix?: string
   uniqueThreads?: boolean
   rateLimitsUpdated?: Record<string, unknown>
+  rateLimitsRead?: Record<string, unknown>
+  skills?: Record<string, unknown>[] | 'silent'
   allowDenyAllEnums?: boolean
   configRead?: FixtureConfigRead
   turnScript?: FixtureTurnScript
@@ -61,6 +63,10 @@ function readMessages(path: string): CodexAppServerLogEntry[] {
     })
 }
 
+/**
+ * Writes a deterministic native-protocol app-server executable under a test's temporary home.
+ * The executable accepts `app-server`, speaks JSONL on stdio, and never contacts a provider.
+ */
 export function createCodexAppServerFixture(home: string, options?: CodexAppServerOptions): CodexAppServerFixture {
   mkdirSync(home, { recursive: true })
   const executable = join(home, 'codex-app-server-fixture')
@@ -76,7 +82,8 @@ const environmentLogPath = ${JSON.stringify(environmentLogPath)}
 const heldPrefix = ${JSON.stringify(options?.heldPrefix ?? null)}
 const uniqueThreads = ${JSON.stringify(options?.uniqueThreads ?? false)}
 const rateLimitsUpdated = ${JSON.stringify(options?.rateLimitsUpdated ?? null)}
-const allowDenyAllEnums = ${JSON.stringify(options?.allowDenyAllEnums ?? false)}
+const rateLimitsRead = ${JSON.stringify(options?.rateLimitsRead ?? null)}
+const skills = ${JSON.stringify(options?.skills ?? [])}
 const configRead = JSON.parse(${JSON.stringify(JSON.stringify(options?.configRead ?? null))})
 const turnScript = ${JSON.stringify(options?.turnScript ?? null)}
 const threadNotifications = ${JSON.stringify(options?.threadNotifications ?? [])}
@@ -96,7 +103,7 @@ const serverRequest = (message) => {
 }
 fs.appendFileSync(environmentLogPath, JSON.stringify({ CODEX_HOME: process.env.CODEX_HOME ?? null }) + '\\n')
 fs.writeFileSync(logPath + '.argv', JSON.stringify(process.argv.slice(2)))
-fs.writeFileSync(logPath + '.pid', String(process.pid))
+fs.writeFileSync(logPath + '.server-pid', String(process.pid))
 const textInput = (items) => items.filter((item) => item.type === 'text').map((item) => item.text).join('\\n')
 function finish(threadId, turn, status = 'completed') {
   const state = active.get(threadId)
@@ -244,9 +251,11 @@ function startTurn(message, threadId, text) {
 function receive(message) {
   if (message.method) {
     log(message)
+    // Stable wire enum spellings from codex app-server generate-json-schema.
     if ((message.method === 'thread/start' || message.method === 'thread/resume') &&
-        (message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write') &&
-        !(allowDenyAllEnums && message.params.approvalPolicy === 'untrusted' && message.params.sandbox === 'read-only')) {
+        (!['untrusted', 'on-request', 'never'].includes(message.params.approvalPolicy) ||
+          !['read-only', 'workspace-write', 'danger-full-access'].includes(message.params.sandbox) ||
+          (message.params.approvalsReviewer !== undefined && !['user', 'auto_review', 'guardian_subagent'].includes(message.params.approvalsReviewer)))) {
       send({ id: message.id, error: { code: -32602, message: 'invalid native approvalPolicy or sandbox enum' } })
       return
     }
@@ -307,8 +316,18 @@ function receive(message) {
           send({ id: message.id, error: { code: -32001, message: 'scripted interrupt failure' } })
           return
         }
+        if (active.get(message.params.threadId)?.text.includes('[ignore-interrupt]')) return
         send({ id: message.id, result: {} })
         if (active.has(message.params.threadId)) finish(message.params.threadId, active.get(message.params.threadId).turn, 'interrupted')
+        return
+      case 'skills/list':
+        if (skills === 'silent') return
+        send({ id: message.id, result: { data: (message.params.cwds ?? []).map((cwd) => ({ cwd, skills, errors: [] })) } })
+        return
+      case 'account/rateLimits/read':
+        if (rateLimitsRead === null) {
+          if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } })
+        } else send({ id: message.id, result: rateLimitsRead })
         return
       default:
         if (message.id !== undefined) send({ id: message.id, error: { code: -32601, message: 'Method not found' } })
@@ -375,8 +394,8 @@ process.stdin.on('end', () => process.exit(0))
       return JSON.parse(readFileSync(logPath + '.argv', 'utf8')) as string[]
     },
     processId() {
-      if (!existsSync(logPath + '.pid')) return null
-      return Number(readFileSync(logPath + '.pid', 'utf8'))
+      if (!existsSync(logPath + '.server-pid')) return null
+      return Number(readFileSync(logPath + '.server-pid', 'utf8'))
     }
   }
 }

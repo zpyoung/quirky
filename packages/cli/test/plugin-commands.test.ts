@@ -26,6 +26,8 @@ const MODULE_SOURCE = `
 import { appendFileSync } from 'node:fs'
 appendFileSync(process.env.QUIRKY_TEST_MARKER, 'loaded\\n')
 
+export const help = { greet: 'Extra guide for greet.\\nSecond line.' }
+
 export const commands = {
   greet: async (args, ctx) => {
     const count = await ctx.call('acme.notes/count', {})
@@ -154,7 +156,6 @@ describe('a declared command with a CLI module', () => {
   test('the module is imported only when its command runs', async () => {
     await run(['acme.notes', 'add', 'x'])
     await run(['acme.notes', '--help'])
-    await run(['acme.notes', 'greet', '--help'])
     await run(['api', '--json'])
     expect(loads()).toBe(0)
 
@@ -257,6 +258,20 @@ describe('declared commands beat generated ones, and help lists them', () => {
     expect(one.stdout).toContain('usage: quirky acme.notes add <name>')
     expect(one.stdout).toContain('<name>  The note title')
     expect(one.stdout).toMatch(/--color red\|blue\s+Note color/)
+  })
+
+  test('a module help entry is appended to its command help only', async () => {
+    const greet = await run(['acme.notes', 'greet', '--help'])
+    expect(greet.code).toBe(0)
+    expect(greet.stdout).toContain('usage: quirky acme.notes greet [<who>] [--shout]')
+    expect(greet.stdout).toEndWith('global: --json prints machine-readable JSON\n\nExtra guide for greet.\nSecond line.\n')
+    expect(loads()).toBe(1)
+
+    const boom = await run(['acme.notes', 'boom', '--help'])
+    expect(boom.stdout).toBe('usage: quirky acme.notes boom\n\nboom\n\nglobal: --json prints machine-readable JSON\n')
+    const add = await run(['acme.notes', 'add', '--help'])
+    expect(add.stdout).not.toContain('Extra guide')
+    expect(add.stdout).toEndWith('global: --json prints machine-readable JSON\n')
   })
 
   test('quirky api text and the skill list declared commands and the global switches', async () => {

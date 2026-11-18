@@ -3,15 +3,22 @@ import type { MobileDevice, MobileHostInfo, MobileNetworkInterface, MobilePairin
 import type { OwnerCliPairOffer } from '@quirky/protocol'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { hostname } from 'node:os'
+import { basename } from 'node:path'
 import { assertMobileCallAllowed } from './authorization'
-import { configureInput, openInput, ownerPairInput, ownerRevokeInput, pairInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput, type OwnerPairInput, type OwnerRevokeInput } from './api'
+import { configureInput, openInput, ownerPairInput, ownerRevokeInput, pairInput, resetPairingInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput, type OwnerPairInput, type OwnerRevokeInput } from './api'
 import { getMobileBundleChunk, getMobileBundleManifest, getMobileBundleRange, MobileBundleError } from './bundle'
 import { bestNetworkAddress, endpointHost, isLoopbackHost, normalizeAdvertisedEndpoint, rankNetworkInterfaces } from './network'
 import { createPairingResult } from './pairing'
-import { MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord, type MobileSettings } from './storage'
+import { MobilePairingResetError, MobileStore, MobileStoreError, type AuthenticationResult, type MobileDeviceRecord, type MobilePairingResetOutcome, type MobileSettings } from './storage'
 import { OwnerGrantStore, type OwnerGrantRecord, type OwnerGrantSummary } from './owner-store'
 import { MAX_MOBILE_INBOUND_FRAME_BYTES, MobileTransport, type MobilePeer } from './transport'
 import { DesktopMobileE2EEV2Session, MAX_MOBILE_BINARY_BYTES, MAX_MOBILE_TEXT_BYTES } from '../crypto/e2ee-v2'
+
+export type MobilePairingResetResult = MobilePairingResetOutcome & {
+  ownerGrantsRevoked: number
+  ownerGrantsRemaining: number | null
+}
+
 
 const AUTH_TIMEOUT_MS = 10_000
 const MAX_REQUESTS_PER_CREDENTIAL = 16
@@ -19,6 +26,9 @@ const AUTH_FAILURE_WINDOW_MS = 60_000
 const MOBILE_UNAVAILABLE_GUIDANCE = 'Mobile pairing is unavailable. Check the listener, network, and device registry, then try again.'
 const INVALID_ENDPOINT_GUIDANCE = 'No usable advertised address is available. Connect to Wi-Fi or Tailscale, then refresh the network interfaces or add a custom address.'
 const EXPOSURE_FAILED_GUIDANCE = 'The mobile listener could not be widened safely. It was restored to loopback; choose another reachable address or check the listener port.'
+const RESET_GUIDANCE = 'Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'
+const OWNER_GRANTS_UNAVAILABLE_MESSAGE = "owner_grants_unavailable: owner-grants.json is unavailable, so its grants can't be revoked before a new encryption identity is created; nothing was reset. Fix or move owner-grants.json, restart Quirky, then run reset-pairing again"
+const OWNER_WRITE_FAILURE_MESSAGE = 'write_failed: owner-grants.json could not be written; no mobile file was changed. Restart Quirky, then run reset-pairing again'
 // A params.scope may be domain data; envelope-level scope remains caller identity below.
 const CALLER_IDENTITY_FIELDS = [
   'role', 'caller', 'credential', 'credentials', 'token', 'connection', 'client', 'clientId', 'deviceToken', 'ownerGrantId', 'desktopClientId'
@@ -105,6 +115,10 @@ export class MobileService {
   constructor(private readonly context: PluginContext, options: { portValue?: string; hostValue?: string } = {}) {
     this.store = new MobileStore(context.dataDir)
     this.ownerStore = new OwnerGrantStore(context.dataDir)
+    if (this.ownerStore.recoveredFrom) {
+      context.log(`mobile: set aside unreadable owner-grants.json as ${basename(this.ownerStore.recoveredFrom)}; paired owner CLIs must pair again`)
+    }
+    if (this.ownerStore.recoveryDiagnostic) context.log(`mobile: ${this.ownerStore.recoveryDiagnostic}`)
     const hasPairedHistory = (this.store.registryAvailable && this.store.devices().length > 0) || this.ownerStore.hasGrants
     try {
       this.transport = new MobileTransport({
@@ -148,7 +162,7 @@ export class MobileService {
       autoRestoreFitMs: settings.autoRestoreFitMs,
       customAddresses: [...settings.customAddresses],
       interfaces,
-      devices: this.store.devices(),
+      devices: this.readDevices(),
       listener: { available: listener?.available ?? false, host: listener?.host ?? null, port: listener?.port ?? null },
       relay: 'unavailable'
     }
@@ -164,9 +178,9 @@ export class MobileService {
     return this.gate.run(async () => {
       const transport = this.transport
       if (this.stopped || !transport?.available) return unavailable('websocket_unavailable')
-      if (!this.store.registryAvailable) return unavailable('device_registry_unavailable')
+      if (!this.store.registryAvailable) return this.pairingUnavailable('device_registry_unavailable')
       const publicKeyB64 = this.store.publicKeyB64
-      if (!this.store.identityAvailable || !publicKeyB64) return unavailable('e2ee_key_unavailable')
+      if (!this.store.identityAvailable || !publicKeyB64) return this.pairingUnavailable('e2ee_key_unavailable')
       const interfaces = rankNetworkInterfaces()
       const customAddresses = this.store.settingsAvailable ? this.store.settings().customAddresses : []
       const address = input.address ?? bestNetworkAddress(interfaces) ?? customAddresses[0] ?? null
@@ -183,8 +197,8 @@ export class MobileService {
       try {
         device = this.store.getOrCreatePending(input.rotate === true)
       } catch (error) {
-        if (error instanceof MobileStoreError) return unavailable(error.code === 'e2ee_key_unavailable' ? 'e2ee_key_unavailable' : 'device_registry_unavailable')
-        return unavailable('device_registry_unavailable')
+        if (error instanceof MobileStoreError) return this.pairingUnavailable(error.code === 'e2ee_key_unavailable' ? 'e2ee_key_unavailable' : 'device_registry_unavailable')
+        return this.pairingUnavailable('device_registry_unavailable')
       }
       const result = await createPairingResult({ device, endpoint: actualEndpoint, publicKeyB64 })
       if (this.stopped || !transport.available) return unavailable('websocket_unavailable')
@@ -192,6 +206,61 @@ export class MobileService {
       return result
     })
   }
+
+  async resetPairing(params: unknown): Promise<MobilePairingResetResult> {
+    try { resetPairingInput(params) } catch (error) {
+      throw this.context.error('invalid-params', error instanceof Error ? error.message : 'resetPairing requires confirm: true')
+    }
+    return this.gate.run(() => {
+      if (this.stopped) throw this.context.error('conflict', 'Mobile plugin is stopping')
+
+      const refusal = this.store.pairingResetRefusal()
+      if (refusal) throw this.context.error('conflict', refusal.message)
+
+      let ownerGrantsRevoked = 0
+      if (!this.store.identityAvailable) {
+        if (!this.ownerStore.registryAvailable) {
+          throw this.context.error('conflict', OWNER_GRANTS_UNAVAILABLE_MESSAGE)
+        }
+        try {
+          ownerGrantsRevoked = this.ownerStore.revokeAll()
+        } catch {
+          this.closeCredentialConnections(this.ownerConnections)
+          throw this.context.error('conflict', OWNER_WRITE_FAILURE_MESSAGE)
+        }
+        if (ownerGrantsRevoked > 0) this.closeCredentialConnections(this.ownerConnections)
+      }
+
+      let outcome: MobilePairingResetOutcome
+      try {
+        outcome = this.store.resetPairing()
+      } catch (error) {
+        if (error instanceof MobilePairingResetError) {
+          if (error.registryReset) this.closeCredentialConnections(this.deviceConnections)
+          throw this.context.error('conflict', error.message)
+        }
+        throw this.context.error('conflict', error instanceof Error ? error.message : 'Mobile pairing reset failed')
+      }
+
+      this.closeCredentialConnections(this.deviceConnections)
+      const ownerGrantsRemaining = this.ownerStore.registryAvailable ? this.ownerStore.grants().length : null
+      this.context.log(`mobile: pairing reset; identity created ${outcome.identityCreated}, ${outcome.unpairedDevices} paired devices and ${ownerGrantsRevoked} owner CLI grants must pair again`)
+      if (outcome.unsynced.length > 0) {
+        this.context.log(`mobile: pairing reset wrote ${outcome.unsynced.join(', ')} but could not sync the directory; the change is visible but may not survive a crash`)
+      }
+      this.emitChanged()
+      return { ...outcome, ownerGrantsRevoked, ownerGrantsRemaining }
+    })
+  }
+
+  private pairingUnavailable(reason: PairingUnavailableReason): MobilePairingResult {
+    const resettable = reason === 'device_registry_unavailable' || reason === 'e2ee_key_unavailable'
+    if (resettable && this.store.pairingResetRefusal() === null) {
+      return { available: false, reason, guidance: RESET_GUIDANCE }
+    }
+    return unavailable(reason)
+  }
+
 
   async ownerPair(params: unknown): Promise<{ available: true; endpoint: string; offer: string; grant: OwnerGrantSummary }> {
     let input: OwnerPairInput
@@ -277,7 +346,19 @@ export class MobileService {
   }
 
   async devices(): Promise<MobileDevice[]> {
-    try { return this.store.devices() } catch (error) { throw this.context.error('conflict', error instanceof Error ? error.message : 'Mobile device registry unavailable') }
+    return this.readDevices()
+  }
+
+  private readDevices(): MobileDevice[] {
+    try {
+      return this.store.devices()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Mobile device registry unavailable'
+      const guidance = error instanceof MobileStoreError && this.store.pairingResetRefusal() === null
+        ? `. ${RESET_GUIDANCE}`
+        : ''
+      throw this.context.error('conflict', `${message}${guidance}`)
+    }
   }
 
   async revoke(params: unknown): Promise<{ revoked: boolean }> {
@@ -576,7 +657,7 @@ export class MobileService {
   private authorizeConnection(scope: 'mobile' | 'owner-cli', credentialId: string, token: string, method: string, params: Record<string, unknown>): void {
     if (CALLER_IDENTITY_FIELDS.some((key) => Object.hasOwn(params, key))) throw new Error('not authorized')
     if (scope === 'owner-cli') {
-      if (!this.ownerStore.isCurrentCredential(credentialId, token) || method === 'client.hello') throw new Error('not authorized')
+      if (!this.ownerStore.isCurrentCredential(credentialId, token) || method === 'client.hello' || method === 'quirky.mobile/resetPairing') throw new Error('not authorized')
       return
     }
     if (!this.store.isCurrentCredential(credentialId, token)) throw new Error('not authorized')
@@ -662,6 +743,13 @@ export class MobileService {
     else state.peer.close(code, reason)
   }
 
+  private closeCredentialConnections(connectionsByCredential: Map<string, Set<ConnectionState>>): void {
+    for (const connections of connectionsByCredential.values()) {
+      for (const connection of [...connections]) this.cleanupConnection(connection, 4001, 'Unauthorized', false)
+    }
+  }
+
+
   private credentialKey(scope: 'mobile' | 'owner-cli', credentialId: string): string {
     return `${scope}:${credentialId}`
   }
@@ -706,6 +794,12 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
   const requireLocal = (caller: PluginCaller): void => {
     if (caller.role === 'mobile') throw new Error('Mobile clients cannot call pairing administration methods')
   }
+  const requireLocalOwner = (caller: PluginCaller): void => {
+    if ((caller.role !== 'cli' && caller.role !== 'desktop' && caller.role !== 'ui') ||
+      caller.ownerGrantId !== undefined || caller.deviceId !== undefined) {
+      throw new Error('Mobile pairing reset requires a local owner client')
+    }
+  }
   const requireFullOwner = (caller: PluginCaller): void => {
     if (caller.role !== 'cli' && caller.role !== 'desktop' && caller.role !== 'ui') {
       throw new Error('Owner grants require a local or authenticated full-owner client')
@@ -718,6 +812,7 @@ export function registerMobileMethods(context: PluginContext, service: MobileSer
     pair: (params, caller) => { requireLocal(caller); return service.pair(params) },
     devices: (_params, caller) => { requireLocal(caller); return service.devices() },
     revoke: (params, caller) => { requireLocal(caller); return service.revoke(params) },
+    resetPairing: (params, caller) => { requireLocalOwner(caller); return service.resetPairing(params) },
     ownerPair: (params, caller) => { requireFullOwner(caller); return service.ownerPair(params) },
     ownerGrants: (_params, caller) => { requireFullOwner(caller); return service.ownerGrants() },
     ownerRevoke: (params, caller) => {

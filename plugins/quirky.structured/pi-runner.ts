@@ -1,34 +1,139 @@
-import type { ProcessRunner, Session, SpawnExit, SpawnedProcess } from '@quirky/protocol'
-import type { StructuredContext, StructuredRunner, StructuredStartOptions, ToolPolicy } from './runner'
+import { constants, existsSync } from 'node:fs'
+import { open } from 'node:fs/promises'
+import { extname } from 'node:path'
+import type { AgentCommand, AskEnvelope, AskSpec, Session } from '@quirky/protocol'
+import { capabilitiesFor } from './capabilities'
+import {
+  CallTracker,
+  ProseStream,
+  closingEntries,
+  errorItem,
+  oneLine,
+  piEntries,
+  statusItem,
+  stderrLines,
+  turnEndItem,
+  userItem,
+  type ItemEntry
+} from './items'
+import { approvalOutcome, approvalSpec, nativeQuestionPlan } from './native-questions'
+import { MAX_IMAGE_BYTES } from './queue'
+import { hoistCommand } from './slash-commands'
+import {
+  PiRpc,
+  MAX_WRITE_BYTES,
+  PiRpcError,
+  describeExit,
+  piLaunchArgs,
+  spawnPiTransport,
+  type PiExit,
+  type PiFrame,
+  type PiTransportFactory,
+  type PiVariant
+} from './pi-rpc'
+import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions, TurnUsage } from './runner'
 
-const TOOLS_DISABLED = 'tools are disabled for this session'
-const STDERR_TAIL_BYTES = 16 * 1024
-const MAX_FRAME_BYTES = 256 * 1024 * 1024
-const TERM_GRACE_MS = 2_000
-const SUMMARY_LIMIT = 160
-const STATE_REQUEST_ID = 'quirky-state'
-
-type PiAgent = 'pi' | 'omp'
-
-// omp rejects --no-mcp, so its offered tools must be checked rather than switched off
-const DENY_ALL_ARGS = { pi: ['--no-tools', '--no-extensions', '--no-mcp'], omp: ['--no-tools', '--no-extensions'] }
-
-/**
- * Finds the user's `pi` or `omp` executable the way their terminal would: `command -v` in a login
- * shell, so PATH entries added by shell profiles count. Throws when nothing is found.
- */
-export async function resolvePiThroughLoginShell(process: ProcessRunner, shell: string, agent: PiAgent): Promise<string> {
-  const result = await process.run([shell, '-l', '-c', `command -v ${agent}`])
-  if (result.spawnError !== undefined) throw new Error(result.spawnError.message)
-  const executable = result.stdoutText.trim().split('\n').at(-1) ?? ''
-  if (result.stopped !== undefined || result.exitCode !== 0 || !executable) {
-    throw new Error(`could not find the ${agent} executable on the login shell PATH`)
-  }
-  return executable
+export type PiRunnerDeps = {
+  /** Replaces the child process; tests inject a scripted fake. */
+  transport?: PiTransportFactory
+  /** The base child environment before the launch patch; production inherits the daemon's. */
+  env?: NodeJS.ProcessEnv
+  /** How long a session without tools waits for the no-tools check and for an abort. A test may lower it. */
+  checkTimeoutMs?: number
+  abortTimeoutMs?: number
 }
 
-function environmentWithPatch(patch?: Record<string, string | null>): NodeJS.ProcessEnv {
-  const env = { ...process.env }
+const STARTUP_TIMEOUT_MS = 60_000
+const SEND_TIMEOUT_MS = 45_000
+const COMMANDS_TIMEOUT_MS = 10_000
+const ABORT_TIMEOUT_MS = 2_000
+const QUESTION_LIMIT = 300
+const TOOLS_DISABLED = 'tools are disabled for this session'
+const CHECK_TIMEOUT_MS = 30_000
+const DENY_ALL_ABORT_TIMEOUT_MS = 10_000
+
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+
+type EncodedImage = { type: 'image'; data: string; mimeType: string }
+
+/**
+ * Reads an image for the agent without ever blocking on it: the file is opened non-blocking and
+ * checked on the open descriptor, so a path swapped for a FIFO or device since it was validated
+ * is refused instead of hanging the daemon.
+ */
+async function encodeImage(path: string): Promise<EncodedImage> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
+  try {
+    const stats = await handle.stat()
+    if (!stats.isFile()) throw new Error(`image ${path} is not a regular file`)
+    if (stats.size > MAX_IMAGE_BYTES) throw new Error(`image ${path} is larger than 20 MB`)
+    const data = await handle.readFile()
+    return { type: 'image', data: data.toString('base64'), mimeType: IMAGE_MEDIA_TYPES[extname(path).toLowerCase()] ?? 'image/png' }
+  } finally {
+    await handle.close()
+  }
+}
+
+const ALLOW_LABEL = /^(allow|yes|approve|accept|ok|proceed|continue|run)\b/i
+type AskTracker = (askId: string) => void
+
+const DENY_LABEL = /^(deny|no|block|reject|decline|cancel|abort|stop|don't|do not)\b/i
+
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function contextTokensOf(message: Record<string, unknown>): number | null {
+  const usage = record(message.usage)
+  if (usage === null) return null
+  return (count(usage.totalTokens) || count(usage.input) + count(usage.output) + count(usage.cacheRead) + count(usage.cacheWrite)) || null
+}
+
+type Running = {
+  sessionId: string
+  /** A `deny-all` session runs with no tools, is checked before each message, and never raises an ask. */
+  denyAll: boolean
+  contextWindow: number | null
+  lastContextTokens: number | null
+  abortTimer: ReturnType<typeof setTimeout> | null
+  rpc: PiRpc
+  ready: boolean
+  ended: boolean
+  stopped: boolean
+  working: boolean
+  idleStatus: 'running' | 'done'
+  failedTurn: boolean
+  turnStartedAt: number | null
+  calls: CallTracker
+  stream: ProseStream
+  pendingDialogs: number
+  dialogCancels: Map<string, () => void>
+  exit?: PiExit
+  deniedReasons: string[]
+  settings: StructuredSettings
+  /** What started this process, so omp can be relaunched on the same conversation in another approval mode. */
+  launch: { session: Session; executable: string; options: StructuredStartOptions }
+  providerSessionId: string
+  sessionFile: string
+  /** The list last reported, which decides how an outgoing message is rewritten. */
+  commands: AgentCommand[]
+}
+
+type Starting = { stopped: boolean; run?: Running }
+
+const record = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+
+const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
+  const env = { ...base }
   for (const [name, value] of Object.entries(patch ?? {})) {
     if (value === null) delete env[name]
     else env[name] = value
@@ -36,257 +141,430 @@ function environmentWithPatch(patch?: Record<string, string | null>): NodeJS.Pro
   return env
 }
 
-function oneLine(text: string, limit = SUMMARY_LIMIT): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
+const PI_KINDS: Record<string, AgentCommand['kind']> = {
+  skill: 'skill',
+  prompt: 'command',
+  extension: 'command',
+  custom: 'command',
+  file: 'command',
+  mcp_prompt: 'mcp',
+  builtin: 'builtin'
 }
-
-function count(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
-}
-
-function textOf(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((part) => (part && typeof part === 'object' && part.type === 'text' && typeof part.text === 'string' ? part.text : ''))
-    .join('')
-}
-
-function summarizeArgs(args: unknown): string {
-  if (typeof args !== 'object' || args === null) return ''
-  for (const key of ['command', 'path', 'file_path', 'pattern', 'url', 'query']) {
-    const value = (args as Record<string, unknown>)[key]
-    if (typeof value === 'string' && value) return oneLine(value)
-  }
-  return oneLine(JSON.stringify(args) ?? '')
-}
-
-function contextTokensOf(message: Record<string, unknown>): number | null {
-  const usage = message.usage
-  if (typeof usage !== 'object' || usage === null) return null
-  const u = usage as Record<string, unknown>
-  return (count(u.totalTokens) || count(u.input) + count(u.output) + count(u.cacheRead) + count(u.cacheWrite)) || null
-}
-
-type Running = {
-  session: Session
-  agent: PiAgent
-  toolPolicy: ToolPolicy
-  child: SpawnedProcess
-  frameChunks: Buffer[]
-  frameBytes: number
-  contextWindow: number | null
-  lastContextTokens: number | null
-  working: boolean
-  agentRunning: boolean
-  commandOut: boolean
-  checkSequence: number
-  checkId: string | null
-  checkTimer: NodeJS.Timeout | null
-  abortTimer: NodeJS.Timeout | null
-  waitingCommands: Record<string, unknown>[]
-  stopped: boolean
-  exited: boolean
-  closed: Promise<void>
-}
-
-/** Limits a test may lower. Defaults: 256 MiB, 30 seconds, 10 seconds. */
-export type PiRunnerLimits = { maxFrameBytes?: number; checkTimeoutMs?: number; abortTimeoutMs?: number }
 
 /**
- * Runs Pi and Oh My Pi sessions in the background through their `--mode rpc` stdio protocol, with
- * no PTY: JSON lines in (prompts), JSON lines out (events). Assistant messages are journaled as
- * they end; `agent_settled` or `session_settled` closes the turn once automatic work is finished.
- * A picked model and thinking level are passed to the CLI as `--model` and `--thinking`.
- *
- * A `deny-all` session is checked before each message and ends when the check fails.
- * Tool execution aborts the turn; a tool result other than "not found" or a stuck abort ends the session.
- * Extension dialogs are always cancelled, never answered.
+ * Sorts pi's `get_commands` or omp's `get_available_commands` entries into the kinds Quirky shows.
+ * An entry a pi package ships is a plugin entry. omp's built-ins run only when they open the
+ * message, so they are start-only.
  */
-export function createPiRunner(context: StructuredContext, limits?: PiRunnerLimits): StructuredRunner {
-  return new PiRunner(context, limits?.maxFrameBytes ?? MAX_FRAME_BYTES, limits?.checkTimeoutMs ?? 30_000, limits?.abortTimeoutMs ?? 10_000)
+export function piCommands(list: readonly unknown[]): AgentCommand[] {
+  return list.flatMap((value): AgentCommand[] => {
+    const entry = record(value)
+    const name = text(entry?.name)
+    const source = text(entry?.source)
+    const kind = PI_KINDS[source]
+    if (name === '' || kind === undefined) return []
+    const description = text(entry?.description).trim()
+    const hint = text(record(entry?.input)?.hint).trim()
+    const fromPackage = record(entry?.sourceInfo)?.origin === 'package' && kind !== 'builtin'
+    return [
+      {
+        name,
+        kind: fromPackage ? 'plugin' : kind,
+        ...(description === '' ? {} : { description }),
+        ...(hint === '' || hint === 'arguments' ? {} : { argumentHint: hint }),
+        ...(kind === 'builtin' ? { startOnly: true } : {})
+      }
+    ]
+  })
+}
+
+/** The allow and deny labels of a select that is a yes/no approval, or null when it is a real choice. */
+function approvalOptions(options: string[]): { allow: string; deny: string } | null {
+  const allow = options.find((option) => ALLOW_LABEL.test(option))
+  const deny = options.find((option) => DENY_LABEL.test(option))
+  return allow !== undefined && deny !== undefined && allow !== deny ? { allow, deny } : null
+}
+
+/**
+ * Runs pi or omp sessions in the background over their `--mode rpc` JSON protocol, with no PTY:
+ * one child per Quirky session, every event journaled as a chat item through `context`, and
+ * extension dialogs and omp's `ask` surfaced as asks.
+ *
+ * `deps.transport` is the test seam; production callers pass only the context and variant.
+ */
+export function createPiRunner(context: StructuredContext, variant: PiVariant, deps: PiRunnerDeps = {}): StructuredRunner {
+  return new PiRunner(context, variant, deps)
 }
 
 class PiRunner implements StructuredRunner {
   private readonly running = new Map<string, Running>()
-  private readonly starting = new Map<string, { stopped: boolean }>()
+  private readonly starting = new Map<string, Starting>()
 
   constructor(
     private readonly context: StructuredContext,
-    private readonly maxFrameBytes: number,
-    private readonly checkTimeoutMs: number,
-    private readonly abortTimeoutMs: number
+    private readonly variant: PiVariant,
+    private readonly deps: PiRunnerDeps
   ) {}
 
-  async start(session: Session, prompt?: string, options: StructuredStartOptions = {}): Promise<void> {
-    if (session.agent !== 'pi' && session.agent !== 'omp') throw new Error('structured sessions support pi and omp only')
-    if (options.providerSession !== undefined) throw new Error(`${session.agent} sessions cannot be resumed`)
+  async start(session: Session, prompt: string | undefined, options: StructuredStartOptions = {}): Promise<void> {
+    if (session.agent !== this.variant) throw new Error(`this runner serves ${this.variant} sessions only`)
     if (this.running.has(session.id) || this.starting.has(session.id)) throw new Error('session is already connected')
-    const agent: PiAgent = session.agent
-    const startup = { stopped: false }
+    const startup: Starting = { stopped: false }
     this.starting.set(session.id, startup)
     try {
-      const resolvePath = this.context.resolvePiPath
-      if (!resolvePath) throw new Error(`no way to resolve the ${agent} executable`)
-      const executable = await resolvePath.call(this.context, agent)
+      const executable = await this.context.resolvePiPath(this.variant)
       if (startup.stopped) return
-      this.launch(session, agent, executable, prompt, options)
+      const providerSession = options.providerSession
+      const resume =
+        providerSession === undefined
+          ? undefined
+          : providerSession.transcriptPath && existsSync(providerSession.transcriptPath)
+            ? providerSession.transcriptPath
+            : providerSession.id
+      const run = this.createRun(session, executable, options, resume)
+      startup.run = run
+      try {
+        const state = record(await run.rpc.request('get_state', {}, STARTUP_TIMEOUT_MS))
+        if (startup.stopped) return
+        const sessionId = text(state?.sessionId)
+        if (sessionId === '') throw new Error(`${this.variant} did not report a session id`)
+        if (providerSession !== undefined && sessionId !== providerSession.id) {
+          throw new Error(`${this.variant} resumed session ${sessionId}, expected ${providerSession.id}`)
+        }
+        run.providerSessionId = sessionId
+        run.sessionFile = text(state?.sessionFile)
+        const window = record(state?.model)?.contextWindow
+        if (typeof window === 'number' && Number.isFinite(window) && window > 0) run.contextWindow = window
+        await this.context.setProviderSession(session.id, {
+          id: sessionId,
+          transcriptPath: run.sessionFile || null
+        })
+        if (startup.stopped) return
+        this.requireLive(run)
+        if (this.variant === 'omp' && !run.denyAll) await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+        if (startup.stopped) return
+        this.requireLive(run)
+        await this.loadCommands(run)
+        if (startup.stopped) return
+        this.requireLive(run)
+        this.running.set(session.id, run)
+        run.ready = true
+        if (prompt === undefined || prompt === '') this.context.setStatus(session.id, 'running')
+        // a rejected first prompt is already journaled as an error item; the session itself started
+        else await this.submit(run, prompt, {}).catch(() => undefined)
+      } catch (error) {
+        await run.rpc.close()
+        if (startup.stopped) return
+        throw error instanceof PiRpcError ? new Error(error.message, { cause: error }) : error
+      }
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
   }
 
-  private launch(session: Session, agent: PiAgent, executable: string, prompt: string | undefined, options: StructuredStartOptions): void {
-    const toolPolicy = options.toolPolicy ?? 'default'
-    const args = [
-      '--mode',
-      'rpc',
-      ...(toolPolicy === 'deny-all' ? DENY_ALL_ARGS[agent] : []),
-      ...(typeof options.model === 'string' ? ['--model', options.model] : []),
-      ...(typeof options.effort === 'string' ? ['--thinking', options.effort] : [])
-    ]
-    const spawner = this.context.process
-    if (!spawner) throw new Error(`no process spawner configured for ${agent}`)
-    const child = spawner.spawn([executable, ...args], {
-      cwd: session.cwd,
-      env: environmentWithPatch(options.env),
-      timeoutMs: null,
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'tail',
-      stderrTailBytes: STDERR_TAIL_BYTES,
-      killGraceMs: TERM_GRACE_MS
-    })
-    const closed = Promise.withResolvers<void>()
-    const run: Running = {
-      session,
-      agent,
-      toolPolicy,
-      child,
-      frameChunks: [],
-      frameBytes: 0,
-      contextWindow: null,
-      lastContextTokens: null,
-      working: false,
-      agentRunning: false,
-      commandOut: false,
-      checkSequence: 0,
-      checkId: null,
-      checkTimer: null,
-      abortTimer: null,
-      waitingCommands: [],
-      stopped: false,
-      exited: false,
-      closed: closed.promise
+  /** Reports the commands the child offers: pi's `get_commands`, or omp's `get_available_commands`. A failure leaves the list empty. */
+  private async loadCommands(run: Running): Promise<void> {
+    const command = this.variant === 'omp' ? 'get_available_commands' : 'get_commands'
+    try {
+      const data = record(await run.rpc.request(command, {}, COMMANDS_TIMEOUT_MS))
+      this.reportCommands(run, data?.commands)
+    } catch {
+      // an older child without the command offers no list
     }
-    this.running.set(session.id, run)
-    void this.readOutput(run, closed.resolve)
-    if (agent === 'pi' || toolPolicy !== 'deny-all') this.write(run, { id: STATE_REQUEST_ID, type: 'get_state' })
-    if (prompt === undefined || prompt === '') {
-      this.context.setStatus(session.id, 'running')
-      this.checkAndWrite(run)
-      return
-    }
-    this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: { type: 'prompt', message: prompt } })
-    this.context.setStatus(session.id, 'working')
-    run.working = true
-    this.checkAndWrite(run, { type: 'prompt', message: prompt })
   }
 
-  async send(sessionId: string, text: string): Promise<void> {
+  private reportCommands(run: Running, list: unknown): void {
+    if (!Array.isArray(list) || run.stopped) return
+    run.commands = piCommands(list)
+    this.context.reportCommands?.(run.sessionId, run.commands)
+  }
+
+  /** Fails startup when the child exited during an awaited step, so no session is reported running without a process. */
+  private requireLive(run: Running): void {
+    if (run.ended) throw new Error(run.exit ? `${this.variant} ${describeExit(run.exit)}` : `${this.variant} exited during startup`)
+  }
+
+  async send(sessionId: string, message: string, options: StructuredSendOptions = {}): Promise<void> {
     const run = this.running.get(sessionId)
-    if (!run || run.stopped || run.exited) throw new Error('session is not running')
-    // a bare steer sent to idle pi is queued and never answered
-    const command = run.working
-      ? { type: 'prompt', message: text, streamingBehavior: 'steer' }
-      : { type: 'prompt', message: text }
-    this.context.appendMessage({ sessionId, role: 'user', text, data: command })
-    this.context.setStatus(sessionId, 'working')
-    run.working = true
-    this.checkAndWrite(run, command)
+    if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
+    await this.submit(run, message, options)
+  }
+
+  private configureChains = new Map<string, Promise<unknown>>()
+
+  /** Applies settings changes for one session in call order, so a slow older request cannot override a newer one. */
+  configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const previous = this.configureChains.get(sessionId) ?? Promise.resolve()
+    const result = previous.then(() => this.applySettings(sessionId, settings))
+    const settled = result.then(() => undefined, () => undefined)
+    this.configureChains.set(sessionId, settled)
+    void settled.then(() => {
+      if (this.configureChains.get(sessionId) === settled) this.configureChains.delete(sessionId)
+    })
+    return result
+  }
+
+  private async applySettings(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
+    if (settings.model !== undefined) {
+      const { provider, modelId } = await this.resolveModel(run, settings.model)
+      await run.rpc.request('set_model', { provider, modelId }, SEND_TIMEOUT_MS)
+      run.settings = { ...run.settings, model: settings.model }
+    }
+    // after the model: pi clamps a level the new model does not support
+    if (settings.effort !== undefined) {
+      await run.rpc.request('set_thinking_level', { level: settings.effort }, SEND_TIMEOUT_MS)
+      run.settings = { ...run.settings, effort: settings.effort }
+    }
+    if (settings.permissionMode !== undefined && run.denyAll) throw new Error('a session without tools has no permission modes')
+    if (settings.permissionMode !== undefined && settings.permissionMode !== run.settings.permissionMode) {
+      if (this.variant !== 'omp') throw new Error(`${this.variant} has no permission modes`)
+      return { ...(await this.relaunch(run, settings.permissionMode)).settings }
+    }
+    return { ...run.settings }
+  }
+
+  /**
+   * Restarts omp on the same conversation with another `--approval-mode`, since omp reads it only at
+   * launch. The old process keeps serving until the new one has resumed, so a failed relaunch leaves
+   * the chat as it was; a turn in progress refuses the switch instead of being cut off.
+   */
+  private async relaunch(old: Running, permissionMode: string): Promise<Running> {
+    const busy = () => old.working || old.pendingDialogs > 0
+    if (busy()) throw new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`)
+    const resume = old.sessionFile !== '' && existsSync(old.sessionFile) ? old.sessionFile : old.providerSessionId
+    const { model, effort } = old.settings
+    const options: StructuredStartOptions = {
+      ...(old.launch.options.env === undefined ? {} : { env: old.launch.options.env }),
+      ...(model === undefined ? {} : { model }),
+      ...(effort === undefined ? {} : { effort }),
+      permissionMode
+    }
+    const next = this.createRun(old.launch.session, old.launch.executable, options, resume)
+    const discard = async (reason: Error): Promise<never> => {
+      next.stopped = true
+      await next.rpc.close()
+      throw reason
+    }
+    try {
+      const state = record(await next.rpc.request('get_state', {}, STARTUP_TIMEOUT_MS))
+      const resumed = text(state?.sessionId)
+      if (resumed !== old.providerSessionId) throw new Error(`${this.variant} resumed session ${resumed}, expected ${old.providerSessionId}`)
+      this.requireLive(next)
+      if (this.variant === 'omp') await next.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+      this.requireLive(next)
+      next.providerSessionId = resumed
+      next.sessionFile = text(state?.sessionFile) || old.sessionFile
+    } catch (error) {
+      return discard(error instanceof PiRpcError ? new Error(error.message, { cause: error }) : (error as Error))
+    }
+    if (this.running.get(old.sessionId) !== old || old.stopped || old.ended) return discard(new Error('session is not running'))
+    if (busy()) return discard(new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`))
+    next.ready = true
+    next.idleStatus = old.idleStatus
+    next.commands = old.commands
+    this.running.set(old.sessionId, next)
+    old.stopped = true
+    await old.rpc.close()
+    return next
+  }
+
+  /** Lists the agent's available models as `provider/id`, so each id is one `configure` accepts. */
+  async models(sessionId: string): Promise<{ id: string; label: string }[]> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
+    const data = record(await run.rpc.request('get_available_models', {}, SEND_TIMEOUT_MS))
+    return (Array.isArray(data?.models) ? data.models : []).flatMap((entry) => {
+      const found = record(entry)
+      const provider = text(found?.provider)
+      const id = text(found?.id)
+      if (provider === '' || id === '') return []
+      const name = text(found?.name)
+      return [{ id: `${provider}/${id}`, label: name === '' ? `${provider}/${id}` : `${name} (${provider})` }]
+    })
+  }
+
+  /** Splits `provider/model-id`; a bare id is looked up among the agent's available models. */
+  private async resolveModel(run: Running, model: string): Promise<{ provider: string; modelId: string }> {
+    const slash = model.indexOf('/')
+    if (slash > 0) return { provider: model.slice(0, slash), modelId: model.slice(slash + 1) }
+    const data = record(await run.rpc.request('get_available_models', {}, SEND_TIMEOUT_MS))
+    const matches = (Array.isArray(data?.models) ? data.models : []).flatMap((entry) => {
+      const found = record(entry)
+      return text(found?.id) === model && text(found?.provider) !== '' ? [{ provider: text(found?.provider), modelId: model }] : []
+    })
+    if (matches.length !== 1) throw new Error(`${this.variant} has no single model named ${model}; use provider/model`)
+    return matches[0]!
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready || !run.working) return
+    this.closeTurn(run, 'stopped')
+    run.idleStatus = 'done'
+    try {
+      await run.rpc.request('abort', {}, ABORT_TIMEOUT_MS)
+    } catch {
+      await this.stop(sessionId)
+      return
+    }
+    if (run.stopped || run.ended) return
+    this.context.setStatus(sessionId, 'done')
   }
 
   async stop(sessionId: string): Promise<void> {
     const startup = this.starting.get(sessionId)
-    if (startup) startup.stopped = true
+    if (startup) {
+      startup.stopped = true
+      await startup.run?.rpc.close()
+    }
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
-    this.clearCheck(run)
     this.clearAbort(run)
-    run.frameChunks = []
-    run.frameBytes = 0
     this.running.delete(sessionId)
-    void run.child.stop({ signal: 'SIGTERM', graceMs: TERM_GRACE_MS })
-    const timeout = Promise.withResolvers<void>()
-    const timer = setTimeout(timeout.resolve, TERM_GRACE_MS * 2)
+    this.closeTurn(run, 'stopped')
     try {
-      await Promise.race([run.closed, timeout.promise])
-    } finally {
-      clearTimeout(timer)
+      await run.rpc.request('abort', {}, ABORT_TIMEOUT_MS)
+    } catch {
+      // closing the child below is the bounded fallback for an agent that does not answer the abort
     }
+    await run.rpc.close()
     this.context.setStatus(sessionId, 'exited')
   }
 
-  private checkAndWrite(run: Running, command?: Record<string, unknown>): void {
-    if (command) run.waitingCommands.push(command)
-    // pi drops a prompt written before it has answered the one before
-    if (run.commandOut || run.checkId !== null) return
-    if (run.toolPolicy !== 'deny-all') {
-      this.writeNext(run)
-      return
+  private createRun(session: Session, executable: string, options: StructuredStartOptions, resume: string | undefined): Running {
+    const denyAll = options.toolPolicy === 'deny-all'
+    const run: Running = {
+      sessionId: session.id,
+      denyAll,
+      contextWindow: null,
+      lastContextTokens: null,
+      abortTimer: null,
+      rpc: undefined as unknown as PiRpc,
+      ready: false,
+      ended: false,
+      stopped: false,
+      working: false,
+      idleStatus: 'running',
+      failedTurn: false,
+      turnStartedAt: null,
+      calls: new CallTracker(),
+      stream: new ProseStream(),
+      pendingDialogs: 0,
+      dialogCancels: new Map(),
+      deniedReasons: [],
+      commands: [],
+      settings: {
+        ...(typeof options.model === 'string' ? { model: options.model } : {}),
+        ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+        ...(!denyAll && this.variant === 'omp' && typeof options.permissionMode === 'string' ? { permissionMode: options.permissionMode } : {})
+      },
+      launch: { session, executable, options },
+      providerSessionId: '',
+      sessionFile: ''
     }
-    run.checkTimer = setTimeout(() => this.fail(run, `${run.agent} did not answer the no-tools check`), this.checkTimeoutMs)
-    run.checkId = `quirky-check-${++run.checkSequence}`
-    this.write(run, { id: run.checkId, type: run.agent === 'pi' ? 'get_commands' : 'get_state' })
+    run.rpc = new PiRpc(
+      {
+        executable,
+        args: piLaunchArgs(this.variant, {
+          ...(typeof options.model === 'string' ? { model: options.model } : {}),
+          ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+          ...(!denyAll && this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
+          ...(denyAll ? { denyAll } : {}),
+          ...(resume === undefined ? {} : { resume })
+        }),
+        cwd: session.cwd,
+        env: environmentWithPatch(this.deps.env ?? process.env, options.env)
+      },
+      { event: (frame) => this.onFrame(run, frame), exit: (exit) => this.onExit(run, exit) },
+      this.context.process,
+      this.deps.transport ?? spawnPiTransport
+    )
+    return run
   }
 
-  private writeNext(run: Running): void {
-    const command = run.waitingCommands.shift()
-    if (!command) return
-    run.commandOut = true
-    this.write(run, command)
+  private append(run: Running, entry: ItemEntry): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: entry.role, text: entry.text, data: entry.data, item: entry.item })
   }
 
-  private clearCheck(run: Running): void {
-    if (run.checkTimer !== null) clearTimeout(run.checkTimer)
-    run.checkTimer = null
-    run.checkId = null
+  private beginTurn(run: Running): void {
+    if (run.working) return
+    run.working = true
+    run.failedTurn = false
+    run.turnStartedAt = Date.now()
+    this.context.setStatus(run.sessionId, 'working')
   }
 
-  private fail(run: Running, reason: string): void {
-    this.append(run, 'system', reason)
-    void this.stop(run.session.id)
+  /** Ends the open turn: closes calls still running, journals `turn-end` and reports the session idle. */
+  private finishTurn(run: Running, state: 'done' | 'failed'): void {
+    if (!run.working) return
+    this.closeTurn(run, state)
+    run.idleStatus = 'done'
+    this.context.setStatus(run.sessionId, 'done')
+    this.sendDenialReasons(run)
   }
 
-  private checked(run: Running, event: Record<string, any>): void {
-    if (event.success !== true) {
-      const reason = typeof event.error === 'string' && event.error.trim() ? oneLine(event.error) : 'the check was refused'
-      this.fail(run, `${run.agent} could not confirm it has no tools: ${reason}`)
-      return
+  /** Journals the end of the open turn without changing the session status; a turn that is not open is left alone. */
+  private closeTurn(run: Running, state: 'done' | 'stopped' | 'failed'): void {
+    if (!run.working) return
+    for (const entry of closingEntries(run.calls, state)) this.append(run, entry)
+    const usage: TurnUsage | null =
+      state === 'done' && run.lastContextTokens !== null ? { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow } : null
+    run.lastContextTokens = null
+    this.clearAbort(run)
+    this.context.appendMessage({
+      sessionId: run.sessionId,
+      role: 'result',
+      text: state === 'done' ? 'Turn finished' : state === 'stopped' ? 'Turn stopped' : 'Turn failed',
+      ...(usage === null ? {} : { data: { contextUsage: usage } }),
+      item: turnEndItem(state, run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
+    })
+    run.working = false
+    run.turnStartedAt = null
+    run.stream.reset()
+  }
+
+  private async submit(run: Running, message: string, options: StructuredSendOptions): Promise<void> {
+    const images = options.images !== undefined && options.images.length > 0 ? await Promise.all(options.images.map(encodeImage)) : []
+    if (run.stopped || run.ended) throw new Error('session is not running')
+    const encodedBytes = images.reduce((sum, image) => sum + image.data.length, 0) + Buffer.byteLength(message) + 4096
+    if (encodedBytes > MAX_WRITE_BYTES) {
+      const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024))
+      const reason = `These images are too large to send together to ${this.variant} (${mib(encodedBytes)} MiB, limit ${Math.floor(MAX_WRITE_BYTES / (1024 * 1024))} MiB). Send fewer or smaller images.`
+      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+      throw new Error(reason)
     }
-    const list = run.agent === 'pi' ? event.data?.commands : event.data?.dumpTools
-    if (!Array.isArray(list)) {
-      this.fail(run, `${run.agent} could not confirm it has no tools: the reply lists no ${run.agent === 'pi' ? 'commands' : 'tools'}`)
-      return
+    this.context.appendMessage({
+      sessionId: run.sessionId,
+      role: 'user',
+      text: message,
+      data: { text: message, ...(options.images === undefined ? {} : { images: options.images }) },
+      item: userItem(message, options.images, options.queuedId)
+    })
+    const steering = run.working
+    if (run.denyAll) await this.requireNoTools(run)
+    if (!steering) this.beginTurn(run)
+    const params = { message: hoistCommand(message, run.commands), ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
+    try {
+      const data = record(await run.rpc.request(steering ? 'steer' : 'prompt', params, SEND_TIMEOUT_MS))
+      if (!steering && (data?.disposition === 'handled' || data?.agentInvoked === false)) this.finishTurn(run, 'done')
+    } catch (error) {
+      if (run.stopped || run.ended) throw new Error('session is not running', { cause: error })
+      const reason = error instanceof Error ? error.message : String(error)
+      this.context.appendMessage({
+        sessionId: run.sessionId,
+        role: 'system',
+        text: `${this.variant} did not accept the message: ${reason}`,
+        item: errorItem('protocol', stderrLines(reason), true)
+      })
+      if (!steering) {
+        run.failedTurn = true
+        this.finishTurn(run, 'failed')
+      }
+      throw error
     }
-    const offered = run.agent === 'pi' ? list.filter((entry) => entry?.source === 'extension') : list
-    if (offered.length > 0) {
-      const names = offered.slice(0, 8).map((entry) => typeof entry?.name === 'string' ? oneLine(entry.name, 80) : 'unnamed').join(', ')
-      const remaining = offered.length > 8 ? ` and ${offered.length - 8} more` : ''
-      this.fail(run, run.agent === 'pi'
-        ? `pi loaded extensions in a session that must have no tools: ${names}${remaining}`
-        : `omp offers tools to a session that must have none: ${names}${remaining}`)
-      return
-    }
-    this.clearCheck(run)
-    this.writeNext(run)
-  }
-
-  private write(run: Running, command: Record<string, unknown>): void {
-    if (run.stopped || run.exited) return
-    void run.child.write(`${JSON.stringify(command)}\n`)
   }
 
   private clearAbort(run: Running): void {
@@ -294,182 +572,343 @@ class PiRunner implements StructuredRunner {
     run.abortTimer = null
   }
 
-  private async readOutput(run: Running, settle: () => void): Promise<void> {
-    const reader = run.child.stdout.getReader()
+  /** Ends a `deny-all` session that cannot prove it has no tools; the reason is journaled first. */
+  private failNoTools(run: Running, reason: string): never {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+    void this.stop(run.sessionId)
+    throw new Error(reason)
+  }
+
+  /** pi lists its extension commands and omp lists its tools; either list must be empty before a message goes out. */
+  private async requireNoTools(run: Running): Promise<void> {
+    const timeoutMs = this.deps.checkTimeoutMs ?? CHECK_TIMEOUT_MS
+    let data: Record<string, unknown> | null
     try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        this.read(run, Buffer.from(value.buffer, value.byteOffset, value.byteLength))
-      }
-    } catch {
-      if (!run.stopped && !run.exited) {
-        void run.child.stop({ signal: 'SIGTERM', graceMs: TERM_GRACE_MS })
-      }
-    } finally {
-      reader.releaseLock()
+      data = record(await run.rpc.request(this.variant === 'pi' ? 'get_commands' : 'get_state', {}, timeoutMs))
+    } catch (error) {
+      if (run.stopped || run.ended) throw new Error('session is not running', { cause: error })
+      const reason = error instanceof Error ? error.message : String(error)
+      return this.failNoTools(run, `${this.variant} could not confirm it has no tools: ${reason}`)
     }
-    const exit = await run.child.exited
-    this.exit(run, settle, exit)
+    const list = this.variant === 'pi' ? data?.commands : data?.dumpTools
+    if (!Array.isArray(list)) {
+      return this.failNoTools(run, `${this.variant} could not confirm it has no tools: the reply lists no ${this.variant === 'pi' ? 'commands' : 'tools'}`)
+    }
+    const offered = this.variant === 'pi' ? list.filter((entry) => record(entry)?.source === 'extension') : list
+    if (offered.length === 0) return
+    const names = offered.slice(0, 8).map((entry) => (text(record(entry)?.name) !== '' ? oneLine(text(record(entry)?.name), 80) : 'unnamed')).join(', ')
+    const remaining = offered.length > 8 ? ` and ${offered.length - 8} more` : ''
+    return this.failNoTools(
+      run,
+      this.variant === 'pi'
+        ? `pi loaded extensions in a session that must have no tools: ${names}${remaining}`
+        : `omp offers tools to a session that must have none: ${names}${remaining}`
+    )
   }
 
-  private exit(run: Running, settle: () => void, exit: SpawnExit): void {
-    if (run.exited) return
-    run.exited = true
-    this.clearCheck(run)
-    this.clearAbort(run)
-    settle()
-    if (run.stopped || this.running.get(run.session.id) !== run) return
-    this.running.delete(run.session.id)
-    const reason = exit.spawnError !== undefined
-      ? `could not start ${run.agent}: ${exit.spawnError.message}`
-      : `${run.agent} exited${exit.exitCode === null ? ` (${exit.signal})` : ` with code ${exit.exitCode}`}`
-    const tail = run.child.stderrTail().trim()
-    this.context.appendMessage({
-      sessionId: run.session.id,
-      role: 'system',
-      text: tail ? `${reason}; stderr: ${oneLine(tail, 400)}` : reason
-    })
-    this.context.setStatus(run.session.id, 'exited')
+  private refuseTool(run: Running, frame: PiFrame): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: frame, item: statusItem(TOOLS_DISABLED) })
+    if (run.abortTimer !== null) return
+    const timeoutMs = this.deps.abortTimeoutMs ?? DENY_ALL_ABORT_TIMEOUT_MS
+    run.abortTimer = setTimeout(() => this.endForTool(run, `${this.variant} did not stop after a tool started`), timeoutMs)
+    void run.rpc.request('abort', {}, timeoutMs).catch(() => undefined)
   }
 
-  private read(run: Running, chunk: Buffer): void {
-    if (run.stopped || run.exited) return
-    let offset = 0
-    while (offset < chunk.length) {
-      const newline = chunk.indexOf(0x0a, offset)
-      const end = newline < 0 ? chunk.length : newline
-      const part = chunk.subarray(offset, end)
-      const frameBytes = run.frameBytes + part.length
-      if (frameBytes > this.maxFrameBytes) {
-        this.append(run, 'system', `${run.agent} sent an rpc frame too large to read`)
-        void this.stop(run.session.id)
-        return
-      }
-      if (newline < 0) {
-        run.frameChunks.push(part)
-        run.frameBytes = frameBytes
-        return
-      }
-      let frame = part
-      if (run.frameChunks.length > 0) {
-        if (part.length > 0) run.frameChunks.push(part)
-        frame = Buffer.concat(run.frameChunks, frameBytes)
-        run.frameChunks = []
-      }
-      run.frameBytes = 0
-      offset = newline + 1
-      if (frame.at(-1) === 0x0d) frame = frame.subarray(0, frame.length - 1)
-      if (frame.length === 0) continue
-      const line = frame.toString('utf8')
-      let event: unknown
-      try {
-        event = JSON.parse(line)
-      } catch {
-        this.append(run, 'system', `unreadable ${run.agent} output: ${oneLine(line)}`)
-        continue
-      }
-      if (typeof event === 'object' && event !== null && !Array.isArray(event)) this.handle(run, event as Record<string, any>)
-      if (run.stopped || run.exited) return
+  private endForTool(run: Running, reason: string): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+    void this.stop(run.sessionId)
+  }
+
+  private onFrame(run: Running, frame: PiFrame): void {
+    if (run.stopped || run.ended) return
+    try {
+      this.handleFrame(run, frame)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: `${this.variant} event ${text(frame.type)}: ${message}`, item: statusItem(`could not read a ${text(frame.type)} event`) })
     }
   }
 
-  private append(run: Running, role: Parameters<StructuredContext['appendMessage']>[0]['role'], text: string, data?: unknown): void {
-    if (run.stopped) return
-    this.context.appendMessage({ sessionId: run.session.id, role, text, ...(data === undefined ? {} : { data }) })
-  }
-
-  private handle(run: Running, event: Record<string, any>): void {
-    if (run.stopped) return
-    switch (event.type) {
-      case 'response': {
-        if (event.command === 'get_state' && event.success === true) {
-          const window = event.data?.model?.contextWindow
-          if (typeof window === 'number' && Number.isFinite(window) && window > 0) run.contextWindow = window
-        }
-        if (run.checkId !== null && event.id === run.checkId) {
-          this.checked(run, event)
-          return
-        }
-        if (event.command === 'get_state' && event.success === true) {
-          return
-        }
-        if (event.success === false) {
-          this.append(run, 'system', `${run.agent} rejected ${String(event.command ?? 'command')}: ${String(event.error ?? 'unknown error')}`, event)
-        }
-        if (event.command === 'prompt') {
-          run.commandOut = false
-          if (run.waitingCommands.length > 0) this.checkAndWrite(run)
-          if (event.success === false || (event.success === true && event.data?.disposition === 'handled')) this.closeTurn(run)
-        }
+  private handleFrame(run: Running, frame: PiFrame): void {
+    switch (frame.type) {
+      case 'available_commands_update':
+        this.reportCommands(run, frame.commands)
         return
-      }
       case 'agent_start':
-        run.agentRunning = true
+        this.beginTurn(run)
         return
-      case 'message_end': {
-        const message = event.message
-        if (typeof message !== 'object' || message === null || message.role !== 'assistant') return
-        if (run.working) run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
-        const text = textOf(message.content)
-        if (text) this.append(run, 'assistant', text, message)
-        if (message.stopReason === 'error' && typeof message.errorMessage === 'string') {
-          this.append(run, 'system', `${run.agent} error: ${message.errorMessage}`, message)
+      case 'message_update': {
+        const delta = record(frame.assistantMessageEvent)
+        if (delta?.type !== 'text_delta' || typeof delta.delta !== 'string') return
+        const item = run.stream.push(text(frame.messageId) || 'assistant', delta.delta, Date.now())
+        if (item && item.kind === 'prose') {
+          this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: item.text, data: { streaming: true }, item })
         }
         return
       }
-      case 'tool_execution_start': {
-        if (run.toolPolicy === 'deny-all') {
-          this.append(run, 'system', TOOLS_DISABLED, event)
-          this.write(run, { type: 'abort' })
-          if (run.working && run.abortTimer === null) {
-            run.abortTimer = setTimeout(() => this.fail(run, `${run.agent} did not stop after a tool started`), this.abortTimeoutMs)
+      case 'message_end': {
+        const message = record(frame.message)
+        if (message?.role !== 'assistant') return
+        if (run.working) run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
+        run.stream.reset()
+        const content = Array.isArray(message.content) ? message.content : []
+        const body = content
+          .map((part) => (record(part)?.type === 'text' ? text(record(part)?.text) : ''))
+          .join('')
+        if (body !== '') this.context.appendMessage({ sessionId: run.sessionId, role: 'assistant', text: body, data: frame, item: { kind: 'prose', text: body } })
+        if (message.stopReason === 'error') {
+          run.failedTurn = true
+          const reason = text(message.errorMessage) || `${this.variant} stopped with an error`
+          this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, data: frame, item: statusItem(oneLine(reason)) })
+        }
+        return
+      }
+      case 'tool_execution_start':
+      case 'tool_execution_end':
+        if (run.denyAll) {
+          if (frame.type === 'tool_execution_start') {
+            this.refuseTool(run, frame)
+            return
           }
+          const toolName = text(frame.toolName) || 'tool'
+          const result = record(frame.result)
+          const output = Array.isArray(result?.content)
+            ? result.content.map((part) => (record(part)?.type === 'text' ? text(record(part)?.text) : '')).join('')
+            : ''
+          if (frame.isError === true && output === `Tool ${toolName} not found`) return
+          this.endForTool(run, `${this.variant} ran ${toolName} in a session that must have no tools`)
           return
         }
-        this.append(run, 'tool', `${String(event.toolName ?? 'tool')}: ${summarizeArgs(event.args)}`, event)
-        return
-      }
-      case 'tool_execution_end': {
-        const toolName = String(event.toolName ?? 'tool')
-        const text = textOf(event.result?.content)
-        if (run.toolPolicy === 'deny-all' && event.isError === true && text === `Tool ${toolName} not found`) return
-        this.append(run, 'tool', text || toolName, event)
-        if (run.toolPolicy === 'deny-all') this.fail(run, `${run.agent} ran ${toolName} in a session that must have no tools`)
-        return
-      }
-      case 'extension_ui_request': {
-        if (typeof event.id === 'string' && ['select', 'confirm', 'input', 'editor'].includes(event.method)) {
-          this.write(run, { type: 'extension_ui_response', id: event.id, cancelled: true })
-        }
-        return
-      }
-      case 'prompt_result':
-        if (run.working && event.agentInvoked === false) this.closeTurn(run)
+        for (const entry of piEntries(frame, run.calls)) this.append(run, entry)
         return
       case 'agent_settled':
-      case 'session_settled': {
-        run.agentRunning = false
-        if (!run.working) return
-        const contextUsage =
-          run.lastContextTokens === null ? null : { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow }
-        this.append(run, 'result', `${run.agent} turn completed`, {
-          type: 'agent_end',
-          ...(contextUsage ? { contextUsage } : {})
-        })
-        run.lastContextTokens = null
-        this.clearAbort(run)
-        this.closeTurn(run)
+        this.finishTurn(run, run.failedTurn ? 'failed' : 'done')
+        return
+      case 'agent_end':
+        if (this.variant === 'omp' && frame.isTerminal !== false && frame.yielded !== false) {
+          this.finishTurn(run, run.failedTurn ? 'failed' : 'done')
+        }
+        return
+      case 'extension_ui_request':
+        this.onUiRequest(run, frame)
+        return
+      case 'auto_retry_start':
+        this.status(run, `Retrying after an error${text(frame.errorMessage) ? `: ${oneLine(text(frame.errorMessage))}` : ''}`, frame)
+        return
+      case 'auto_compaction_start':
+      case 'manual_compaction_start':
+      case 'compaction_start':
+        this.status(run, 'Compacting the conversation', frame)
+        return
+      case 'extension_error':
+        this.status(run, `Extension error: ${oneLine(text(frame.error))}`, frame)
+        return
+      case 'notice':
+        this.status(run, oneLine(text(frame.message)) || 'Notice', frame)
+        return
+      case 'prompt_result': {
+        const error = record(frame.error)
+        if (frame.status === 'error') this.status(run, oneLine(text(error?.message)) || `${this.variant} could not finish the prompt`, frame)
         return
       }
+      default:
+        return
     }
   }
 
-  private closeTurn(run: Running): void {
-    if (!run.working || run.agentRunning || run.commandOut || run.waitingCommands.length > 0) return
-    this.clearAbort(run)
-    run.working = false
-    run.lastContextTokens = null
-    this.context.setStatus(run.session.id, 'done')
+  private status(run: Running, message: string, data: unknown): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: message, data, item: statusItem(message) })
+  }
+
+  private onExit(run: Running, exit: PiExit): void {
+    if (run.stopped || run.ended) return
+    run.ended = true
+    run.exit = exit
+    if (!run.ready) return
+    this.running.delete(run.sessionId)
+    const wasWorking = run.working
+    this.closeTurn(run, 'failed')
+    const tail = exit.stderrTail.length > 0 ? exit.stderrTail : stderrLines(describeExit(exit))
+    if (exit.protocolError !== undefined || exit.code !== 0 || wasWorking || exit.stderrTail.length > 0) {
+      this.context.appendMessage({
+        sessionId: run.sessionId,
+        role: 'system',
+        text: `${this.variant} ${describeExit(exit)}`,
+        item: errorItem(exit.protocolError === undefined ? 'exited' : 'protocol', tail, capabilitiesFor(this.variant)?.resume.ok === true)
+      })
+    }
+    this.context.setStatus(run.sessionId, 'exited')
+    void run.rpc.close()
+  }
+
+  private onUiRequest(run: Running, frame: PiFrame): void {
+    const id = text(frame.id)
+    if (run.denyAll && ['select', 'confirm', 'input', 'editor', 'ask'].includes(text(frame.method))) {
+      if (id !== '') run.rpc.send({ type: 'extension_ui_response', id, cancelled: true })
+      return
+    }
+    switch (frame.method) {
+      case 'select':
+      case 'confirm':
+      case 'input':
+      case 'editor':
+      case 'ask':
+        if (id !== '') void this.dialog(run, id, frame)
+        return
+      case 'cancel':
+        run.dialogCancels.get(text(frame.targetId))?.()
+        return
+      case 'notify':
+        if (text(frame.message) !== '') this.status(run, oneLine(text(frame.message)), frame)
+        return
+      default:
+        return
+    }
+  }
+
+  private async dialog(run: Running, id: string, frame: PiFrame): Promise<void> {
+    run.pendingDialogs++
+    this.context.setStatus(run.sessionId, 'waiting')
+    const cancelled = Promise.withResolvers<null>()
+    let askId: string | undefined
+    let cancelledByPi = false
+    const cancelOwnAsk = (): void => {
+      if (askId !== undefined) void this.context.cancelAsk(askId).catch(() => undefined)
+    }
+    run.dialogCancels.set(id, () => {
+      cancelledByPi = true
+      cancelOwnAsk()
+      cancelled.resolve(null)
+    })
+    const track = (created: string): void => {
+      askId = created
+      if (cancelledByPi) cancelOwnAsk()
+    }
+    let response: PiFrame | null
+    try {
+      const answer = this.answer(run, frame, track)
+      answer.catch(() => undefined)
+      response = await Promise.race([answer, cancelled.promise])
+    } catch {
+      response = { cancelled: true }
+    } finally {
+      run.dialogCancels.delete(id)
+      run.pendingDialogs--
+      if (!run.stopped && !run.ended && run.pendingDialogs === 0) {
+        this.context.setStatus(run.sessionId, run.working ? 'working' : run.idleStatus)
+      }
+    }
+    if (run.stopped || run.ended) return
+    if (response !== null) {
+      try {
+        run.rpc.send({ type: 'extension_ui_response', id, ...response })
+      } catch {
+        // an agent that closed its input ends the run through the exit handler
+      }
+    }
+    this.sendDenialReasons(run)
+  }
+
+  private async ask(run: Running, spec: AskSpec, track: AskTracker): Promise<AskEnvelope | null> {
+    try {
+      return await this.context.createAsk(spec, run.sessionId, { nativeQuestion: true, onAsk: track })
+    } catch {
+      return null
+    }
+  }
+
+  private async approve(run: Running, question: string, track: AskTracker): Promise<boolean> {
+    let envelope: AskEnvelope | null = null
+    try {
+      envelope = await this.context.createAsk(approvalSpec(oneLine(question, QUESTION_LIMIT)), run.sessionId, { onAsk: track })
+    } catch {
+      envelope = null
+    }
+    const outcome = approvalOutcome(envelope, false)
+    if (outcome.reason !== undefined) run.deniedReasons.push(outcome.reason)
+    return outcome.decision !== 'deny'
+  }
+
+  private async answer(run: Running, frame: PiFrame, track: AskTracker): Promise<PiFrame> {
+    const title = text(frame.title)
+    switch (frame.method) {
+      case 'confirm':
+        return { confirmed: await this.approve(run, [title, text(frame.message)].filter(Boolean).join(': ') || 'Allow this?', track) }
+      case 'select': {
+        const options = (Array.isArray(frame.options) ? frame.options : []).filter((option): option is string => typeof option === 'string')
+        const approval = approvalOptions(options)
+        if (approval) return { value: (await this.approve(run, title || 'Allow this?', track)) ? approval.allow : approval.deny }
+        const envelope = await this.ask(run, {
+          questions: [{ id: 'answer', type: 'select', question: title || 'Choose one', options: options.map((label, index) => ({ value: `o${index + 1}`, label })) }]
+        }, track)
+        const answer = envelope?.status === 'answered' || envelope?.status === 'partial' ? envelope.answers.answer : undefined
+        if (!answer || !('value' in answer) || typeof answer.value !== 'string') return { cancelled: true }
+        const index = /^o(\d+)$/.exec(answer.value)?.[1]
+        return { value: options[Number(index) - 1] ?? answer.label ?? answer.value }
+      }
+      case 'input':
+      case 'editor': {
+        if (frame.secret === true) return { cancelled: true }
+        const prefill = text(frame.prefill)
+        const envelope = await this.ask(run, {
+          questions: [
+            {
+              id: 'answer',
+              type: 'text',
+              question: title || 'Your input is needed',
+              multiline: frame.method === 'editor',
+              ...(prefill === '' ? {} : { default: prefill })
+            }
+          ]
+        }, track)
+        const answer = envelope?.status === 'answered' || envelope?.status === 'partial' ? envelope.answers.answer : undefined
+        return answer && 'value' in answer && typeof answer.value === 'string' ? { value: answer.value } : { cancelled: true }
+      }
+      case 'ask':
+        return this.answerQuestions(run, frame, track)
+      default:
+        return { cancelled: true }
+    }
+  }
+
+  /** Answers omp's multi-question `ask` request; a skipped question fails the whole ask rather than guessing. */
+  private async answerQuestions(run: Running, frame: PiFrame, track: AskTracker): Promise<PiFrame> {
+    const questions = (Array.isArray(frame.questions) ? frame.questions : []).flatMap((entry) => {
+      const fields = record(entry)
+      if (!fields) return []
+      const options = (Array.isArray(fields.options) ? fields.options : []).flatMap((option) => {
+        const label = text(record(option)?.label)
+        return label === '' ? [] : [{ label, ...(text(record(option)?.description) ? { description: text(record(option)?.description) } : {}) }]
+      })
+      return [{ id: text(fields.id) || undefined, question: text(fields.question), header: text(fields.header) || undefined, multiSelect: fields.multi === true, options }]
+    })
+    let plan: ReturnType<typeof nativeQuestionPlan>
+    try {
+      plan = nativeQuestionPlan({ questions }, 'codex')
+    } catch {
+      return { cancelled: true }
+    }
+    const envelope = await this.ask(run, plan.spec, track)
+    if (envelope?.status !== 'answered' && envelope?.status !== 'partial') return { cancelled: true }
+    const answers = []
+    for (const { id } of plan.keys) {
+      const answer = envelope.answers[id]
+      if (!answer) return { cancelled: true }
+      if ('values' in answer) {
+        answers.push({ id, selectedOptions: answer.labels, ...(answer.other ? { customInput: answer.other } : {}) })
+      } else if ('label' in answer && typeof answer.label === 'string' && answer.source === 'option') {
+        answers.push({ id, selectedOptions: [answer.label] })
+      } else {
+        answers.push({ id, selectedOptions: [], customInput: String(answer.value) })
+      }
+    }
+    return { answers }
+  }
+
+  /** Tells the agent why a request was denied, once no dialog is still pending; the agent's RPC has no field for a reason. */
+  private sendDenialReasons(run: Running): void {
+    if (run.pendingDialogs > 0 || run.deniedReasons.length === 0 || run.stopped || run.ended) return
+    const reasons = run.deniedReasons.splice(0).map((reason) => `Denied: ${reason}`).join('\n')
+    void this.send(run.sessionId, reasons).catch(() => {})
   }
 }

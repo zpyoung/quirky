@@ -105,6 +105,10 @@ function navigation(page: AutomationNavigation['page'], patch: Partial<Automatio
     direction: 'asc',
     runQuery: '',
     runStatus: 'all',
+    promptExpanded: false,
+    historyStarts: [0],
+    runLimit: 100,
+    settingsNotice: false,
     ...patch
   }
 }
@@ -112,6 +116,7 @@ function navigation(page: AutomationNavigation['page'], patch: Partial<Automatio
 function makeContext(initialDefinition: AutomationDefinition, initialRuns: AutomationRun[]) {
   let currentDefinition = initialDefinition
   let currentRuns = initialRuns
+  let echoNavigation: ((patch: Record<string, unknown>) => void) | null = null
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const listeners = new Set<ChangeListener>()
   const deferredRunPages = new Map<string, Promise<AutomationRunsPage>>()
@@ -119,6 +124,10 @@ function makeContext(initialDefinition: AutomationDefinition, initialRuns: Autom
     pluginId: 'quirky.automations',
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      if (method === `${API}uiNavigate`) {
+        echoNavigation?.(params)
+        return null
+      }
       if (method === `${API}list`) return [currentDefinition]
       if (method === `${API}editorData`) return editorData
       if (method === `${API}externalList`) return { managers: [] }
@@ -146,7 +155,8 @@ function makeContext(initialDefinition: AutomationDefinition, initialRuns: Autom
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    openView: () => {}
+    openView: () => {},
+    setNavigateEcho: (callback: (patch: Record<string, unknown>) => void) => { echoNavigation = callback }
   } as unknown as UiPluginContext
   return {
     context,
@@ -173,19 +183,31 @@ async function mountPage(context: UiPluginContext, page: AutomationNavigation['p
   const root = createRoot(container)
   mounted.push({ container, root })
   let revision = 0
-  const render = async (nextPage: AutomationNavigation['page'], nextAutomationId = automationId) => {
+  let currentNavigation = navigation(page, { automationId })
+  const renderCurrent = () => {
     revision++
     const props: AutomationSurfaceProps = {
       context,
-      state: { revision, navigation: navigation(nextPage, { automationId: nextAutomationId }), editor: null },
+      state: { revision, navigation: currentNavigation, editor: null },
       refresh: async () => {},
       notify: () => {}
     }
-    await act(async () => root.render(createElement(AutomationsPage, props)))
+    root.render(createElement(AutomationsPage, props))
   }
-  await render(page)
+  // Echo daemon navigation patches into the same rendered state the plugin host would provide.
+  const contextRig = context as UiPluginContext & { setNavigateEcho?: (callback: (patch: Record<string, unknown>) => void) => void }
+  contextRig.setNavigateEcho?.((patch) => {
+    currentNavigation = { ...currentNavigation, ...patch }
+    renderCurrent()
+  })
+  const render = async (nextPage: AutomationNavigation['page'], nextAutomationId = automationId) => {
+    currentNavigation = { ...currentNavigation, page: nextPage, automationId: nextAutomationId }
+    await act(async () => renderCurrent())
+  }
+  await act(async () => renderCurrent())
   return { container, render }
 }
+
 
 async function settle(): Promise<void> {
   await act(async () => {

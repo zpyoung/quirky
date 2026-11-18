@@ -3,8 +3,11 @@ import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { TerminalPaneView, type TerminalPaneHandle, type TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { WorkspaceController } from '../workspace/controller'
 import { DEFAULT_GUTTER_ROWS, dockHeight, gutterRowsAfterDrag, shouldMountDock } from './geometry'
+import { DockLoader } from './loader'
 import { isDockState, type DockHostReport, type DockState, type DockTransport } from './types'
 import { useBoxSize } from '../workspace/useBoxSize'
+import { InlineError, NoticeLine } from '@quirky/ui'
+import { dockFocusCommand, requestWindowCommand } from '../pane/commands'
 
 const COMPOSER_VIEW_ID = 'view:quirky.terminal-dock/composer'
 
@@ -48,7 +51,6 @@ export function DockHost(props: Props) {
   onHandleRef.current = onHandle
   const onPaneFocusRef = useRef(terminalProps.onFocus)
   onPaneFocusRef.current = terminalProps.onFocus
-  const requestSequence = useRef(0)
   const reportSequence = useRef(0)
   const reportSignature = useRef<string | null>(null)
   const focusWanted = useRef(false)
@@ -80,51 +82,50 @@ export function DockHost(props: Props) {
     [paneId, sessionId]
   )
 
-  const loadDock = useCallback(async () => {
-    const sequence = ++requestSequence.current
-    try {
-      const result = await context.call('quirky.terminal-dock/get', { pane: paneId, session: sessionId })
-      if (sequence !== requestSequence.current) return
-      if (!isDockState(result) || result.pane !== paneId || result.session !== sessionId) throw new Error('The dock state response was invalid.')
-      acceptDock(result)
-      setTransport('connected')
-    } catch (error) {
-      if (sequence !== requestSequence.current) return
-      const previous = dockRef.current
-      const showError = Boolean(previous?.enabled && previous.supported && previous.docked)
-      dockRef.current = null
-      setDock(null)
-      setHostError(showError ? messageOf(error) : null)
-      setTransport('offline')
-    }
-  }, [acceptDock, context, paneId, sessionId])
-
   useEffect(() => {
+    const loader = new DockLoader({
+      call: (method, params) => context.call(method, params),
+      pane: paneId,
+      session: sessionId,
+      onState: (next) => {
+        acceptDock(next)
+        setTransport('connected')
+      },
+      onFailure: (error) => {
+        const previous = dockRef.current
+        const showError = Boolean(previous?.enabled && previous.supported && previous.docked)
+        dockRef.current = null
+        setDock(null)
+        setHostError(showError ? messageOf(error) : null)
+        setTransport('offline')
+      }
+    })
     const onEvent = (event: QuirkyEvent) => {
       if (event.type !== 'quirky.terminal-dock/changed' || !('data' in event)) return
       const data = event.data
       if (typeof data !== 'object' || data === null || Array.isArray(data)) return
       if (!('pane' in data) || data.pane !== paneId || !('state' in data) || !isDockState(data.state)) return
-      requestSequence.current += 1
+      loader.settle()
       acceptDock(data.state)
       setTransport('connected')
     }
     const unsubscribe = context.subscribe(onEvent)
     const unsubscribeConnection = context.onConnection((status) => {
       if (status === 'reconnecting') {
+        loader.settle()
         setTransport('reconnecting')
         return
       }
       setTransport('connected')
-      void loadDock()
+      void loader.load()
     })
-    void loadDock()
+    void loader.load()
     return () => {
-      requestSequence.current += 1
       unsubscribe()
       unsubscribeConnection()
+      loader.dispose()
     }
-  }, [acceptDock, context, loadDock, paneId])
+  }, [acceptDock, context, paneId, sessionId])
 
   const requested = Boolean(dock?.enabled && dock.supported && dock.docked)
   const shownRows = resize?.previewRows ?? rows
@@ -247,10 +248,10 @@ export function DockHost(props: Props) {
     }
   }, [acceptDock, context, dock?.enabled, focused, mounted, paneId, transport, viewMountSequence])
 
-  const requestComposerFocus = useCallback(() => {
+  const requestComposerFocus = () => {
     if (!controller.canFocusDock(paneId) || focusRequestPending.current) return
     focusRequestPending.current = true
-    void context.executeCommand('command:quirky.terminal-dock/focus', { pane: paneId }).then(
+    void requestWindowCommand(context, dockFocusCommand(paneId)).then(
       () => {
         focusRequestPending.current = false
       },
@@ -259,7 +260,7 @@ export function DockHost(props: Props) {
         setMountError(messageOf(error))
       }
     )
-  }, [context, controller, paneId])
+  }
 
   useEffect(() => {
     const enteringPassthrough = Boolean(dock?.passthrough && !wasPassthrough.current)
@@ -283,23 +284,20 @@ export function DockHost(props: Props) {
     wasRequested.current = requested
     wasActive.current = active
     wasPassthrough.current = Boolean(dock?.passthrough)
-  }, [active, composerFocused, controller, dock, hostFocused, mounted, paneId, requestComposerFocus, requested, viewMountSequence])
+  }, [active, composerFocused, context, controller, dock, hostFocused, mounted, paneId, requested, viewMountSequence])
 
-  const persistRows = useCallback(
-    async (nextRows: number) => {
-      const current = dockRef.current
-      if (!current?.enabled || !current.supported || !current.docked || current.gutterRows === nextRows) return
-      try {
-        const result = await context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })
-        if (!isDockState(result)) throw new Error('The dock state response was invalid.')
-        acceptDock(result)
-      } catch (error) {
-        setRows(dockRef.current?.gutterRows ?? DEFAULT_GUTTER_ROWS)
-        context.toast('Could not resize the agent composer', messageOf(error))
-      }
-    },
-    [acceptDock, context, paneId]
-  )
+  const persistRows = async (nextRows: number) => {
+    const current = dockRef.current
+    if (!current?.enabled || !current.supported || !current.docked || current.gutterRows === nextRows) return
+    try {
+      const result = await context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })
+      if (!isDockState(result)) throw new Error('The dock state response was invalid.')
+      acceptDock(result)
+    } catch (error) {
+      setRows(dockRef.current?.gutterRows ?? DEFAULT_GUTTER_ROWS)
+      context.toast('Could not resize the agent composer', messageOf(error))
+    }
+  }
 
   const beginResize = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !mounted || !dock?.enabled) return
@@ -336,7 +334,7 @@ export function DockHost(props: Props) {
       target.removeEventListener('mousemove', onMove)
       target.removeEventListener('mouseup', onUp)
     }
-  }, [persistRows, resize !== null])
+  }, [acceptDock, context, paneId, resize !== null])
 
   useEffect(() => () => {
     const current = dockRef.current
@@ -376,7 +374,9 @@ export function DockHost(props: Props) {
           ref={terminalRef}
           context={context}
           sessionId={sessionId}
+          paneId={paneId}
           active={active}
+          autoFocus={!controller.suppressLayoutAutoFocus}
           dragging={workspaceDragging || resize !== null}
           suppressAutoFocus={suppressTerminalFocus}
           onState={terminalProps.onState}
@@ -396,6 +396,7 @@ export function DockHost(props: Props) {
             data-resize-handle
             onMouseDown={beginResize}
           />
+          {!viewMounted && !mountError ? <div role="status"><NoticeLine>Opening agent composer…</NoticeLine></div> : null}
           <div
             ref={composerHost}
             className="qtd-composer-host"
@@ -404,8 +405,8 @@ export function DockHost(props: Props) {
           />
         </div>
       ) : null}
-      {hostError ? <div className="qtd-error" role="alert">Agent composer unavailable: {hostError}</div> : null}
-      {mountError && requested && geometryMounted ? <div className="qtd-error" role="alert">Agent composer unavailable: {mountError}</div> : null}
+      {hostError ? <div className="qtd-error"><InlineError message={`Agent composer unavailable: ${hostError}`} /></div> : null}
+      {mountError && requested && geometryMounted ? <div className="qtd-error"><InlineError message={`Agent composer unavailable: ${mountError}`} /></div> : null}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
@@ -656,6 +657,18 @@ function setup(
         }
         case 'ui.window.self':
           return { connId: 1 }
+        case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+          const args = params.args
+          const handler = provided.get(String(params.id))
+          if (typeof handler === 'function') {
+            return { result: await (handler as (args: unknown) => unknown)(args) }
+          }
+          const scoped = params.id === UI_CONTROL_COMMAND &&
+            typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+          if (scoped) return { result: dispatchUiControl(context, args) }
+          throw new Error(`unexpected command ${String(params.id)}`)
+        }
         case 'quirky.worktree/views':
           return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
         case 'quirky.worktree/activeView':
@@ -674,7 +687,7 @@ function setup(
       return () => void eventListeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
         ? input.worktree
@@ -705,8 +718,9 @@ function setup(
 
   activate(context)
   const mount = provided.get(SLOT) as Mount
-  const flush = async () => act(async () => {
-    for (let i = 0; i < 8; i++) await Promise.resolve()
+  const flush = (action?: () => void) => act(async () => {
+    action?.()
+    for (let i = 0; i < 12; i++) await Promise.resolve()
   })
   return {
     world,
@@ -736,22 +750,16 @@ function setup(
       await flush()
     },
     async setLayout(next: UiLayout) {
-      await act(async () => {
+      await flush(() => {
         current = next
         for (const listener of layoutListeners) listener(next)
-        await Promise.resolve()
       })
-      await flush()
     },
     async click(element: Element) {
-      await act(async () => {
-        ;(element as HTMLElement).click()
-        await Promise.resolve()
-      })
-      await flush()
+      await flush(() => (element as HTMLElement).click())
     },
     async emit(type: string) {
-      await emit({ type, data: {} } as QuirkyEvent)
+      await act(async () => { await emit({ type, data: {} } as QuirkyEvent) })
     },
     deferNextSet() {
       const gate = callGate()
@@ -1830,6 +1838,53 @@ test('session changes skip the all-window projection but refresh an override for
     worktree: 'w-main',
     preferences: { workspaceActivityWindow: 'live-only' }
   })
+})
+
+test('an all-window session change recovers an errored projection and resumes skipping after recovery', async () => {
+  const h = setup({ worktree: 'w-main', view: { id: 'view:global' }, panel: null, sidebar: true, focus: 'view' })
+  try {
+    await h.mount()
+    expect(h.world.active).toEqual({ worktreeId: 'w-main', instanceId: 'instance-w-main' })
+    expect(h.world.preferences.workspaceActivityWindow).toBe('all')
+    await openFilter(h)
+    expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('all')
+    expect(filterContent().textContent).not.toMatch(/workspace activity filters unavailable/i)
+
+    const activationCount = h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge).length
+    const initialProjections = sectionProjections(h).length
+    h.world.extrasFailure = new Error('temporary sidebar projection failure')
+    await act(async () => {
+      await h.emit('quirky.hosting/reviewCacheChanged')
+    })
+    await h.flush()
+
+    expect(sectionProjections(h)).toHaveLength(initialProjections + 1)
+    expect(sectionProjections(h).at(-1)?.params.worktree).toBe('w-main')
+    expect(filterContent().textContent).toMatch(/workspace activity filters unavailable/i)
+
+    const failedProjections = sectionProjections(h).length
+    h.world.extrasFailure = null
+    await act(async () => {
+      await h.emit('quirky.session/changed')
+    })
+    await h.flush()
+
+    expect(sectionProjections(h)).toHaveLength(failedProjections + 1)
+    expect(sectionProjections(h).at(-1)?.params.worktree).toBe('w-main')
+    expect(h.calls.filter((call) => call.method === 'quirky.sidebar-extras/activate' && !call.fromBadge)).toHaveLength(activationCount)
+    expect(filterContent().textContent).not.toMatch(/workspace activity filters unavailable/i)
+    expect(filterContent().querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')?.value).toBe('all')
+
+    const recoveredProjections = sectionProjections(h).length
+    await act(async () => {
+      await h.emit('quirky.session/changed')
+    })
+    await h.flush()
+    expect(sectionProjections(h)).toHaveLength(recoveredProjections)
+  } finally {
+    await currentCleanup?.()
+    currentCleanup = null
+  }
 })
 
 

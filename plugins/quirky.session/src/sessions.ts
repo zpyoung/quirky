@@ -324,6 +324,10 @@ export class SessionService {
   /** Exit details that arrived while a restore was spawning; a key is present for the whole spawn. */
   private readonly restoreExits = new Map<string, SessionExit | null>()
   private readonly sessionLocks = new Map<string, Promise<void>>()
+  private readonly emittedSessionStates = new Map<
+    string,
+    { status: SessionStatus; providerSessionId: string | null; transcriptPath: string | null }
+  >()
   private readonly workspaceLocks = new Map<string, Promise<void>>()
   /** Narrow admission for provider IDs published asynchronously by structured sessions resumed during wake. */
   private readonly structuredWakeProviderUpdates = new Map<
@@ -1115,6 +1119,7 @@ export class SessionService {
           }
         }
         this.records.delete(current.id)
+        this.emittedSessionStates.delete(current.id)
         this.context.emit('removed', { sessionId: current.id })
         return typeof expectedIncarnation === 'string'
           ? { ok: true as const, closed: true as const, sessionId: current.id, processIncarnation: expectedIncarnation }
@@ -1143,7 +1148,7 @@ export class SessionService {
       ...(agentStatus === undefined ? {} : { agentStatus: agentStatus as AgentStatusSummary | null })
     }) as Session
     const summaryChanged = agentStatus !== undefined && !isDeepStrictEqual(before.agentStatus ?? null, updated.agentStatus ?? null)
-    if (before.status !== status || summaryChanged) this.context.emit('changed', { session: updated })
+    if (before.status !== status || summaryChanged) this.emitChanged(updated)
     return updated
   }
 
@@ -1546,8 +1551,27 @@ export class SessionService {
     return holders.map((holder) => this.records.update(holder.id, { name: null }) as Session)
   }
 
+  private emitChanged(session: Session): void {
+    const providerSession = session.providerSession
+    const state = {
+      status: session.status,
+      providerSessionId: providerSession?.id ?? null,
+      transcriptPath: providerSession?.transcriptPath ?? null
+    }
+    const previous = this.emittedSessionStates.get(session.id)
+    const immediate =
+      !previous ||
+      previous.status !== state.status ||
+      previous.providerSessionId !== state.providerSessionId ||
+      previous.transcriptPath !== state.transcriptPath
+
+    if (this.context.emit('changed', { session }, immediate ? { immediate: true } : undefined)) {
+      this.emittedSessionStates.set(session.id, state)
+    }
+  }
+
   private publish(session: Session): Session {
-    this.context.emit('changed', { session })
+    this.emitChanged(session)
     return session
   }
 

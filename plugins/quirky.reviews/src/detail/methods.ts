@@ -21,6 +21,7 @@ import {
   parseReviewStackResult,
   repoFromReviewUrl,
   sameRepo,
+  type ReviewProvider,
   type ChangedFile,
   type CommentsResult,
   type RepoIdentity,
@@ -123,7 +124,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailSetFilesView',
     description: 'Set file selection, filtering, collapse, and diff mode.',
-    params: strictObject({ ...targetIdentity,
+    params: strictObject({ ...targetIdentity, generation: { type: 'integer', minimum: 0 },
       fileFilter: stringShape,
       diffMode: { type: 'string', enum: ['inline', 'side-by-side'] },
       selectedFile: { description: 'String or null.' },
@@ -214,7 +215,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     destructive: true,
     confirm: 'Reopen pull request #{number}?',
     params: strictObject(surfaceNumber, ['surface', 'number']),
-    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
+    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open', 'draft'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
   },
   {
     id: 'detailMerge',
@@ -327,8 +328,93 @@ function parseSurface(env: ReviewsEnv, value: unknown): Surface {
   if (value === 'detail' || value === 'checks') return value
   throw env.invalid('invalid_input', 'surface must be detail or checks.')
 }
-function selectionIdentity(worktree: string, number: number, repo: RepoIdentity | null): string {
-  return `${worktree}\u0000${number}\u0000${repo?.host.toLowerCase() ?? ''}/${repo?.owner.toLowerCase() ?? ''}/${repo?.repo.toLowerCase() ?? ''}`
+type CanonicalRepository = { provider: ReviewProvider; repository: RepoIdentity }
+
+function repoIdentity(value: unknown, provider?: ReviewProvider): RepoIdentity | null {
+  return provider === undefined
+    ? parseRepoIdentity(value, 'gitlab') ?? parseRepoIdentity(value, 'github')
+    : parseRepoIdentity(value, provider)
+}
+
+async function canonicalRepository(env: ReviewsEnv, worktree: string): Promise<CanonicalRepository> {
+  const value = await env.call('quirky.hosting/repository', { worktree })
+  if (!isRecord(value)) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  const provider = value.provider === undefined ? 'github' : value.provider
+  if (provider !== 'github' && provider !== 'gitlab') {
+    throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  }
+  const repository = parseRepoIdentity(value.repository, provider)
+  if (repository === null) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  return { provider, repository }
+}
+
+function isReviewMetadataScalar(value: unknown): value is string | number | null {
+  return typeof value === 'string' || typeof value === 'number' || value === null
+}
+
+function reviewForSurface(env: ReviewsEnv, review: ReviewData, repository: RepoIdentity): ReviewData {
+  if (review.provider !== 'gitlab') return { ...review, prRepo: repository }
+  const projected: ReviewData = {
+    provider: 'gitlab',
+    number: review.number,
+    url: review.url,
+    title: review.title,
+    body: review.body,
+    state: review.state,
+    headRefName: review.headRefName,
+    baseRefName: review.baseRefName,
+    headRefOid: review.headRefOid,
+    baseRefOid: review.baseRefOid,
+    mergeable: 'UNKNOWN',
+    checksStatus: 'neutral',
+    reviewDecision: review.reviewDecision,
+    mergeStateStatus: 'UNKNOWN',
+    autoMergeRequest: null,
+    stack: null,
+    mergeMethods: { default: null, allowed: [] },
+    mergeQueueRequired: false,
+    autoMergeAllowed: null,
+    mergeMetadataKnown: false,
+    repository,
+    prRepo: repository,
+  }
+  if (typeof review.updatedAt === 'string') projected.updatedAt = review.updatedAt
+  if (review.requestedReviewers !== undefined) {
+    const values = review.requestedReviewers
+    if (!Array.isArray(values) || !values.every((value) => typeof value === 'string')) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid requestedReviewers.')
+    }
+    projected.requestedReviewers = [...values]
+  }
+  if (review.assignees !== undefined) {
+    const values = review.assignees
+    if (!Array.isArray(values) || !values.every((value) => typeof value === 'string')) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid assignees.')
+    }
+    projected.assignees = [...values]
+  }
+  if (review.reviews !== undefined) {
+    if (!Array.isArray(review.reviews) || !review.reviews.every(isRecord)) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid review history.')
+    }
+    projected.reviews = review.reviews.map((entry) => {
+      const safe: JsonRecord = {}
+      if (isReviewMetadataScalar(entry.id)) safe.id = entry.id
+      if (isReviewMetadataScalar(entry.author)) safe.author = entry.author
+      if (isReviewMetadataScalar(entry.state)) safe.state = entry.state
+      if (isReviewMetadataScalar(entry.body)) safe.body = entry.body
+      if (isReviewMetadataScalar(entry.submittedAt)) safe.submittedAt = entry.submittedAt
+      if (isReviewMetadataScalar(entry.updatedAt)) safe.updatedAt = entry.updatedAt
+      if (isReviewMetadataScalar(entry.url)) safe.url = entry.url
+      if (isReviewMetadataScalar(entry.commitOid)) safe.commitOid = entry.commitOid
+      return safe
+    })
+  }
+  return projected
+}
+
+function selectionIdentity(worktree: string, number: number, repo: RepoIdentity | null, provider?: ReviewProvider): string {
+  return `${provider ?? ''}\u0000${worktree}\u0000${number}\u0000${repo?.host.toLowerCase() ?? ''}/${repo?.owner.toLowerCase() ?? ''}/${repo?.repo.toLowerCase() ?? ''}`
 }
 
 
@@ -345,7 +431,9 @@ function selectionFromState(env: ReviewsEnv, state: ReviewsStore, surface: Surfa
     generation = state.detail.generation
     review = state.detail.review
     const rawSource = (target as ReviewTargetWithRepo | null)?.prRepo
-    if (rawSource !== undefined && parseRepoIdentity(rawSource) === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+    if (rawSource !== undefined && repoIdentity(rawSource, review?.provider as ReviewProvider | undefined) === null) {
+      throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+    }
   } else {
     const entry = typeof checksWorktree === 'string' ? state.checksByWorktree[checksWorktree] : undefined
     worktree = entry?.worktree ?? null
@@ -357,23 +445,28 @@ function selectionFromState(env: ReviewsEnv, state: ReviewsStore, surface: Surfa
     throw env.invalid('no_target', `No pull request is selected on the ${surface} surface.`)
   }
   if (needsReview && review === null) throw env.invalid('no_review', `Pull request #${number} is not available on the ${surface} surface.`)
-  if (review !== null && review.number !== number) throw env.invalid('invalid_state', 'The selected pull request identity does not match its review data.')
-  let repo: RepoIdentity | null
+  if (review !== null && (review.number !== number || review.provider !== 'github' && review.provider !== 'gitlab')) {
+    throw env.invalid('invalid_state', 'The selected pull request identity does not match its review data.')
+  }
+  const provider = review?.provider as ReviewProvider | undefined
   const rawSource = surface === 'detail'
     ? (state.detail.target as ReviewTargetWithRepo | null)?.prRepo
     : review?.prRepo
-  if (rawSource !== undefined) {
-    repo = parseRepoIdentity(rawSource)
-    if (repo === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
-  } else {
-    repo = review === null ? null : repoFromReviewUrl(review.url, number)
-  }
-  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number)
-  if (repo !== null && urlRepo !== null && !sameRepo(repo, urlRepo)) {
+  const explicitRepo = rawSource === undefined ? null : repoIdentity(rawSource, provider)
+  if (rawSource !== undefined && explicitRepo === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number, provider)
+  if (review !== null && urlRepo === null) throw env.invalid('invalid_state', 'The selected review URL is invalid.')
+  const rawRepository = review?.repository
+  const repository = rawRepository === undefined ? null : repoIdentity(rawRepository, provider)
+  if (rawRepository !== undefined && repository === null) throw env.invalid('invalid_state', 'The normalized review repository is invalid.')
+  if (explicitRepo !== null && urlRepo !== null && !sameRepo(explicitRepo, urlRepo)
+    || repository !== null && urlRepo !== null && !sameRepo(repository, urlRepo)
+    || explicitRepo !== null && repository !== null && !sameRepo(explicitRepo, repository)) {
     throw env.invalid('source_mismatch', 'The selected pull request URL does not match its trusted repository source.')
   }
-  const identity = selectionIdentity(worktree, number, repo)
-  return { surface, worktree, number, generation, review, repo: repo ?? urlRepo, head: review?.headRefOid ?? null, identity }
+  const repo = explicitRepo ?? repository ?? urlRepo
+  const identity = selectionIdentity(worktree, number, repo, provider)
+  return { surface, worktree, number, generation, review, repo, head: review?.headRefOid ?? null, identity }
 }
 
 function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surface, needsReview: boolean): Selection {
@@ -385,11 +478,12 @@ function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surfa
     throw env.invalid('stale_target', 'The selected review surface changed before this action.')
   }
   if (params.prRepo !== undefined) {
-    const requestedRepo = parseRepoIdentity(params.prRepo)
+    const provider = selected.review?.provider as ReviewProvider | undefined
+    const requestedRepo = repoIdentity(params.prRepo, provider)
     if (requestedRepo === null || selected.repo !== null && !sameRepo(selected.repo, requestedRepo)) {
       throw env.invalid('source_mismatch', 'The requested repository source does not match the selected review.')
     }
-    selected = { ...selected, repo: requestedRepo, identity: selectionIdentity(selected.worktree, selected.number, requestedRepo) }
+    selected = { ...selected, repo: requestedRepo, identity: selectionIdentity(selected.worktree, selected.number, requestedRepo, selected.review?.provider as ReviewProvider | undefined) }
   }
   return selected
 }
@@ -397,21 +491,31 @@ function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surfa
 function snapshotFor(state: ReviewsStore, surface: Surface, worktree: string): SurfaceSnapshot {
   if (surface === 'detail') {
     const target = state.detail.target
+    const review = state.detail.review
+    const provider = review?.provider === 'github' || review?.provider === 'gitlab' ? review.provider : undefined
+    const explicitRepo = repoIdentity((target as ReviewTargetWithRepo | null)?.prRepo, provider)
+    const normalizedRepo = review?.repository === undefined ? null : repoIdentity(review.repository, provider)
+    const urlRepo = review ? repoFromReviewUrl(review.url, review.number, provider) : null
     return {
       worktree: target?.worktree ?? null,
       number: target?.number ?? null,
       generation: state.detail.generation,
-      review: state.detail.review,
-      repo: parseRepoIdentity((target as ReviewTargetWithRepo | null)?.prRepo) ?? (state.detail.review ? repoFromReviewUrl(state.detail.review.url, state.detail.review.number) : null),
+      review,
+      repo: explicitRepo ?? normalizedRepo ?? urlRepo,
     }
   }
   const entry = state.checksByWorktree[worktree]
+  const review = entry?.review ?? null
+  const provider = review?.provider === 'github' || review?.provider === 'gitlab' ? review.provider : undefined
+  const explicitRepo = repoIdentity(review?.prRepo, provider)
+  const normalizedRepo = review?.repository === undefined ? null : repoIdentity(review.repository, provider)
+  const urlRepo = review ? repoFromReviewUrl(review.url, review.number, provider) : null
   return {
     worktree: entry?.worktree ?? null,
-    number: entry?.review?.number ?? null,
+    number: review?.number ?? null,
     generation: entry?.generation ?? 0,
-    review: entry?.review ?? null,
-    repo: parseRepoIdentity(entry?.review?.prRepo) ?? (entry?.review ? repoFromReviewUrl(entry.review.url, entry.review.number) : null),
+    review,
+    repo: explicitRepo ?? normalizedRepo ?? urlRepo,
   }
 }
 
@@ -419,6 +523,7 @@ function ownerMatches(state: ReviewsStore, selection: Selection): boolean {
   const snapshot = snapshotFor(state, selection.surface, selection.worktree)
   return snapshot.worktree === selection.worktree && snapshot.number === selection.number && snapshot.generation === selection.generation
     && (selection.repo === null || snapshot.repo === null || sameRepo(selection.repo, snapshot.repo))
+    && (selection.review === null || snapshot.review?.provider === selection.review.provider)
 }
 
 function selectionMatches(state: ReviewsStore, selection: Selection): boolean {
@@ -427,13 +532,13 @@ function selectionMatches(state: ReviewsStore, selection: Selection): boolean {
   return selection.head === null || current === null || current.headRefOid.toLowerCase() === selection.head.toLowerCase()
 }
 
-function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void): boolean {
+function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void, scope?: 'shared'): boolean {
   let applied = false
   env.update((state) => {
     if (!ownerMatches(state, selection)) return
     change(state)
     applied = true
-  })
+  }, selection.surface === 'checks' && scope !== 'shared' ? selection.worktree : undefined)
   return applied
 }
 
@@ -447,6 +552,11 @@ function surfaceError(env: ReviewsEnv, selection: Selection, message: string | n
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
+function errorReason(error: unknown): string | null {
+  return isRecord(error) && isRecord(error.data) && typeof error.data.reason === 'string'
+    ? error.data.reason
+    : null
+}
 
 function positiveNumber(env: ReviewsEnv, value: unknown, label: string): number {
   if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value
@@ -456,6 +566,11 @@ function positiveNumber(env: ReviewsEnv, value: unknown, label: string): number 
 function requireMatchingNumber(env: ReviewsEnv, selection: Selection, value: unknown): void {
   if (positiveNumber(env, value, 'number') !== selection.number) {
     throw env.invalid('target_mismatch', 'The requested pull request does not match the selected review surface.')
+  }
+}
+function rejectUnsupportedGitLab(env: ReviewsEnv, selection: Selection): void {
+  if (selection.review?.provider === 'gitlab') {
+    throw env.invalid('unsupported_provider', 'This operation is unavailable for GitLab merge requests.')
   }
 }
 
@@ -570,6 +685,7 @@ function parseNumberResult(raw: unknown, number: number): raw is JsonRecord {
 
 
 export function reviewMethods(review: ReviewData): { allowed: string[]; defaultMethod: string | null; known: boolean } {
+  if (review.provider === 'gitlab') return { allowed: [], defaultMethod: null, known: true }
   if (review.mergeMetadataKnown === false || !isRecord(review.mergeMethods)) return { allowed: [], defaultMethod: null, known: false }
   const allowedValue = review.mergeMethods.allowed
   const defaultValue = review.mergeMethods.default
@@ -583,6 +699,7 @@ export function reviewMethods(review: ReviewData): { allowed: string[]; defaultM
 }
 
 export function directMergeAllowed(review: ReviewData): boolean {
+  if (review.provider === 'gitlab') return false
   if (review.state !== 'open' || review.mergeable === 'CONFLICTING'
     || review.mergeStateStatus === 'CONFLICTING' || review.mergeStateStatus === 'DIRTY'
     || review.mergeStateStatus === 'BEHIND' || review.mergeStateStatus === 'BLOCKED'
@@ -594,6 +711,7 @@ export function directMergeAllowed(review: ReviewData): boolean {
 }
 
 export function queueMergeAllowed(review: ReviewData): boolean {
+  if (review.provider === 'gitlab') return false
   const policy = reviewMethods(review)
   return review.state === 'open' && review.mergeQueueRequired === true
     && review.mergeable !== 'CONFLICTING' && review.mergeStateStatus !== 'CONFLICTING'
@@ -623,8 +741,16 @@ function includedStackEntries(env: ReviewsEnv, selection: Selection): ReviewStac
 }
 
 
-function parseReviewUpdate(raw: unknown, number: number, expectedState: 'open' | 'closed'): boolean {
-  return isRecord(raw) && raw.number === number && raw.updated === true && raw.state === expectedState
+function parseReviewUpdate(
+  raw: unknown,
+  number: number,
+  allowedStates: readonly ('open' | 'draft' | 'closed')[],
+  provider: ReviewProvider,
+): { state: 'open' | 'draft' | 'closed'; updated: boolean } | null {
+  if (!isRecord(raw) || raw.number !== number || typeof raw.updated !== 'boolean') return null
+  if (raw.state !== 'open' && raw.state !== 'draft' && raw.state !== 'closed') return null
+  if (!allowedStates.includes(raw.state) || (provider === 'github' && raw.updated !== true)) return null
+  return { state: raw.state, updated: raw.updated }
 }
 
 function withReviewChange(review: ReviewData, change: Partial<ReviewData>): ReviewData {
@@ -774,7 +900,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (typeof params.worktree !== 'string' || params.worktree.trim() === '') throw env.invalid('invalid_input', 'worktree must be a non-empty selector.')
       const requestedTab = params.tab === undefined ? 'conversation' : params.tab
       if (!tabs.includes(requestedTab as ReviewTab)) throw env.invalid('invalid_input', 'tab must be conversation, checks, or files.')
-      const repo = params.prRepo === undefined ? null : parseRepoIdentity(params.prRepo)
+      const repo = params.prRepo === undefined ? null : repoIdentity(params.prRepo)
       if (params.prRepo !== undefined && repo === null) throw env.invalid('invalid_input', 'prRepo must include a valid host, owner, and repository.')
       const worktree = await env.resolve({ worktree: params.worktree }, caller)
       const target = {
@@ -837,17 +963,81 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const loaded = { review: false, details: false, checks: false, comments: false, files: false }
       const errors: string[] = []
       const noData = () => ({ surface: selectedSurface, number: selected.number, ok: false, errors, loaded, fetchedAt: Date.now() })
-      const hostParams = hostingParams(selected)
+      let canonical: CanonicalRepository
+      if (selected.review?.provider === 'github' && selected.repo !== null) {
+        canonical = { provider: 'github', repository: selected.repo }
+      } else {
+        try {
+          canonical = await canonicalRepository(env, selected.worktree)
+        } catch (error) {
+          const message = errorMessage(error)
+          errors.push(message)
+          if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
+            surfaceError(env, selected, message)
+            applyIfOwner(env, selected, (state) => {
+              if (selectedSurface === 'detail') state.detail.loading = false
+              else checksOf(state, selected.worktree).loading = false
+            })
+          }
+          return noData()
+        }
+      }
+      if (reads.get(readKey) !== request || !ownerMatches(env.read(), selected)) return noData()
+      if (selected.review !== null && selected.review.provider !== canonical.provider
+        || canonical.provider === 'gitlab' && selected.repo !== null && !sameRepo(selected.repo, canonical.repository)) {
+        const message = 'The selected review source does not match this workspace repository.'
+        errors.push(message)
+        applyIfOwner(env, selected, (state) => {
+          if (selectedSurface === 'detail') {
+            state.detail.error = message
+            state.detail.loading = false
+          } else {
+            checksOf(state, selected.worktree).error = message
+            checksOf(state, selected.worktree).loading = false
+          }
+        })
+        throw env.invalid('source_mismatch', message)
+      }
+      const source = canonical.provider === 'github' && selected.repo !== null ? selected.repo : canonical.repository
+      const sourceSelection: Selection = {
+        ...selected,
+        repo: source,
+        identity: selectionIdentity(selected.worktree, selected.number, source, canonical.provider),
+      }
+      const hostParams: JsonRecord = { worktree: selected.worktree, number: selected.number, prRepo: source }
       let lookup: RepoLookupResult | null = null
       try {
         const raw = await env.call('quirky.hosting/review', hostParams)
+        if (isRecord(raw) && raw.kind === 'found' && isRecord(raw.review)) {
+          const rawReview = raw.review
+          if (rawReview.number !== selected.number) {
+            throw env.invalid('invalid_upstream', 'The hosting API returned a different numbered review.')
+          }
+          if (rawReview.provider !== 'github' && rawReview.provider !== 'gitlab') {
+            throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request provider.')
+          }
+          const urlRepo = repoFromReviewUrl(rawReview.url, selected.number, rawReview.provider)
+          if (urlRepo === null) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request URL.')
+          if (rawReview.provider !== canonical.provider || !sameRepo(urlRepo, source)) {
+            throw env.invalid('source_mismatch', 'The pull request URL did not match the selected trusted repository.')
+          }
+          for (const candidate of [rawReview.repository, rawReview.prRepo]) {
+            if (candidate === undefined) continue
+            const reportedRepo = repoIdentity(candidate, rawReview.provider)
+            if (reportedRepo === null || !sameRepo(reportedRepo, source)) {
+              throw env.invalid('source_mismatch', 'The hosting API review repository did not match its canonical URL identity.')
+            }
+          }
+        }
         lookup = parseReviewLookup(raw)
         if (lookup === null || lookup.kind === 'found' && lookup.review.number !== selected.number) {
           throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request response.')
         }
       } catch (error) {
         const message = errorMessage(error)
-        errors.push(message)
+        const reason = errorReason(error)
+        const structuralRefusal = reason === 'source_mismatch'
+          || reason === 'invalid_upstream' && message === 'The hosting API returned a different numbered review.'
         if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
           applyIfOwner(env, selected, (state) => {
             if (selectedSurface === 'detail') {
@@ -859,6 +1049,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
             }
           })
         }
+        if (structuralRefusal) throw error
+        errors.push(message)
         return noData()
       }
       if (!lookup || lookup.kind !== 'found') {
@@ -882,30 +1074,18 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       loaded.review = true
       const review = lookup.review
-      const urlRepo = repoFromReviewUrl(review.url, review.number)
-      if (urlRepo === null || selected.repo !== null && !sameRepo(selected.repo, urlRepo)) {
-        const message = 'The pull request URL did not match the selected trusted repository.'
-        errors.push(message)
-        surfaceError(env, selected, message)
-        return noData()
-      }
-      const source = selected.repo ?? urlRepo
-      const sourceSelection: Selection = {
-        ...selected,
-        repo: source,
-        identity: selectionIdentity(selected.worktree, selected.number, source),
-      }
-      const nextReview = { ...review, prRepo: source } as ReviewData
-      const selectedArgs = { worktree: selected.worktree, number: selected.number, prRepo: source }
+      const nextReview = reviewForSurface(env, review, source)
+      const selectedArgs = { ...hostParams, noCache: true }
       const detailArgs = { worktree: selected.worktree, kind: 'pullRequest', reference: review.url }
-      const stackRequested = review.stack !== null && review.stack !== undefined
+      const isGitLab = review.provider === 'gitlab'
+      const stackRequested = !isGitLab && review.stack !== null && review.stack !== undefined
       const results = await Promise.allSettled([
-        env.call('quirky.hosting/workItemDetails', detailArgs),
-        env.call('quirky.hosting/checks', { ...selectedArgs, noCache: true }),
-        env.call('quirky.hosting/comments', { ...selectedArgs, noCache: true }),
-        env.call('quirky.hosting/files', { ...selectedArgs, noCache: true }),
+        isGitLab ? Promise.resolve(null) : env.call('quirky.hosting/workItemDetails', detailArgs),
+        env.call('quirky.hosting/checks', selectedArgs),
+        env.call('quirky.hosting/comments', selectedArgs),
+        isGitLab ? Promise.resolve(null) : env.call('quirky.hosting/files', selectedArgs),
         stackRequested
-          ? env.call('quirky.hosting/reviewStack', { ...selectedArgs, noCache: true })
+          ? env.call('quirky.hosting/reviewStack', selectedArgs)
           : Promise.resolve(null),
       ])
       const detailsResult = results[0]
@@ -917,11 +1097,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       let checks: JsonRecord | null = null
       let comments: JsonRecord | null = null
       let files: JsonRecord | null = null
-      if (detailsResult?.status === 'fulfilled' && isRecord(detailsResult.value) && isRecord(detailsResult.value.item)
+      if (!isGitLab && detailsResult?.status === 'fulfilled' && isRecord(detailsResult.value) && isRecord(detailsResult.value.item)
         && detailsResult.value.item.number === selected.number) {
         details = detailsResult.value
         loaded.details = true
-      } else {
+      } else if (!isGitLab) {
         errors.push(detailsResult?.status === 'rejected' ? errorMessage(detailsResult.reason) : 'The hosting API returned invalid pull request details.')
       }
       let stack: ReviewStackResult | null = null
@@ -935,9 +1115,14 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (stack !== null) details = { ...(details ?? {}), reviewStack: stack }
       }
       const priorReview = surfaceReview(env.read(), selected)
+      const previousRepo = priorReview === null ? null : repoIdentity(priorReview.prRepo, priorReview.provider as ReviewProvider)
+      const identityChanged = priorReview?.number !== review.number
+        || priorReview?.provider !== review.provider
+        || previousRepo === null || !sameRepo(previousRepo, source)
       const headChanged = priorReview !== null && priorReview.headRefOid.toLowerCase() !== review.headRefOid.toLowerCase()
+      const resetReviewData = identityChanged || headChanged
       const overlay = getOverlay(sourceSelection)
-      if (headChanged) {
+      if (resetReviewData) {
         for (const [key, comment] of overlay) if (comment?.kind === 'review_comment') overlay.delete(key)
       }
       const parsedChecks = checksResult?.status === 'fulfilled' ? parseChecksResult(checksResult.value, selected.number) : null
@@ -950,9 +1135,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           errors.push('Check data belongs to a different pull request head; refresh before using it.')
         }
       } else {
-        errors.push(checksResult?.status === 'rejected' ? errorMessage(checksResult.reason) : 'The hosting API returned invalid check data.')
+        errors.push(checksResult?.status === 'rejected'
+          ? isGitLab && errorReason(checksResult.reason) === 'unsupported_provider'
+            ? 'Checks are unavailable for GitLab merge requests.'
+            : errorMessage(checksResult.reason)
+          : 'The hosting API returned invalid check data.')
       }
-      const parsedComments = commentsResult?.status === 'fulfilled' ? parseCommentsResult(commentsResult.value, selected.number) : null
+      const parsedComments = commentsResult?.status === 'fulfilled'
+        ? parseCommentsResult(commentsResult.value, selected.number, review.provider as ReviewProvider)
+        : null
       if (parsedComments !== null) {
         const rawComments = parsedComments.comments
         comments = { ...parsedComments, comments: mergeOverlay(rawComments, overlay, true) }
@@ -960,10 +1151,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       } else {
         errors.push(commentsResult?.status === 'rejected' ? errorMessage(commentsResult.reason) : 'The hosting API returned invalid comment data.')
       }
-      const parsedFiles = filesResult?.status === 'fulfilled' ? parseFilesResult(filesResult.value, selected.number) : null
+      const parsedFiles = !isGitLab && filesResult?.status === 'fulfilled' ? parseFilesResult(filesResult.value, selected.number) : null
       if (parsedFiles !== null) {
         files = parsedFiles
         loaded.files = true
+      } else if (isGitLab) {
+        errors.push('Changed files are unavailable for GitLab merge requests.')
       } else {
         errors.push(filesResult?.status === 'rejected' ? errorMessage(filesResult.reason) : 'The hosting API returned invalid changed-file data.')
       }
@@ -977,28 +1170,33 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           if (selectedSurface === 'detail') {
             const target = state.detail.target as ReviewTargetWithRepo | null
             if (target !== null) state.detail.target = { ...target, prRepo: source }
-            state.detail.details = details ?? state.detail.details
-            state.detail.checks = checks ?? (headChanged ? null : state.detail.checks)
-            state.detail.comments = comments ?? (headChanged ? withoutInlineComments(state.detail.comments, selected.number) : state.detail.comments)
-            state.detail.files = files ?? (headChanged ? null : state.detail.files)
+            state.detail.details = details ?? (resetReviewData ? null : state.detail.details)
+            state.detail.checks = checks ?? (resetReviewData ? null : state.detail.checks)
+            state.detail.comments = comments ?? (resetReviewData ? null : state.detail.comments)
+            state.detail.files = files ?? (resetReviewData ? null : state.detail.files)
             state.detail.error = errorsText
             state.detail.loading = false
             state.detail.fetchedAt = now
-            if (headChanged) {
+            if (resetReviewData) {
               state.detail.selectedFile = null
               state.detail.expandedChecks = []
+              state.detail.commentDraft = ''
+              state.detail.bodyDraft = null
+              state.detail.pending = []
               state.detail.queuedComments = []
               state.detail.collapsedFiles = []
             }
           } else {
-            checksOf(state, selected.worktree).checks = checks ?? (headChanged ? null : checksOf(state, selected.worktree).checks)
-            checksOf(state, selected.worktree).comments = comments ?? (headChanged ? withoutInlineComments(checksOf(state, selected.worktree).comments, selected.number) : checksOf(state, selected.worktree).comments)
+            checksOf(state, selected.worktree).checks = checks ?? (resetReviewData ? null : checksOf(state, selected.worktree).checks)
+            checksOf(state, selected.worktree).comments = comments ?? (resetReviewData ? null : checksOf(state, selected.worktree).comments)
             checksOf(state, selected.worktree).error = errorsText
             checksOf(state, selected.worktree).loading = false
             checksOf(state, selected.worktree).fetchedAt = now
-            if (headChanged) {
+            if (resetReviewData) {
               checksOf(state, selected.worktree).expandedChecks = []
               checksOf(state, selected.worktree).queuedComments = []
+              checksOf(state, selected.worktree).commentDraft = ''
+              checksOf(state, selected.worktree).titleDraft = null
             }
           }
         })
@@ -1031,7 +1229,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.audience = audience
         else state.audience = audience
-      })
+      }, 'shared')
       return { surface: selectedSurface, audience }
     },
 
@@ -1043,7 +1241,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.grouping = grouping
         else state.grouping = grouping
-      })
+      }, 'shared')
       return { surface: selectedSurface, grouping }
     },
 
@@ -1163,7 +1361,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.checksCollapsed = collapsed
         else state.checksCollapsed = collapsed
-      })
+      }, 'shared')
       return { surface: selectedSurface, collapsed }
     },
 
@@ -1253,8 +1451,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         applyIfOwner(env, selected, (state) => {
           const existing = selectedSurface === 'detail' ? state.detail.checks : checksOf(state, selected.worktree).checks
-          const detailsById = isRecord(existing?.detailsById) ? { ...existing.detailsById } : {}
-          detailsById[String(checkRunId)] = details
+          const detailsById = {
+            ...(isRecord(existing?.detailsById) ? existing.detailsById : {}),
+            ...Object.fromEntries([[String(checkRunId), details]]),
+          }
           const next = { ...(existing ?? { number: selected.number, checks: [] }), detailsById }
           assignChecks(state, selected, next)
         })
@@ -1408,6 +1608,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const commentId = positiveNumber(env, params.commentId, 'commentId')
       const comments = commentsFromState(env, selected)
       const original = comments[commentIndex(comments, commentId)]
@@ -1475,7 +1676,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       try {
         const raw = await env.call('quirky.hosting/resolveThread', { ...hostingParams(selected), threadId: params.threadId, action: params.resolved === true ? 'resolve' : 'unresolve' })
         const expectedAction = params.resolved === true ? 'resolve' : 'unresolve'
-        if (!isRecord(raw) || raw.number !== selected.number || raw.threadId !== params.threadId || raw.action !== expectedAction || raw.resolved !== params.resolved) {
+        const validNumber = isRecord(raw)
+          && (raw.number === selected.number || selected.review?.provider === 'gitlab' && raw.number === undefined)
+        if (!isRecord(raw) || !validNumber || raw.threadId !== params.threadId || raw.action !== expectedAction || raw.resolved !== params.resolved) {
           throw env.invalid('invalid_upstream', 'The hosting API did not confirm the review thread state.')
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the thread update was confirmed.')
@@ -1508,6 +1711,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (typeof params.subjectId !== 'string' || params.subjectId.trim() === '' || params.subjectId.length > 1024
         || !reactions.includes(params.content as typeof reactions[number]) || typeof params.add !== 'boolean') {
         throw env.invalid('invalid_input', 'Reaction target, content, and action are required.')
@@ -1601,6 +1805,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const action = params.action
       if (action !== 'add' && action !== 'remove' || !Array.isArray(params.logins) || params.logins.length < 1 || params.logins.length > 15
         || !params.logins.every((login) => typeof login === 'string' && login.trim().length > 0 && login.trim().length <= 39)) {
@@ -1633,6 +1838,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const action = params.action
       if (action !== 'add' && action !== 'remove' && action !== 'set' || !Array.isArray(params.logins) || params.logins.length > 100
         || !params.logins.every((login) => typeof login === 'string' && login.trim().length > 0 && login.trim().length <= 256)) {
@@ -1679,6 +1885,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       requireHead(env, selected, params.expectedHead)
       const method = params.method
       const action = params.action
@@ -1703,6 +1910,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const method = params.method
       const action = params.action
@@ -1747,6 +1955,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       if (typeof params.enabled !== 'boolean') throw env.invalid('invalid_input', 'enabled must be a boolean.')
       const method = params.method === undefined ? undefined : params.method
@@ -1786,6 +1995,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (typeof params.path !== 'string' || params.path.trim() === '' || params.path.length > 1024 || typeof params.viewed !== 'boolean') {
         throw env.invalid('invalid_input', 'path and viewed are required for a changed-file update.')
       }
@@ -1826,6 +2036,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (selectedSurface !== 'detail') throw env.invalid('unsupported_surface', 'Inline review comments are available only on the pull request detail page.')
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const path = params.path
@@ -1905,16 +2116,20 @@ async function updateReviewState(
   })
   try {
     const raw = await env.call('quirky.hosting/updateReview', { ...hostingParams(selected), action })
-    const expected = action === 'close' ? 'closed' : 'open'
-    if (!parseReviewUpdate(raw, selected.number, expected)) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
+    const provider = selected.review!.provider as ReviewProvider
+    const allowedStates = action === 'close' ? ['closed'] as const
+      : action === 'reopen' && provider === 'gitlab' ? ['open', 'draft'] as const
+      : ['open'] as const
+    const confirmed = parseReviewUpdate(raw, selected.number, allowedStates, provider)
+    if (confirmed === null) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
     if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the state update was confirmed.')
     applyIfOwner(env, selected, (state) => {
       const current = surfaceReview(state, selected)
-      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: expected }))
+      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: confirmed.state }))
       if (selectedSurface === 'detail') state.detail.error = null
       else checksOf(state, selected.worktree).error = null
     })
-    return { number: selected.number, state: expected, updated: true }
+    return { number: selected.number, ...confirmed }
   } catch (error) {
     if (action !== 'ready' && mutationCounters.get(ticket.key) === ticket.sequence) {
       applyIfOwner(env, selected, (state) => {

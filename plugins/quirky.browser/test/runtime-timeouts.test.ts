@@ -7,7 +7,7 @@ import { CdpTimeoutError } from '../src/runtime/cdp'
 import { BrowserRuntime } from '../src/runtime/driver'
 import { BrowserFault, fault } from '../src/runtime/errors'
 
-type FakeEpoch = { id: string; profileId: string; invalid: boolean; stopping: boolean; cdp: { send(method: string): Promise<unknown>; close(): void }; helper: { asyncClose(): Promise<void>; socketDir: string; socketAliasRoot: string }; chrome: { asyncClose(): Promise<void>; profileRoot: string }; pages: Map<string, unknown> }
+type FakeEpoch = { id: string; profileId: string; invalid: boolean; stopping: boolean; cdp: { send(method: string): Promise<unknown>; close(): void }; helper: { asyncClose(): Promise<void>; socketDir: string; socketAliasRoot: string }; chrome: { child: { exited: Promise<unknown> }; asyncClose(): Promise<void>; profileRoot: string }; pages: Map<string, unknown> }
 
 function setup(probe: () => Promise<unknown>) {
   const root = mkdtempSync(join(tmpdir(), 'browser-timeouts-'))
@@ -18,7 +18,7 @@ function setup(probe: () => Promise<unknown>) {
     id: 'epoch-1', profileId, invalid: false, stopping: false, pages: new Map(),
     cdp: { send: async (method) => method === 'Browser.getVersion' ? await probe() : {}, close: () => {} },
     helper: { asyncClose: async () => {}, socketDir: join(root, 'sock'), socketAliasRoot: join(root, 'alias') },
-    chrome: { asyncClose: async () => {}, profileRoot: join(root, 'chrome') }
+    chrome: { child: { exited: Promise.resolve(0) }, asyncClose: async () => {}, profileRoot: join(root, 'chrome') }
   }
   Reflect.set(Reflect.get(runtime, 'profile').call(runtime, profileId), 'epoch', epoch)
   return { runtime, profileId, epoch, cleanup: () => rmSync(root, { recursive: true, force: true }) }
@@ -58,5 +58,44 @@ test('a closed websocket still invalidates the epoch', async () => {
     const failure = await t.runtime.withProfileLock(t.profileId, async () => { throw new Error('CDP websocket closed') }).catch((error: unknown) => error)
     expect((failure as BrowserFault).reason).toBe('browser_tab_changed')
     expect(t.epoch.invalid).toBe(true)
+  } finally { t.cleanup() }
+})
+
+test('graceful shutdown lets Chrome finish flushing before terminating owned processes', async () => {
+  const t = setup(async () => ({}))
+  const requested = Promise.withResolvers<void>()
+  const exited = Promise.withResolvers<number>()
+  const events: string[] = []
+  t.epoch.chrome.child.exited = exited.promise
+  t.epoch.cdp.send = async (method) => {
+    if (method === 'Browser.close') { events.push('close-requested'); requested.resolve() }
+    return {}
+  }
+  t.epoch.cdp.close = () => { events.push('socket-closed') }
+  t.epoch.chrome.asyncClose = async () => { events.push('process-stopped') }
+  const stopping = t.runtime.stopAll()
+  try {
+    await Promise.race([requested.promise, stopping])
+    expect(events).toEqual(['close-requested'])
+    exited.resolve(0)
+    await stopping
+    expect(events).toEqual(['close-requested', 'socket-closed', 'process-stopped'])
+  } finally {
+    exited.resolve(0)
+    await stopping
+    t.cleanup()
+  }
+})
+
+test('invalidated Chrome skips graceful shutdown and still releases owned processes', async () => {
+  const t = setup(async () => ({}))
+  const events: string[] = []
+  t.epoch.invalid = true
+  t.epoch.cdp.send = async (method) => { events.push(method); return {} }
+  t.epoch.cdp.close = () => { events.push('socket-closed') }
+  t.epoch.chrome.asyncClose = async () => { events.push('process-stopped') }
+  try {
+    await t.runtime.stopAll()
+    expect(events).toEqual(['socket-closed', 'process-stopped'])
   } finally { t.cleanup() }
 })

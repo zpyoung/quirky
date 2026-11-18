@@ -1,0 +1,628 @@
+import { afterEach, expect, test } from 'bun:test'
+import { Buffer } from 'node:buffer'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync, renameSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { PluginContext, RunOptions } from '@quirky/protocol'
+import type { ObjectivePayload } from '../src/contract'
+import type { ObjectiveJournalEntry } from '../src/decide'
+import type { PlannerReport } from '../src/plan'
+import type { ObjectiveStore, Revision, RevisionRepair } from '../src/store'
+import { captureContentIdentity, type ObjectiveRuntime } from '../src/checks'
+import { commitLocalBranch, readLocalGitHead, recordFilesOnDisk } from '../src/landing'
+
+const cleanup: (() => void)[] = []
+afterEach(() => { for (const close of cleanup.splice(0).reverse()) close() })
+
+type CheckRow = {
+  attemptId: string; watcherId: string; revision: number; kind: 'criterion' | 'gate'; targetKey: string
+  contentIdentity: string; command: string; status: 'passed' | 'failed' | 'stale'; exitCode: number | null
+  timedOut: boolean; stdoutTail: string; stderrTail: string; checkedAtMs: number
+}
+type VerdictRow = {
+  attemptId: string; watcherId: string; dispatchId: string; revision: number; role: 'reviewer' | 'integrator'
+  contentIdentity: string; verdict: 'approve' | 'block'; criteriaResults: unknown[]; checksRun: unknown[]
+  summary: string; digest: string; acceptedAtMs: number
+}
+type LandingRow = {
+  watcherId: string; rung: 'files-on-disk' | 'committed-local-branch'; contentIdentity: string
+  attemptId: string; payload: Record<string, unknown>; recordedAtMs: number
+}
+type Options = { rewriteCommitMessage?: boolean }
+
+function rig(options: Options = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'objective-landing-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'objective-landing-data-'))
+  cleanup.push(() => rmSync(root, { recursive: true, force: true }))
+  cleanup.push(() => rmSync(dataDir, { recursive: true, force: true }))
+  const calls: { argv: string[]; options?: RunOptions }[] = []
+  const checkRows: CheckRow[] = []
+  const verdictRows: VerdictRow[] = []
+  const repairs: RevisionRepair[] = []
+  const journal: ObjectiveJournalEntry[] = []
+  const landingRows: LandingRow[] = []
+  const task = {
+    taskKey: 'implement', title: 'Implement objective', spec: 'Implement the objective.', deps: [],
+    criteria: [{ body: 'The implementation passes its acceptance check.', shellCheckable: true, checkCommand: 'test -f src/main.ts' }],
+    territory: ['src/**']
+  }
+  const plan: PlannerReport = { plan: { tasks: [task] }, assumptions: [] }
+  const payload: ObjectivePayload = {
+    objectiveText: 'Implement the objective', tier: 'full', landingBar: 'committed-local-branch', lanesEnabled: true,
+    maxConcurrency: 1, writeTerritory: ['src/**'], roleAgents: {},
+    gates: [{ name: 'ready', command: 'test -f src/main.ts', timeoutSeconds: 45 }], worktree: 'id:fixture'
+  }
+  const enrollment = { watcherId: 'watcher-landing', workspacePath: root, kindPayload: payload }
+  let currentRevision: Revision | null = {
+    watcherId: enrollment.watcherId, number: 1, plan, digest: 'plan-digest',
+    sourceAttemptId: 'planner-attempt', approvedAtMs: 1
+  }
+  const issuedRows: {
+    attemptId: string; watcherId: string; role: 'reviewer' | 'integrator'; revision: number; contentIdentity: string | null
+  }[] = []
+  const store = {
+    revision(watcherId: string) { return watcherId === enrollment.watcherId ? currentRevision : null },
+    issued(watcherId: string) { return issuedRows.filter(row => row.watcherId === watcherId) },
+    checks(watcherId: string) { return checkRows.filter(row => row.watcherId === watcherId) },
+    verdicts(watcherId: string) { return verdictRows.filter(row => row.watcherId === watcherId) },
+    repairs(watcherId: string) { return repairs.filter(row => row.watcherId === watcherId) },
+    landings(watcherId: string) { return landingRows.filter(row => row.watcherId === watcherId) },
+    recordLanding(row: LandingRow) {
+      const existing = landingRows.find(value => value.watcherId === row.watcherId && value.rung === row.rung && value.contentIdentity === row.contentIdentity)
+      if (!existing) landingRows.push(row)
+    }
+  } as unknown as ObjectiveStore
+  const process = {
+    async run(argv: readonly string[], runOptions?: RunOptions) {
+      calls.push({ argv: [...argv], options: runOptions })
+      const actualArgv = [...argv]
+      if (options.rewriteCommitMessage && actualArgv[0] === 'git' && actualArgv[1] === 'commit') {
+        const messageIndex = actualArgv.indexOf('-m')
+        if (messageIndex >= 0) actualArgv[messageIndex + 1] = 'unexpected commit message'
+      }
+      const result = Bun.spawnSync(actualArgv, {
+        cwd: runOptions?.cwd,
+        env: {
+          ...globalThis.process.env, ...(runOptions?.env ?? {}),
+          GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1'
+        },
+        stdin: runOptions?.input === undefined ? 'ignore' : Buffer.from(runOptions.input),
+        stdout: 'pipe', stderr: 'pipe'
+      })
+      const stdout = result.stdout ?? Buffer.alloc(0)
+      const stderr = result.stderr ?? Buffer.alloc(0)
+      return {
+        stdout, stdoutText: stdout.toString(), stderr: stderr.toString(),
+        exitCode: result.exitCode, signal: result.signalCode ?? null, durationMs: 0
+      }
+    }
+  }
+  const context = { dataDir, process } as unknown as PluginContext
+  const runtime: ObjectiveRuntime = {
+    context, store, enrollment,
+    captureContentIdentity: () => captureContentIdentity(context, root, dataDir, enrollment.watcherId)
+  }
+  async function runChecked(argv: string[], runOptions?: RunOptions): Promise<string> {
+    const result = await context.process.run(argv, runOptions)
+    if (result.exitCode !== 0 || result.signal !== null || result.stopped || result.spawnError) {
+      throw new Error(`${argv.join(' ')} failed: ${result.stderr}`)
+    }
+    return result.stdoutText
+  }
+  async function initGit(): Promise<void> {
+    await runChecked(['git', 'init', '-q'], { cwd: root })
+    await runChecked(['git', 'config', 'user.name', 'Fixture'], { cwd: root })
+    await runChecked(['git', 'config', 'user.email', 'fixture@example.test'], { cwd: root })
+    await runChecked(['git', 'config', 'commit.gpgsign', 'false'], { cwd: root })
+    mkdirSync(join(root, 'src'), { recursive: true })
+    writeFileSync(join(root, 'src', 'main.ts'), 'export const value = 1\n')
+    writeFileSync(join(root, 'outside.txt'), 'base outside\n')
+    await runChecked(['git', 'add', '-A'], { cwd: root })
+    await runChecked(['git', 'commit', '-m', 'baseline'], { cwd: root })
+  }
+  function appendAttempt(
+    attemptId: string,
+    action: NonNullable<ObjectiveJournalEntry['action']>,
+    dispatchId: string,
+    state: 'running' | 'settled' = 'settled'
+  ): void {
+    journal.push({
+      seq: journal.length + 1, kind: 'attempt', attemptId, action, dispatchId, state,
+      ...(state === 'settled' ? { effect: 'landed' as const } : {})
+    })
+  }
+  function approveEvidence(
+    contentIdentity: string,
+    options: { suffix?: string; checkedAtMs?: number; acceptedAtMs?: number; repairOrdinal?: number } = {}
+  ): void {
+    const suffix = options.suffix ?? ''
+    const checkedAtMs = options.checkedAtMs ?? 2
+    const acceptedAtMs = options.acceptedAtMs ?? 3
+    const marker = options.repairOrdinal === undefined ? '' : `:r${options.repairOrdinal}`
+    const criterionAttemptId = `criterion-pass${suffix}`
+    const gateAttemptId = `gate-pass${suffix}`
+    const criterionCommand = task.criteria[0]!.checkCommand!
+    const gateCommand = payload.gates[0]!.command
+    checkRows.push({
+      attemptId: criterionAttemptId, watcherId: enrollment.watcherId, revision: 1, kind: 'criterion',
+      targetKey: 'implement:0', contentIdentity, command: criterionCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs
+    })
+    appendAttempt(criterionAttemptId, {
+      kind: 'run-check', revision: 1, taskKey: 'implement', criterionIndex: 0, command: criterionCommand,
+      contentIdentity, evidenceKey: `check:1:implement:0:${contentIdentity}${marker}`
+    }, `${criterionAttemptId}-dispatch`)
+    checkRows.push({
+      attemptId: gateAttemptId, watcherId: enrollment.watcherId, revision: 1, kind: 'gate', targetKey: 'ready',
+      contentIdentity, command: gateCommand, status: 'passed', exitCode: 0, timedOut: false,
+      stdoutTail: '', stderrTail: '', checkedAtMs
+    })
+    appendAttempt(gateAttemptId, {
+      kind: 'run-gate', revision: 1, gateName: 'ready', command: gateCommand, contentIdentity,
+      evidenceKey: `gate:1:ready:${contentIdentity}${marker}`
+    }, `${gateAttemptId}-dispatch`)
+    const reviewerAttemptId = `reviewer-attempt${suffix}`
+    const integratorAttemptId = `integrator-attempt${suffix}`
+    issuedRows.push(
+      { attemptId: reviewerAttemptId, watcherId: enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity },
+      { attemptId: integratorAttemptId, watcherId: enrollment.watcherId, role: 'integrator', revision: 1, contentIdentity }
+    )
+    const reviewer = { taskKey: 'implement', criterionIndex: 0, result: 'pass', note: 'Verified.' }
+    const reviewerDispatchId = `reviewer-dispatch${suffix}`
+    const integratorDispatchId = `integrator-dispatch${suffix}`
+    verdictRows.push({
+      attemptId: reviewerAttemptId, watcherId: enrollment.watcherId, dispatchId: reviewerDispatchId,
+      revision: 1, role: 'reviewer', contentIdentity, verdict: 'approve', criteriaResults: [reviewer],
+      checksRun: [], summary: 'Approved.', digest: `reviewer-digest${suffix}`, acceptedAtMs
+    })
+    appendAttempt(reviewerAttemptId, {
+      kind: 'dispatch-reviewer', revision: 1, contentIdentity,
+      evidenceKey: `review:1:reviewer:${contentIdentity}:1`
+    }, reviewerDispatchId)
+    verdictRows.push({
+      attemptId: integratorAttemptId, watcherId: enrollment.watcherId, dispatchId: integratorDispatchId,
+      revision: 1, role: 'integrator', contentIdentity, verdict: 'approve', criteriaResults: [reviewer],
+      checksRun: [{ command: gateCommand, exitCode: 0 }], summary: 'Integrated.',
+      digest: `integrator-digest${suffix}`, acceptedAtMs: acceptedAtMs + 1
+    })
+    appendAttempt(integratorAttemptId, {
+      kind: 'dispatch-integrator', revision: 1, contentIdentity,
+      evidenceKey: `review:1:integrator:${contentIdentity}:1`
+    }, integratorDispatchId)
+  }
+  function addRepair(ordinal: number, appliedAtMs: number): void {
+    repairs.push({
+      watcherId: enrollment.watcherId, revision: 1, ordinal, attemptId: `repair-${ordinal}`,
+      beforeDigest: 'before-repair', afterDigest: 'after-repair', touchedTaskKeys: ['verification'],
+      patch: { repair: { upsertTasks: [{
+        taskKey: 'verification', title: 'Verify objective', spec: 'Run the acceptance check.',
+        deps: ['implement'], territory: ['src/**'],
+        criteria: [{ body: 'The source file exists.', shellCheckable: true, checkCommand: 'test -f src/main.ts' }]
+      }], dropTaskKeys: [] }, assumptions: [] }, appliedAtMs
+    })
+  }
+  return {
+    root, dataDir, calls, checkRows, verdictRows, issuedRows, landingRows, repairs, journal, task, plan, payload, enrollment,
+    store, context, runtime, runChecked, initGit, approveEvidence, addRepair, appendAttempt
+  }
+}
+
+function actionFor(contentIdentity: string) {
+  return { revision: 1, contentIdentity }
+}
+
+type LandingRig = { landingRows: LandingRow[]; enrollment: { watcherId: string } }
+function landingFor(r: LandingRig, rung: LandingRow['rung'], contentIdentity: string): void {
+  r.landingRows.push({
+    watcherId: r.enrollment.watcherId, rung, contentIdentity, attemptId: `landing-${rung}`,
+    payload: { revision: 1 }, recordedAtMs: 10
+  })
+}
+
+type FolderLandingFixture = {
+  context: PluginContext
+  root: string
+  dataDir: string
+  enrollment: { watcherId: string }
+  runtime: ObjectiveRuntime
+}
+
+function folderRuntime(r: FolderLandingFixture): ObjectiveRuntime {
+  return {
+    ...r.runtime,
+    workspaceKind: 'folder',
+    captureContentIdentity: () => captureContentIdentity(
+      r.context, r.root, r.dataDir, r.enrollment.watcherId, 'folder'
+    )
+  }
+}
+
+function addStandardChecks(r: LandingFolderView, contentIdentity: string): void {
+  const criterionCommand = r.task.criteria[0]!.checkCommand!
+  const gateCommand = r.payload.gates[0]!.command
+  const criterionAttemptId = 'folder-criterion-pass'
+  const gateAttemptId = 'folder-gate-pass'
+  r.checkRows.push(
+    {
+      attemptId: criterionAttemptId, watcherId: r.enrollment.watcherId, revision: 1, kind: 'criterion',
+      targetKey: 'implement:0', contentIdentity, command: criterionCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs: 2
+    },
+    {
+      attemptId: gateAttemptId, watcherId: r.enrollment.watcherId, revision: 1, kind: 'gate',
+      targetKey: 'ready', contentIdentity, command: gateCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs: 2
+    }
+  )
+  r.appendAttempt(criterionAttemptId, {
+    kind: 'run-check', revision: 1, taskKey: 'implement', criterionIndex: 0, command: criterionCommand,
+    contentIdentity, evidenceKey: `check:1:implement:0:${contentIdentity}`
+  }, `${criterionAttemptId}-dispatch`)
+  r.appendAttempt(gateAttemptId, {
+    kind: 'run-gate', revision: 1, gateName: 'ready', command: gateCommand, contentIdentity,
+    evidenceKey: `gate:1:ready:${contentIdentity}`
+  }, `${gateAttemptId}-dispatch`)
+}
+
+function addStandardReviewer(r: LandingFolderView, contentIdentity: string): void {
+  const attemptId = 'folder-reviewer-approval'
+  const dispatchId = `${attemptId}-dispatch`
+  r.issuedRows.push({
+    attemptId, watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
+  r.verdictRows.push({
+    attemptId, watcherId: r.enrollment.watcherId, dispatchId, revision: 1, role: 'reviewer',
+    contentIdentity, verdict: 'approve',
+    criteriaResults: [{ taskKey: 'implement', criterionIndex: 0, result: 'pass', note: 'Verified.' }],
+    checksRun: [], summary: 'Approved.', digest: 'folder-reviewer-digest', acceptedAtMs: 3
+  })
+  r.appendAttempt(attemptId, {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity,
+    evidenceKey: `review:1:reviewer:${contentIdentity}:1`
+  }, dispatchId)
+}
+
+type LandingFolderView = {
+  root: string
+  payload: ObjectivePayload
+  enrollment: { watcherId: string }
+  task: { criteria: Array<{ checkCommand?: string }> }
+  checkRows: CheckRow[]
+  verdictRows: VerdictRow[]
+  issuedRows: Array<{
+    attemptId: string; watcherId: string; role: 'reviewer' | 'integrator'; revision: number; contentIdentity: string | null
+  }>
+  appendAttempt(
+    attemptId: string,
+    action: NonNullable<ObjectiveJournalEntry['action']>,
+    dispatchId: string,
+    state?: 'running' | 'settled'
+  ): void
+}
+
+test('records files-on-disk landing only when content identity matches and required checks and verdicts pass', async () => {
+  const r = rig()
+  await r.initGit()
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  const action = actionFor(contentIdentity)
+
+  const missingEvidence = await recordFilesOnDisk(r.runtime, action, 'landing-attempt', r.journal)
+  expect(missingEvidence.effect).toBe('not-landed')
+  expect(r.landingRows).toHaveLength(0)
+
+  r.approveEvidence(contentIdentity)
+  const integratorIssue = r.issuedRows.find(row => row.role === 'integrator')!
+  integratorIssue.contentIdentity = 'objective-tree:stale-dispatch'
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-dispatch-tree', r.journal)).effect).toBe('not-landed')
+  integratorIssue.contentIdentity = contentIdentity
+  const reviewerApproval = r.journal.find(entry => entry.attemptId === 'reviewer-attempt')!
+  const reviewerDispatchId = reviewerApproval.dispatchId
+  reviewerApproval.dispatchId = 'wrong-dispatch'
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-review-dispatch', r.journal)).effect).toBe('not-landed')
+  reviewerApproval.dispatchId = reviewerDispatchId
+  const reviewerIssueIndex = r.issuedRows.findIndex(row => row.attemptId === 'reviewer-attempt')
+  const reviewerIssue = r.issuedRows.splice(reviewerIssueIndex, 1)[0]!
+  expect((await recordFilesOnDisk(r.runtime, action, 'unissued-approval', r.journal)).effect).toBe('not-landed')
+  r.issuedRows.splice(reviewerIssueIndex, 0, reviewerIssue)
+  const criterionCheck = r.checkRows.find(row => row.kind === 'criterion')!
+  const criterionCommand = criterionCheck.command
+  criterionCheck.command = 'different command'
+  expect((await recordFilesOnDisk(r.runtime, action, 'wrong-check-command', r.journal)).effect).toBe('not-landed')
+  criterionCheck.command = criterionCommand
+  r.issuedRows.push({
+    attemptId: 'reviewer-block', watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
+  r.verdictRows.push({
+    attemptId: 'reviewer-block', watcherId: r.enrollment.watcherId, dispatchId: 'reviewer-block-dispatch',
+    revision: 1, role: 'reviewer', contentIdentity, verdict: 'block', criteriaResults: [], checksRun: [],
+    summary: 'A blocking verdict cannot be overridden by approval.', digest: 'block-digest', acceptedAtMs: 5
+  })
+  r.appendAttempt('reviewer-block', {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity, evidenceKey: `review:1:reviewer:${contentIdentity}:2`
+  }, 'reviewer-block-dispatch')
+  expect((await recordFilesOnDisk(r.runtime, action, 'blocked-attempt', r.journal)).effect).toBe('not-landed')
+  expect(r.landingRows).toHaveLength(0)
+  r.verdictRows.pop()
+  r.issuedRows.pop()
+  r.journal.pop()
+
+  reviewerApproval.state = 'running'
+  expect((await recordFilesOnDisk(r.runtime, action, 'unsettled-approval', r.journal)).effect).toBe('not-landed')
+  reviewerApproval.state = 'settled'
+
+  expect(await recordFilesOnDisk(r.runtime, action, 'landing-attempt', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.landingRows[0]).toMatchObject({ rung: 'files-on-disk', contentIdentity, attemptId: 'landing-attempt' })
+
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'changed after evidence\n')
+  expect(await recordFilesOnDisk(r.runtime, action, 'stale-landing', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-stale'
+  })
+  expect(r.landingRows).toHaveLength(1)
+})
+
+test('ignores superseded blocks and accepts only checks and approvals current to the latest repair', async () => {
+  const r = rig()
+  await r.initGit()
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  const action = actionFor(contentIdentity)
+  r.approveEvidence(contentIdentity)
+  r.issuedRows.push({
+    attemptId: 'historical-block', watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
+  r.verdictRows.push({
+    attemptId: 'historical-block', watcherId: r.enrollment.watcherId, dispatchId: 'historical-block-dispatch',
+    revision: 1, role: 'reviewer', contentIdentity, verdict: 'block', criteriaResults: [], checksRun: [],
+    summary: 'Superseded after repair.', digest: 'historical-block-digest', acceptedAtMs: 5
+  })
+  r.appendAttempt('historical-block', {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity, evidenceKey: `review:1:reviewer:${contentIdentity}:2`
+  }, 'historical-block-dispatch')
+  r.addRepair(1, 10)
+  r.approveEvidence(contentIdentity, {
+    suffix: '-repair-1', checkedAtMs: 10, acceptedAtMs: 11, repairOrdinal: 1
+  })
+  const repairCheck = r.checkRows.find(row => row.attemptId === 'criterion-pass-repair-1')!
+  const repairCheckAttempt = r.journal.find(entry => entry.attemptId === repairCheck.attemptId)!
+  const repairCheckedAtMs = repairCheck.checkedAtMs
+  const repairEvidenceKey = repairCheckAttempt.action!.evidenceKey
+  repairCheck.checkedAtMs = 9
+  repairCheckAttempt.action!.evidenceKey = `check:1:implement:0:${contentIdentity}`
+  expect((await recordFilesOnDisk(r.runtime, action, 'superseded-check', r.journal)).effect).toBe('not-landed')
+  repairCheck.checkedAtMs = repairCheckedAtMs
+  repairCheckAttempt.action!.evidenceKey = repairEvidenceKey
+
+  const repairCommand = repairCheck.command
+  repairCheck.command = 'different command'
+  expect((await recordFilesOnDisk(r.runtime, action, 'repair-command-mismatch', r.journal)).effect).toBe('not-landed')
+  repairCheck.command = repairCommand
+
+  expect(await recordFilesOnDisk(r.runtime, action, 'repaired-landing', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.verdictRows.find(row => row.attemptId === 'historical-block')).toMatchObject({ verdict: 'block' })
+})
+
+test('commits only inside-territory files with the attempt trailer and leaves outside dirty and staged files untouched', async () => {
+  const r = rig()
+  await r.initGit()
+  const unusualPath = 'src/a [literal]*\nname.ts'
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'export const value = 2\n')
+  writeFileSync(join(r.root, unusualPath), 'special path\n')
+  writeFileSync(join(r.root, 'outside-rename.txt'), 'tracked rename source\n')
+  await r.runChecked(['git', 'add', 'outside-rename.txt'], { cwd: r.root })
+  await r.runChecked(['git', 'commit', '-m', 'add rename source'], { cwd: r.root })
+  renameSync(join(r.root, 'outside-rename.txt'), join(r.root, 'src', 'moved-source.ts'))
+  await r.runChecked(['git', 'add', '-A'], { cwd: r.root })
+  writeFileSync(join(r.root, 'outside-staged.txt'), 'staged outside\n')
+  await r.runChecked(['git', 'add', 'outside-staged.txt'], { cwd: r.root })
+  writeFileSync(join(r.root, 'outside.txt'), 'unstaged outside\n')
+  writeFileSync(join(r.root, 'outside-untracked.txt'), 'untracked outside\n')
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  landingFor(r, 'files-on-disk', contentIdentity)
+  const head = await readLocalGitHead(r.context, r.root)
+  expect(head.branch).not.toBeNull()
+  expect(head.headSha).not.toBeNull()
+
+  const result = await commitLocalBranch(r.runtime, {
+    revision: 1, contentIdentity, branch: head.branch!, headSha: head.headSha!
+  }, 'commit-attempt-7')
+  expect(result).toEqual({ effect: 'landed' })
+  const addCall = r.calls.find(call => call.argv[0] === 'git' && call.argv[1] === 'add' && call.argv.includes('--pathspec-from-file=-'))
+  const commitCall = r.calls.find(call => call.argv[0] === 'git' && call.argv[1] === 'commit' && call.argv.includes('--pathspec-from-file=-'))
+  expect(addCall?.argv).toContain('--pathspec-file-nul')
+  expect(commitCall?.argv).toContain('--pathspec-file-nul')
+  expect(addCall?.options?.env?.GIT_LITERAL_PATHSPECS).toBe('1')
+  expect(commitCall?.options?.env?.GIT_LITERAL_PATHSPECS).toBe('1')
+  expect(new TextDecoder().decode(addCall?.options?.input as Uint8Array).split('\0').filter(Boolean).sort())
+    .toEqual(['src/main.ts', 'src/moved-source.ts', unusualPath].sort())
+
+  const committed = (await r.runChecked(['git', 'diff-tree', '--no-commit-id', '-r', '-z', '--name-only', 'HEAD^', 'HEAD'], { cwd: r.root }))
+    .split('\0').filter(Boolean).sort()
+  expect(committed).toEqual(['src/main.ts', 'src/moved-source.ts', unusualPath].sort())
+  const body = await r.runChecked(['git', 'log', '-1', '--format=%B'], { cwd: r.root })
+  expect(body.split(/\r?\n/)).toContain('Quirky-Objective-Attempt: commit-attempt-7')
+  expect(await r.runChecked(['git', 'diff', '--cached', '--name-only'], { cwd: r.root })).toBe('outside-rename.txt\noutside-staged.txt\n')
+  expect(await r.runChecked(['git', 'diff', '--name-only'], { cwd: r.root })).toBe('outside.txt\n')
+  expect(await r.runChecked(['git', 'ls-files', '--others', '--exclude-standard'], { cwd: r.root })).toBe('outside-untracked.txt\n')
+  expect(r.landingRows.find(row => row.rung === 'committed-local-branch')).toMatchObject({
+    contentIdentity, attemptId: 'commit-attempt-7',
+    payload: { committedPaths: ['src/main.ts', 'src/moved-source.ts', unusualPath].sort(), outsideTerritoryPaths: ['outside-rename.txt', 'outside-staged.txt', 'outside-untracked.txt', 'outside.txt'].sort() }
+  })
+
+  const clean = rig()
+  await clean.initGit()
+  writeFileSync(join(clean.root, 'outside.txt'), 'outside-only change\n')
+  await clean.runChecked(['git', 'add', 'outside.txt'], { cwd: clean.root })
+  const cleanIdentity = await clean.runtime.captureContentIdentity()
+  landingFor(clean, 'files-on-disk', cleanIdentity)
+  const cleanHead = await readLocalGitHead(clean.context, clean.root)
+  expect(await commitLocalBranch(clean.runtime, {
+    revision: 1, contentIdentity: cleanIdentity, branch: cleanHead.branch!, headSha: cleanHead.headSha!
+  }, 'clean-attempt')).toEqual({ effect: 'landed' })
+  expect(await clean.runChecked(['git', 'rev-list', '--count', 'HEAD'], { cwd: clean.root })).toBe('1\n')
+  expect(clean.landingRows.find(row => row.rung === 'committed-local-branch')?.payload).toMatchObject({
+    committedPaths: [], outsideTerritoryPaths: ['outside.txt']
+  })
+
+  const recovered = rig()
+  await recovered.initGit()
+  writeFileSync(join(recovered.root, 'src', 'main.ts'), 'commit before landing record\n')
+  const recoveredIdentity = await recovered.runtime.captureContentIdentity()
+  landingFor(recovered, 'files-on-disk', recoveredIdentity)
+  const beforeRecovery = await readLocalGitHead(recovered.context, recovered.root)
+  await recovered.runChecked(['git', 'add', 'src/main.ts'], { cwd: recovered.root })
+  await recovered.runChecked([
+    'git', 'commit', '-m', 'Implement the objective\n\nQuirky-Objective-Attempt: recovery-attempt'
+  ], { cwd: recovered.root })
+  expect(await commitLocalBranch(recovered.runtime, {
+    revision: 1, contentIdentity: recoveredIdentity, branch: beforeRecovery.branch!,
+    headSha: beforeRecovery.headSha!
+  }, 'recovery-attempt')).toEqual({ effect: 'landed' })
+  expect(await recovered.runChecked(['git', 'rev-list', '--count', 'HEAD'], { cwd: recovered.root })).toBe('2\n')
+  expect(recovered.landingRows.find(row => row.rung === 'committed-local-branch')?.payload).toMatchObject({
+    committedPaths: []
+  })
+}, 30_000)
+
+test('commits reviewed content for assume-unchanged and skip-worktree files while preserving outside state', async () => {
+  for (const flag of ['--assume-unchanged', '--skip-worktree'] as const) {
+    const r = rig()
+    await r.initGit()
+    await r.runChecked(['git', 'update-index', flag, '--', 'src/main.ts'], { cwd: r.root })
+    writeFileSync(join(r.root, 'src', 'main.ts'), `reviewed ${flag}\n`)
+    writeFileSync(join(r.root, 'outside-staged.txt'), 'staged outside\n')
+    await r.runChecked(['git', 'add', 'outside-staged.txt'], { cwd: r.root })
+    writeFileSync(join(r.root, 'outside.txt'), 'dirty outside\n')
+    writeFileSync(join(r.root, 'outside-untracked.txt'), 'untracked outside\n')
+
+    const contentIdentity = await r.runtime.captureContentIdentity()
+    landingFor(r, 'files-on-disk', contentIdentity)
+    const head = await readLocalGitHead(r.context, r.root)
+    const attemptId = `flagged-${flag}`
+    expect(await commitLocalBranch(r.runtime, {
+      revision: 1, contentIdentity, branch: head.branch!, headSha: head.headSha!
+    }, attemptId)).toEqual({ effect: 'landed' })
+
+    const landing = r.landingRows.find(row => row.rung === 'committed-local-branch')
+    const recordedHeadSha = landing?.payload.headSha
+    expect(typeof recordedHeadSha).toBe('string')
+    expect(await r.runChecked(['git', 'show', `${String(recordedHeadSha)}:src/main.ts`], { cwd: r.root }))
+      .toBe(`reviewed ${flag}\n`)
+    expect(await r.runChecked(['git', 'diff', '--cached', '--name-only'], { cwd: r.root }))
+      .toBe('outside-staged.txt\n')
+    expect(await r.runChecked(['git', 'diff', '--name-only'], { cwd: r.root })).toBe('outside.txt\n')
+    expect(await r.runChecked(['git', 'ls-files', '--others', '--exclude-standard'], { cwd: r.root }))
+      .toBe('outside-untracked.txt\n')
+    expect(await r.runChecked(['git', 'ls-files', '-v', '--', 'src/main.ts'], { cwd: r.root }))
+      .toBe(`${flag === '--assume-unchanged' ? 'h' : 'S'} src/main.ts\n`)
+  }
+}, 30_000)
+
+test('does not record a committed landing when a hook changes only the index content', async () => {
+  const r = rig()
+  await r.initGit()
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'reviewed content\n')
+  const contentIdentity = await r.runtime.captureContentIdentity()
+  landingFor(r, 'files-on-disk', contentIdentity)
+  const head = await readLocalGitHead(r.context, r.root)
+  const hooksPath = await r.runChecked(['git', 'rev-parse', '--git-path', 'hooks'], { cwd: r.root })
+  const hookDir = hooksPath.startsWith('/') ? hooksPath : join(r.root, hooksPath.trim())
+  mkdirSync(hookDir, { recursive: true })
+  writeFileSync(join(hookDir, 'pre-commit'),
+    '#!/bin/sh\nblob=$(printf "hook-only content\\n" | git hash-object -w --stdin) || exit 1\ngit update-index --cacheinfo 100644 "$blob" src/main.ts\n')
+  chmodSync(join(hookDir, 'pre-commit'), 0o755)
+
+  expect(await commitLocalBranch(r.runtime, {
+    revision: 1, contentIdentity, branch: head.branch!, headSha: head.headSha!
+  }, 'index-mismatch-attempt')).toEqual({ effect: 'indeterminate', reason: 'commit-state-indeterminate' })
+  expect(await r.runChecked(['git', 'show', 'HEAD:src/main.ts'], { cwd: r.root })).toBe('hook-only content\n')
+  expect(await Bun.file(join(r.root, 'src', 'main.ts')).text()).toBe('reviewed content\n')
+  expect(r.landingRows.some(row => row.rung === 'committed-local-branch')).toBe(false)
+}, 30_000)
+
+test('refuses detached HEAD with branch-not-attached and distinguishes commit-hook-failed from indeterminate', async () => {
+  const detached = rig()
+  await detached.initGit()
+  writeFileSync(join(detached.root, 'src', 'main.ts'), 'detached workspace change\n')
+  const detachedIdentity = await detached.runtime.captureContentIdentity()
+  landingFor(detached, 'files-on-disk', detachedIdentity)
+  const attachedHead = await readLocalGitHead(detached.context, detached.root)
+  await detached.runChecked(['git', 'checkout', '--detach'], { cwd: detached.root })
+  expect(await commitLocalBranch(detached.runtime, {
+    revision: 1, contentIdentity: detachedIdentity, branch: attachedHead.branch!, headSha: attachedHead.headSha!
+  }, 'detached-attempt')).toEqual({ effect: 'not-landed', reason: 'branch-not-attached' })
+
+  const hookFailure = rig()
+  await hookFailure.initGit()
+  writeFileSync(join(hookFailure.root, 'src', 'main.ts'), 'commit should be rejected by hook\n')
+  const hookIdentity = await hookFailure.runtime.captureContentIdentity()
+  landingFor(hookFailure, 'files-on-disk', hookIdentity)
+  const hookHead = await readLocalGitHead(hookFailure.context, hookFailure.root)
+  const hooksPath = await hookFailure.runChecked(['git', 'rev-parse', '--git-path', 'hooks'], { cwd: hookFailure.root })
+  const hookDir = hooksPath.startsWith('/') ? hooksPath : join(hookFailure.root, hooksPath.trim())
+  mkdirSync(hookDir, { recursive: true })
+  const preCommit = join(hookDir, 'pre-commit')
+  writeFileSync(preCommit, '#!/bin/sh\nexit 1\n')
+  chmodSync(preCommit, 0o755)
+  expect(await commitLocalBranch(hookFailure.runtime, {
+    revision: 1, contentIdentity: hookIdentity, branch: hookHead.branch!, headSha: hookHead.headSha!
+  }, 'hook-failed-attempt')).toEqual({ effect: 'not-landed', reason: 'commit-hook-failed' })
+
+  const indeterminate = rig({ rewriteCommitMessage: true })
+  await indeterminate.initGit()
+  writeFileSync(join(indeterminate.root, 'src', 'main.ts'), 'commit with unexpected trailer\n')
+  const indeterminateIdentity = await indeterminate.runtime.captureContentIdentity()
+  landingFor(indeterminate, 'files-on-disk', indeterminateIdentity)
+  const indeterminateHead = await readLocalGitHead(indeterminate.context, indeterminate.root)
+  expect(await commitLocalBranch(indeterminate.runtime, {
+    revision: 1, contentIdentity: indeterminateIdentity, branch: indeterminateHead.branch!, headSha: indeterminateHead.headSha!
+  }, 'indeterminate-attempt')).toEqual({ effect: 'indeterminate', reason: 'commit-state-indeterminate' })
+  expect(indeterminate.landingRows.some(row => row.rung === 'committed-local-branch')).toBe(false)
+}, 30_000)
+test('folder checks and tiered review retain content-bound evidence without Git', async () => {
+  const r = rig()
+  r.payload.tier = 'standard'
+  r.payload.landingBar = 'files-on-disk'
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'export const value = 1\n')
+  const runtime = folderRuntime(r)
+  const contentIdentity = await runtime.captureContentIdentity()
+  const action = actionFor(contentIdentity)
+
+  expect(await recordFilesOnDisk(runtime, action, 'missing-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-incomplete'
+  })
+  addStandardChecks(r, contentIdentity)
+  expect(await recordFilesOnDisk(runtime, action, 'missing-folder-review', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-incomplete'
+  })
+  addStandardReviewer(r, contentIdentity)
+
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'changed after checks and review\n')
+  expect(await recordFilesOnDisk(runtime, action, 'stale-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-stale'
+  })
+  expect(r.landingRows).toHaveLength(0)
+
+  const unavailableRuntime: ObjectiveRuntime = {
+    ...runtime,
+    captureContentIdentity: async () => { throw new Error('folder observation unavailable') }
+  }
+  expect(await recordFilesOnDisk(unavailableRuntime, action, 'unavailable-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-unavailable'
+  })
+  expect(r.landingRows).toHaveLength(0)
+
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'export const value = 1\n')
+  expect(await recordFilesOnDisk(runtime, action, 'folder-landing', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.landingRows[0]).toMatchObject({
+    rung: 'files-on-disk', contentIdentity, attemptId: 'folder-landing',
+    payload: { revision: 1, checkAttempts: ['folder-criterion-pass', 'folder-gate-pass'], verdictAttempts: ['folder-reviewer-approval'] }
+  })
+  expect(await recordFilesOnDisk(runtime, action, 'folder-landing-recovery', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.landingRows[0]?.attemptId).toBe('folder-landing')
+  expect(r.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(existsSync(join(r.root, '.git'))).toBe(false)
+}, 30_000)

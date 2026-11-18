@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ContextMenu, IconButton, StatusDot } from '@quirky/ui'
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react'
+import { Button, ContextMenu, IconButton, StatusDot } from '@quirky/ui'
 import type { ContextMenuItem, UiStatus } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { NoteTarget } from '../daemon/targets'
@@ -11,6 +11,8 @@ export type SendParams = { scope: 'note'; id: string } | { scope: 'file'; path: 
 
 /** One thing the menu can send: a label, the notes it covers and the parameters that select them. */
 export type SendScope = { id: string; label: string; notes: readonly Note[]; params: SendParams }
+type SendableScope = SendScope & { unsent: Note[] }
+type SendTarget = { session: string } | { agent: string }
 
 type Targets = { sessions: NoteTarget[]; agents: Array<{ id: string; label: string }> }
 
@@ -58,7 +60,11 @@ export function postSendRequest(next: SendRequest | null): void {
 
 const NO_REQUEST = () => request
 
-function targetEntry(target: NoteTarget, send: (to: { session: string }) => void): ContextMenuItem {
+function targetEntry(
+  target: NoteTarget,
+  scope: SendableScope,
+  onSend: (scope: SendableScope, to: SendTarget) => void
+): ContextMenuItem {
   const state = target.state ?? target.status
   const label = state.charAt(0).toUpperCase() + state.slice(1)
   const status: UiStatus = state === 'waiting' || state === 'blocked' ? 'needs-you' : state === 'done' ? 'done' : 'working'
@@ -69,15 +75,19 @@ function targetEntry(target: NoteTarget, send: (to: { session: string }) => void
     detail: parts.join(' · '),
     enabled: target.sendable,
     ...(target.reason === undefined ? {} : { title: target.reason }),
-    onSelect: () => send({ session: target.session })
+    onSelect: () => onSend(scope, { session: target.session })
   }
 }
 
 /** The rows that choose where a scope goes: running sessions, then agents to start. */
-function targetEntries(targets: Targets, send: (to: { session: string } | { agent: string }) => void): ContextMenuItem[] {
-  const rows: ContextMenuItem[] = [{ label: 'Send notes to', heading: true }, ...targets.sessions.map((target) => targetEntry(target, send))]
+function targetEntries(
+  targets: Targets,
+  scope: SendableScope,
+  onSend: (scope: SendableScope, to: SendTarget) => void
+): ContextMenuItem[] {
+  const rows: ContextMenuItem[] = [{ label: 'Send notes to', heading: true }, ...targets.sessions.map((target) => targetEntry(target, scope, onSend))]
   rows.push({ label: 'New agent', heading: true, separatorBefore: true })
-  for (const agent of targets.agents) rows.push({ label: agent.label, onSelect: () => send({ agent: agent.id }) })
+  for (const agent of targets.agents) rows.push({ label: agent.label, onSelect: () => onSend(scope, { agent: agent.id }) })
   if (targets.agents.length === 0) rows.push({ label: 'No agents available', enabled: false })
   return rows
 }
@@ -93,6 +103,18 @@ type Props = {
   children?: ReactNode
   /** Opens in answer to `postSendRequest`; enable on one instance per window. */
   respondToRequest?: boolean
+  /** Renders a labelled button that sizes to its text, for hosts without the panel's icon-button overrides. */
+  inline?: boolean
+}
+
+type TriggerProps = ComponentProps<typeof IconButton>
+
+function InlineTrigger({ label, children, title, disabled, onClick, 'aria-haspopup': haspopup }: TriggerProps) {
+  return (
+    <Button aria-label={label} aria-haspopup={haspopup} title={title} disabled={disabled} onClick={onClick}>
+      {children}
+    </Button>
+  )
 }
 
 /**
@@ -100,14 +122,15 @@ type Props = {
  * left out of every scope, so the trigger reads "Sending…" while all of them are on their way
  * and "All notes sent" when none are left. Sending toasts its progress and its failure.
  */
-export function SendMenu({ context, worktree, scopes, ariaLabel, children, respondToRequest }: Props) {
+export function SendMenu({ context, worktree, scopes, ariaLabel, children, respondToRequest, inline }: Props) {
+  const Trigger = inline ? InlineTrigger : IconButton
   useSyncExternalStore(subscribe, () => heldVersion)
   const pending = useSyncExternalStore(subscribe, NO_REQUEST)
   const anchor = useRef<HTMLSpanElement>(null)
   const alive = useRef(true)
   const [menu, setMenu] = useState<{ x: number; y: number; targets: Targets } | null>(null)
 
-  const sendable = scopes.map((scope) => ({ ...scope, unsent: scope.notes.filter((note) => !isHeld(note.id)) }))
+  const sendable: SendableScope[] = scopes.map((scope) => ({ ...scope, unsent: scope.notes.filter((note) => !isHeld(note.id)) }))
   const deliverable = sendable.some((scope) => scope.unsent.length > 0)
   const idle = scopes.some((scope) => scope.notes.length > 0) ? 'Sending…' : 'All notes sent'
 
@@ -124,7 +147,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
       const targets = (await context.call('quirky.git/noteTargets', { worktree })) as Targets
       if (alive.current) setMenu({ x: box?.left ?? 0, y: box?.bottom ?? 0, targets })
     } catch (error) {
-      context.toast('Failed to load agents', messageOf(error))
+      context.toast('Failed to load agents', messageOf(error), { kind: 'error' })
     }
   }
 
@@ -134,7 +157,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
     if (Date.now() - pending.issuedAt <= SEND_REQUEST_TTL_MS && deliverable) void show()
   }, [pending])
 
-  const deliver = async (scope: (typeof sendable)[number], to: { session: string } | { agent: string }) => {
+  const onSend = async (scope: SendableScope, to: SendTarget) => {
     const sending = context.call('quirky.git/sendNotes', { worktree, ...scope.params, ...to })
     hold(scope.unsent.map((note) => note.id), sending)
     context.toast('Sending notes...', '')
@@ -142,12 +165,12 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
       await sending
       context.toast('Notes sent.', '')
     } catch (error) {
-      context.toast('Failed to send notes', messageOf(error))
+      context.toast('Failed to send notes', messageOf(error), { kind: 'error' })
     }
   }
 
   const entries = (targets: Targets): ContextMenuItem[] => {
-    const rowsFor = (scope: (typeof sendable)[number]) => targetEntries(targets, (to) => void deliver(scope, to))
+    const rowsFor = (scope: SendableScope) => targetEntries(targets, scope, onSend)
     if (sendable.length === 1) return rowsFor(sendable[0]!)
     return [
       { label: 'Send notes', heading: true },
@@ -158,7 +181,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
   return (
     <>
       <span ref={anchor}>
-        <IconButton
+        <Trigger
           label={ariaLabel ?? 'Send notes to an agent'}
           aria-haspopup="menu"
           title={deliverable ? 'Send notes to an agent' : idle}
@@ -166,7 +189,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
           onClick={() => void show()}
         >
           {children ?? '➤'}
-        </IconButton>
+        </Trigger>
       </span>
       {menu && <ContextMenu x={menu.x} y={menu.y} label="Send notes" items={entries(menu.targets)} onClose={() => setMenu(null)} />}
     </>

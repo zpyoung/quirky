@@ -1,112 +1,77 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type {
-  AskEnvelope,
-  AskSpec,
-  ProcessRunner,
-  ProcessSpawner,
-  RunOptions,
-  RunResult,
-  Session,
-  SessionStatus,
-  SpawnOptions,
-  StructuredMessage
-} from '@quirky/protocol'
-import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
-import { createPiRunner, resolvePiThroughLoginShell } from '../pi-runner'
-import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
-import { createFakePiRpc, type FakePiRpcFixture } from './fakes/fake-pi-rpc'
+import type { AgentCommand, AskEnvelope, AskSpec, ChatItem, ProcessSpawner, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import { createProcessRunner } from '../../../packages/process/src/api'
+import { PiRpc, piLaunchArgs, spawnPiTransport, type PiVariant } from '../pi-rpc'
+import { createPiRunner } from '../pi-runner'
+import type { NewStructuredMessage, StructuredContext } from '../runner'
+import { fakePiTransports, type FakePiTransport, type Reply } from './fakes/pi-transport'
 
-function runResult(overrides: Partial<RunResult> = {}): RunResult {
-  return {
-    stdout: new Uint8Array(),
-    stdoutText: '',
-    stderr: '',
-    exitCode: 0,
-    signal: null,
-    durationMs: 0,
-    ...overrides
-  }
-}
-
-type RunCall = { argv: string[]; options: RunOptions | undefined }
-type SpawnCall = { argv: string[]; options: SpawnOptions }
-type RecordingProcess = ProcessRunner & ProcessSpawner & { runs: RunCall[]; spawns: SpawnCall[] }
-
-function recordProcess(): RecordingProcess {
-  const runs: RunCall[] = []
-  const spawns: SpawnCall[] = []
-  return {
-    runs,
-    spawns,
-    run(argv, options) {
-      runs.push({ argv: [...argv], options })
-      return processRunner.run(argv, options)
-    },
-    spawn(argv, options) {
-      spawns.push({ argv: [...argv], options })
-      return processRunner.spawn(argv, options)
-    }
-  }
-}
-
-let processRunner: OwnedProcessRunner
-let context: StructuredContext
-
-async function until(check: () => boolean, attempts = 400) {
-  for (let i = 0; i < attempts && !check(); i++) await Bun.sleep(5)
+async function until(check: () => boolean) {
+  for (let i = 0; i < 400 && !check(); i++) await Bun.sleep(5)
   expect(check()).toBe(true)
 }
 
-let home: string
-let fake: FakePiRpcFixture
-let messages: StructuredMessage[]
-let statuses: SessionStatus[]
-let asks: AskSpec[]
-let resolved: string[]
-let runner: StructuredRunner
-let session: Session
+type AskWaiter = { spec: AskSpec; sessionId: string; options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }; resolve(envelope: AskEnvelope): void }
 
-function build(
-  agent: 'pi' | 'omp' = 'pi',
-  contextWindow?: number | null,
-  limits?: { maxFrameBytes?: number; checkTimeoutMs?: number; abortTimeoutMs?: number },
-  fakeOptions: Omit<NonNullable<Parameters<typeof createFakePiRpc>[1]>, 'contextWindow' | 'flavor'> = {},
-  processOverride: ProcessRunner & ProcessSpawner = processRunner
-) {
-  fake = createFakePiRpc(home, { ...(contextWindow === undefined ? {} : { contextWindow }), flavor: agent, ...fakeOptions })
-  context = {
-    appendMessage(msg: NewStructuredMessage) {
-      const stored = { ...msg, seq: messages.length + 1, at: msg.at ?? Date.now() } as StructuredMessage
+const noSpawn: ProcessSpawner = {
+  spawn() {
+    throw new Error('the scripted transport must not spawn a process')
+  }
+}
+
+function makeSetup(variant: PiVariant, replies?: Record<string, () => Reply>) {
+  const messages: StructuredMessage[] = []
+  const statuses: SessionStatus[] = []
+  const asks: AskWaiter[] = []
+  const providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[] = []
+  const resolved: PiVariant[] = []
+  const cancelledAsks: string[] = []
+  const reported: AgentCommand[][] = []
+  const context: StructuredContext = {
+    process: noSpawn,
+    reportCommands: (_id, commands) => void reported.push(commands),
+    appendMessage(message: NewStructuredMessage) {
+      const stored: StructuredMessage = {
+        sessionId: message.sessionId,
+        seq: messages.length + 1,
+        role: message.role,
+        text: message.text,
+        at: message.at ?? Date.now(),
+        ...(message.data === undefined ? {} : { data: message.data }),
+        ...(message.item === undefined ? {} : { item: message.item })
+      }
       messages.push(stored)
       return stored
     },
-    setStatus(_id, status) {
-      statuses.push(status)
+    setStatus: (_id, status) => void statuses.push(status),
+    createAsk(spec, sessionId, options) {
+      const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
+      asks.push({ spec, sessionId, ...(options === undefined ? {} : { options }), resolve })
+      return promise
     },
-    createAsk(spec) {
-      asks.push(spec)
-      return new Promise<AskEnvelope>(() => {})
+    async cancelAsk(askId) {
+      cancelledAsks.push(askId)
     },
-    async setProviderSession() {},
+    async setProviderSession(sessionId, providerSession) {
+      providerSessions.push({ sessionId, id: providerSession.id, transcriptPath: providerSession.transcriptPath })
+    },
     resolveClaudePath: async () => '/not-used/claude',
     resolveCodexPath: async () => '/not-used/codex',
-    resolvePiPath: async (name) => {
-      resolved.push(name)
-      return fake.executable
-    },
-    process: processOverride
+    resolvePiPath: async (requested) => {
+      resolved.push(requested)
+      return `/fake/bin/${requested}`
+    }
   }
-  runner = createPiRunner(context, limits)
-  session = {
-    id: 's_pi',
+  const session: Session = {
+    id: `s_${variant}`,
     kind: 'structured',
-    agent,
+    agent: variant,
     worktreeId: 'wt_1',
-    cwd: home,
-    title: agent,
+    cwd: '/fake/worktree',
+    title: variant,
     status: 'starting',
     createdAt: 1,
     lastActivityAt: 1,
@@ -115,1402 +80,722 @@ function build(
     exitCause: null,
     restorable: false
   }
+  const fake = fakePiTransports(replies === undefined ? {} : { replies })
+  const runner = createPiRunner(context, variant, { transport: fake.factory, env: { BASE: 'kept', DROP: 'gone' } })
+  const items = (): ChatItem[] => messages.flatMap((message) => (message.item ? [message.item] : []))
+  const ofKind = <K extends ChatItem['kind']>(kind: K) => items().filter((item): item is Extract<ChatItem, { kind: K }> => item.kind === kind)
+  const settle = (transport: FakePiTransport) =>
+    variant === 'pi' ? transport.emit({ type: 'agent_settled' }) : transport.emit({ type: 'agent_end', messages: [], isTerminal: true, yielded: true })
+  const answered = (askId: string, answers: AskEnvelope['answers']): AskEnvelope => ({ status: 'answered', askId, answers, skipped: [], summary: '' })
+  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, reported, context, session, fake, runner, items, ofKind, settle, answered }
 }
-function useCheckResponse(response: Record<string, unknown>) {
-  const logPath = join(home, 'fake-pi.jsonl')
-  const script = `#!${process.execPath}
-const fs = require('node:fs')
-const response = ${JSON.stringify(response)}
-const logPath = ${JSON.stringify(logPath)}
-const send = (frame) => process.stdout.write(JSON.stringify(frame) + '\\n')
-let input = ''
-process.stdin.setEncoding('utf8')
-process.stdin.on('data', (chunk) => {
-  input += chunk
-  for (;;) {
-    const newline = input.indexOf('\\n')
-    if (newline < 0) break
-    const line = input.slice(0, newline)
-    input = input.slice(newline + 1)
-    if (!line) continue
-    const command = JSON.parse(line)
-    fs.appendFileSync(logPath, JSON.stringify(command) + '\\n')
-    if (command.type === 'get_state') {
-      send({ id: command.id, type: 'response', command: 'get_state', success: true, data: { model: { id: 'fake', contextWindow: 200000 } } })
+
+type Setup = ReturnType<typeof makeSetup>
+
+for (const variant of ['pi', 'omp'] as const) {
+  describe(`${variant} structured runner`, () => {
+    let setup: Setup
+    const begin = async (prompt: string | null = 'hello', options: Parameters<Setup['runner']['start']>[2] = {}) => {
+      setup = makeSetup(variant)
+      await setup.runner.start(setup.session, prompt ?? undefined, options)
+      return setup.fake.last()
     }
-    if (command.type === 'get_commands') send({ ...response, id: response.id ?? command.id })
-  }
-})
-`
-  writeFileSync(fake.executable, script, { mode: 0o700 })
-  chmodSync(fake.executable, 0o700)
-}
+    afterEach(async () => {
+      await setup?.runner.stop(setup.session.id)
+    })
 
-function writeStandInShell(name: string, body: string) {
-  const shell = join(home, name)
-  writeFileSync(shell, `#!/bin/sh\n${body}`, { mode: 0o700 })
-  chmodSync(shell, 0o700)
-  return shell
-}
+    test('start resolves the executable, passes picks and env, stores the provider session and sends the first prompt', async () => {
+      const transport = await begin('hello', { model: 'anthropic/sonnet', effort: 'high', env: { QUIRKY_SESSION_TOKEN: 'tok', DROP: null } })
+      expect(setup.resolved).toEqual([variant])
+      expect(transport.spec.executable).toBe(`/fake/bin/${variant}`)
+      expect(transport.spec.cwd).toBe('/fake/worktree')
+      expect(transport.spec.args).toEqual(['--mode', 'rpc', '--model', 'anthropic/sonnet', '--thinking', 'high'])
+      expect(transport.spec.env).toMatchObject({ BASE: 'kept', QUIRKY_SESSION_TOKEN: 'tok' })
+      expect(transport.spec.env.DROP).toBeUndefined()
+      expect(setup.providerSessions).toEqual([{ sessionId: setup.session.id, id: 'pi-sess-1', transcriptPath: '/fake/pi-sess-1.jsonl' }])
+      expect(transport.commands('prompt')).toMatchObject([{ message: 'hello' }])
+      expect(setup.ofKind('user')).toEqual([{ kind: 'user', text: 'hello' }])
+      expect(setup.statuses.at(-1)).toBe('working')
+      expect(transport.commands('set_ask_dialog').length).toBe(variant === 'omp' ? 1 : 0)
+    })
 
-beforeEach(() => {
-  processRunner = createProcessRunner({ owner: 'pi-runner-test' })
-  home = realpathSync(mkdtempSync(join(tmpdir(), 'pi-runner-')))
-  messages = []
-  statuses = []
-  asks = []
-  resolved = []
-  build()
-})
+    test('start without a prompt leaves the session running and sends nothing', async () => {
+      const transport = await begin(null)
+      expect(transport.commands('prompt')).toEqual([])
+      expect(setup.statuses.at(-1)).toBe('running')
+    })
 
-afterEach(async () => {
-  await runner.stop(session.id)
-  await processRunner.dispose()
-  rmSync(home, { recursive: true, force: true })
-})
+    test('resume passes the saved session to the agent and refuses a different session', async () => {
+      setup = makeSetup(variant)
+      await setup.runner.start(setup.session, undefined, { providerSession: { id: 'pi-sess-1', transcriptPath: null } })
+      expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', variant === 'pi' ? '--session' : '--resume', 'pi-sess-1'])
+      await setup.runner.stop(setup.session.id)
 
-const settled = () => statuses.includes('done')
-const results = () => messages.filter((message) => message.role === 'result')
-const prompts = () => fake.commands().filter((command) => command.type === 'prompt')
-const userCommands = () =>
-  fake.commands().filter((command) => command.type === 'prompt' || command.type === 'steer')
-const contextUsageOfResult = () =>
-  (messages.find((m) => m.role === 'result')?.data as { contextUsage?: unknown } | undefined)?.contextUsage
-const journal = () => messages.map(({ role, text }) => [role, text])
+      setup = makeSetup(variant)
+      await expect(setup.runner.start(setup.session, undefined, { providerSession: { id: 'someone-else', transcriptPath: null } })).rejects.toThrow('expected someone-else')
+      expect(setup.fake.last().closed).toBe(true)
+    })
 
-describe('pi rpc runner', () => {
-  test.each([
-    { agent: 'pi' as const, options: { model: 'stub/think' }, args: ['--model', 'stub/think'] },
-    { agent: 'pi' as const, options: { model: 'stub/think', effort: 'high' }, args: ['--model', 'stub/think', '--thinking', 'high'] },
-    { agent: 'pi' as const, options: { effort: 'off' }, args: ['--thinking', 'off'] },
-    { agent: 'omp' as const, options: { model: 'stub/think' }, args: ['--model', 'stub/think'] },
-    { agent: 'omp' as const, options: { model: 'stub/think', effort: 'xhigh' }, args: ['--model', 'stub/think', '--thinking', 'xhigh'] },
-    { agent: 'omp' as const, options: { effort: 'low' }, args: ['--thinking', 'low'] }
-  ])('$agent passes the selected model and thinking level: $options', async ({ agent, options, args }) => {
-    build(agent)
-    await runner.start(session, 'hello', options)
-    await until(() => fake.launch() !== null)
-    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', ...args])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} puts the selected model and thinking level after the no-tools switches`, async () => {
-      build(agent)
-      await runner.start(session, 'hello', { toolPolicy: 'deny-all', model: 'stub/think', effort: 'high' })
-      await until(() => fake.launch() !== null)
-      expect(fake.launch()?.argv).toEqual([
-        '--mode',
-        'rpc',
-        '--no-tools',
-        '--no-extensions',
-        ...(agent === 'pi' ? ['--no-mcp'] : []),
-        '--model',
-        'stub/think',
-        '--thinking',
-        'high'
+    test('streamed text journals throttled partials and one final prose item, then the turn ends', async () => {
+      const transport = await begin()
+      let now = 1_000
+      const clock = spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        transport.emit({ type: 'agent_start' })
+        transport.emit({ type: 'message_update', messageId: 'm1', assistantMessageEvent: { type: 'text_delta', delta: 'Hello ' } })
+        now += 300
+        transport.emit({ type: 'message_update', messageId: 'm1', assistantMessageEvent: { type: 'text_delta', delta: 'wor' } })
+        now += 10
+        transport.emit({ type: 'message_update', messageId: 'm1', assistantMessageEvent: { type: 'text_delta', delta: 'ld' } })
+      } finally {
+        clock.mockRestore()
+      }
+      transport.emit({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'hm' }, { type: 'text', text: 'Hello world' }] } })
+      expect(setup.messages.filter((m) => m.item?.kind === 'prose').map((m) => [m.role, m.item])).toEqual([
+        ['system', { kind: 'prose', text: 'Hello wor', streaming: true }],
+        ['assistant', { kind: 'prose', text: 'Hello world' }]
       ])
-    })
-  }
-
-  test('pi deny-all checks before its first prompt', async () => {
-    build('pi', undefined, undefined, { commands: [] })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    expect(journal()).toEqual([['user', 'hello']])
-    expect(statuses).toEqual(['working'])
-    await until(settled)
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: 'hello' }
-    ])
-    expect(messages.map((message) => [message.role, message.text])).toEqual([
-      ['user', 'hello'],
-      ['assistant', 'pi: hello'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-  test('pi deny-all exits when get_commands lists an extension', async () => {
-    build('pi', undefined, undefined, {
-      commands: [
-        { name: 'llama', source: 'extension' },
-        { name: 'fix-tests', source: 'prompt' },
-        { name: 'mcp', source: 'extension' },
-        { name: 'skill:review', source: 'skill' }
-      ]
-    })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi loaded extensions in a session that must have no tools: llama, mcp']
-    ])
-    expect(messages.filter((message) => message.role === 'system').map((message) => message.data)).toEqual([undefined])
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' }
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-    await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-  })
-
-  test('omp deny-all exits when get_state offers a tool', async () => {
-    build('omp', undefined, undefined, { tools: ['mcp__standin_touch_marker'] })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'omp offers tools to a session that must have none: mcp__standin_touch_marker']
-    ])
-    expect(fake.commands()).toEqual([{ id: 'quirky-check-1', type: 'get_state' }])
-    expect(statuses).toEqual(['working', 'exited'])
-    await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-  })
-
-  test('omp deny-all limits long tool lists to eight sanitized names and a remainder count', async () => {
-    const tools = Array.from({ length: 10 }, (_, index) => `mcp__s_t${index}`)
-    build('omp', undefined, undefined, { tools })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'omp offers tools to a session that must have none: mcp__s_t0, mcp__s_t1, mcp__s_t2, mcp__s_t3, mcp__s_t4, mcp__s_t5, mcp__s_t6, mcp__s_t7 and 2 more']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-    await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-  })
-
-  test('omp deny-all flattens and truncates tool names and labels non-string names', async () => {
-    const longName = 'x'.repeat(81)
-    build('omp', undefined, undefined, { tools: ['mcp__line\nbreak', longName, 7 as unknown as string] })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', `omp offers tools to a session that must have none: mcp__line break, ${'x'.repeat(79)}…, unnamed`]
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} deny-all times out when the no-tools check is unanswered`, async () => {
-      build(agent, undefined, { checkTimeoutMs: 150 }, { check: 'silent' })
-      await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-      await until(() => statuses.at(-1) === 'exited')
-      expect(journal()).toEqual([
-        ['user', 'hello'],
-        ['system', `${agent} did not answer the no-tools check`]
-      ])
-      expect(fake.commands().some((command) => command.type === 'prompt')).toBe(false)
-      expect(statuses).toEqual(['working', 'exited'])
-      await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
+      setup.settle(transport)
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'done' }])
+      expect(setup.statuses.at(-1)).toBe('done')
     })
 
-    test(`${agent} deny-all exits when the no-tools check is refused`, async () => {
-      build(agent, undefined, undefined, { check: 'refuse' })
-      await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-      await until(() => statuses.at(-1) === 'exited')
-      expect(journal()).toEqual([
-        ['user', 'hello'],
-        ['system', `${agent} could not confirm it has no tools: scripted check failure`]
-      ])
-      expect(fake.commands().some((command) => command.type === 'prompt')).toBe(false)
-      expect(statuses).toEqual(['working', 'exited'])
+    test('a provider error marks the turn failed', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'error', errorMessage: 'No API key' } })
+      setup.settle(transport)
+      expect(setup.ofKind('status').map((item) => item.text)).toContain('No API key')
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'failed' }])
     })
 
-    test(`${agent} deny-all fails closed when the no-tools reply has no list`, async () => {
-      build(agent, undefined, undefined, { check: 'empty' })
-      await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-      await until(() => statuses.at(-1) === 'exited')
-      const reason = agent === 'pi' ? 'the reply lists no commands' : 'the reply lists no tools'
-      expect(journal()).toEqual([
-        ['user', 'hello'],
-        ['system', `${agent} could not confirm it has no tools: ${reason}`]
-      ])
-      expect(fake.commands().some((command) => command.type === 'prompt')).toBe(false)
-      expect(statuses).toEqual(['working', 'exited'])
-    })
-  }
-  test('pi deny-all uses the refusal fallback when a check has no error text', async () => {
-    build()
-    useCheckResponse({ type: 'response', command: 'get_commands', success: false })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi could not confirm it has no tools: the check was refused']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('pi deny-all uses the refusal fallback when the error text is only spaces', async () => {
-    build()
-    useCheckResponse({ type: 'response', command: 'get_commands', success: false, error: '   ' })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi could not confirm it has no tools: the check was refused']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('pi deny-all sanitizes and truncates a refusal reason', async () => {
-    build()
-    const error = `bad\n${'x'.repeat(170)}`
-    useCheckResponse({ type: 'response', command: 'get_commands', success: false, error })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', `pi could not confirm it has no tools: ${'bad '}${'x'.repeat(155)}…`]
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('pi deny-all fails closed when commands is not an array', async () => {
-    build()
-    useCheckResponse({
-      type: 'response',
-      command: 'get_commands',
-      success: true,
-      data: { commands: 'not-an-array' }
-    })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi could not confirm it has no tools: the reply lists no commands']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('pi deny-all does not accept a check reply with another id', async () => {
-    build('pi', undefined, { checkTimeoutMs: 1000 })
-    useCheckResponse({
-      id: 'unrelated-check',
-      type: 'response',
-      command: 'get_commands',
-      success: true,
-      data: { commands: [] }
-    })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => fake.commands().some((command) => command.type === 'get_commands'))
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi did not answer the no-tools check']
-    ])
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' }
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('omp deny-all gets its model and context from the no-tools check', async () => {
-    build('omp', undefined, undefined, { tools: [] })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(settled)
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-check-1', type: 'get_state' },
-      { type: 'prompt', message: 'hello' }
-    ])
-    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['assistant', 'omp: hello'],
-      ['result', 'omp turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} deny-all checks every later prompt`, async () => {
-      build(agent)
-      await runner.start(session, 'first', { toolPolicy: 'deny-all' })
-      const results = () => messages.filter((message) => message.role === 'result')
-      await until(() => results().length === 1)
-      await runner.send(session.id, 'second')
-      await until(() => results().length === 2)
-      const expectedCommands =
-        agent === 'pi'
-          ? [
-              { id: 'quirky-state', type: 'get_state' },
-              { id: 'quirky-check-1', type: 'get_commands' },
-              { type: 'prompt', message: 'first' },
-              { id: 'quirky-check-2', type: 'get_commands' },
-              { type: 'prompt', message: 'second' }
-            ]
-          : [
-              { id: 'quirky-check-1', type: 'get_state' },
-              { type: 'prompt', message: 'first' },
-              { id: 'quirky-check-2', type: 'get_state' },
-              { type: 'prompt', message: 'second' }
-            ]
-      expect(fake.commands()).toEqual(expectedCommands)
-      expect(journal()).toEqual([
-        ['user', 'first'],
-        ['assistant', `${agent}: first`],
-        ['result', `${agent} turn completed`],
-        ['user', 'second'],
-        ['assistant', `${agent}: second`],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'done', 'working', 'done'])
-    })
-  }
-
-  test('pi deny-all checks a message sent during a turn before writing it', async () => {
-    await runner.start(session, '[hold]', { toolPolicy: 'deny-all' })
-    await until(() => fake.commands().some((command) => command.type === 'prompt'))
-    await runner.send(session.id, 'focus')
-    await until(settled)
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: '[hold]' },
-      { id: 'quirky-check-2', type: 'get_commands' },
-      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
-    ])
-    expect(journal()).toEqual([
-      ['user', '[hold]'],
-      ['user', 'focus'],
-      ['assistant', 'steered: focus'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'working', 'done'])
-  })
-
-  test('pi deny-all writes a queued message after the prompt before it is answered, behind its own check', async () => {
-    await runner.start(session, '[hold]', { toolPolicy: 'deny-all' })
-    await runner.send(session.id, 'focus')
-    await until(settled)
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: '[hold]' },
-      { id: 'quirky-check-2', type: 'get_commands' },
-      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
-    ])
-    expect(statuses).toEqual(['working', 'working', 'done'])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} deny-all: a message whose check outlasts the turn starts a new turn`, async () => {
-      build(agent)
-      await runner.start(session, '[hold] [settle-at-check]', { toolPolicy: 'deny-all' })
-      await until(() => prompts().length === 1)
-      await runner.send(session.id, 'second')
-      await until(() => results().length === 2)
-
-      expect(userCommands()).toEqual([
-        { type: 'prompt', message: '[hold] [settle-at-check]' },
-        { type: 'prompt', message: 'second', streamingBehavior: 'steer' }
-      ])
-      expect(journal()).toEqual([
-        ['user', '[hold] [settle-at-check]'],
-        ['user', 'second'],
-        ['assistant', 'settled while the check waited'],
-        ['result', `${agent} turn completed`],
-        ['assistant', `${agent}: second`],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(results().map((result) => result.data)).toEqual([
-        { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } },
-        { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } }
-      ])
-      expect(statuses).toEqual(['working', 'working', 'done'])
-    })
-
-    test(`${agent}: a message that reaches a CLI that had just settled starts a new turn`, async () => {
-      build(agent)
-      await runner.start(session, '[hold]')
-      await until(() => prompts().length === 1)
-      await runner.send(session.id, 'second [late]')
-      await until(() => results().length === 2)
-
-      expect(userCommands()).toEqual([
-        { type: 'prompt', message: '[hold]' },
-        { type: 'prompt', message: 'second [late]', streamingBehavior: 'steer' }
-      ])
-      expect(journal()).toEqual([
-        ['user', '[hold]'],
-        ['user', 'second [late]'],
-        ['assistant', 'settled before the message arrived'],
-        ['result', `${agent} turn completed`],
-        ['assistant', `${agent}: second [late]`],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'working', 'done'])
-    })
-
-    test(`${agent}: the next message is written only after the one before it is answered`, async () => {
-      build(agent)
-      await runner.start(session, 'first [slow-ack]')
-      await runner.send(session.id, 'second')
-      await until(() => results().length === 2)
-
-      expect(fake.commands().filter((command) => command.type === 'prompt' || command.type === 'fake-answered')).toEqual([
-        { type: 'prompt', message: 'first [slow-ack]' },
-        { type: 'fake-answered', message: 'first [slow-ack]' },
-        { type: 'prompt', message: 'second', streamingBehavior: 'steer' }
-      ])
-      expect(statuses).toEqual(['working', 'working', 'done'])
-    })
-
-    test(`${agent}: a rejected message during a run leaves the turn open`, async () => {
-      build(agent)
-      await runner.start(session, '[hold]')
-      await until(() => prompts().length === 1)
-      await runner.send(session.id, 'no [reject]')
-      await until(() => messages.some((message) => message.role === 'system'))
-      await runner.send(session.id, 'focus')
-      await until(settled)
-
-      expect(journal()).toEqual([
-        ['user', '[hold]'],
-        ['user', 'no [reject]'],
-        ['system', `${agent} rejected prompt: scripted rejection`],
-        ['user', 'focus'],
-        ['assistant', 'steered: focus'],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'working', 'working', 'done'])
-    })
-
-    const marker = agent === 'pi' ? '[handled]' : '[no-agent]'
-    test(`${agent}: a message the CLI handles by itself during a run leaves the turn open`, async () => {
-      build(agent)
-      await runner.start(session, '[hold]')
-      await until(() => prompts().length === 1)
-      await runner.send(session.id, `note ${marker}`)
-      await until(() => prompts().length === 2)
-      // Let the handled/no-agent reply reach the runner before checking the held turn.
-      await Bun.sleep(100)
-      expect(statuses).toEqual(['working', 'working'])
-
-      await runner.send(session.id, 'focus')
-      await until(settled)
-      expect(journal()).toEqual([
-        ['user', '[hold]'],
-        ['user', `note ${marker}`],
-        ['user', 'focus'],
-        ['assistant', 'steered: focus'],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'working', 'working', 'done'])
-    })
-
-    const handled = agent === 'pi' ? '[handled]' : '[no-agent]'
-    test(`${agent}: a first message the CLI handles by itself does not end the turn while another waits`, async () => {
-      build(agent)
-      await runner.start(session, `first ${handled} [slow-ack]`, { toolPolicy: 'deny-all' })
-      await runner.send(session.id, 'second')
-      await until(() => results().length === 1)
-
-      expect(journal()).toEqual([
-        ['user', `first ${handled} [slow-ack]`],
-        ['user', 'second'],
-        ['assistant', `${agent}: second`],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'working', 'done'])
-    })
-  }
-
-  test('pi deny-all: a result written while a message waits takes its token count with it', async () => {
-    await runner.start(session, '[hold] [settle-at-check]', { toolPolicy: 'deny-all' })
-    await until(() => prompts().length === 1)
-    await runner.send(session.id, '[tool]')
-    await until(() => results().length === 2)
-
-    expect(results().map((result) => result.data)).toEqual([
-      { type: 'agent_end', contextUsage: { contextTokens: 180, contextWindow: 200000 } },
-      { type: 'agent_end' }
-    ])
-    expect(statuses).toEqual(['working', 'working', 'done'])
-  })
-
-  test('pi deny-all: a turn that settles while a message waits takes its abort deadline with it', async () => {
-    build('pi', undefined, { abortTimeoutMs: 300 })
-    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
-    await runner.send(session.id, '[hold]')
-    await until(() => prompts().length === 2)
-    // Wait beyond the deadline to catch an abort timer carried into the next turn.
-    await Bun.sleep(600)
-    expect(journal()).toEqual([
-      ['user', '[tool]'],
-      ['user', '[hold]'],
-      ['system', 'tools are disabled for this session'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'working'])
-    expect(userCommands()).toEqual([
-      { type: 'prompt', message: '[tool]' },
-      { type: 'prompt', message: '[hold]', streamingBehavior: 'steer' }
-    ])
-
-    await runner.send(session.id, 'go')
-    await until(settled)
-    expect(journal()).toEqual([
-      ['user', '[tool]'],
-      ['user', '[hold]'],
-      ['system', 'tools are disabled for this session'],
-      ['result', 'pi turn completed'],
-      ['user', 'go'],
-      ['assistant', 'steered: go'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'working', 'working', 'done'])
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: '[tool]' },
-      { id: 'quirky-check-2', type: 'get_commands' },
-      { type: 'abort' },
-      { type: 'prompt', message: '[hold]', streamingBehavior: 'steer' },
-      { id: 'quirky-check-3', type: 'get_commands' },
-      { type: 'prompt', message: 'go', streamingBehavior: 'steer' }
-    ])
-  })
-
-  test('pi deny-all checks an idle session before a prompt arrives', async () => {
-    build('pi', undefined, undefined, { commands: [] })
-    await runner.start(session, undefined, { toolPolicy: 'deny-all' })
-    await until(() => fake.commands().some((command) => command.type === 'get_commands'))
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' }
-    ])
-    expect(messages).toEqual([])
-    expect(statuses).toEqual(['running'])
-  })
-
-  test('pi deny-all allows prompt templates and skills', async () => {
-    build('pi', undefined, undefined, {
-      commands: [
-        { name: 'fix-tests', source: 'prompt' },
-        { name: 'skill:review', source: 'skill' }
-      ]
-    })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(settled)
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: 'hello' }
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} default policy does not check even when the CLI has tools`, async () => {
-      build(
-        agent,
-        undefined,
-        undefined,
-        agent === 'pi'
-          ? { commands: [{ name: 'llama', source: 'extension' }] }
-          : { tools: ['mcp__a_b'] }
+    test('a tool call journals a running item and a closing item with the same callId', async () => {
+      const transport = await begin()
+      transport.emit(
+        { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'bash', args: { command: 'bun test plugins/x' } },
+        { type: 'tool_execution_start', toolCallId: 'c2', toolName: 'edit', args: { path: 'a.ts', edits: [{ oldText: 'a', newText: 'b\nc' }] } },
+        { type: 'tool_execution_start', toolCallId: 'c3', toolName: 'read', args: { path: 'a.ts' } }
       )
-      await runner.start(session, 'hello')
-      await until(settled)
-      expect(fake.commands()).toEqual([
-        { id: 'quirky-state', type: 'get_state' },
-        { type: 'prompt', message: 'hello' }
+      expect(setup.items().map((item) => [item.kind, (item as { state?: string }).state])).toEqual([
+        ['user', undefined],
+        ['tests', 'running'],
+        ['file-change', 'running'],
+        ['activity', 'running']
       ])
-      expect(journal()).toEqual([
-        ['user', 'hello'],
-        ['assistant', `${agent}: hello`],
-        ['result', `${agent} turn completed`]
-      ])
-      expect(statuses).toEqual(['working', 'done'])
-    })
-  }
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} deny-all fails its later check when a new tool appears`, async () => {
-      build(
-        agent,
-        undefined,
-        undefined,
-        agent === 'pi' ? { commands: [] } : { tools: [] }
+      transport.emit(
+        { type: 'tool_execution_end', toolCallId: 'c1', toolName: 'bash', isError: false, result: { content: [{ type: 'text', text: '3 pass\n1 fail' }] } },
+        { type: 'tool_execution_end', toolCallId: 'c2', toolName: 'edit', isError: false, result: { content: [], details: { diff: '+1 b\n+2 c\n-1 a\n 3 ctx' } } },
+        { type: 'tool_execution_end', toolCallId: 'c3', toolName: 'read', isError: true, result: { content: [{ type: 'text', text: 'ENOENT' }] } }
       )
-      await runner.start(session, '[grow]', { toolPolicy: 'deny-all' })
-      await until(() => messages.filter((message) => message.role === 'result').length === 1)
-      await runner.send(session.id, 'second')
-      await until(() => statuses.at(-1) === 'exited')
-      const reason =
-        agent === 'pi'
-          ? 'pi loaded extensions in a session that must have no tools: late'
-          : 'omp offers tools to a session that must have none: mcp__late_tool'
-      expect(journal()).toEqual([
-        ['user', '[grow]'],
-        ['assistant', `${agent}: [grow]`],
-        ['result', `${agent} turn completed`],
-        ['user', 'second'],
-        ['system', reason]
+      const calls = setup.items().filter((item) => 'callId' in item)
+      expect(calls.slice(3)).toMatchObject([
+        { kind: 'tests', callId: 'c1', command: 'bun test plugins/x', passed: 3, failed: 1, state: 'done' },
+        { kind: 'file-change', callId: 'c2', path: 'a.ts', added: 2, removed: 1, state: 'done' },
+        { kind: 'activity', callId: 'c3', tool: 'read', summary: 'a.ts', state: 'failed', detail: 'ENOENT' }
       ])
-      expect(fake.commands().filter((command) => command.type === 'prompt')).toEqual([
-        { type: 'prompt', message: '[grow]' }
+    })
+
+    test('the todo tool journals steps, and a call still open when the turn settles is closed', async () => {
+      const transport = await begin()
+      transport.emit(
+        { type: 'tool_execution_start', toolCallId: 't1', toolName: 'todo', args: { op: 'init' } },
+        {
+          type: 'tool_execution_end',
+          toolCallId: 't1',
+          toolName: 'todo',
+          isError: false,
+          result: { content: [], details: { phases: [{ name: 'Tasks', tasks: [{ content: 'one', status: 'completed' }, { content: 'two', status: 'in_progress' }, { content: 'three', status: 'pending' }] }] } }
+        },
+        { type: 'tool_execution_start', toolCallId: 'c9', toolName: 'grep', args: { pattern: 'x' } }
+      )
+      expect(setup.ofKind('steps')).toEqual([
+        { kind: 'steps', callId: 't1', steps: [{ text: 'one', state: 'done' }, { text: 'two', state: 'active' }, { text: 'three', state: 'pending' }] }
       ])
-      expect(statuses).toEqual(['working', 'done', 'working', 'exited'])
-      await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-    })
-  }
-
-  test('omp deny-all exits when an idle session offers a tool', async () => {
-    build('omp', undefined, undefined, { tools: ['mcp__a_b'] })
-    await runner.start(session, undefined, { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['system', 'omp offers tools to a session that must have none: mcp__a_b']
-    ])
-    expect(fake.commands()).toEqual([{ id: 'quirky-check-1', type: 'get_state' }])
-    expect(statuses).toEqual(['running', 'exited'])
-    await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-  })
-
-
-  test('spawns pi in rpc mode inside the worktree', async () => {
-    await runner.start(session, 'hello')
-    await until(() => fake.launch() !== null)
-    expect(fake.launch()).toEqual({ argv: ['--mode', 'rpc'], cwd: home })
-    expect(resolved).toEqual(['pi'])
-  })
-
-  test('omp resolves its own executable', async () => {
-    build('omp')
-    await runner.start(session, 'hello')
-    await until(settled)
-    expect(resolved).toEqual(['omp'])
-  })
-
-  test('sends the prompt, journals assistant text and settles on agent_settled', async () => {
-    await runner.start(session, 'hello there')
-    await until(settled)
-    expect(messages.map((m) => [m.role, m.text])).toEqual([
-      ['user', 'hello there'],
-      ['assistant', 'pi: hello there'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-    expect(fake.commands().find((c) => c.type === 'prompt')).toEqual({ type: 'prompt', message: 'hello there' })
-  })
-
-  test('agent_end alone leaves the pi turn working', async () => {
-    await runner.start(session, '[end-only]')
-    await until(() => messages.some((message) => message.role === 'assistant'))
-    // the spawned fixture's timers cannot be advanced by Bun's fake clock
-    await Bun.sleep(100)
-    expect(messages.filter((message) => message.role === 'result')).toEqual([])
-    expect(statuses).toEqual(['working'])
-  })
-
-  test('a pi retry after agent_end settles once after the second run', async () => {
-    await runner.start(session, '[retry]')
-    await until(() => messages.some((message) => message.role === 'system' && message.text === 'pi error: 529 overloaded'))
-    expect(messages.filter((message) => message.role === 'result')).toHaveLength(0)
-    expect(statuses).toEqual(['working'])
-
-    await until(settled)
-    expect(messages.map((message) => [message.role, message.text])).toEqual([
-      ['user', '[retry]'],
-      ['system', 'pi error: 529 overloaded'],
-      ['assistant', 'second try'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-    expect(fake.commands().map((command) => command.type)).toEqual(['get_state', 'prompt'])
-  })
-
-  test('omp settles a normal turn on session_settled', async () => {
-    build('omp')
-    await runner.start(session, 'hello omp')
-    await until(settled)
-    expect(messages.map((message) => [message.role, message.text])).toEqual([
-      ['user', 'hello omp'],
-      ['assistant', 'omp: hello omp'],
-      ['result', 'omp turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  test('omp stays working after prompt_result until background work settles', async () => {
-    build('omp')
-    await runner.start(session, '[background]')
-    await until(() => messages.some((message) => message.role === 'assistant'))
-    await Bun.sleep(100)
-    expect(messages.filter((message) => message.role === 'result')).toEqual([])
-    expect(statuses).toEqual(['working'])
-
-    await until(settled)
-    expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  test('omp keeps invoked prompt_result open even when sessionSettled is true', async () => {
-    build('omp')
-    await runner.start(session, '[settled-result]')
-    await until(() => messages.some((message) => message.role === 'assistant'))
-    // the spawned fixture owns the delayed settle frame, not this process's clock
-    await Bun.sleep(100)
-    expect(statuses).toEqual(['working'])
-    expect(messages.filter((message) => message.role === 'result')).toEqual([])
-    await runner.send(session.id, 'still working')
-    await until(() =>
-      fake.commands().some((command) => command.type === 'prompt' && command.streamingBehavior === 'steer')
-    )
-    expect(statuses).toEqual(['working', 'working'])
-    await until(settled)
-    await runner.send(session.id, 'next turn')
-    await until(() => messages.filter((message) => message.role === 'result').length === 2)
-    expect(fake.commands().filter((command) => command.type === 'prompt')).toEqual([
-      { type: 'prompt', message: '[settled-result]' },
-      { type: 'prompt', message: 'still working', streamingBehavior: 'steer' },
-      { type: 'prompt', message: 'next turn' }
-    ])
-    expect(statuses).toEqual(['working', 'working', 'done', 'working', 'done'])
-  })
-
-  test('omp closes a prompt that never reached the agent without a result', async () => {
-    build('omp')
-    await runner.start(session, '[no-agent]')
-    await until(settled)
-    expect(messages.filter((message) => message.role === 'result')).toEqual([])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  test('omp ignores a duplicate no-agent prompt_result after the prompt closes', async () => {
-    build('omp')
-    await runner.start(session, '[no-agent] [twice]')
-    await until(settled)
-    // the duplicate is emitted by a timer in another process
-    await Bun.sleep(100)
-    expect(messages.map((message) => message.role)).toEqual(['user'])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  test('pi closes a handled prompt without a result', async () => {
-    await runner.start(session, '[handled]')
-    await until(settled)
-    expect(messages.filter((message) => message.role === 'result')).toEqual([])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  for (const [agent, text] of [
-    ['pi', 'note [handled]'],
-    ['omp', 'note [no-agent]'],
-    ['pi', 'no [reject]'],
-    ['omp', 'no [reject]']
-  ] as const) {
-    test(`${agent}: after a finished turn, "${text}" ends its own turn at once`, async () => {
-      build(agent)
-      await runner.start(session, 'hello')
-      await until(settled)
-      await runner.send(session.id, text)
-      await until(() => statuses.length === 4)
-      expect(statuses).toEqual(['working', 'done', 'working', 'done'])
-      expect(results()).toHaveLength(1)
-    })
-  }
-
-  for (const [agent, marker] of [
-    ['pi', '[queued]'],
-    ['pi', 'started'],
-    ['omp', 'no disposition']
-  ] as const) {
-    test(`${agent} keeps an accepted ${marker} prompt open until settlement`, async () => {
-      build(agent)
-      await runner.start(session, marker + ' [end-only]')
-      await until(() => messages.some((message) => message.role === 'assistant'))
-      await Bun.sleep(100)
-      expect(messages.filter((message) => message.role === 'result')).toEqual([])
-      expect(statuses).toEqual(['working'])
-    })
-  }
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} ignores duplicate settle frames after a turn closes`, async () => {
-      build(agent)
-      await runner.start(session, '[twice]')
-      await until(settled)
-      await Bun.sleep(100)
-      expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
-      expect(statuses).toEqual(['working', 'done'])
-    })
-  }
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} ignores settle and prompt_result frames without an initial prompt`, async () => {
-      build(agent)
-      await runner.start(session)
-      await until(() => fake.commands().some((command) => command.type === 'get_state'))
-      process.kill(await pidOf(), 'SIGUSR1')
-      await until(() => existsSync(join(home, 'idle-frames-sent')))
-      // allow the other process's flushed frames to reach the runner
-      await Bun.sleep(100)
-      expect(messages).toEqual([])
-      expect(statuses).toEqual(['running'])
-    })
-  }
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} journals a message that arrives with no open turn and keeps its token count out of the next result`, async () => {
-      build(agent)
-      await runner.start(session, undefined, { toolPolicy: 'deny-all' })
-      await until(() => fake.commands().some((command) => command.id === 'quirky-check-1'))
-      process.kill(await pidOf(), 'SIGUSR2')
-      await until(() => existsSync(join(home, 'wake-frames-sent')))
-      await until(() => messages.length > 0)
-      // allow the other process's flushed frames to reach the runner
-      await Bun.sleep(100)
-      expect(journal()).toEqual([['assistant', 'woke on its own']])
-      expect(statuses).toEqual(['running'])
-      await runner.send(session.id, '[tool]')
-      await until(settled)
-      expect(messages.filter((message) => message.role === 'result').map((message) => message.data)).toEqual([{ type: 'agent_end' }])
-      expect(statuses).toEqual(['running', 'working', 'done'])
-    })
-  }
-
-  test('starts idle without a prompt and runs a later send', async () => {
-    await runner.start(session)
-    expect(statuses).toEqual(['running'])
-    await runner.send(session.id, 'later')
-    await until(settled)
-    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'result'])
-  })
-
-  test('a send after settlement starts a new prompt turn', async () => {
-    await runner.start(session, 'first turn')
-    const results = () => messages.filter((message) => message.role === 'result')
-    await until(() => results().length === 1)
-
-    await runner.send(session.id, 'second turn')
-    await until(() => results().length === 2)
-    expect(fake.commands().filter((command) => command.type === 'prompt')).toEqual([
-      { type: 'prompt', message: 'first turn' },
-      { type: 'prompt', message: 'second turn' }
-    ])
-    expect(statuses).toEqual(['working', 'done', 'working', 'done'])
-  })
-
-  test('omp ignores protocol frames that do not change the journal or need a reply', async () => {
-    build('omp')
-    await runner.start(session, 'ignore unused frames')
-    await until(settled)
-    expect(messages.map((message) => [message.role, message.text])).toEqual([
-      ['user', 'ignore unused frames'],
-      ['assistant', 'omp: ignore unused frames'],
-      ['result', 'omp turn completed']
-    ])
-    expect(fake.commands().some((command) => command.type === 'extension_ui_response')).toBe(false)
-    expect(fake.commands().map((command) => command.type)).toEqual(['get_state', 'prompt'])
-  })
-
-  test('records context usage on the turn-ending message', async () => {
-    await runner.start(session, 'usage')
-    await until(settled)
-    expect(messages.find((m) => m.role === 'result')?.data).toEqual({
-      type: 'agent_end',
-      contextUsage: { contextTokens: 180, contextWindow: 200000 }
-    })
-  })
-
-  test('clears context usage before a turn with no token count', async () => {
-    await runner.start(session, 'usage', { toolPolicy: 'deny-all' })
-    const results = () => messages.filter((m) => m.role === 'result')
-    await until(() => results().length === 1)
-    expect(results()[0]?.data).toEqual({
-      type: 'agent_end',
-      contextUsage: { contextTokens: 180, contextWindow: 200000 }
+      setup.settle(transport)
+      const closed = setup.ofKind('activity').filter((item) => item.callId === 'c9')
+      expect(closed.map((item) => item.state)).toEqual(['running', 'done'])
     })
 
-    await runner.send(session.id, '[tool]')
-    await until(() => results().length === 2)
-    expect(results()[1]?.data).toEqual({ type: 'agent_end' })
-  })
-
-  test('context window is null when the process does not report one', async () => {
-    build('pi', null)
-    await runner.start(session, 'usage')
-    await until(settled)
-    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: null })
-  })
-
-  test('a later zero-usage message keeps the previous context footprint', async () => {
-    await runner.start(session, '[zero-last]')
-    await until(settled)
-    expect(contextUsageOfResult()).toEqual({ contextTokens: 180, contextWindow: 200000 })
-    expect(messages.filter((message) => message.role === 'system').map((message) => message.text)).toEqual([
-      'pi error: boom'
-    ])
-  })
-
-  test('journals tool execution when tools are allowed', async () => {
-    await runner.start(session, '[tool] [allowed]')
-    await until(settled)
-    expect(messages.filter((m) => m.role === 'tool').map((m) => m.text)).toEqual(['bash: ls -la', 'file.txt'])
-  })
-
-  test('a message sent while working goes out as a prompt the CLI may steer with', async () => {
-    await runner.start(session, '[hold]')
-    await until(() => fake.commands().some((c) => c.type === 'prompt'))
-    await runner.send(session.id, 'focus')
-    await until(settled)
-    expect(userCommands()).toEqual([
-      { type: 'prompt', message: '[hold]' },
-      { type: 'prompt', message: 'focus', streamingBehavior: 'steer' }
-    ])
-    expect(messages.find((message) => message.role === 'user' && message.text === 'focus')?.data).toEqual({
-      type: 'prompt',
-      message: 'focus',
-      streamingBehavior: 'steer'
+    test('an approval dialog becomes an approval ask and the allow answer reaches the agent', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-1', method: 'confirm', title: 'Run rm -rf?', message: 'This deletes files' })
+      await until(() => setup.asks.length === 1)
+      expect(setup.asks[0]!.options?.nativeQuestion).toBeUndefined()
+      expect(setup.asks[0]!.spec.questions.map((q) => q.id)).toEqual(['decision', 'reason'])
+      expect(setup.asks[0]!.spec.questions[0]!.question).toBe('Run rm -rf?: This deletes files')
+      expect(setup.statuses.at(-1)).toBe('waiting')
+      setup.asks[0]!.resolve(setup.answered('ask_1', { decision: { value: 'always', source: 'option' } }))
+      await until(() => transport.commands('extension_ui_response').length === 1)
+      expect(transport.commands('extension_ui_response')[0]).toEqual({ type: 'extension_ui_response', id: 'ui-1', confirmed: true })
+      expect(setup.statuses.at(-1)).toBe('working')
     })
-    expect(messages.find((m) => m.role === 'assistant')?.text).toBe('steered: focus')
-  })
 
-  test('extension dialogs are cancelled and never become asks', async () => {
-    await runner.start(session, '[ui]')
-    await until(settled)
-    expect(asks).toEqual([])
-    expect(fake.commands().find((c) => c.type === 'extension_ui_response')).toEqual({
-      type: 'extension_ui_response',
-      id: 'ui-1',
-      cancelled: true
+    test('a denied approval answers the agent and follows up with the reason', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-2', method: 'select', title: 'Allow dangerous command?', options: ['Allow', 'Block'] })
+      await until(() => setup.asks.length === 1)
+      setup.asks[0]!.resolve(setup.answered('ask_2', { decision: { value: 'deny', source: 'option' }, reason: { value: 'too risky', source: 'input' } }))
+      await until(() => transport.commands('extension_ui_response').length === 1)
+      expect(transport.commands('extension_ui_response')[0]).toEqual({ type: 'extension_ui_response', id: 'ui-2', value: 'Block' })
+      await until(() => transport.commands('steer').length === 1)
+      expect(transport.commands('steer')[0]).toMatchObject({ message: 'Denied: too risky' })
     })
-  })
 
-  test('a rejected prompt is journaled and leaves the session done', async () => {
-    await runner.start(session, '[reject]')
-    await until(settled)
-    expect(messages.some((m) => m.role === 'system' && m.text.includes('scripted rejection'))).toBe(true)
-  })
-
-  test('deny-all starts with no tools and refuses a tool that runs anyway', async () => {
-    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
-    await until(settled)
-    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools', '--no-extensions', '--no-mcp'])
-    expect(fake.commands().some((c) => c.type === 'abort')).toBe(true)
-    expect(messages.filter((m) => m.role === 'tool')).toEqual([])
-    expect(messages.some((m) => m.role === 'system' && m.text === 'tools are disabled for this session')).toBe(true)
-    expect(messages.find((m) => m.role === 'result')?.data).toEqual({ type: 'agent_end' })
-    expect(asks).toEqual([])
-  })
-  test('pi deny-all puts --no-mcp before a selected model', async () => {
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all', model: 'picked-model' })
-    await until(settled)
-    expect(fake.launch()?.argv).toEqual([
-      '--mode',
-      'rpc',
-      '--no-tools',
-      '--no-extensions',
-      '--no-mcp',
-      '--model',
-      'picked-model'
-    ])
-  })
-
-  test('deny-all on omp also starts with no extensions, since --no-tools only drops built-in tools', async () => {
-    build('omp')
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(settled)
-    expect(fake.launch()?.argv).toEqual(['--mode', 'rpc', '--no-tools', '--no-extensions'])
-  })
-  test('an older pi rejects --no-mcp and exits through the normal stderr path', async () => {
-    writeFileSync(fake.executable, `#!/bin/sh
-case " $* " in
-  *" --no-mcp "*)
-    printf '%s\\n' 'Error: Unknown option: --no-mcp' >&2
-    exit 1
-    ;;
-esac
-exit 0
-`, { mode: 0o700 })
-    chmodSync(fake.executable, 0o700)
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => statuses.at(-1) === 'exited')
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['system', 'pi exited with code 1; stderr: Error: Unknown option: --no-mcp']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('omp deny-all aborts and settles after a tool starts', async () => {
-    build('omp')
-    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
-    await until(settled)
-    expect(fake.commands().some((command) => command.type === 'abort')).toBe(true)
-    expect(messages.some((message) => message.role === 'system' && message.text === 'tools are disabled for this session')).toBe(true)
-    expect(messages.find((message) => message.role === 'result')?.data).toEqual({ type: 'agent_end' })
-    expect(statuses).toEqual(['working', 'done'])
-  })
-  test('pi deny-all clears the abort deadline when a tool-start turn settles', async () => {
-    build('pi', undefined, { abortTimeoutMs: 500 })
-    await runner.start(session, '[tool]', { toolPolicy: 'deny-all' })
-    await until(settled)
-    // The spawned RPC fixture owns a separate clock, so exercise the real abort deadline.
-    await Bun.sleep(700)
-    expect(journal()).toEqual([
-      ['user', '[tool]'],
-      ['system', 'tools are disabled for this session'],
-      ['result', 'pi turn completed']
-    ])
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  test('pi deny-all keeps one abort deadline when a second tool starts', async () => {
-    build('pi', undefined, { abortTimeoutMs: 300 })
-    await runner.start(session, '[tool] [double]', { toolPolicy: 'deny-all' })
-    await until(settled)
-    // Wait past twice the deadline to catch a timer restarted by the second tool start.
-    await Bun.sleep(600)
-    expect(journal()).toEqual([
-      ['user', '[tool] [double]'],
-      ['system', 'tools are disabled for this session'],
-      ['system', 'tools are disabled for this session'],
-      ['result', 'pi turn completed']
-    ])
-    expect(fake.commands().filter((command) => command.type === 'abort')).toHaveLength(2)
-    expect(statuses).toEqual(['working', 'done'])
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} deny-all exits when a tool-start abort stays stuck`, async () => {
-      build(agent, undefined, { abortTimeoutMs: 150 })
-      await runner.start(session, '[tool] [stuck]', { toolPolicy: 'deny-all' })
-      await until(() => statuses.at(-1) === 'exited')
-      expect(journal()).toEqual([
-        ['user', '[tool] [stuck]'],
-        ['system', 'tools are disabled for this session'],
-        ['system', `${agent} did not stop after a tool started`]
-      ])
-      expect(fake.commands().filter((command) => command.type === 'abort')).toHaveLength(1)
-      expect(messages.filter((message) => message.role === 'result')).toEqual([])
-      expect(statuses).toEqual(['working', 'exited'])
-      await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
+    test('a select that is not an approval becomes a question and answers with the chosen label', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-3', method: 'select', title: 'Which branch?', options: ['main', 'dev'] })
+      await until(() => setup.asks.length === 1)
+      expect(setup.asks[0]!.options?.nativeQuestion).toBe(true)
+      setup.asks[0]!.resolve(setup.answered('ask_3', { answer: { value: 'o2', label: 'dev', source: 'option' } }))
+      await until(() => transport.commands('extension_ui_response').length === 1)
+      expect(transport.commands('extension_ui_response')[0]).toEqual({ type: 'extension_ui_response', id: 'ui-3', value: 'dev' })
     })
-  }
 
-  test('pi deny-all ignores a not-found tool result and checks the next send', async () => {
-    await runner.start(session, '[tool] [missing]', { toolPolicy: 'deny-all' })
-    await until(settled)
-    await runner.send(session.id, 'second')
-    await until(() => messages.filter((message) => message.role === 'result').length === 2)
-    expect(journal()).toEqual([
-      ['user', '[tool] [missing]'],
-      ['system', 'tools are disabled for this session'],
-      ['result', 'pi turn completed'],
-      ['user', 'second'],
-      ['assistant', 'pi: second'],
-      ['result', 'pi turn completed']
-    ])
-    expect(fake.commands()).toEqual([
-      { id: 'quirky-state', type: 'get_state' },
-      { id: 'quirky-check-1', type: 'get_commands' },
-      { type: 'prompt', message: '[tool] [missing]' },
-      { type: 'abort' },
-      { id: 'quirky-check-2', type: 'get_commands' },
-      { type: 'prompt', message: 'second' }
-    ])
-    expect(messages.some((message) => message.role === 'tool')).toBe(false)
-    expect(statuses).toEqual(['working', 'done', 'working', 'done'])
-  })
+    test('an unanswered or declined question cancels the dialog, and input uses a text question', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-4', method: 'input', title: 'Branch name' })
+      await until(() => setup.asks.length === 1)
+      expect(setup.asks[0]!.spec.questions[0]).toMatchObject({ type: 'text', multiline: false })
+      setup.asks[0]!.resolve({ status: 'declined', askId: 'ask_4', answers: {}, skipped: [], summary: '' })
+      await until(() => transport.commands('extension_ui_response').length === 1)
+      expect(transport.commands('extension_ui_response')[0]).toEqual({ type: 'extension_ui_response', id: 'ui-4', cancelled: true })
+    })
 
-  for (const [marker, output, isError] of [
-    ['[tool] [allowed]', 'file.txt', false],
-    ['[tool] [failed]', 'exit 1', true],
-    ['[tool] [missing-ok]', 'Tool bash not found', false],
-  ] as const) {
-    test(`pi deny-all ends and journals when a tool result is ${output}`, async () => {
-      await runner.start(session, marker, { toolPolicy: 'deny-all' })
-      await until(() => statuses.at(-1) === 'exited')
-      expect(journal()).toEqual([
-        ['user', marker],
-        ['system', 'tools are disabled for this session'],
-        ['tool', output],
-        ['system', 'pi ran bash in a session that must have no tools']
-      ])
-      expect(messages.filter((message) => message.role === 'tool')[0]?.data).toEqual({
-        type: 'tool_execution_end',
-        toolCallId: 't1',
-        toolName: 'bash',
-        result: { content: [{ type: 'text', text: output }] },
-        isError
+    test('an omp-style ask frame answers every question in order', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, {
+        type: 'extension_ui_request',
+        id: 'ui-5',
+        method: 'ask',
+        questions: [
+          { id: 'db', question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+          { id: 'features', question: 'Which features?', multi: true, options: [{ label: 'Auth' }, { label: 'Search' }] },
+          { id: 'note', question: 'Anything else?', options: [] }
+        ]
       })
-      expect(messages.filter((message) => message.role === 'result')).toEqual([])
-      expect(statuses).toEqual(['working', 'exited'])
-      await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
+      await until(() => setup.asks.length === 1)
+      setup.asks[0]!.resolve(
+        setup.answered('ask_5', {
+          db: { value: 'o2', label: 'SQLite', source: 'option' },
+          features: { values: ['o1', 'o2'], labels: ['Auth', 'Search'], source: 'options' },
+          note: { value: 'no', source: 'input' }
+        })
+      )
+      await until(() => transport.commands('extension_ui_response').length === 1)
+      expect(transport.commands('extension_ui_response')[0]).toEqual({
+        type: 'extension_ui_response',
+        id: 'ui-5',
+        answers: [
+          { id: 'db', selectedOptions: ['SQLite'] },
+          { id: 'features', selectedOptions: ['Auth', 'Search'] },
+          { id: 'note', selectedOptions: [], customInput: 'no' }
+        ]
+      })
     })
-  }
 
-  test('default policy journals tool starts and results without aborting', async () => {
-    await runner.start(session, '[tool] [allowed]')
-    await until(settled)
-    expect(journal()).toEqual([
-      ['user', '[tool] [allowed]'],
-      ['tool', 'bash: ls -la'],
-      ['tool', 'file.txt'],
-      ['assistant', 'listed'],
-      ['result', 'pi turn completed']
-    ])
-    expect(fake.commands().some((command) => command.type === 'abort')).toBe(false)
-  })
-
-  test('stopping during a pending check drops its timeout diagnostic', async () => {
-    build('pi', undefined, { checkTimeoutMs: 150 }, { check: 'silent' })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await runner.stop(session.id)
-    // Wait past the real check deadline to ensure stop cleared it.
-    await Bun.sleep(300)
-    expect(messages.filter((message) => message.role === 'system')).toEqual([])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('a process exit during a pending check prevents its timeout diagnostic', async () => {
-    build('pi', undefined, { checkTimeoutMs: 1000 }, { check: 'silent' })
-    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
-    await until(() => fake.commands().some((command) => command.type === 'get_commands'))
-    process.kill(-(await pidOf()), 'SIGKILL')
-    await until(() => statuses.at(-1) === 'exited')
-    // Wait past the real check deadline; the spawned process and runner use separate clocks.
-    await Bun.sleep(1200)
-    const systemMessages = messages.filter((message) => message.role === 'system')
-    expect(systemMessages).toHaveLength(1)
-    expect(systemMessages[0]?.text.startsWith('pi exited')).toBe(true)
-    expect(journal()[0]).toEqual(['user', 'hello'])
-    expect(statuses).toEqual(['working', 'exited'])
-    await expect(runner.send(session.id, 'later')).rejects.toThrow('session is not running')
-  })
-
-
-  test('assistant text survives a multibyte character split across stdout chunks', async () => {
-    await runner.start(session, '[split]')
-    await until(settled)
-    expect(messages.find((m) => m.role === 'assistant')?.text).toBe('caf\u00e9 \u2615')
-  })
-
-  for (const agent of ['pi', 'omp'] as const) {
-    test(`${agent} settles after reading a frame larger than 4 MiB`, async () => {
-      build(agent)
-      await runner.start(session, '[big]')
-      await until(settled)
-      expect(messages.find((message) => message.role === 'assistant')?.text).toBe('big')
-      expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
-      expect(messages.filter((message) => message.role === 'system')).toEqual([])
+    test('a send while the agent is working steers it, and a send when idle starts a new prompt', async () => {
+      const transport = await begin()
+      await setup.runner.send(setup.session.id, 'actually do this', { queuedId: 'q1' })
+      expect(transport.commands('steer')).toMatchObject([{ message: 'actually do this' }])
+      expect(transport.commands('prompt').length).toBe(1)
+      expect(setup.ofKind('user').at(-1)).toEqual({ kind: 'user', text: 'actually do this', queuedId: 'q1' })
+      setup.settle(transport)
+      await setup.runner.send(setup.session.id, 'next')
+      expect(transport.commands('prompt')).toMatchObject([{ message: 'hello' }, { message: 'next', streamingBehavior: 'steer' }])
+      expect(setup.statuses.at(-1)).toBe('working')
     })
-  }
 
-  test('reads CRLF-terminated frames and skips a blank CRLF line', async () => {
-    await runner.start(session, '[crlf]')
-    await until(settled)
-    expect(messages.map((message) => message.role)).toEqual(['user', 'assistant', 'result'])
-    expect(statuses).toEqual(['working', 'done'])
+    test('images go to the agent as base64 image content', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'pi-runner-'))
+      try {
+        const image = join(dir, 'shot.png')
+        writeFileSync(image, Buffer.from('png-bytes'))
+        const transport = await begin(null)
+        await setup.runner.send(setup.session.id, 'look', { images: [image] })
+        expect(transport.commands('prompt')[0]).toMatchObject({ message: 'look', images: [{ type: 'image', data: Buffer.from('png-bytes').toString('base64'), mimeType: 'image/png' }] })
+        expect(setup.ofKind('user')).toEqual([{ kind: 'user', text: 'look', images: [image] }])
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test('images that fit one by one but not in one frame are refused clearly and nothing is written', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'pi-runner-'))
+      try {
+        const first = join(dir, 'a.png')
+        const second = join(dir, 'b.png')
+        writeFileSync(first, Buffer.alloc(13 * 1024 * 1024))
+        writeFileSync(second, Buffer.alloc(13 * 1024 * 1024))
+        const transport = await begin(null)
+        await expect(setup.runner.send(setup.session.id, 'look', { images: [first, second] })).rejects.toThrow('too large to send together')
+        expect(transport.commands('prompt')).toEqual([])
+        expect(setup.ofKind('user')).toEqual([])
+        expect(setup.ofKind('error')).toHaveLength(1)
+        await setup.runner.send(setup.session.id, 'one', { images: [first] })
+        expect(transport.commands('prompt')).toHaveLength(1)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test('configure switches the model by provider/id and sets the thinking level, returning what is in force', async () => {
+      const transport = await begin(null, { model: 'anthropic/old', effort: 'low' })
+      const settings = await setup.runner.configure!(setup.session.id, { model: 'openai/gpt-x', effort: 'high' })
+      expect(transport.commands('set_model')).toMatchObject([{ provider: 'openai', modelId: 'gpt-x' }])
+      expect(transport.commands('set_thinking_level')).toMatchObject([{ level: 'high' }])
+      expect(settings).toEqual({ model: 'openai/gpt-x', effort: 'high' })
+    })
+
+    test('overlapping configure calls apply in arrival order', async () => {
+      const transport = await begin(null, { model: 'anthropic/old' })
+      let release!: () => void
+      const held = new Promise<void>((resolve) => (release = resolve))
+      transport.replies.set('get_available_models', () => ({ success: true, data: { models: [{ provider: 'a', id: 'solo' }] } }))
+      const originalWrite = transport.write.bind(transport)
+      transport.write = (frame) => {
+        if (frame.type === 'get_available_models') void held.then(() => originalWrite(frame))
+        else originalWrite(frame)
+      }
+      const first = setup.runner.configure!(setup.session.id, { model: 'solo' })
+      const second = setup.runner.configure!(setup.session.id, { model: 'openai/gpt-x' })
+      await Bun.sleep(5)
+      release()
+      await first
+      expect(await second).toEqual({ model: 'openai/gpt-x' })
+      expect(transport.commands('set_model').at(-1)).toMatchObject({ provider: 'openai', modelId: 'gpt-x' })
+    })
+
+    test('models lists the available models as provider/id', async () => {
+      const transport = await begin(null)
+      transport.replies.set('get_available_models', () => ({
+        success: true,
+        data: { models: [{ provider: 'openai', id: 'gpt-x', name: 'GPT X' }, { provider: 'a', id: 'bare' }, { id: 'orphan' }] }
+      }))
+      expect(await setup.runner.models!(setup.session.id)).toEqual([
+        { id: 'openai/gpt-x', label: 'GPT X (openai)' },
+        { id: 'a/bare', label: 'a/bare' }
+      ])
+    })
+
+    test('configure resolves a bare model id through the available models and rejects an ambiguous one', async () => {
+      const transport = await begin(null)
+      transport.replies.set('get_available_models', () => ({
+        success: true,
+        data: { models: [{ provider: 'a', id: 'solo' }, { provider: 'a', id: 'twin' }, { provider: 'b', id: 'twin' }] }
+      }))
+      expect(await setup.runner.configure!(setup.session.id, { model: 'solo' })).toEqual({ model: 'solo' })
+      expect(transport.commands('set_model')).toMatchObject([{ provider: 'a', modelId: 'solo' }])
+      await expect(setup.runner.configure!(setup.session.id, { model: 'twin' })).rejects.toThrow('use provider/model')
+    })
+
+    test('configure surfaces an agent refusal and keeps the previous settings', async () => {
+      const transport = await begin(null, { model: 'anthropic/old' })
+      transport.replies.set('set_model', () => ({ success: false, error: 'Model not found: x/y' }))
+      await expect(setup.runner.configure!(setup.session.id, { model: 'x/y' })).rejects.toThrow('Model not found')
+      transport.replies.set('set_model', () => ({ success: true }))
+      expect(await setup.runner.configure!(setup.session.id, { effort: 'medium' })).toEqual({ model: 'anthropic/old', effort: 'medium' })
+    })
+
+    test('an image path that is not a regular file is refused before anything is journaled or sent', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'pi-runner-'))
+      try {
+        const transport = await begin(null)
+        await expect(setup.runner.send(setup.session.id, 'look', { images: [dir] })).rejects.toThrow('not a regular file')
+        expect(transport.commands('prompt')).toEqual([])
+        expect(setup.ofKind('user')).toEqual([])
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test('a prompt the agent handled itself ends the turn at once', async () => {
+      setup = makeSetup(variant)
+      await setup.runner.start(setup.session, undefined)
+      const transport = setup.fake.last()
+      transport.replies.set('prompt', () => ({ success: true, data: variant === 'pi' ? { disposition: 'handled' } : { agentInvoked: false } }))
+      await setup.runner.send(setup.session.id, '/compact')
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'done' }])
+      expect(setup.statuses.at(-1)).toBe('done')
+    })
+
+    test('a prompt the agent rejects becomes an error item and a failed turn', async () => {
+      setup = makeSetup(variant)
+      await setup.runner.start(setup.session, undefined)
+      const transport = setup.fake.last()
+      transport.replies.set('prompt', () => ({ success: false, error: 'No model selected' }))
+      await expect(setup.runner.send(setup.session.id, 'hi')).rejects.toThrow('No model selected')
+      expect(setup.ofKind('error')).toEqual([{ kind: 'error', reason: 'protocol', stderrTail: ['No model selected'], resumable: true }])
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'failed' }])
+      expect(setup.statuses.at(-1)).toBe('done')
+    })
+
+    test('a steer the agent rejects rejects send once and records one error item', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' })
+      transport.replies.set('steer', () => ({ success: false, error: 'cannot steer' }))
+      await expect(setup.runner.send(setup.session.id, 'more')).rejects.toThrow('cannot steer')
+      expect(setup.ofKind('error')).toHaveLength(1)
+    })
+
+    test('a transport write failure rejects send so the caller can restore the queued message', async () => {
+      const transport = await begin(null)
+      transport.failWrites.set('prompt', new Error('pi message exceeds the frame limit'))
+      await expect(setup.runner.send(setup.session.id, 'big')).rejects.toThrow('exceeds the frame limit')
+      expect(setup.ofKind('error')).toHaveLength(1)
+    })
+
+    test('a cancelled dialog settles the wait, sends nothing for it and returns the status to working', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-c', method: 'confirm', title: 'Go?' })
+      await until(() => setup.asks.length === 1)
+      expect(setup.statuses.at(-1)).toBe('waiting')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-x', method: 'cancel', targetId: 'ui-c' })
+      await until(() => setup.statuses.at(-1) === 'working')
+      setup.asks[0]!.resolve(setup.answered('ask_c', { decision: { value: 'allow', source: 'option' } }))
+      await Bun.sleep(10)
+      expect(transport.commands('extension_ui_response')).toEqual([])
+    })
+
+    test('a cancelled dialog cancels its own ask once', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-c', method: 'confirm', title: 'Go?' })
+      await until(() => setup.asks.length === 1)
+      setup.asks[0]!.options?.onAsk?.('ask_c')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-x', method: 'cancel', targetId: 'ui-c' })
+      await until(() => setup.statuses.at(-1) === 'working')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-y', method: 'cancel', targetId: 'ui-c' })
+      await Bun.sleep(10)
+      expect(setup.cancelledAsks).toEqual(['ask_c'])
+      expect(transport.commands('extension_ui_response')).toEqual([])
+    })
+
+    test('an exit while the provider session is being stored fails the start and closes the child', async () => {
+      setup = makeSetup(variant)
+      const context: StructuredContext = {
+        ...setup.context,
+        setProviderSession: async () => {
+          setup.fake.last().exit(1, ['died early'])
+        }
+      }
+      const runner = createPiRunner(context, variant, { transport: setup.fake.factory })
+      await expect(runner.start(setup.session, 'hello')).rejects.toThrow('died early')
+      expect(setup.fake.last().commands('prompt')).toEqual([])
+      await expect(runner.send(setup.session.id, 'again')).rejects.toThrow('not running')
+    })
+
+    test('stop aborts, closes the child, stops open calls and ends the turn as stopped', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'bash', args: { command: 'sleep 99' } })
+      await setup.runner.stop(setup.session.id)
+      expect(transport.commands('abort').length).toBe(1)
+      expect(transport.closed).toBe(true)
+      expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running', 'stopped'])
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'stopped' }])
+      expect(setup.statuses.at(-1)).toBe('exited')
+      await expect(setup.runner.send(setup.session.id, 'late')).rejects.toThrow('not running')
+    })
+
+    test('interrupt aborts, ends the turn as stopped and keeps the child open for the next send', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'bash', args: { command: 'sleep 99' } })
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.commands('abort').length).toBe(1)
+      expect(transport.closed).toBe(false)
+      expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running', 'stopped'])
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'stopped' }])
+      expect(setup.statuses.at(-1)).toBe('done')
+      expect(setup.statuses).not.toContain('exited')
+      transport.emit({ type: 'agent_end' })
+      expect(setup.ofKind('turn-end')).toHaveLength(1)
+      await setup.runner.send(setup.session.id, 'again')
+      expect(transport.commands('prompt')).toHaveLength(2)
+      expect(setup.statuses.at(-1)).toBe('working')
+    })
+
+    test('interrupt with no open turn does nothing', async () => {
+      const transport = await begin(null)
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.commands('abort')).toEqual([])
+      expect(setup.ofKind('turn-end')).toEqual([])
+    })
+
+    test('an abort the agent never answers falls back to a full stop', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' })
+      transport.silent.add('abort')
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.closed).toBe(true)
+      expect(setup.statuses.at(-1)).toBe('exited')
+    })
+
+    test('stop answers pending dialogs with nothing and still exits', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-9', method: 'confirm', title: 'Go?' })
+      await until(() => setup.asks.length === 1)
+      await setup.runner.stop(setup.session.id)
+      setup.asks[0]!.resolve({ status: 'unavailable', askId: 'x', answers: {}, skipped: [], summary: '', reason: 'gone' })
+      await Bun.sleep(10)
+      expect(transport.commands('extension_ui_response')).toEqual([])
+    })
+
+    test('an exit while working journals the stderr tail as a resumable error and fails the turn', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'bash', args: { command: 'ls' } })
+      transport.exit(1, ['loading model', 'fatal: out of memory'])
+      expect(setup.ofKind('error')).toEqual([{ kind: 'error', reason: 'exited', stderrTail: ['loading model', 'fatal: out of memory'], resumable: true }])
+      expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running', 'failed'])
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'failed' }])
+      expect(setup.statuses.at(-1)).toBe('exited')
+      await expect(setup.runner.send(setup.session.id, 'again')).rejects.toThrow('not running')
+    })
+
+    test('a clean exit while idle journals nothing', async () => {
+      const transport = await begin(null)
+      transport.exit(0)
+      expect(setup.ofKind('error')).toEqual([])
+      expect(setup.statuses.at(-1)).toBe('exited')
+    })
+
+    test('an exit before the session is ready fails the start with the stderr tail', async () => {
+      setup = makeSetup(variant)
+      const silent = fakePiTransports({ silent: ['get_state'] })
+      const runner = createPiRunner(setup.context, variant, { transport: silent.factory })
+      const started = runner.start(setup.session, 'hello')
+      await until(() => silent.started.length === 1)
+      silent.last().exit(2, ['Stored session working directory does not exist'])
+      await expect(started).rejects.toThrow('Stored session working directory does not exist')
+      expect(setup.ofKind('error')).toEqual([])
+    })
+  })
+}
+
+describe('omp approval modes', () => {
+  let setup: Setup
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
   })
 
-  test('an over-limit unterminated frame exits once and rejects later sends', async () => {
-    build('pi', undefined, { maxFrameBytes: 1024 * 1024 })
-    await runner.start(session, '[flood]')
-    const pidsPath = join(home, 'flood-pids.json')
-    await until(() => existsSync(pidsPath))
-    const pids = JSON.parse(readFileSync(pidsPath, 'utf8')) as { parent: number; child: number }
+  test('the opening approval mode reaches the command line and the reported settings', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'write' })
+    expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--approval-mode', 'write'])
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'write' })
+  })
+
+  test('switching mode relaunches omp on the same conversation and keeps the chat running', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask', model: 'a/m', env: { TOKEN: 't' } })
+    const first = setup.fake.last()
+    expect(await setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).toEqual({ model: 'a/m', permissionMode: 'yolo' })
+    const second = setup.fake.last()
+    expect(second).not.toBe(first)
+    // the fake's session file does not exist on disk, so the relaunch resumes by id
+    expect(second.spec.args).toEqual(['--mode', 'rpc', '--resume', 'pi-sess-1', '--model', 'a/m', '--approval-mode', 'yolo'])
+    expect(second.spec.env).toMatchObject({ TOKEN: 't' })
+    expect(second.commands('set_ask_dialog')).toHaveLength(1)
+    expect(first.closed).toBe(true)
+    expect(setup.statuses).not.toContain('exited')
+    await setup.runner.send(setup.session.id, 'next')
+    expect(second.commands('prompt')).toMatchObject([{ message: 'next' }])
+    expect(first.commands('prompt')).toEqual([])
+  })
+
+  test('the relaunch resumes from the session file when it exists', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omp-mode-'))
     try {
-      const signalsPath = join(home, 'flood-signals')
-      await until(() => {
-        if (!existsSync(signalsPath)) return false
-        const signals = readFileSync(signalsPath, 'utf8')
-        return signals.includes('child\n') && signals.includes('parent\n')
-      })
-      expect(readFileSync(signalsPath, 'utf8').split('\n').filter(Boolean).sort()).toEqual(['child', 'parent'])
-      expect(process.kill(pids.parent, 0)).toBe(true)
-      expect(process.kill(pids.child, 0)).toBe(true)
-      await until(() => statuses.at(-1) === 'exited', 1000)
-      await until(() => {
-        try { process.kill(pids.child, 0); return false } catch { return true }
-      }, 1000)
-      expect(() => process.kill(pids.parent, 0)).toThrow()
+      const file = join(dir, 'session.jsonl')
+      writeFileSync(file, '')
+      setup = makeSetup('omp')
+      setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'pi-sess-1', sessionFile: file } }))
+      await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+      await setup.runner.configure!(setup.session.id, { permissionMode: 'write' })
+      expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--resume', file, '--approval-mode', 'write'])
     } finally {
-      try { process.kill(-pids.parent, 'SIGKILL') } catch {}
-    }
-
-    const systemMessages = () => messages.filter((message) => message.role === 'system')
-    expect(systemMessages().map((message) => message.text)).toEqual(['pi sent an rpc frame too large to read'])
-    expect(statuses.at(-1)).toBe('exited')
-    await expect(runner.send(session.id, 'too late')).rejects.toThrow('session is not running')
-    // process-close output is asynchronous and must not append a second diagnostic
-    await Bun.sleep(300)
-    expect(systemMessages()).toHaveLength(1)
-  }, 15_000)
-
-  test('an unreadable JSON line is journaled, and an empty line and a non-object value are ignored', async () => {
-    await runner.start(session, '[unreadable]')
-    await until(settled)
-    expect(messages.filter((message) => message.role === 'system').map((message) => message.text)).toEqual([
-      'unreadable pi output: invalid-json'
-    ])
-    expect(messages.filter((message) => message.role === 'result')).toHaveLength(1)
-  })
-
-  test('refuses an agent other than pi or omp and refuses resume', async () => {
-    await expect(runner.start({ ...session, agent: 'claude' }, 'x')).rejects.toThrow('support pi and omp only')
-    await expect(runner.start(session, 'x', { providerSession: { id: 'p', transcriptPath: null } })).rejects.toThrow('cannot be resumed')
-  })
-
-  test('stop ends the process and reports exited; a later send fails', async () => {
-    await runner.start(session)
-    await runner.stop(session.id)
-    expect(statuses.at(-1)).toBe('exited')
-    await expect(runner.send(session.id, 'x')).rejects.toThrow('not running')
-  })
-
-  test('an unexpected process exit is journaled and exits the session', async () => {
-    await runner.start(session, '[hold]')
-    await until(() => fake.commands().some((command) => command.type === 'prompt'))
-    process.kill(-(await pidOf()), 'SIGKILL')
-    await until(() => statuses.at(-1) === 'exited')
-    expect(messages.some((m) => m.role === 'system' && m.text.startsWith('pi exited'))).toBe(true)
-  })
-
-  test('routes login-shell lookup and RPC launch through the process runner', async () => {
-    const recording = recordProcess()
-    const shell = writeStandInShell('recording-login-shell', `printf '%s\\n' '/opt/tools/omp'\n`)
-    await expect(resolvePiThroughLoginShell(recording, shell, 'omp')).resolves.toBe('/opt/tools/omp')
-    expect(recording.runs).toEqual([
-      { argv: [shell, '-l', '-c', 'command -v omp'], options: undefined }
-    ])
-
-    build('pi', undefined, undefined, {}, recording)
-    await runner.start(session, 'hello')
-    await until(() => fake.launch() !== null)
-    expect(recording.spawns).toHaveLength(1)
-    expect(recording.spawns[0]).toEqual({
-      argv: [fake.executable, '--mode', 'rpc'],
-      options: expect.objectContaining({
-        cwd: home,
-        timeoutMs: null,
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'tail',
-        stderrTailBytes: 16_384,
-        killGraceMs: 2_000
-      })
-    })
-  })
-
-  test('stop during pending executable resolution prevents spawning', async () => {
-    const recording = recordProcess()
-    build('pi', undefined, undefined, {}, recording)
-    const deferred = Promise.withResolvers<string>()
-    context.resolvePiPath = () => deferred.promise
-
-    const starting = runner.start(session, 'hello')
-    await runner.stop(session.id)
-    deferred.resolve(fake.executable)
-    await starting
-
-    expect(recording.spawns).toEqual([])
-  })
-
-  test('journals the final assistant frame before a nonzero exit and stderr', async () => {
-    const frame = JSON.stringify({
-      type: 'message_end',
-      message: { role: 'assistant', content: [{ type: 'text', text: 'final answer' }] }
-    })
-    const executable = writeStandInShell(
-      'pi-final-frame',
-      `printf '%s\\n' '${frame}'\nprintf '%s\\n' 'rpc transport failed' >&2\nexit 1\n`
-    )
-    context.resolvePiPath = async () => executable
-    runner = createPiRunner(context)
-
-    await runner.start(session, 'hello')
-    await until(() => statuses.at(-1) === 'exited')
-
-    expect(journal()).toEqual([
-      ['user', 'hello'],
-      ['assistant', 'final answer'],
-      ['system', 'pi exited with code 1; stderr: rpc transport failed']
-    ])
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('journals a spawn error and marks the session exited', async () => {
-    context.resolvePiPath = async () => join(home, 'missing-pi-executable')
-    runner = createPiRunner(context)
-
-    await runner.start(session, 'hello')
-    await until(() => statuses.at(-1) === 'exited')
-
-    expect(messages.find((message) => message.role === 'system')?.text).toMatch(/^could not start pi: /)
-    expect(statuses).toEqual(['working', 'exited'])
-  })
-
-  test('fails clearly when no process spawner is configured', async () => {
-    delete context.process
-    runner = createPiRunner(context)
-
-    await expect(runner.start(session, 'hello')).rejects.toThrow('no process spawner configured for pi')
-    expect(statuses).toEqual([])
-  })
-
-  test('resolves an executable after login-shell profile noise and records shell arguments', async () => {
-    const shell = writeStandInShell('login-shell', `printf '%s\\n' "$@" > "\${0%/*}/args"
-printf '%s\\n' 'profile noise' '/opt/tools/omp'
-`)
-    await expect(resolvePiThroughLoginShell(processRunner, shell, 'omp')).resolves.toBe('/opt/tools/omp')
-    expect(readFileSync(join(home, 'args'), 'utf8').trimEnd().split('\n')).toEqual([
-      '-l',
-      '-c',
-      'command -v omp'
-    ])
-  })
-
-  test('rejects login shells that fail, return only a blank line, or exit unsuccessfully after a path', async () => {
-    const cases = [
-      ['login-exit-1', 'exit 1\n'],
-      ['login-empty', `printf '%s\\n' ''\n`],
-      ['login-exit-3', `printf '%s\\n' '/opt/tools/pi'\nexit 3\n`]
-    ] as const
-    for (const [name, body] of cases) {
-      const shell = writeStandInShell(name, body)
-      await expect(resolvePiThroughLoginShell(processRunner, shell, 'pi')).rejects.toThrow(
-        'could not find the pi executable on the login shell PATH'
-      )
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 
-  test('rejects timed-out and spawn-error login-shell lookups', async () => {
-    const shell = join(home, 'unused-login-shell')
-    const timedOut: ProcessRunner = {
-      run: async () => runResult({ stdoutText: '/opt/tools/pi\n', stopped: 'timeout' })
-    }
-    const spawnFailed: ProcessRunner = {
-      run: async () => runResult({
-        exitCode: null,
-        spawnError: { code: 'ENOENT', message: 'login shell could not start' }
-      })
-    }
-
-    await expect(resolvePiThroughLoginShell(timedOut, shell, 'pi')).rejects.toThrow(
-      'could not find the pi executable on the login shell PATH'
-    )
-    await expect(resolvePiThroughLoginShell(spawnFailed, shell, 'pi')).rejects.toThrow('login shell could not start')
+  test('a turn in progress refuses the switch and leaves the process alone', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, 'busy', { permissionMode: 'always-ask' })
+    setup.fake.last().emit({ type: 'agent_start' })
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow("wait for the turn to end before changing omp's approval mode")
+    expect(setup.fake.started).toHaveLength(1)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
   })
 
-  test('rejects when the login shell executable does not exist', async () => {
-    await expect(resolvePiThroughLoginShell(processRunner, join(home, 'missing-login-shell'), 'pi')).rejects.toThrow()
+  test('a relaunch that fails keeps the old process serving the chat', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+    const first = setup.fake.last()
+    setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'another' } }))
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('expected pi-sess-1')
+    expect(setup.fake.last().closed).toBe(true)
+    expect(first.closed).toBe(false)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
+    await setup.runner.send(setup.session.id, 'still here')
+    expect(first.commands('prompt')).toMatchObject([{ message: 'still here' }])
   })
 
-  test('start fails clearly when no executable resolver exists', async () => {
-    const bare = createPiRunner({ appendMessage: () => ({}) as StructuredMessage, setStatus() {}, createAsk: async () => ({}) as AskEnvelope, setProviderSession: async () => {}, resolveClaudePath: async () => '', resolveCodexPath: async () => '' })
-    await expect(bare.start(session, 'x')).rejects.toThrow('resolve the pi executable')
+  test('pi refuses a permission mode', async () => {
+    setup = makeSetup('pi')
+    await setup.runner.start(setup.session, undefined, {})
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('pi has no permission modes')
   })
 })
 
-async function pidOf(): Promise<number> {
-  const out = await Bun.$`pgrep -f ${fake.executable}`.text()
-  return Number(out.trim().split('\n')[0])
-}
+describe('pi launch arguments', () => {
+  test('only omp takes an approval mode', () => {
+    expect(piLaunchArgs('omp', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc', '--approval-mode', 'yolo'])
+    expect(piLaunchArgs('pi', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc'])
+  })
+
+  test('pi resumes with --session and omp with --resume', () => {
+    expect(piLaunchArgs('pi', { resume: 'abc' })).toEqual(['--mode', 'rpc', '--session', 'abc'])
+    expect(piLaunchArgs('omp', { resume: 'abc', model: 'm', effort: 'low' })).toEqual(['--mode', 'rpc', '--resume', 'abc', '--model', 'm', '--thinking', 'low'])
+  })
+})
+
+describe('pi stdio transport', () => {
+  test('frames split on LF only, responses correlate by id and a failing command rejects', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pi-rpc-'))
+    try {
+      const script = join(dir, 'agent.ts')
+      writeFileSync(
+        script,
+        `
+        process.stdout.write(JSON.stringify({ type: 'ready', note: 'a\\u2028b' }) + '\\r\\n')
+        let input = ''
+        process.stdin.on('data', (chunk) => {
+          input += chunk
+          for (;;) {
+            const newline = input.indexOf('\\n')
+            if (newline < 0) break
+            const command = JSON.parse(input.slice(0, newline))
+            input = input.slice(newline + 1)
+            if (command.type === 'boom') { process.stderr.write('one\\ntwo\\n'); process.exit(3) }
+            const ok = command.type !== 'bad'
+            process.stdout.write(JSON.stringify({ id: command.id, type: 'response', command: command.type, success: ok, ...(ok ? { data: { echoed: command.value } } : { error: 'nope' }) }) + '\\n')
+          }
+        })
+        `
+      )
+      const events: Record<string, unknown>[] = []
+      const exits: unknown[] = []
+      const processRunner = createProcessRunner({ owner: 'pi-rpc-test' })
+      const rpc = new PiRpc(
+        { executable: process.execPath, args: [script], cwd: dir, env: process.env },
+        { event: (frame) => events.push(frame), exit: (exit) => exits.push(exit) },
+        processRunner,
+        spawnPiTransport
+      )
+      expect(await rpc.request('echo', { value: 7 })).toEqual({ echoed: 7 })
+      await expect(rpc.request('bad')).rejects.toThrow('nope')
+      expect(events).toEqual([{ type: 'ready', note: 'a b' }])
+      await expect(rpc.request('boom')).rejects.toThrow('exited with code 3')
+      expect(exits).toMatchObject([{ code: 3, stderrTail: ['one', 'two'] }])
+      await rpc.close()
+      await processRunner.dispose()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+  test('an outgoing frame carrying an image at the structured cap is sent whole', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pi-rpc-big-'))
+    try {
+      const script = join(dir, 'agent.ts')
+      writeFileSync(
+        script,
+        `
+        let input = ''
+        process.stdin.on('data', (chunk) => {
+          input += chunk
+          for (;;) {
+            const newline = input.indexOf('\\n')
+            if (newline < 0) break
+            const line = input.slice(0, newline)
+            input = input.slice(newline + 1)
+            const command = JSON.parse(line)
+            process.stdout.write(JSON.stringify({ id: command.id, type: 'response', command: command.type, success: true, data: { bytes: command.images[0].data.length } }) + '\\n')
+          }
+        })
+        `
+      )
+      const processRunner = createProcessRunner({ owner: 'pi-rpc-big-test' })
+      const rpc = new PiRpc(
+        { executable: process.execPath, args: [script], cwd: dir, env: process.env },
+        { event: () => {}, exit: () => {} },
+        processRunner,
+        spawnPiTransport
+      )
+      const data = Buffer.alloc(3 * 1024 * 1024 + 4096, 1).toString('base64')
+      expect(await rpc.request('prompt', { message: 'look', images: [{ type: 'image', data, mimeType: 'image/png' }] }, 60_000)).toEqual({ bytes: data.length })
+      await expect(rpc.request('prompt', { message: 'x', images: [{ data: 'a'.repeat(40 * 1024 * 1024) }] })).rejects.toThrow('frame limit')
+      await rpc.close()
+      await processRunner.dispose()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('pi and omp commands', () => {
+  let setup: Setup | undefined
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+    setup = undefined
+  })
+
+  const PI_COMMANDS = [
+    { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt', sourceInfo: { scope: 'project', origin: 'top-level' } },
+    { name: 'skill:review', description: 'Review a diff', source: 'skill', sourceInfo: { scope: 'user', origin: 'top-level' } },
+    { name: 'skill:deploy', description: 'Deploy', source: 'skill', sourceInfo: { scope: 'user', origin: 'package' } },
+    { name: 'todos', source: 'extension', sourceInfo: { scope: 'user', origin: 'top-level' } }
+  ]
+
+  test('pi reports get_commands at start, with package entries as plugin entries', async () => {
+    setup = makeSetup('pi', { get_commands: () => ({ success: true, data: { commands: PI_COMMANDS } }) })
+    await setup.runner.start(setup.session, undefined)
+    expect(setup.fake.last().commands('get_commands')).toHaveLength(1)
+    expect(setup.reported).toEqual([
+      [
+        { name: 'fix-tests', kind: 'command', description: 'Fix failing tests' },
+        { name: 'skill:review', kind: 'skill', description: 'Review a diff' },
+        { name: 'skill:deploy', kind: 'plugin', description: 'Deploy' },
+        { name: 'todos', kind: 'command' }
+      ]
+    ])
+  })
+
+  test('pi moves a skill picked mid-message to the front, where pi expands it, but journals what was typed', async () => {
+    setup = makeSetup('pi', { get_commands: () => ({ success: true, data: { commands: PI_COMMANDS } }) })
+    await setup.runner.start(setup.session, 'fix the login /skill:review focus on auth')
+    expect(setup.fake.last().commands('prompt')).toMatchObject([{ message: '/skill:review fix the login focus on auth' }])
+    expect(setup.ofKind('user')).toEqual([{ kind: 'user', text: 'fix the login /skill:review focus on auth' }])
+  })
+
+  test('omp reports get_available_commands with built-ins start-only, follows available_commands_update, and never moves a built-in', async () => {
+    setup = makeSetup('omp', {
+      get_available_commands: () => ({
+        success: true,
+        data: {
+          commands: [
+            { name: 'compact', description: 'Compact the session', input: { hint: '[focus]' }, source: 'builtin' },
+            { name: 'skill:review', description: 'Review a diff', input: { hint: 'arguments' }, source: 'skill' },
+            { name: 'docs', description: 'From MCP', source: 'mcp_prompt' },
+            { name: 'odd', source: 'unknown' }
+          ]
+        }
+      })
+    })
+    await setup.runner.start(setup.session, 'please /compact now')
+    const transport = setup.fake.last()
+    expect(setup.reported[0]).toEqual([
+      { name: 'compact', kind: 'builtin', description: 'Compact the session', argumentHint: '[focus]', startOnly: true },
+      { name: 'skill:review', kind: 'skill', description: 'Review a diff' },
+      { name: 'docs', kind: 'mcp', description: 'From MCP' }
+    ])
+    expect(transport.commands('prompt')).toMatchObject([{ message: 'please /compact now' }])
+    transport.emit({ type: 'available_commands_update', commands: [{ name: 'skill:new', source: 'skill' }] })
+    expect(setup.reported.at(-1)).toEqual([{ name: 'skill:new', kind: 'skill' }])
+  })
+})

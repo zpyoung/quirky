@@ -250,6 +250,15 @@ function completedCall(
   return receipts.some((receipt) => receipt.method === method && receipt.completed && predicate(receipt))
 }
 
+function TasksListHarness(props: Omit<React.ComponentProps<typeof TasksList>, 'adopt'>) {
+  const [state, setState] = React.useState(props.state)
+  React.useEffect(() => { setState(props.state) }, [props.state])
+  const adopt = React.useCallback((next: TasksState) => {
+    setState((previous) => next.revision >= previous.revision ? next : previous)
+  }, [])
+  return React.createElement(TasksList, { ...props, state, adopt })
+}
+
 async function mount(element: React.ReactElement): Promise<{ container: HTMLElement; root: Root }> {
   const container = document.createElement('div')
   document.body.append(container)
@@ -482,7 +491,7 @@ test.each(['issues', 'prs'] as const)('a repository without an origin leads with
   await host.call('navigate', { mode, repoIds: [host.repoId], query: 'is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(() => completedCall(driver.receipts, 'quirky.tasks/list'), 'missing-origin list response')
 
   expect(mounted.container.querySelector('button[aria-label="New GitHub issue"]')).toBeNull()
@@ -526,7 +535,7 @@ test('an origin switch prevents a lagging upstream refresh from repainting the c
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue is:open' })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(() => mounted.container.textContent?.includes('Upstream issue 7') === true, 'initial upstream issue row')
 
   const oldRefresh = driver.hold('quirky.tasks/list', (params) => params.noCache === true)
@@ -555,15 +564,12 @@ test('a delayed issue list cannot repaint the PR view after a mode switch', asyn
   const initialState = taskState(await host.call('state'))
   const driver = uiContext(host)
   const oldResponse = driver.hold('quirky.tasks/list', (params) => params.mode === 'issues')
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state: initialState, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state: initialState, refresh: async () => undefined }))
   await waitForUi(() => oldResponse.wasReached(), 'initial issue list request')
 
-  const nextState = {
-    ...initialState,
-    navigation: { ...initialState.navigation, mode: 'prs' as const, query: 'is:pr is:open' }
-  }
+  const nextState = taskState(await host.call('navigate', { mode: 'prs', query: 'is:pr is:open' }))
   await React.act(async () => {
-    mounted.root.render(React.createElement(TasksList, { context: driver.context, state: nextState, refresh: async () => undefined }))
+    mounted.root.render(React.createElement(TasksListHarness, { context: driver.context, state: nextState, refresh: async () => undefined }))
   })
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
@@ -593,7 +599,7 @@ test('on-page pull-request descriptions come from Hosting while list results kee
 
   const driver = uiContext(host)
   const state = taskState(await host.call('state'))
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
       && mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(pull.body) === true,
@@ -625,7 +631,7 @@ test('a late pull-request description cannot replace the newly selected PR descr
   const driver = uiContext(host)
   const firstDescription = driver.hold('quirky.hosting/workItem', (params) => params.number === firstPull.number)
   const state = taskState(await host.call('state'))
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => firstDescription.wasReached() && mounted.container.querySelectorAll('.tasks-list__row').length === 2,
     'the first description request and both PR rows'
@@ -640,7 +646,7 @@ test('a late pull-request description cannot replace the newly selected PR descr
   })
   const nextState = taskState(await host.call('state'))
   await React.act(async () => {
-    mounted.root.render(React.createElement(TasksList, { context: driver.context, state: nextState, refresh: async () => undefined }))
+    mounted.root.render(React.createElement(TasksListHarness, { context: driver.context, state: nextState, refresh: async () => undefined }))
   })
   await waitForUi(
     () => mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(secondPull.body) === true,
@@ -673,7 +679,7 @@ test('manual refresh adopts an updated pull-request description from Hosting', a
 
   const driver = uiContext(host)
   const state = taskState(await host.call('state'))
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => mounted.container.querySelector('.tasks-pr__description')?.textContent?.includes(pull.body) === true,
     'initial pull-request description'
@@ -703,7 +709,7 @@ test('a failed assignee edit preserves an earlier successful status change in th
   await host.call('navigate', { mode: 'issues', repoIds: [host.repoId], query: 'is:issue', detail: { worktree: host.worktree, kind: 'issue', number: 7, url: issue.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
       && completedCall(driver.receipts, 'quirky.tasks/issue')
@@ -750,9 +756,9 @@ test('closing an issue in its pane keeps the closed row under is:open while sear
   })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
-    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues')
+    () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'issues' && receipt.params.query === 'is:open')
       && completedCall(driver.receipts, 'quirky.tasks/issue')
       && mounted.container.querySelector('.tasks-list__row') !== null
       && !issueStatusSelect(mounted.container).disabled,
@@ -769,7 +775,7 @@ test('closing an issue in its pane keeps the closed row under is:open while sear
       && completedCall(driver.receipts, 'quirky.tasks/issueEdit')
       && completedCall(driver.receipts, 'quirky.tasks/list', (receipt) =>
         receipt.params.noCache === true
-          && receipt.params.query === 'is:issue is:open'
+          && receipt.params.query === 'is:open'
           && listItemState(receipt.value, 7) === 'open'),
     'confirmed close while the open-issue search index lags'
   )
@@ -778,7 +784,7 @@ test('closing an issue in its pane keeps the closed row under is:open while sear
     receipt.method === 'quirky.tasks/list'
     && receipt.completed
     && receipt.params.noCache === true
-    && receipt.params.query === 'is:issue is:open'
+    && receipt.params.query === 'is:open'
     && listItemState(receipt.value, 7) === 'open')
   expect(staleOpenRead).toBeDefined()
   expect(fixtureItem(host, 7).state).toBe('closed')
@@ -797,7 +803,7 @@ test('closing an issue in its pane keeps the closed row under is:open while sear
         receipt.method === 'quirky.tasks/list'
         && receipt.completed
         && receipt.params.noCache === true
-        && receipt.params.query === 'is:issue is:open'
+        && receipt.params.query === 'is:open'
         && listItemState(receipt.value, 7) === 'open')
   }, 'confirmed issue reopen')
   const reopenedRow = mounted.container.querySelector('.tasks-list__row')
@@ -814,7 +820,7 @@ test('quiet adoption retains a confirmed merge while search indexing lags, then 
   await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr', detail: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')
       && mergeTrigger(mounted.container, 12)?.textContent?.trim().startsWith('Merge ') === true,
@@ -868,7 +874,7 @@ test('a failed later reviewer request retains an earlier confirmed reviewer upda
   await host.call('navigate', { mode: 'prs', repoIds: [host.repoId], query: 'is:pr is:open', detail: { worktree: host.worktree, kind: 'pullRequest', number: 12, url: pull.url } })
   const state = taskState(await host.call('state'))
   const driver = uiContext(host)
-  const mounted = await mount(React.createElement(TasksList, { context: driver.context, state, refresh: async () => undefined }))
+  const mounted = await mount(React.createElement(TasksListHarness, { context: driver.context, state, refresh: async () => undefined }))
   const reviewerButton = () => mounted.container.querySelector('.tasks-pr button[aria-haspopup="dialog"]')
   await waitForUi(
     () => completedCall(driver.receipts, 'quirky.tasks/list', (receipt) => receipt.params.mode === 'prs')

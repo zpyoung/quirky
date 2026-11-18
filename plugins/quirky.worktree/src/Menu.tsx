@@ -41,6 +41,7 @@ export function workspaceMenu(
   statuses: readonly Pick<WorktreeStatusDefinition, 'id' | 'label' | 'icon'>[] = Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label })),
   options: { handoffToAvatar?: boolean } = {}
 ): ContextMenuItem[] {
+  const onRun = run
   const sleeping = 'sleeping' in worktree && worktree.sleeping === true
   const archived = 'archivedAt' in worktree && (worktree as Worktree & { archivedAt: number | null }).archivedAt !== null
   const ownSection = worktree.kind === 'git' && repo?.kind === 'git'
@@ -50,18 +51,18 @@ export function workspaceMenu(
       label: group.name,
       checked: group.id === currentSection,
       enabled: group.id !== currentSection,
-      onSelect: () => run('move-section', group.id)
+      onSelect: () => onRun('move-section', group.id)
     })),
     ...(currentSection !== null
-      ? [{ label: 'Remove from section', separatorBefore: groups.length > 0, onSelect: () => run('move-section', null) }]
+      ? [{ label: 'Remove from section', separatorBefore: groups.length > 0, onSelect: () => onRun('move-section', null) }]
       : []),
-    { label: 'New section…', separatorBefore: groups.length > 0 || currentSection !== null, onSelect: () => run('move-section', NEW_SECTION) }
+    { label: 'New section…', separatorBefore: groups.length > 0 || currentSection !== null, onSelect: () => onRun('move-section', NEW_SECTION) }
   ]
   const sleepAction: RowAction = sleeping ? 'wake' : 'sleep'
   const sleepItems: ContextMenuItem[] = [
-    { label: sleeping ? 'Wake' : 'Sleep', onSelect: () => run(sleepAction) },
+    { label: sleeping ? 'Wake' : 'Sleep', onSelect: () => onRun(sleepAction) },
     ...(descendants > 0
-      ? [{ label: `${sleeping ? 'Wake' : 'Sleep'} with descendants (${descendants})`, onSelect: () => run(sleepAction, WITH_DESCENDANTS) }]
+      ? [{ label: `${sleeping ? 'Wake' : 'Sleep'} with descendants (${descendants})`, onSelect: () => onRun(sleepAction, WITH_DESCENDANTS) }]
       : [])
   ]
   const del: ContextMenuItem = worktree.isMain
@@ -70,96 +71,115 @@ export function workspaceMenu(
         label: descendants > 0 ? `Delete with descendants (${descendants})…` : 'Delete…',
         danger: true,
         separatorBefore: true,
-        onSelect: () => run('delete')
+        onSelect: () => onRun('delete')
       }
   return [
-    { label: 'Rename', onSelect: () => run('rename') },
-    { label: 'Tags…', onSelect: () => run('tags') },
+    { label: 'Rename', onSelect: () => onRun('rename') },
+    { label: 'Tags…', onSelect: () => onRun('tags') },
     { label: 'Move to section', enabled: repo !== undefined, submenu: sectionItems },
     {
       label: 'Move to status',
       submenu: statuses.map((status) => ({
         label: `${status.icon ? `${status.icon} ` : ''}${status.label}`,
         checked: worktree.status === status.id,
-        onSelect: () => run('move-status', status.id)
+        onSelect: () => onRun('move-status', status.id)
       }))
     },
     ...sleepItems,
-    ...(options.handoffToAvatar ? [{ label: 'Hand off to Avatar…', onSelect: () => run('handoff-avatar') }] : []),
+    ...(options.handoffToAvatar ? [{ label: 'Hand off to Avatar…', onSelect: () => onRun('handoff-avatar') }] : []),
     {
       label: 'Open in',
       separatorBefore: true,
       submenu: [
-        { label: 'Terminal', onSelect: () => run('open-terminal') },
-        { label: 'Changes', onSelect: () => run('open-changes') }
+        { label: 'Terminal', onSelect: () => onRun('open-terminal') },
+        { label: 'Changes', onSelect: () => onRun('open-changes') }
       ]
     },
     {
       label: 'Copy',
       submenu: [
-        { label: 'Path', onSelect: () => run('copy-path') },
-        { label: 'Worktree name', onSelect: () => run('copy-name') }
+        { label: 'Path', onSelect: () => onRun('copy-path') },
+        { label: 'Worktree name', onSelect: () => onRun('copy-name') }
       ]
     },
     {
       label: 'More',
       submenu: [
-        { label: 'Set parent…', onSelect: () => run('set-parent') },
-        { label: 'Remove from parent', enabled: worktree.parentId !== null, onSelect: () => run('remove-parent') },
+        { label: 'Set parent…', onSelect: () => onRun('set-parent') },
+        { label: 'Remove from parent', enabled: worktree.parentId !== null, onSelect: () => onRun('remove-parent') },
         worktree.unread
-          ? { label: 'Mark read', onSelect: () => run('mark-read') }
-          : { label: 'Mark unread', onSelect: () => run('mark-unread') },
+          ? { label: 'Mark read', onSelect: () => onRun('mark-read') }
+          : { label: 'Mark unread', onSelect: () => onRun('mark-unread') },
         worktree.pinned
-          ? { label: 'Unpin', onSelect: () => run('unpin') }
-          : { label: 'Pin', onSelect: () => run('pin') },
+          ? { label: 'Unpin', onSelect: () => onRun('unpin') }
+          : { label: 'Pin', onSelect: () => onRun('pin') },
         {
           label: archived ? 'Unarchive' : 'Archive',
           enabled: !worktree.isMain && worktree.kind === 'git',
-          onSelect: () => run('archive', archived ? UNARCHIVE : null)
+          onSelect: () => onRun('archive', archived ? UNARCHIVE : null)
         },
-        { label: 'Details…', onSelect: () => run('details') }
+        { label: 'Details…', onSelect: () => onRun('details') }
       ]
     },
     del
   ]
 }
 
-export type ProjectMenuHandlers = {
-  openDialog(dialog: DialogState): void
-  openLedger(): void
-  /** Moves the project into `group`, or out of its group with null. */
-  moveToGroup(repo: Repo, group: ProjectGroup | null): void
-  /** Present only while the project order is manual; each side is null when the project can't move that way. */
-  reorder?: { up: (() => void) | null; down: (() => void) | null }
-}
+export type ProjectMenuHandlers =
+  | {
+      openDialog(dialog: DialogState): void
+      openLedger(): void
+      /** Moves the project into `group`, or out of its group with null. */
+      moveToGroup(repo: Repo, group: ProjectGroup | null): void
+      /** Present only while the project order is manual; each side is null when the project can't move that way. */
+      reorder?: { up: (() => void) | null; down: (() => void) | null }
+    }
+  | {
+      onOpenDialog(dialog: DialogState): void
+      onOpenLedger(): void
+      onMoveToGroup(repo: Repo, group: ProjectGroup | null): void
+      onMoveUp?: (() => void) | null
+      onMoveDown?: (() => void) | null
+    }
 
 /** The items of a project header's menu. */
 export function projectMenu(repo: Repo, groups: ProjectGroup[], on: ProjectMenuHandlers): ContextMenuItem[] {
+  const onStyle = 'onOpenDialog' in on
+  const onOpenDialog = onStyle ? on.onOpenDialog : on.openDialog
+  const onOpenLedger = onStyle ? on.onOpenLedger : on.openLedger
+  const onMoveToGroup = onStyle ? on.onMoveToGroup : on.moveToGroup
+  const onMoveUp = onStyle ? on.onMoveUp ?? null : on.reorder?.up ?? null
+  const onMoveDown = onStyle ? on.onMoveDown ?? null : on.reorder?.down ?? null
+  const showReorder = onStyle
+    ? on.onMoveUp !== undefined || on.onMoveDown !== undefined
+    : on.reorder !== undefined
   const others = groups.filter((group) => group.id !== repo.groupId)
   const targets: ContextMenuItem[] = [
-    ...others.map((group) => ({ label: group.name, onSelect: () => on.moveToGroup(repo, group) })),
-    ...(repo.groupId !== null ? [{ label: 'No section', onSelect: () => on.moveToGroup(repo, null) }] : [])
+    ...others.map((group) => ({ label: group.name, onSelect: () => onMoveToGroup(repo, group) })),
+    ...(repo.groupId !== null ? [{ label: 'No section', onSelect: () => onMoveToGroup(repo, null) }] : [])
   ]
   return [
-    ...(repo.kind === 'git' ? [{ label: 'Open ledger', onSelect: on.openLedger }] : []),
-    { label: 'Project Settings…', onSelect: () => on.openDialog({ kind: 'project-settings', repoId: repo.id }) },
-    { label: 'New section from project…', onSelect: () => on.openDialog({ kind: 'group', action: 'new', repoId: repo.id }) },
+    ...(repo.kind === 'git' ? [{ label: 'Open ledger', onSelect: onOpenLedger }] : []),
+    { label: 'Project Settings…', onSelect: () => onOpenDialog({ kind: 'project-settings', repoId: repo.id }) },
+    { label: 'New section from project…', onSelect: () => onOpenDialog({ kind: 'group', action: 'new', repoId: repo.id }) },
     ...(targets.length > 0 ? [{ label: 'Move to section', submenu: targets }] : []),
-    ...(on.reorder
+    ...(showReorder
       ? [
-          { label: 'Move up', enabled: on.reorder.up !== null, onSelect: () => on.reorder?.up?.() },
-          { label: 'Move down', enabled: on.reorder.down !== null, onSelect: () => on.reorder?.down?.() }
+          { label: 'Move up', enabled: onMoveUp !== null, onSelect: () => onMoveUp?.() },
+          { label: 'Move down', enabled: onMoveDown !== null, onSelect: () => onMoveDown?.() }
         ]
       : []),
-    { label: 'Remove Project…', onSelect: () => on.openDialog({ kind: 'remove-project', repoId: repo.id }) }
+    { label: 'Remove Project…', onSelect: () => onOpenDialog({ kind: 'remove-project', repoId: repo.id }) }
   ]
 }
 
 /** The items of a group header's menu. */
 export function groupMenu(group: ProjectGroup, openDialog: (dialog: DialogState) => void, openLedger: () => void): ContextMenuItem[] {
+  const onOpenDialog = openDialog
+  const onOpenLedger = openLedger
   return [
-    { label: 'Open ledger', onSelect: openLedger },
-    { label: 'Rename…', onSelect: () => openDialog({ kind: 'group', action: 'rename', groupId: group.id }) },
-    { label: 'Delete section…', onSelect: () => openDialog({ kind: 'group', action: 'delete', groupId: group.id }) }
+    { label: 'Open ledger', onSelect: onOpenLedger },
+    { label: 'Rename…', onSelect: () => onOpenDialog({ kind: 'group', action: 'rename', groupId: group.id }) },
+    { label: 'Delete section…', onSelect: () => onOpenDialog({ kind: 'group', action: 'delete', groupId: group.id }) }
   ]
 }

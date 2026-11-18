@@ -37,5 +37,7 @@ export type Command = {
   shadowedBy?: string
   /** Set on an alias word: the primary command's name, whose listing carries it. */
   aliasOf?: string
+  /** Extra text a plugin's CLI module appends to this command's `--help`; `undefined` when it has none. */
+  extraHelp?(): Promise<string | undefined>
   run(args: ParsedArgs, ctx: Context): Promise<void>
 }

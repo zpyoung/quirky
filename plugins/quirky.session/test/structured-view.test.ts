@@ -70,6 +70,138 @@ async function mount(input: unknown) {
 const rows = (root: Element) => [...root.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)
 
 describe('the structured session view', () => {
+  test('shows a loading state while the session read is pending', async () => {
+    const pending = Promise.withResolvers<unknown>().promise
+    start({ session: bg }, { 'quirky.session/get': () => pending })
+    const view = await mount({ session: 'bg' })
+
+    expect(view.textContent).toContain('Loading session…')
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
+  })
+
+  test('shows a Retry error when the session read fails, then loads on retry', async () => {
+    let attempts = 0
+    start({ session: bg }, {
+      'quirky.session/get': () => {
+        if (++attempts === 1) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return bg
+      }
+    })
+    const view = await mount({ session: 'bg' })
+    const alert = view.querySelector('[role="alert"]')!
+
+    expect(alert.textContent).toContain('Could not load the session: boom')
+    expect([...alert.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Retry'])
+    await act(async () => alert.querySelector('button')!.click())
+    await settle()
+
+    expect(rows(view)).toEqual(['userhi', 'assistanthello'])
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
+    expect(fake.callsTo('quirky.session/get')).toHaveLength(2)
+  })
+
+  test('keeps the visible session after a failed re-read', async () => {
+    let fail = false
+    start({ session: bg }, {
+      'quirky.session/get': () => {
+        if (fail) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return bg
+      }
+    })
+    const view = await mount({ session: 'bg' })
+
+    fail = true
+    await fake.emit({ type: 'quirky.session/changed', data: { session: bg } })
+    await settle()
+
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
+    expect(view.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  test('shows a loading line while messages are pending', async () => {
+    const pending = Promise.withResolvers<unknown>().promise
+    start({ session: bg }, { 'quirky.structured/messages': () => pending })
+    const view = await mount({ session: 'bg' })
+
+    expect(view.textContent).toContain('Loading messages…')
+    expect(view.textContent).not.toContain('No messages yet.')
+  })
+
+  test('shows a Retry error when messages fail, then loads them on retry', async () => {
+    let attempts = 0
+    start({ session: bg }, {
+      'quirky.structured/messages': () => {
+        if (++attempts === 1) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return [message(3, 'user', 'again'), message(4, 'assistant', 'retried')]
+      }
+    })
+    const view = await mount({ session: 'bg' })
+    const alert = view.querySelector('[role="alert"]')!
+
+    expect(alert.textContent).toContain('Could not load messages: boom')
+    expect([...alert.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Retry'])
+    await act(async () => alert.querySelector('button')!.click())
+    await settle()
+
+    expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
+    expect(rows(view)).toEqual(['useragain', 'assistantretried'])
+  })
+
+  test('shows no messages after an empty read', async () => {
+    start({ session: bg }, { 'quirky.structured/messages': () => [] })
+    const view = await mount({ session: 'bg' })
+
+    expect(view.textContent).toContain('No messages yet.')
+    expect(view.textContent).not.toContain('Loading messages…')
+  })
+
+  test('a live message replaces the loading line while the messages read is pending', async () => {
+    const pending = Promise.withResolvers<unknown>().promise
+    start({ session: bg }, { 'quirky.structured/messages': () => pending })
+    const view = await mount({ session: 'bg' })
+    expect(view.textContent).toContain('Loading messages…')
+
+    await fake.emit({ type: 'quirky.structured/message', data: { message: message(5, 'assistant', 'live') } })
+
+    expect(rows(view)).toEqual(['assistantlive'])
+    expect(view.textContent).not.toContain('Loading messages…')
+  })
+
+  test('routes Show all events through a command and follows command changes while mounted', async () => {
+    const current = { session: bg as Session | null }
+    const messagesFor = [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic')]
+    start(current, { 'quirky.structured/messages': () => messagesFor })
+    const view = await mount({ session: 'bg' })
+    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+
+    await act(async () => checkbox.click())
+    expect(fake.executed.at(-1)).toStrictEqual({
+      id: 'command:quirky.session/show-all-events',
+      args: { session: 'bg', enabled: true },
+      options: { activateOwner: false }
+    })
+    expect(checkbox.checked).toBe(true)
+    expect(view.textContent).toContain('hook_pre: diagnostic')
+
+    await fake.command('show-all-events', { session: 'bg', enabled: false })
+    expect(checkbox.checked).toBe(false)
+    expect(view.textContent).not.toContain('hook_pre: diagnostic')
+  })
+
+  test('a show-all command for an unknown session does not change the mounted view', async () => {
+    start({ session: bg }, {
+      'quirky.structured/messages': () =>
+        [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic')]
+    })
+    const view = await mount({ session: 'bg' })
+    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+
+    await expect(fake.command('show-all-events', { session: 'missing', enabled: true })).rejects.toThrow('no such session: missing')
+
+    expect(checkbox.checked).toBe(false)
+    expect(view.textContent).not.toContain('hook_pre: diagnostic')
+  })
+
   test('remembers Show all events for its session across unmounts until unticked', async () => {
     const other = session({ id: 'other', kind: 'structured', agent: 'claude', title: 'Other background' })
     const current = { session: bg as Session | null }
@@ -146,7 +278,7 @@ describe('the structured session view', () => {
     expect(fake.callsTo('quirky.session/get')[0]!.params).toEqual({ session: 'bg' })
     expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
     expect(rows(view)).toEqual(['userhi', 'assistanthello'])
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     expect(fake.callsTo('quirky.terminal/attach')).toEqual([])
 
     await act(async () => void (unmount as () => void)())
@@ -160,21 +292,19 @@ describe('the structured session view', () => {
   test('takes a follow-up through the same input the session view has', async () => {
     start({ session: bg }, { 'quirky.structured/send': () => ({ ok: true }) })
     const view = await mount({ session: 'bg' })
-    const textarea = view.querySelector('textarea')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, ' next ')
-      textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => void textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next' })
+    const { EditorView } = await import('@codemirror/view')
+    const editor = EditorView.findFromDOM(view.querySelector<HTMLElement>('.cm-editor')!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: ' next ' }, selection: { anchor: 6 } }))
+    await act(async () => void editor.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: ' next ', when: 'now' })
   })
 
   test('re-reads the session when it changes, and ignores other sessions', async () => {
     const current = { session: bg as Session | null }
     start(current)
     const view = await mount({ session: 'bg' })
-    expect(view.querySelector('textarea')).not.toBeNull()
-    expect(view.textContent).not.toContain('session ended')
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
+    expect(view.textContent).not.toContain('Session ended')
 
     await fake.emit({ type: 'quirky.session/changed', data: { session: session({ id: 'other', kind: 'structured' }) } })
     expect(fake.callsTo('quirky.session/get')).toHaveLength(1)
@@ -183,8 +313,8 @@ describe('the structured session view', () => {
     await fake.emit({ type: 'quirky.session/changed', data: { session: current.session } })
     await settle()
     expect(fake.callsTo('quirky.session/get')).toHaveLength(2)
-    expect(view.textContent).toContain('session ended')
-    expect(view.querySelector('textarea')).toBeNull()
+    expect(view.textContent).toContain('Session ended')
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   test('an unknown session says so, and a session that is closed while shown turns into the same message', async () => {
@@ -198,12 +328,12 @@ describe('the structured session view', () => {
     current.session = bg
     start(current)
     const view = await mount({ session: 'bg' })
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     current.session = null
     await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'bg' } })
     await settle()
     expect(view.querySelector('p')?.textContent).toBe('Session not found')
-    expect(view.querySelector('textarea')).toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   test('an input without a session names none and reads nothing', async () => {
@@ -218,5 +348,29 @@ describe('the structured session view', () => {
     expect(fake.provided.has('view:quirky.session/worktree')).toBe(true)
     expect(fake.provided.has('command:quirky.session/new-shell')).toBe(true)
     expect(fake.provided.has('command:quirky.session/select-tab-9')).toBe(true)
+  })
+
+  test('offers Retry when enabling structured sessions fails to read messages', async () => {
+    let phase: 'off' | 'failed' | 'ready' = 'off'
+    start({ session: bg }, {
+      'quirky.structured/messages': () => {
+        if (phase === 'off') throw new RpcError(RpcErrorCode.MethodNotFound, 'disabled')
+        if (phase === 'failed') throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return [message(1, 'user', 'recovered')]
+      }
+    })
+    const view = await mount({ session: 'bg' })
+    expect(view.textContent).toContain('Structured sessions are off')
+    phase = 'failed'
+    await fake.emit({ type: 'plugin.changed' })
+    await settle()
+    const alert = view.querySelector('[role="alert"]')!
+    expect(alert?.textContent).toContain('Could not load messages: boom')
+    expect(view.textContent).not.toContain('Structured sessions are off')
+    phase = 'ready'
+    await act(async () => alert.querySelector('button')!.click())
+    await settle()
+    expect(rows(view)).toEqual(['userrecovered'])
+    expect(view.querySelector('[role="alert"]')).toBeNull()
   })
 })

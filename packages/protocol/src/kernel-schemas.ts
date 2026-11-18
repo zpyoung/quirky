@@ -43,6 +43,36 @@ const listOf = (items: Schema, description?: string): Schema => ({
   items,
   ...(description ? { description } : {})
 })
+const folderListing = object(
+  {
+    path: string('Canonical absolute directory path.'),
+    parent: { description: 'Canonical absolute parent path, or null at the filesystem root.' },
+    entries: listOf(object({
+      name: string('Directory entry name.'),
+      path: string('Absolute navigable path.')
+    }, ['name', 'path'])),
+    offset: integer(0, 'Zero-based entry offset.'),
+    limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Entries per page.' },
+    hasMore: boolean('Whether another page follows.')
+  },
+  ['path', 'parent', 'entries', 'offset', 'limit', 'hasMore']
+)
+const browserHostPrompt = object(
+  {
+    requestId: string(),
+    kind: { type: 'string', enum: ['folder-picker', 'file-picker', 'window-open'] },
+    title: string(),
+    expiresAt: integer(0),
+    busy: boolean(),
+    error: { description: 'An error message, or null when the request has no error.' },
+    draftPath: string(),
+    directory: folderListing,
+    selectedPaths: strings,
+    multiple: boolean()
+  },
+  ['requestId', 'kind', 'title', 'expiresAt', 'busy', 'error']
+)
+
 
 /** `properties` plus the `yes` and `confirmation` params every destructive method accepts. */
 const destructiveParams = (properties: Record<string, Schema>, required: string[] = []): Schema =>
@@ -109,7 +139,8 @@ const jobInfo = object(
     timeoutMs: { type: 'number' },
     state: { type: 'string', enum: ['idle', 'running'] },
     nextRunAt: { description: 'The next run time, or null while running.' },
-    lastRun: { description: 'The last run, or null.' }
+    lastRun: { description: 'The last run, or null.' },
+    stalled: object({ handlers: integer(0) }, ['handlers'])
   },
   ['id', 'plugin', 'intervalMs', 'timeoutMs', 'state', 'nextRunAt', 'lastRun']
 )
@@ -336,6 +367,7 @@ const nativeNotificationCapabilities = object(
 const nativeDesktopCapabilities = object(
   {
     directoryPicker: boolean(),
+    filePicker: boolean(),
     auxiliaryWindows: boolean(),
     revealItem: boolean(),
     notifications: nativeNotificationCapabilities
@@ -393,6 +425,27 @@ export type KernelMethodSchema = {
   readOnly?: true
   destructive?: { confirm: string }
 }
+const nullableMemoryTree: Schema = {
+  description: 'A memory tree, or null when the process table is unavailable.',
+  properties: {
+    processCount: integer(0),
+    rssBytes: integer(0),
+    processes: listOf(
+      object(
+        { pid: integer(1), ppid: integer(0), rssBytes: integer(0), name: string() },
+        ['pid', 'ppid', 'rssBytes', 'name']
+      )
+    ),
+    omitted: integer(0)
+  },
+  required: ['processCount', 'rssBytes', 'processes', 'omitted']
+}
+
+const nullableMemoryTotals: Schema = {
+  description: 'The unique process total, or null when the process table is unavailable.',
+  properties: { processCount: integer(0), rssBytes: integer(0) },
+  required: ['processCount', 'rssBytes']
+}
 
 /** Every kernel method's params and result schema; `params` never rejects what the handler accepts. */
 export const KERNEL_METHOD_SCHEMAS = {
@@ -438,6 +491,59 @@ export const KERNEL_METHOD_SCHEMAS = {
         socket: { description: 'The unix socket path, or null when none is listening.' }
       },
       ['daemonVersion', 'pid', 'startedAt', 'home', 'ptyHost', 'clients', 'safeMode', 'socket']
+    )
+  },
+  'diagnostics.memory': {
+    description: 'The daemon, PTY host and each running session process tree memory usage.',
+    readOnly: true,
+    params: noParams,
+    result: object(
+      {
+        schemaVersion: { type: 'integer', enum: [1] },
+        takenAt: { type: 'number' },
+        daemon: object(
+          {
+            pid: integer(1),
+            rssBytes: { description: 'RSS bytes, or null when the process table or daemon row is unavailable.' },
+            heapUsedBytes: integer(0),
+            heapTotalBytes: integer(0),
+            externalBytes: integer(0),
+            descendants: nullableMemoryTree
+          },
+          ['pid', 'rssBytes', 'heapUsedBytes', 'heapTotalBytes', 'externalBytes', 'descendants']
+        ),
+        ptyHost: object(
+          {
+            pid: { description: 'The PTY host pid, or null when unknown.' },
+            alive: boolean(),
+            rssBytes: { description: 'RSS bytes, or null when the process table or host row is unavailable.' }
+          },
+          ['pid', 'alive', 'rssBytes']
+        ),
+        sessions: listOf(
+          object(
+            {
+              sessionId: string(),
+              pid: integer(1),
+              title: { description: 'The session title, or null.' },
+              cwd: string(),
+              tree: nullableMemoryTree
+            },
+            ['sessionId', 'pid', 'title', 'cwd', 'tree']
+          )
+        ),
+        totals: nullableMemoryTotals,
+        unavailable: listOf(
+          object(
+            {
+              part: { type: 'string', enum: ['process-table', 'pty-host', 'pty-sessions'] },
+              reason: string()
+            },
+            ['part', 'reason']
+          )
+        )
+      },
+      ['schemaVersion', 'takenAt', 'daemon', 'ptyHost', 'sessions', 'totals', 'unavailable']
     )
   },
   'daemon.stop': {
@@ -650,6 +756,52 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: object({ target: { type: 'string', enum: ['sidebar', 'view', 'panel'] } }, ['target']),
     result: uiLayout
   },
+  'ui.url': {
+    description: 'Returns the built browser UI entry URL authenticated with this daemon’s loopback RPC token.',
+    readOnly: true,
+    params: noParams,
+    result: object({ url: string('Authenticated http://127.0.0.1 loopback URL with the token in its fragment.') }, ['url'])
+  },
+  'ui.open': {
+    description: 'Requests that the daemon host open its authenticated browser UI URL with the default browser.',
+    params: noParams,
+    result: object({
+      url: string('The authenticated loopback URL.'),
+      requested: boolean('True when the OS opener accepted the request.')
+    }, ['url', 'requested'])
+  },
+  'ui.folder.list': {
+    description: 'Lists canonical daemon-filesystem directories, including directory symlinks, in a page.',
+    readOnly: true,
+    params: object({
+      path: string('Absolute directory path; omitted starts at the daemon process OS home.'),
+      offset: integer(0, 'Zero-based offset; defaults to 0.'),
+      limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Page size from 1 to 200; defaults to 100.' }
+    }),
+    result: folderListing
+  },
+  'ui.browserHost.control': {
+    description: 'Reads or controls the browser host prompt in one exact live UI connection; CLI callers supply connId.',
+    params: object({
+      connId: integer(1, 'Exact live UI connection ID.'),
+      action: {
+        type: 'string',
+        enum: ['state', 'set-path', 'navigate', 'select', 'confirm', 'cancel', 'open-popup']
+      },
+      requestId: string('Current browser-host request identity required for mutations.'),
+      path: string('Directory path for set-path, navigate or select.'),
+      selected: boolean('Explicit selection state for select.'),
+      offset: integer(0, 'Directory page offset for navigate.')
+    }, ['connId', 'action']),
+    result: object({
+      active: {
+        description: 'The current browser-host prompt snapshot, or null when idle.',
+        properties: browserHostPrompt.properties,
+        required: browserHostPrompt.required
+      }
+    }, ['active'])
+  },
+
   'ui.command.run': {
     description: 'Runs a plugin UI command in one open window and returns its result.',
     params: object({ id: string(), args: { description: "Checked against the command's args schema." } }, ['id']),
@@ -723,6 +875,13 @@ export const KERNEL_METHOD_SCHEMAS = {
     ),
     result: object({ cancelled: boolean(), paths: strings }, ['cancelled', 'paths'])
   },
+  'desktop.file.pick': {
+    description: 'Opens the selected native shell file chooser and returns its absolute selected paths; an empty selection is cancellation.',
+    params: object(
+      { title: string(), multiple: boolean(), imagesOnly: boolean() }
+    ),
+    result: object({ cancelled: boolean(), paths: strings }, ['cancelled', 'paths'])
+  },
   'desktop.window.open': {
     description: 'Opens effective view `view` with its exact `input` in a separately owned native window.',
     params: object({ view: string(), input: { description: 'Passed to the view as its input.' }, title: string() }, ['view']),
@@ -758,8 +917,13 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: desktopWindowSummary
   },
   'desktop.window.runOwnerCommand': {
-    description: 'Runs a command in the exact owner shell of an auxiliary window and activates that native window on success. Role `ui` only.',
-    params: object({ windowId: string(), id: string(), args: { description: 'Command arguments, validated against the UI command declaration.' } }, ['windowId', 'id']),
+    description: 'Runs a command in the exact owner shell of an auxiliary window and, unless `activateOwner` is false, activates that native window on success. Role `ui` only.',
+    params: object({
+      windowId: string(),
+      id: string(),
+      args: { description: 'Command arguments, validated against the UI command declaration.' },
+      activateOwner: boolean('False runs the command without activating the owner window. Default true.')
+    }, ['windowId', 'id']),
     result: object({ result: { description: 'The owner window command result.' }, activated: boolean() }, ['result', 'activated'])
   },
   'desktop.window.closed': {
@@ -880,7 +1044,7 @@ export const KERNEL_EVENT_SCHEMAS = {
         requestId: string(),
         action: object(
           {
-            kind: { type: 'string', enum: ['folder-picker', 'window-open', 'window-close', 'window-activate-owner', 'reveal-item'] },
+            kind: { type: 'string', enum: ['folder-picker', 'file-picker', 'window-open', 'window-close', 'window-activate-owner', 'reveal-item'] },
             request: { type: 'object', additionalProperties: true, description: 'The request matching `kind`.' }
           },
           ['kind', 'request']

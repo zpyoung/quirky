@@ -1,4 +1,6 @@
 import { performance } from 'node:perf_hooks'
+import { createSupervision, type SupervisionEngine } from '@quirky/supervision'
+
 import type { PluginContext, StructuredMessage } from '@quirky/protocol'
 import type {
   CheckResult,
@@ -189,13 +191,18 @@ function normalizeCheck(value: unknown, durationMs: number): CheckResult {
 }
 
 export class EvidenceEngine implements EvidenceEngineContract {
+  private readonly supervision: SupervisionEngine
+  private readonly ownsSupervision: boolean
   private readonly active = new Map<string, ActiveGather>()
   private shuttingDown = false
 
-  constructor(private readonly context: PluginContext) {}
+  constructor(private readonly context: PluginContext, supervision?: SupervisionEngine) {
+    this.ownsSupervision = supervision === undefined
+    this.supervision = supervision ?? createSupervision(context)
+  }
 
   snapshot(cwd: string): Promise<string | null> {
-    return snapshotWorkingTree(cwd)
+    return snapshotWorkingTree(this.context.process, cwd)
   }
 
   async validate(agent: LoopAgent, config: LoopConfig, _cwd: string): Promise<void> {
@@ -240,12 +247,13 @@ export class EvidenceEngine implements EvidenceEngineContract {
     input.onPhase?.('checking')
     const startedAt = performance.now()
     try {
-      const result = await this.context.call('quirky.checks/run', {
+      const result = await this.supervision.runCheck({
         checkId,
         command: definition.command,
         cwd: input.loop.cwd,
         timeoutSeconds: definition.timeoutSeconds ?? 300
-      })
+      }, { signal: active.controller.signal })
+
       return normalizeCheck(result, performance.now() - startedAt)
     } catch (error) {
       return failedCheck(error, active.controller.signal.aborted, performance.now() - startedAt)
@@ -259,7 +267,7 @@ export class EvidenceEngine implements EvidenceEngineContract {
     if (!checkId || active.cancelledCheckId === checkId) return
     active.cancelledCheckId = checkId
     try {
-      await this.context.call('quirky.checks/cancel', { checkId })
+      await this.supervision.cancelCheck(checkId)
     } catch {
       // Check cancellation is best-effort after a plugin or daemon shutdown.
     }
@@ -268,8 +276,8 @@ export class EvidenceEngine implements EvidenceEngineContract {
   private async gatherActive(input: GatherInput, active: ActiveGather): Promise<IterationEvidence> {
     const markers = parseMarkers(input.messages)
     const agentOutput = outputTail(input.messages)
-    const treeAfter = await snapshotWorkingTree(input.loop.cwd, active.controller.signal)
-    const diff = await diffTrees(input.loop.cwd, input.treeBefore, treeAfter, active.controller.signal)
+    const treeAfter = await snapshotWorkingTree(this.context.process, input.loop.cwd, active.controller.signal)
+    const diff = await diffTrees(this.context.process, input.loop.cwd, input.treeBefore, treeAfter, active.controller.signal)
     const protectedPatterns = input.loop.config.protectedPaths?.filter((pattern) => pattern.trim() !== '') ?? []
     const protectedPathHits = protectedPatterns.length === 0
       ? []
@@ -307,6 +315,7 @@ export class EvidenceEngine implements EvidenceEngineContract {
       !aborted
     ) {
       checkpointCommit = await checkpointChangedPaths(
+        this.context.process,
         input.loop.cwd,
         input.loop.name,
         input.n,
@@ -352,5 +361,6 @@ export class EvidenceEngine implements EvidenceEngineContract {
       await this.cancelCheck(gathering)
     }))
     await Promise.allSettled(active.map((gathering) => gathering.task).filter((task): task is Promise<IterationEvidence> => task !== undefined))
+    if (this.ownsSupervision) this.supervision.dispose()
   }
 }

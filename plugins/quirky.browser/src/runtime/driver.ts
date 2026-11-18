@@ -15,6 +15,8 @@ import { BrowserStore, type BrowserPage } from '../profiles/store'
 import type { BrowserIdentityMode } from '../preferences/contract'
 import { identityModeFromSetting, userAgentForIdentity } from '../preferences/identity'
 import { findWatchOccurrences } from './find'
+import { fetchDomainCommand, InterceptLedger, type HeldRequest } from './intercept'
+import { launchDetachedOpen } from './process'
 
 
 export type RuntimeBinding = {
@@ -72,9 +74,10 @@ export type RuntimePageState = {
   binding: RuntimeBinding
   consoleEntries: ConsoleEntry[]
   networkById: Map<string, NetworkEntry>
+  networkResourceTypes: Map<string, string>
   networkEntries: NetworkEntry[]
   harEntries: JsonValue[]
-  interceptRequests: Array<{ id: string; url: string; method: string; headers: Record<string, string>; resourceType: string }>
+  intercepts: InterceptLedger
   navigationReady?: boolean
   mainFrameId?: string
   mainFrameLoaderId?: string
@@ -167,6 +170,7 @@ type BoundPage = {
   sessionId: string
   generation: number
   runtime: RuntimePageState
+  interceptDiscard?: Promise<void>
 }
 
 type RuntimeEpoch = {
@@ -437,6 +441,34 @@ function cdpTransportFailure(error: unknown): boolean {
   return message.includes('websocket') || message.includes('malformed json') || message.includes('malformed envelope') || message.includes('50 mib frame')
 }
 
+/** Creates a user-approved external launch bound to the originating Watch lease. */
+export function createExternalPrompt(
+  event: CdpEvent,
+  mainFrameUrl: string | undefined,
+  isCurrentWatch: () => boolean,
+  dependencies: Pick<BrowserDependencies, 'process' | 'log'>
+): RuntimePanePrompt | null {
+  const url = asString(event.params.url)
+  if (!url || event.params.userGesture !== true) return null
+  try { if (new URL(url).protocol !== 'mailto:') return null } catch { return null }
+  let origin = 'unknown origin'
+  if (mainFrameUrl) {
+    try { origin = new URL(mainFrameUrl).origin } catch { origin = 'unknown origin' }
+  }
+  return {
+    id: randomUUID(),
+    kind: 'external',
+    origin,
+    message: `${origin} requested opening an email link in another app.`,
+    respond: async (input) => {
+      if (!isCurrentWatch()) throw fault('browser_tab_changed', 'the external-app prompt belongs to a stale Watch lease')
+      if (!input.accept) return
+      if (process.platform !== 'darwin') throw fault('browser_unavailable', 'external-app launching is supported only on macOS')
+      launchDetachedOpen(dependencies, ['open', url])
+    }
+  }
+}
+
 export class BrowserRuntime {
   private readonly profiles = new Map<string, ProfileRuntime>()
   private readonly generations = new Map<string, number>()
@@ -447,6 +479,7 @@ export class BrowserRuntime {
   private readonly paneWatches = new Map<string, PaneWatchState>()
   private readonly paneWatchesByPage = new Map<string, string>()
   private readonly paneDownloadOwners = new Map<string, { profileId: string; pageId: string; epochId: string }>()
+  private readonly interceptReleases = new Map<string, number>()
   private readonly identityMode: BrowserIdentityMode
   constructor(
     private readonly store: BrowserStore,
@@ -457,6 +490,9 @@ export class BrowserRuntime {
     this.identityMode = identityModeFromSetting(identityMode)
     for (const page of store.listPages()) this.generations.set(page.browserPageId, 0)
     this.dependencies.onControl?.(this.testControl())
+  }
+  openDetached(args: readonly string[], fallbackLog?: (message: string) => void): void {
+    launchDetachedOpen(this.dependencies, args, fallbackLog)
   }
   pageSettings(pageId: string): PageSettings {
     const current = this.settings.get(pageId)
@@ -476,13 +512,51 @@ export class BrowserRuntime {
     return structuredClone(settings)
   }
 
+  /** Clears patterns and releases the live binding's held requests without taking the profile lock. Never throws. */
+  async releaseIntercepts(pageId: string): Promise<void> {
+    this.updatePageSettings(pageId, (settings) => { settings.routes = [] })
+    for (const profile of this.profiles.values()) {
+      const epoch = profile.epoch
+      const binding = epoch?.pages.get(pageId)
+      if (!epoch || epoch.invalid || epoch.stopping || !binding) continue
+      await Promise.allSettled(binding.runtime.intercepts.take().map(async (requestId) => {
+        await epoch.cdp.send('Fetch.continueRequest', { requestId }, binding.sessionId, 5_000)
+      }))
+    }
+  }
+
+  /** Keeps queued commands from holding new requests until the locked disable finishes. */
+  async withInterceptsReleased<T>(pageId: string, operation: () => Promise<T>): Promise<T> {
+    this.interceptReleases.set(pageId, (this.interceptReleases.get(pageId) ?? 0) + 1)
+    try {
+      await this.releaseIntercepts(pageId)
+      return await operation()
+    } finally {
+      const remaining = (this.interceptReleases.get(pageId) ?? 1) - 1
+      if (remaining === 0) this.interceptReleases.delete(pageId)
+      else this.interceptReleases.set(pageId, remaining)
+    }
+  }
+
+  /** Returns stored patterns and live pending requests without starting a browser or taking its lock. */
+  interceptSnapshot(pageId: string): { patterns: string[]; requests: HeldRequest[] } {
+    const patterns = this.pageSettings(pageId).routes
+    const profile = this.profiles.get(this.store.getPage(pageId).profileId)
+    const epoch = profile?.epoch
+    if (profile && epoch?.invalid) profile.lossReported = true
+    const binding = epoch?.pages.get(pageId)
+    if (epoch && !epoch.invalid && !epoch.stopping && binding) {
+      return { patterns, requests: binding.runtime.intercepts.list() }
+    }
+    return { patterns, requests: [] }
+  }
+
   private testControl(): BrowserTestControl {
     return {
       crashHelper: async (profileId) => {
         const epoch = this.profile(profileId).epoch
         if (!epoch) throw fault('browser_error', 'no owned browser helper is running for that profile')
-        epoch.helper.child.kill('SIGKILL')
-        await epoch.helper.child.exited
+        await epoch.helper.child.stop({ signal: 'SIGKILL' })
       }
     }
   }
@@ -524,11 +598,17 @@ export class BrowserRuntime {
   }
 
 
-  async withPage<T>(page: BrowserPage, method: string, operation: (execution: PageExecution) => Promise<T>): Promise<T> {
+  async withPage<T>(
+    page: BrowserPage,
+    method: string,
+    operation: (execution: PageExecution) => Promise<T>,
+    options?: { spansNavigation?: boolean }
+  ): Promise<T> {
     const profile = this.profile(page.profileId)
     if (profile.clearing) throw fault('browser_error', 'browser profile is being cleared')
     if (this.changingPages.has(page.browserPageId)) throw fault('browser_tab_changed', 'the managed page is changing browser profiles')
     const expectedGeneration = this.generation(page.browserPageId)
+    const expectedBinding = options?.spansNavigation ? profile.epoch?.pages.get(page.browserPageId) : undefined
     const controller = new AbortController()
     const controllers = profile.controllers.get(page.browserPageId) ?? new Set<AbortController>()
     controllers.add(controller)
@@ -540,7 +620,10 @@ export class BrowserRuntime {
         let current: BrowserPage
         try { current = this.store.getPage(page.browserPageId) } catch { throw fault('browser_tab_closed', 'the managed page was closed before the operation ran') }
         if (current.profileId !== page.profileId) throw fault('browser_tab_changed', 'the managed page changed browser profiles before the operation ran')
-        if (this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (!options?.spansNavigation && this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        if (expectedBinding && (profile.epoch?.invalid || profile.epoch?.pages.get(page.browserPageId) !== expectedBinding)) {
+          throw fault('browser_tab_changed', 'the managed page changed before the operation ran')
+        }
         const epoch = await this.ensureEpoch(profile, page.profileId)
         const binding = await this.ensureBinding(epoch, current, this.generation(page.browserPageId))
         if (epoch.activeTabId !== binding.tabId) {
@@ -577,7 +660,9 @@ export class BrowserRuntime {
           await binding.runtime.termination
           throw fault('browser_tab_changed', 'the managed page changed browser profiles during the operation')
         }
-        if (epoch.invalid || this.generation(page.browserPageId) !== expectedGeneration) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
+        if (epoch.invalid || (options?.spansNavigation
+          ? epoch.pages.get(page.browserPageId) !== binding
+          : this.generation(page.browserPageId) !== expectedGeneration)) throw fault('browser_tab_changed', 'browser page identity changed during the operation')
         return result
       }, controller.signal)
     } catch (error) {
@@ -899,21 +984,20 @@ export class BrowserRuntime {
             void this.endPaneWatch(state, 'Watch received an invalid intercepted request.')
             return
           }
-          // Authentication interception pauses ordinary requests too. Resume on this exact
+          if (binding.runtime.intercepts.discarded) {
+            void this.failIntercept(epoch, binding, requestId)
+            return
+          }
           const settings = this.pageSettings(page.browserPageId)
           const request = objectValue(event.params.request)
-          if (settings.routes.length > 0 && request) {
-            const entries = binding.runtime.interceptRequests
-            entries.push({
-              id: requestId,
-              url: asString(request.url) ?? '',
-              method: asString(request.method) ?? 'GET',
-              headers: headersAsStrings(request.headers),
-              resourceType: asString(event.params.resourceType) ?? 'Other'
-            })
-            if (entries.length > 10_000) entries.splice(0, entries.length - 10_000)
-          }
-          // session outside the profile FIFO held by the pending navigation.
+          if (!this.interceptReleases.has(page.browserPageId) && settings.routes.length > 0 && request && binding.runtime.intercepts.hold({
+            id: requestId,
+            url: asString(request.url) ?? '',
+            method: asString(request.method) ?? 'GET',
+            headers: headersAsStrings(request.headers),
+            resourceType: binding.runtime.networkResourceTypes.get(asString(event.params.networkId) ?? '') ?? asString(event.params.resourceType) ?? 'Other',
+            networkId: asString(event.params.networkId)
+          })) return
           void epoch.cdp.send('Fetch.continueRequest', { requestId }, sessionId, 5_000)
             .catch(() => this.endPaneWatch(state, 'Watch could not resume an intercepted request.'))
         })
@@ -1030,11 +1114,8 @@ export class BrowserRuntime {
           downloadPath: downloadDir,
           eventsEnabled: true
         })
-        const watchSettings = this.pageSettings(page.browserPageId)
-        await epoch.cdp.send('Fetch.enable', {
-          ...(watchSettings.routes.length > 0 ? { patterns: watchSettings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-          handleAuthRequests: true
-        }, sessionId)
+        const fetch = fetchDomainCommand(this.pageSettings(page.browserPageId), true)
+        await epoch.cdp.send(fetch.method, fetch.params, sessionId)
         await epoch.cdp.send('Security.enable', {}, sessionId)
         await epoch.cdp.send('Security.setOverrideCertificateErrors', { override: true }, sessionId)
         await epoch.cdp.send('Target.setDiscoverTargets', { discover: true })
@@ -1082,14 +1163,10 @@ export class BrowserRuntime {
     for (const unsubscribe of watch.subscriptions) unsubscribe()
     if (watch.downloads.size === 0) this.clearDownloadSubscriptions(watch)
     if (!watch.epoch.invalid && !watch.epoch.stopping) {
-      const settings = this.pageSettings(watch.pageId)
-      const restoreFetch = !this.closingPages.has(watch.pageId) && !this.changingPages.has(watch.pageId) &&
-        (settings.routes.length > 0 || settings.credentials)
-        ? watch.epoch.cdp.send('Fetch.enable', {
-          ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-          ...(settings.credentials ? { handleAuthRequests: true } : {})
-        }, watch.binding.sessionId, 5_000)
-        : watch.epoch.cdp.send('Fetch.disable', {}, watch.binding.sessionId, 5_000)
+      const fetch = fetchDomainCommand(this.pageSettings(watch.pageId), false)
+      // disabling Fetch resumes held traffic, so leave it intact on targets being destroyed
+      const restoreFetch = watch.binding.runtime.intercepts.discarded || this.closingPages.has(watch.pageId) || this.changingPages.has(watch.pageId)
+        ? Promise.resolve() : watch.epoch.cdp.send(fetch.method, fetch.params, watch.binding.sessionId, 5_000)
       await Promise.allSettled([
         watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000),
         restoreFetch,
@@ -1232,24 +1309,13 @@ export class BrowserRuntime {
   }
 
   private emitExternalPrompt(watch: PaneWatchState, event: CdpEvent): void {
-    const url = asString(event.params.url)
-    if (!url || event.params.userGesture !== true) return
-    let protocol = ''
-    try { protocol = new URL(url).protocol } catch { return }
-    if (protocol === 'http:' || protocol === 'https:' || protocol !== 'mailto:') return
-    const origin = this.originOf(watch.binding.runtime.mainFrameUrl)
-    const prompt: RuntimePanePrompt = {
-      id: randomUUID(),
-      kind: 'external',
-      origin,
-      message: `${origin} requested opening an email link in another app.`,
-      respond: async (input) => {
-        if (!this.isCurrentPaneWatch(watch)) throw fault('browser_tab_changed', 'the external-app prompt belongs to a stale Watch lease')
-        if (!input.accept) return
-        if (process.platform !== 'darwin') throw fault('browser_unavailable', 'external-app launching is supported only on macOS')
-        Bun.spawn(['open', url], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' }).unref()
-      }
-    }
+    const prompt = createExternalPrompt(
+      event,
+      watch.binding.runtime.mainFrameUrl,
+      () => this.isCurrentPaneWatch(watch),
+      this.dependencies
+    )
+    if (!prompt) return
     try { watch.callbacks.onPrompt(prompt) } catch { /* without an attached pane no external app is launched */ }
   }
 
@@ -1400,7 +1466,10 @@ export class BrowserRuntime {
       if (epoch) {
         epoch.stopping = true
         const bindings = [...epoch.pages.values()]
-        for (const binding of bindings) this.startPageTermination(binding.runtime)
+        const discards = bindings.map((binding) => {
+          this.startPageTermination(binding.runtime)
+          return this.discardIntercepts(epoch, binding)
+        })
         for (const page of this.store.listPages()) {
           if (page.profileId === profileId) this.invalidatePage(page.browserPageId, false)
         }
@@ -1408,6 +1477,7 @@ export class BrowserRuntime {
           for (const controller of controllers) controller.abort()
         }
         try {
+          await Promise.all(discards)
           await this.teardownEpoch(epoch)
         } finally {
           for (const binding of bindings) this.finishPageTermination(binding.runtime)
@@ -1539,7 +1609,6 @@ export class BrowserRuntime {
 
   async closePageOutOfBand(pageId: string): Promise<void> {
     this.closingPages.add(pageId)
-    this.invalidatePage(pageId, true)
     const targets: Array<{ epoch: RuntimeEpoch; binding: BoundPage }> = []
     for (const profile of this.profiles.values()) {
       const epoch = profile.epoch
@@ -1547,14 +1616,21 @@ export class BrowserRuntime {
       if (!epoch || !binding || epoch.invalid) continue
       binding.runtime.pendingDialog = undefined
       this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
       this.closingTargets.add(binding.targetId)
       targets.push({ epoch, binding })
     }
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    const watchCleanup = watch ? this.endPaneWatch(watch, 'The managed page identity changed or closed.') : Promise.resolve()
+    this.invalidatePage(pageId, true)
     for (const profile of this.profiles.values()) {
       for (const controller of profile.controllers.get(pageId) ?? []) controller.abort()
     }
+    await watchCleanup
     for (const { epoch, binding } of targets) {
       try {
+        await this.discardIntercepts(epoch, binding)
         await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000)
       } catch { /* target close is bounded by queued cleanup */ }
       finally { this.finishPageTermination(binding.runtime) }
@@ -1565,26 +1641,30 @@ export class BrowserRuntime {
     if (this.closingPages.has(pageId)) throw fault('browser_tab_closed', 'the managed page is closing')
     if (this.changingPages.has(pageId)) throw fault('browser_tab_changed', 'the managed page is already changing browser profiles')
     this.changingPages.add(pageId)
-    const watchId = this.paneWatchesByPage.get(pageId)
-    const watch = watchId ? this.paneWatches.get(watchId) : undefined
-    if (watch) await this.endPaneWatch(watch, 'The managed page changed browser profiles.')
-    this.invalidatePage(pageId, true)
     const targets: Array<{ epoch: RuntimeEpoch; binding: BoundPage }> = []
     for (const profile of this.profiles.values()) {
       const epoch = profile.epoch
       const binding = epoch?.pages.get(pageId)
       if (!epoch || !binding || epoch.invalid) continue
       this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
       binding.runtime.pendingDialog = undefined
       this.closingTargets.add(binding.targetId)
       targets.push({ epoch, binding })
     }
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    const watchCleanup = watch ? this.endPaneWatch(watch, 'The managed page changed browser profiles.') : Promise.resolve()
+    this.invalidatePage(pageId, true)
     for (const profile of this.profiles.values()) {
       for (const controller of profile.controllers.get(pageId) ?? []) controller.abort()
     }
+    await watchCleanup
     for (const { epoch, binding } of targets) {
-      try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) }
-      catch { /* profile switch will create a fresh target */ }
+      try {
+        await this.discardIntercepts(epoch, binding)
+        await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000)
+      } catch { /* profile switch will create a fresh target */ }
       finally { this.finishPageTermination(binding.runtime) }
     }
   }
@@ -1597,6 +1677,23 @@ export class BrowserRuntime {
 
   finishPageChange(pageId: string): void {
     this.changingPages.delete(pageId)
+  }
+
+  private async failIntercept(epoch: RuntimeEpoch, binding: BoundPage, requestId: string): Promise<void> {
+    if (epoch.invalid) return
+    try {
+      await epoch.cdp.send('Fetch.failRequest', { requestId, errorReason: 'Aborted' }, binding.sessionId, 5_000)
+    } catch { /* cancellation cannot invalidate a healthy epoch */ }
+  }
+
+  private discardIntercepts(epoch: RuntimeEpoch, binding: BoundPage): Promise<void> {
+    if (binding.interceptDiscard) return binding.interceptDiscard
+    const completion = Promise.withResolvers<void>()
+    binding.interceptDiscard = completion.promise
+    const requestIds = binding.runtime.intercepts.discard()
+    void Promise.allSettled(requestIds.map((requestId) => this.failIntercept(epoch, binding, requestId)))
+      .then(() => completion.resolve())
+    return completion.promise
   }
 
   private startPageTermination(state: RuntimePageState): void {
@@ -1628,6 +1725,10 @@ export class BrowserRuntime {
     const profile = this.profile(profileId)
     const epoch = profile.epoch
     const binding = epoch?.pages.get(pageId)
+    if (epoch && binding) {
+      this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
+    }
     this.invalidatePage(pageId, false)
     if (epoch && binding && !epoch.invalid) await this.closeBinding(epoch, pageId, binding)
     this.closingPages.delete(pageId)
@@ -1782,17 +1883,22 @@ export class BrowserRuntime {
     if (completed.has(loaderId) || state.mainFrameUrl === 'about:blank') return
     const eventName = loadState === 'load' ? 'load' : 'DOMContentLoaded'
     const arrived = Promise.withResolvers<void>()
-    const unsubscribe = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
-      if (event.sessionId === execution.binding.sessionId && event.params.frameId === frameId &&
-          event.params.loaderId === loaderId && event.params.name === eventName) {
-        completed.add(loaderId)
-        arrived.resolve()
-      }
-    })
-    if (completed.has(loaderId)) {
-      unsubscribe()
-      return
+    const checkCurrentDocument = () => {
+      if (state.mainFrameUrl === 'about:blank' ||
+          state.mainFrameLoaderId && completed.has(state.mainFrameLoaderId)) arrived.resolve()
     }
+    const unsubscribeLifecycle = execution.cdp.subscribe('Page.lifecycleEvent', (event) => {
+      if (event.sessionId !== execution.binding.sessionId) return
+      const loaderId = asString(event.params.loaderId)
+      if (event.params.frameId === state.mainFrameId && loaderId && event.params.name === eventName) {
+        completed.add(loaderId)
+      }
+      queueMicrotask(checkCurrentDocument)
+    })
+    const unsubscribeNavigation = execution.cdp.subscribe('Page.frameNavigated', (event) => {
+      if (event.sessionId === execution.binding.sessionId) queueMicrotask(checkCurrentDocument)
+    })
+    checkCurrentDocument()
     const timeout = Promise.withResolvers<void>()
     const aborted = Promise.withResolvers<void>()
     const onAbort = () => aborted.resolve()
@@ -1813,7 +1919,8 @@ export class BrowserRuntime {
     } finally {
       clearTimeout(timer)
       execution.signal?.removeEventListener('abort', onAbort)
-      unsubscribe()
+      unsubscribeLifecycle()
+      unsubscribeNavigation()
     }
   }
 
@@ -2095,18 +2202,30 @@ export class BrowserRuntime {
   }
 
   private async closeBinding(epoch: RuntimeEpoch, pageId: string, binding: BoundPage): Promise<void> {
-    if (!epoch.invalid) {
-      this.closingTargets.add(binding.targetId)
-      this.invalidateHelperReferences(epoch)
-      try { await nativeRequest(epoch.helper.socketPath, 'tab_close', { tabId: binding.tabId }, 5_000) } catch { /* target may already be closed */ }
-      if (epoch.activeTabId === binding.tabId) epoch.activeTabId = undefined
-      try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) } catch { /* Chrome may already have closed this target */ }
-      try { await epoch.cdp.send('Target.detachFromTarget', { sessionId: binding.sessionId }, undefined, 5_000) } catch { /* session is already detached */ }
-    }
-    epoch.pages.delete(pageId)
-    if (epoch.cookiePageId === pageId) {
-      epoch.cookiePageId = undefined
-      epoch.cookiePage = undefined
+    this.startPageTermination(binding.runtime)
+    const discard = this.discardIntercepts(epoch, binding)
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    try {
+      await Promise.all([
+        discard,
+        watch?.binding === binding ? this.endPaneWatch(watch, 'The managed page identity changed or closed.') : Promise.resolve()
+      ])
+      if (!epoch.invalid) {
+        this.closingTargets.add(binding.targetId)
+        this.invalidateHelperReferences(epoch)
+        try { await nativeRequest(epoch.helper.socketPath, 'tab_close', { tabId: binding.tabId }, 5_000) } catch { /* target may already be closed */ }
+        if (epoch.activeTabId === binding.tabId) epoch.activeTabId = undefined
+        try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) } catch { /* Chrome may already have closed this target */ }
+        try { await epoch.cdp.send('Target.detachFromTarget', { sessionId: binding.sessionId }, undefined, 5_000) } catch { /* session is already detached */ }
+      }
+      if (epoch.pages.get(pageId) === binding) epoch.pages.delete(pageId)
+      if (epoch.cookiePage === binding) {
+        epoch.cookiePageId = undefined
+        epoch.cookiePage = undefined
+      }
+    } finally {
+      this.finishPageTermination(binding.runtime)
     }
   }
   private async ensureBinding(epoch: RuntimeEpoch, page: BrowserPage, generation: number): Promise<BoundPage> {
@@ -2129,7 +2248,12 @@ export class BrowserRuntime {
     epoch.pages.set(page.browserPageId, binding)
     await this.enablePageDomains(epoch, binding)
     await this.applySettings(epoch, binding, this.pageSettings(page.browserPageId), page.url)
-    await this.navigateRetainedPage(epoch, page, binding)
+    binding.runtime.intercepts.suspended = true
+    try {
+      await this.navigateRetainedPage(epoch, page, binding)
+    } finally {
+      binding.runtime.intercepts.suspended = false
+    }
     return binding
   }
 
@@ -2275,9 +2399,10 @@ export class BrowserRuntime {
         binding: { browserEpoch: epoch.id, pageGeneration: generation, targetId, sessionId, tabId },
         consoleEntries: [],
         networkById: new Map(),
+        networkResourceTypes: new Map(),
         networkEntries: [],
         harEntries: [],
-        interceptRequests: [],
+        intercepts: new InterceptLedger(),
         domContentLoadedLoaders: new Set(),
         loadedLoaders: new Set()
       }
@@ -2375,12 +2500,8 @@ export class BrowserRuntime {
         ...(settings.reducedMotion === undefined || settings.reducedMotion === null ? [] : [{ name: 'prefers-reduced-motion', value: settings.reducedMotion }])
       ] }, sessionId)
     }
-    if (settings.routes.length > 0 || settings.credentials) {
-      await epoch.cdp.send('Fetch.enable', {
-        ...(settings.routes.length > 0 ? { patterns: settings.routes.map((urlPattern) => ({ urlPattern: urlPattern.replaceAll('**', '*'), requestStage: 'Request' })) } : {}),
-        ...(settings.credentials ? { handleAuthRequests: true } : {})
-      }, sessionId)
-    }
+    const fetch = fetchDomainCommand(settings, false)
+    if (fetch.method !== 'Fetch.disable') await epoch.cdp.send(fetch.method, fetch.params, sessionId)
   }
 
   private subscribeBrowserEvents(epoch: RuntimeEpoch): void {
@@ -2473,13 +2594,23 @@ export class BrowserRuntime {
         this.pushNavigationEvent(state, { kind: 'document-request', requestId, frameId, loaderId })
       }
       if (!url || !method || !requestId) return
+      // chrome's Fetch domain reports fetch() as XHR; Network retains its resource type
+      const resourceType = asString(event.params.type)
+      if (resourceType) {
+        state.networkResourceTypes.set(requestId, resourceType)
+        state.intercepts.updateResourceType(requestId, resourceType)
+      }
       const timestamp = asFiniteNumber(event.params.wallTime) ?? asFiniteNumber(event.params.timestamp) ?? Date.now() / 1000
       const record: NetworkEntry = { url, method, status: 0, mimeType: '', size: 0, timestamp }
       state.networkEntries.push(record)
       state.networkById.set(requestId, record)
       if (state.networkEntries.length > 10_000) {
         const removed = state.networkEntries.splice(0, state.networkEntries.length - 10_000)
-        for (const [id, entry] of state.networkById) if (removed.includes(entry)) state.networkById.delete(id)
+        for (const [id, entry] of state.networkById) {
+          if (!removed.includes(entry)) continue
+          state.networkById.delete(id)
+          state.networkResourceTypes.delete(id)
+        }
       }
       if (state.captureStartedAt === undefined || timestamp < state.captureStartedAt) return
       const headers = headersAsStrings(request.headers)
@@ -2531,6 +2662,7 @@ export class BrowserRuntime {
       if (event.sessionId !== binding.sessionId) return
       const requestId = asString(event.params.requestId)
       if (!requestId) return
+      state.networkResourceTypes.delete(requestId)
       const size = asFiniteNumber(event.params.encodedDataLength) ?? 0
       const record = state.networkById.get(requestId)
       if (record) record.size = size
@@ -2540,6 +2672,8 @@ export class BrowserRuntime {
       if (event.sessionId !== binding.sessionId) return
       const requestId = asString(event.params.requestId)
       if (!requestId) return
+      state.networkResourceTypes.delete(requestId)
+      state.intercepts.forget(requestId)
       const errorText = asString(event.params.errorText) ?? 'network error'
       if (state.pendingNavigation?.events.some((candidate) => candidate.kind === 'document-request' && candidate.requestId === requestId)) {
         this.pushNavigationEvent(state, { kind: 'loading-failed', requestId, errorText, canceled: event.params.canceled === true })
@@ -2547,22 +2681,28 @@ export class BrowserRuntime {
       this.finishHarEntry(state, requestId, 0, errorText)
     })
     epoch.cdp.subscribe('Fetch.requestPaused', (event) => {
-      if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId) || validateValue({
+      if (event.sessionId !== binding.sessionId || validateValue({
         type: 'object', properties: { requestId: { type: 'string' }, request: { type: 'object', additionalProperties: true }, resourceType: { type: 'string' } },
         required: ['requestId', 'request', 'resourceType'], additionalProperties: true
       }, event.params, 'intercepted request')) return
       const params = event.params as Record<string, unknown>
-      const request = params.request as Record<string, unknown>
-      if (this.pageSettings(binding.pageId).routes.length > 0) {
-        state.interceptRequests.push({
-          id: params.requestId as string,
-          url: asString(request.url) ?? '',
-          method: asString(request.method) ?? 'GET',
-          headers: headersAsStrings(request.headers),
-          resourceType: params.resourceType as string
-        })
-        if (state.interceptRequests.length > 10_000) state.interceptRequests.splice(0, state.interceptRequests.length - 10_000)
+      const watchId = this.paneWatchesByPage.get(binding.pageId)
+      const watch = watchId ? this.paneWatches.get(watchId) : undefined
+      if (watch?.binding === binding && this.isCurrentPaneWatch(watch)) return
+      if (state.intercepts.discarded) {
+        void this.failIntercept(epoch, binding, params.requestId as string)
+        return
       }
+      if (epoch.invalid || epoch.stopping || this.paneWatchesByPage.has(binding.pageId)) return
+      const request = params.request as Record<string, unknown>
+      if (!this.interceptReleases.has(binding.pageId) && this.pageSettings(binding.pageId).routes.length > 0 && state.intercepts.hold({
+        id: params.requestId as string,
+        url: asString(request.url) ?? '',
+        method: asString(request.method) ?? 'GET',
+        headers: headersAsStrings(request.headers),
+        resourceType: state.networkResourceTypes.get(asString(params.networkId) ?? '') ?? params.resourceType as string,
+        networkId: asString(params.networkId)
+      })) return
       void epoch.cdp.send('Fetch.continueRequest', { requestId: params.requestId }, binding.sessionId)
         .catch((error) => this.invalidateEpoch(this.profile(epoch.profileId), epoch, error instanceof Error ? error.message : String(error)))
     })
@@ -2767,6 +2907,7 @@ export class BrowserRuntime {
   private invalidateEpoch(profile: ProfileRuntime, epoch: RuntimeEpoch | undefined, reason: string): void {
     if (!epoch || epoch.stopping || epoch.invalid) return
     epoch.invalid = true
+    for (const binding of epoch.pages.values()) binding.runtime.intercepts.discard()
     profile.failureReason = reason.slice(0, 300)
     for (const page of this.store.listPages()) {
       if (page.profileId !== epoch.profileId) continue
@@ -2781,12 +2922,21 @@ export class BrowserRuntime {
   private async teardownEpoch(epoch: RuntimeEpoch): Promise<void> {
     if (epoch.teardown) return await epoch.teardown
     epoch.stopping = true
-    epoch.cdp.close()
-    epoch.teardown = Promise.allSettled([epoch.helper.asyncClose(), epoch.chrome.asyncClose()]).then(() => {
+    epoch.teardown = (async () => {
+      await Promise.all([...epoch.pages.values()].map((binding) => this.discardIntercepts(epoch, binding)))
+      if (!epoch.invalid) {
+        await epoch.cdp.send('Browser.close', {}, undefined, 1_500).catch(() => {})
+        await Promise.race([
+          epoch.chrome.child.exited.then(() => undefined).catch(() => undefined),
+          Bun.sleep(1_500)
+        ])
+      }
+      epoch.cdp.close()
+      await Promise.allSettled([epoch.helper.asyncClose(), epoch.chrome.asyncClose()])
       rmSync(epoch.helper.socketDir, { recursive: true, force: true })
       rmSync(epoch.helper.socketAliasRoot, { recursive: true, force: true })
       rmSync(join(epoch.chrome.profileRoot, 'helper-home'), { recursive: true, force: true })
-    }).then(() => undefined)
+    })()
     await epoch.teardown
   }
 }

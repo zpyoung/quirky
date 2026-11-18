@@ -2,6 +2,16 @@
 
 The Git plugin stores independent recipes for commit messages, fix/review actions, branch names, and conversation names. `aiRecipe` resolves each field from the repository recipe, then the global recipe, then the default, and reports each field's source. `setAiRecipe` saves or resets a recipe at repository or global scope.
 
+## Git command limits
+
+`packages/git` runs git and gh through `@quirky/process`, under owner `git`. Git keeps its global eight-child scheduler and post-arrival read sharing.
+
+Read-only git calls default to a 30-second deadline; writes, including hooks, default to 120 seconds. Queue time counts toward the deadline. Direct `runGit` and `git` callers can set `timeoutMs` and `maxOutputBytes`; the default output cap is 16 MiB per stream. Diff blobs and patches keep their smaller limits and report oversized content instead of truncated text.
+
+Every git child disables fsmonitor and detached automatic maintenance through environment overrides, preserving caller-supplied `GIT_CONFIG_*` entries. Child process groups are stopped on exit, timeout, abort, or an early end to a streamed listing.
+
+Mutations are never retried after a post-exit pipe stall: their exit status and already-drained stdout and stderr are retained. Read-only commands retry at most three times within the same deadline.
+
 ## Commit messages
 
 With staged changes and an empty commit message, the sparkle button's tooltip and accessible name both read “Generate commit message with AI” when an agent is available. Other states explain why generation is unavailable or direct you to the AI settings.
@@ -59,7 +69,11 @@ Right-click a file row for its Source Control actions. Blank Changes areas follo
 
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
-Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
+`open-diff` and `open-changes` reuse the worktree's one Review tab; `open-commit` uses the same hosted-tab route. Both Review commands focus by default. Pass `focus: false` to open in the background without moving the window, selecting a tab, or changing the active card. A background reveal or scope waits until that Review tab is next shown. `open-diff`'s `source` and `open-changes`'s `area` accept `staged` or `unstaged` to scope the Review; omit them to show the whole review.
+
+`open-changes` defaults to `mode: 'diff'`. `edit` opens changed files in editor tabs; `both` opens those files and the Review. Edit and both skip deleted files and refuse a capped Git status. A diff result reports `statusComplete: false` when status is capped. Both commands return structured results describing focus and scope; `open-changes` also lists opened and skipped files, and `statusComplete` says whether the status was complete. Focused commands wait for their Review or editor action and any worktree navigation to be acknowledged before replying. `open-commit` also waits for its hosted-tab operation. A dirty Review refuses a command's scope change without opening a discard dialog.
+
+Staged rename cards compare the old path in HEAD with the new path in the index. A panel request that asks to discard unsaved edits keeps any newly requested card and note reveal when the discard is accepted.
 
 Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
 
@@ -72,6 +86,12 @@ History-opened whole-commit diffs keep the compact toolbar title and show the co
 Plugin integrations split a tab through `quirky.terminal/moveTab` with `tab`, `split`, `of`, and the acknowledged `revision`; the tab determines its workspace, so this method does not accept a `workspace` field.
 
 Explicit standalone diffs opened through `ui.view.open` publish a top-level slot report. Embedded hosted views intentionally have no separate slot report; their tab identity and placement are available through `quirky.terminal/workspace`.
+
+### Scoped diff controls
+
+Standalone diff slot reports expose mounted actions in `uiControls`, alongside review-note controls. Discover them with `quirky ui state --json`; each address carries a `surface`, `target`, `generation`, and available `actions`. Hosted diff tabs mount with input only and publish no `uiControls`, so their generations cannot be discovered through this command.
+
+Run an action with `quirky ui run command:quirky.git/ui-control --args '<control JSON>' --json`. For an exact window, use `quirky api call ui.window.command.run --conn-id <window> --id command:quirky.git/ui-control --args '<control JSON>' --json`. Control JSON contains `surface`, `target`, `generation`, `action`, and optional `data`; collapse-all takes `{"collapsed":true}`. A delivered reply means the view accepted the action, not that an asynchronous save or Git operation finished. Scope changes and remounts invalidate older generations.
 
 ## Review notes
 

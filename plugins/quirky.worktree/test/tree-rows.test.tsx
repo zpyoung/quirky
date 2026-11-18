@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:te
 import type { ProjectGroup, QuirkyEvent, Repo, UiPluginContext } from '@quirky/protocol'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
 import type { TreeProps } from '../src/Tree'
 import { buildTree } from '../src/view-model'
@@ -34,6 +35,10 @@ const context = {
   call: async (method: string, params: Record<string, unknown> = {}) => {
     calls.push({ method, params })
     if (method === 'quirky.worktree/tags') return tagReply
+    if (method === 'ui.window.command.run') {
+      if (params.connId !== 7 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+      return { result: dispatchUiControl(context, params.args) }
+    }
     if (method === 'ui.window.self') return { connId: 7 }
     if (method === 'quirky.worktree/tagCreate') return { tag: { id: 'tag_new', name: params.name, color: null } }
     return []
@@ -95,9 +100,10 @@ async function mount(options: {
   const repos = options.repos ?? [REPO]
   const tags = options.tags ?? []
   const groups = options.groups ?? []
+  const stock = { ...DEFAULT_STOCK_OPTIONS, ...options.stock }
   host = document.createElement('div')
   document.body.append(host)
-  const baseSpec = allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS, ...options.stock }, DEFAULT_ACTIVITY_PREFERENCES)
+  const baseSpec = allSpecFromStock(stock, DEFAULT_ACTIVITY_PREFERENCES)
   const model = buildTree({
     worktrees: options.worktrees,
     repos,
@@ -123,6 +129,7 @@ async function mount(options: {
     onToggleAutomationDetails: () => {},
     now: NOW,
     separatorEnabled: false,
+    options: stock,
     allWorktrees: options.worktrees,
     canShowSleeping: () => true,
     statusDefinitions: [
@@ -155,8 +162,14 @@ beforeEach(() => {
 
 const rowOf = (id: string) => host.querySelector<HTMLElement>(`[data-worktree-id="${id}"]`)!
 const buttonLabelled = (within: ParentNode, label: string) => within.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!
+const flushControl = async () => {
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+}
 const click = (element: Element, init: MouseEventInit = {}) =>
-  act(async () => void element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init })))
+  act(async () => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }))
+    await flushControl()
+  })
 const menu = () => document.querySelector<HTMLElement>('[role="menu"]')
 const visibleText = (node: Node): string => {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
@@ -167,7 +180,10 @@ const labelOf = (item: Element) => visibleText(item).replace(/\s+/g, ' ').trim()
 const menuLabels = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(labelOf)
 const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => labelOf(item) === label)!
 const pressKey = (element: Element, key: string) =>
-  act(async () => void element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })))
+  act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    await flushControl()
+  })
 const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
@@ -430,7 +446,10 @@ test('the row menu lists its actions in the fixed order with Delete set apart in
 
 test('right-clicking a row opens the same menu at the pointer', async () => {
   await mount({ worktrees: [worktree('a', 'alpha')] })
-  await act(async () => void rowOf('a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 })))
+  await act(async () => {
+    rowOf('a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }))
+    await flushControl()
+  })
   const opened = menu()
   expect(opened).not.toBeNull()
   expect(opened?.getAttribute('aria-label')).toBe('Actions for alpha')
@@ -580,6 +599,65 @@ test('a focused row shows its hover card after a short delay with every tag and 
   expect([...card.querySelectorAll('.ui-tag-chip')].map((chip) => chip.textContent)).toEqual(['urgent', 'release-2.4', 'docs'])
   await act(async () => trigger.blur())
   expect(document.querySelector('.worktree-hover')).toBeNull()
+})
+
+test("the hover card shows the worktree's notes, keeps their text exactly, and leaves them out when comments are hidden or empty", async () => {
+  const comment = 'see the auth bug\nthen ship'
+  const review = {
+    provider: 'github' as const,
+    kind: 'pullRequest' as const,
+    number: 42,
+    title: 'Add route',
+    url: 'https://example.test/42',
+    repository: { host: 'github.com', owner: 'o', repo: 'r' }
+  }
+  await mount({
+    worktrees: [
+      worktree('notes', 'alpha', { comment, linkedPR: review }),
+      worktree('empty', 'empty', { comment: '' }),
+      worktree('blank', 'blank', { comment: '   ' })
+    ]
+  })
+  const cardFor = async (id: string) => {
+    const trigger = rowOf(id).querySelector<HTMLButtonElement>('.worktree-row__main')!
+    await act(async () => trigger.focus())
+    await act(async () => { await Bun.sleep(450) })
+    return document.querySelector<HTMLElement>('.worktree-hover')!
+  }
+
+  const card = await cardFor('notes')
+  const terms = [...card.querySelectorAll('dt')].map((term) => term.textContent)
+  expect(terms.slice(terms.indexOf('Agent'), terms.indexOf('Review') + 1)).toEqual(['Agent', 'Notes', 'Review'])
+  const notesTerm = [...card.querySelectorAll('dt')].find((term) => term.textContent === 'Notes')
+  expect(notesTerm?.nextElementSibling?.textContent).toBe(comment)
+
+  for (const id of ['empty', 'blank']) {
+    const emptyCard = await cardFor(id)
+    expect([...emptyCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
+  }
+
+  await act(async () => root!.unmount())
+  root = null
+  document.body.innerHTML = ''
+  await mount({
+    worktrees: [worktree('hidden-comment', 'hidden-comment', { comment })],
+    stock: { showComment: false }
+  })
+  const hiddenCard = await cardFor('hidden-comment')
+  expect([...hiddenCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
+
+  await act(async () => root!.unmount())
+  root = null
+  document.body.innerHTML = ''
+  await mount({
+    worktrees: [worktree('hidden-property', 'hidden-property', { comment })],
+    stock: {
+      showComment: true,
+      showProperties: DEFAULT_STOCK_OPTIONS.showProperties.filter((property) => property !== 'notes')
+    }
+  })
+  const propertyHiddenCard = await cardFor('hidden-property')
+  expect([...propertyHiddenCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
 })
 
 test('the tags popover checks, mixes, creates and recolors tags for the selected worktrees', async () => {

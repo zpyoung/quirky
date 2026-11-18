@@ -18,7 +18,11 @@ export function createBrowserPlugin(context: PluginContext, dependencies: Browse
 }
 
 export function activate(context: PluginContext): void {
-  active = createBrowserPlugin(context, browserDependencies(import.meta.dir))
+  active = createBrowserPlugin(context, browserDependencies(
+    import.meta.dir,
+    context.process,
+    (message) => context.log(message)
+  ))
 }
 export function setPaneProfile(paneId: string, profileId: string): Promise<PaneTab> {
   if (!active) throw new Error('browser plugin is not active')

@@ -3,9 +3,9 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
-import { parseArguments, UsageError } from './arguments.ts'
+import { parseArguments, USAGE, UsageError } from './arguments.ts'
 
-const faultKinds = ['leak', 'zombies', 'storm', 'block'] as const
+const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood', 'pty-pause'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -13,7 +13,9 @@ const defaultLimits = {
   maxGrowth: 5,
   maxZombies: 0,
   maxEventsPer5s: 30,
-  maxStallMs: 1000
+  maxStallMs: 1000,
+  maxUnanswered: 0,
+  maxWindowRequestsPerMinute: 2500,
 }
 
 function makeTempDir(): string {
@@ -163,7 +165,7 @@ for (const argv of [
   ['--fault', 'nope'],
   ['--fault'],
 ]) {
-  test(`rejects ${argv.length === 1 ? 'a missing' : 'an unknown'} --fault value with the exact error`, () => {
+  test(`rejects ${argv.length === 1 ? 'a missing' : 'an unknown'} --fault value`, () => {
     const out = makeTempDir()
     let caught: unknown
     try {
@@ -174,7 +176,7 @@ for (const argv of [
 
     expect(caught).toBeInstanceOf(UsageError)
     if (caught instanceof UsageError) {
-      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block')
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback, flood, pty-pause')
     }
   })
 }
@@ -184,8 +186,32 @@ const validLimits = [
   ['--max-growth', '8', 'maxGrowth', 8],
   ['--max-zombies', '2', 'maxZombies', 2],
   ['--max-events-per-5s', '45', 'maxEventsPer5s', 45],
-  ['--max-stall-ms', '1500', 'maxStallMs', 1500]
+  ['--max-stall-ms', '1500', 'maxStallMs', 1500],
+  ['--max-unanswered', '3', 'maxUnanswered', 3],
+  ['--max-window-requests-per-minute', '3000', 'maxWindowRequestsPerMinute', 3000],
 ] as const
+
+for (const value of ['0', '-1', '1.5', 'abc']) {
+  test(`rejects ${value} for --max-window-requests-per-minute with the exact constraint`, () => {
+    const out = makeTempDir()
+    let caught: unknown
+    try {
+      parseArguments(['--out', out, '--max-window-requests-per-minute', value])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    expect(caught).toMatchObject({
+      message: '--max-window-requests-per-minute must be a whole positive number',
+    })
+  })
+}
+
+test('defaults the per-window request budget to 2500', () => {
+  expect(parseConfig(['--out', makeTempDir()]).limits.maxWindowRequestsPerMinute).toBe(2500)
+})
+
 
 for (const [flag, value, field, expected] of validLimits) {
   test(`parses ${flag}`, () => {
@@ -205,7 +231,7 @@ test('rejects an unknown flag as a usage error', () => {
   expectUsageError(['--out', out, '--not-a-soak-option'], '--not-a-soak-option')
 })
 
-for (const flag of ['--minutes', '--out', '--windows', ...validLimits.map(([name]) => name)]) {
+for (const flag of ['--minutes', '--out', '--windows', '--slow-git', ...validLimits.map(([name]) => name)]) {
   test(`rejects ${flag} when its value is missing`, () => {
     const argv = flag === '--out' ? [flag] : ['--out', makeTempDir(), flag]
     expectUsageError(argv, flag)
@@ -236,4 +262,83 @@ test('rejects --out when the directory already contains a file', () => {
   writeFileSync(join(out, 'occupied.txt'), 'occupied')
 
   expectUsageError(['--out', out], '--out')
+})
+
+test('parses --slow-git as a positive integer', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out, '--slow-git', '5000'])
+
+  expect(config.slowGitMs).toBe(5000)
+})
+
+test('does not include slowGitMs when --slow-git is omitted', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out])
+
+  expect(Object.hasOwn(config, 'slowGitMs')).toBe(false)
+})
+
+for (const value of ['0', '-1', '1.5', 'abc']) {
+  test(`rejects ${value} for --slow-git`, () => {
+    const out = makeTempDir()
+    expectUsageError(['--out', out, '--slow-git', value], '--slow-git')
+  })
+}
+
+test('rejects a fractional --max-unanswered limit', () => {
+  const out = makeTempDir()
+  expectUsageError(['--out', out, '--max-unanswered=1.5'], 'whole number')
+})
+
+for (const windows of ['0', '1']) {
+  test(`rejects feedback with ${windows} windows before reserving the default output`, () => {
+    let caught: unknown
+    try {
+      parseArguments(['--fault', 'feedback', '--windows', windows])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    expect(caught).toMatchObject({ message: '--fault feedback needs --windows 2 or more' })
+  })
+}
+
+test('accepts feedback with two or more windows', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out, '--fault', 'feedback', '--windows', '2'])
+  expect(config).toMatchObject({ fault: 'feedback', windows: 2 })
+})
+
+for (const windows of ['0', '1']) {
+  test(`rejects flood with ${windows} windows before reserving the default output`, () => {
+    expectUsageError(
+      ['--fault', 'flood', '--windows', windows],
+      '--fault flood needs --windows 2 or more'
+    )
+  })
+}
+
+for (let windows = 2; windows <= 7; windows += 1) {
+  test(`accepts flood with ${windows} windows`, () => {
+    const out = makeTempDir()
+    const config = parseConfig(['--out', out, '--fault', 'flood', '--windows', String(windows), '--minutes', '0.4'])
+    expect(config).toMatchObject({
+      fault: 'flood',
+      windows,
+      minutes: 0.4,
+      limits: { maxWindowRequestsPerMinute: 2500 }
+    })
+  })
+}
+
+test('lists flood and pty-pause last in the supported fault choices', () => {
+  expect(USAGE).toContain('--fault leak|zombies|storm|block|slow-git|feedback|flood|pty-pause')
+})
+
+test('does not add a report-only spelling for the request limit', () => {
+  expectUsageError(
+    ['--out', makeTempDir(), '--max-window-requests-per-minute=null'],
+    'whole positive number'
+  )
 })

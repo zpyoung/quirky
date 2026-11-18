@@ -127,7 +127,12 @@ test('SC-16: the filter narrows rows, hides the Commits dock and refuses a long 
 
   await type(input, 'x'.repeat(3000))
   await w.win.waitFor(async () => (await w.report()).filter === input.value)
-  await w.win.waitFor(() => q('[data-git-content] section p'))
+  await w.win.waitFor(() =>
+    text(q('[data-git-content] .ui-inline-error__message')) === 'Search text is too large' &&
+    text(q('[data-git-content] .ui-text-muted')) === 'Use a shorter file filter.'
+  )
+  expect(text(q('[data-git-content] .ui-inline-error__message'))).toBe('Search text is too large')
+  expect(text(q('[data-git-content] .ui-text-muted'))).toBe('Use a shorter file filter.')
   expect(rowPaths()).toHaveLength(0)
   await press(input, 'Escape')
   await w.win.waitFor(() => rowPaths().length === 4)
@@ -240,11 +245,13 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
 
   expect((await w.cli(['git', 'stage', '--paths', 'math.ts']).done).code).toBe(0)
   await quickly(() => rowOf('math.ts', 'staged'))
+  await quickly(() => card() === null)
   expect((await w.cli(['git', 'unstage', '--paths', 'math.ts']).done).code).toBe(0)
   await quickly(() => rowOf('math.ts') && !rowOf('math.ts', 'staged'))
+  await quickly(() => card() && q('[contenteditable]', card()!))
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
-  await quickly(() => card() === null && text(q('[data-review-scroll]')).includes('Nothing changed against'))
+  await quickly(() => card() === null && text(q('[data-review-scroll]')).includes('No unstaged changes'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 

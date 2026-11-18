@@ -1,6 +1,6 @@
 {
   "id": "quirky.automations",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Automations",
   "version": "0.1.0",
   "description": "Durable scheduled and manual structured agent runs.",
@@ -20,7 +20,7 @@
       {"id":"externalAction","description":"Performs a fixed-argv OpenClaw cron action after local owner and job-ID revalidation. Only delete requires destructive confirmation.","destructive":true,"confirm":"Delete the selected OpenClaw automation?","describe":"externalActionDescribe","params":{"type":"object","properties":{"owner":{"type":"object","properties":{"provider":{"type":"string","description":"Must be openclaw; unsupported providers are refused."},"hostId":{"type":"string","description":"Must be local; unsupported remote hosts are refused without local fallback."},"generation":{"type":"string"}},"required":["provider","hostId","generation"],"additionalProperties":false},"jobId":{"type":"string","description":"OpenClaw ID matching ^[A-Za-z0-9][A-Za-z0-9._:-]*$."},"action":{"type":"string","enum":["pause","resume","run","delete"]}},"required":["owner","jobId","action"],"additionalProperties":false},"result":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}},
       {"id":"externalActionDescribe","description":"Returns a current-job deletion confirmation, or null for reversible actions; performs no external process.","readOnly":true,"params":{"type":"object","properties":{"owner":{"type":"object","properties":{"provider":{"type":"string","description":"Must be openclaw; unsupported providers are refused."},"hostId":{"type":"string","description":"Must be local; unsupported remote hosts are refused without local fallback."},"generation":{"type":"string"}},"required":["provider","hostId","generation"],"additionalProperties":false},"jobId":{"type":"string"},"action":{"type":"string","enum":["pause","resume","run","delete"]}},"required":["owner","jobId","action"],"additionalProperties":false},"result":{"description":"Deletion confirmation text, or null for a non-delete action."}},
       { "id": "uiState", "description": "Read daemon-owned automation navigation and retained editor draft.", "readOnly": true, "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "revision": { "type": "integer" }, "navigation": { "type": "object", "additionalProperties": true }, "editor": {} }, "required": ["revision", "navigation", "editor"], "additionalProperties": false } },
-      { "id": "uiNavigate", "description": "Set automation page, selection, filters and sort atomically.", "params": { "type": "object", "properties": { "page": { "type": "string", "enum": ["list", "detail", "runs", "run"] }, "automationId": {}, "runId": {}, "tab": { "type": "string", "enum": ["overview", "runs"] }, "query": { "type": "string" }, "host": { "type": "string" }, "status": { "type": "string", "enum": ["all", "enabled", "paused"] }, "lastRun": { "type": "string", "enum": ["all", "failed", "succeeded", "never"] }, "agent": { "type": "string" }, "sort": { "type": "string", "enum": ["name", "lastRun"] }, "direction": { "type": "string", "enum": ["asc", "desc"] }, "runQuery": { "type": "string" }, "runStatus": { "type": "string", "enum": ["all", "successful", "failed", "progress", "skipped"] } }, "additionalProperties": false }, "result": { "type": "object", "additionalProperties": true } },
+      { "id": "uiNavigate", "description": "Set automation page, selection, filters and sort atomically.", "params": { "type": "object", "properties": { "page": { "type": "string", "enum": ["list", "detail", "runs", "run"] }, "automationId": {}, "runId": {}, "tab": { "type": "string", "enum": ["overview", "runs"] }, "query": { "type": "string" }, "host": { "type": "string" }, "status": { "type": "string", "enum": ["all", "enabled", "paused"] }, "lastRun": { "type": "string", "enum": ["all", "failed", "succeeded", "never"] }, "agent": { "type": "string" }, "sort": { "type": "string", "enum": ["name", "lastRun"] }, "direction": { "type": "string", "enum": ["asc", "desc"] }, "runQuery": { "type": "string" }, "runStatus": { "type": "string", "enum": ["all", "successful", "failed", "progress", "skipped"] }, "promptExpanded": { "type": "boolean" }, "historyStarts": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 1000000 } }, "runLimit": { "type": "integer", "minimum": 1, "maximum": 1000000 }, "settingsNotice": { "type": "boolean" } }, "additionalProperties": false }, "result": { "type": "object", "additionalProperties": true } },
       { "id": "open", "description": "Open Automations, retaining state and the prior view.", "params": { "type": "object", "additionalProperties": true }, "result": { "type": "object", "additionalProperties": true } },
       { "id": "close", "description": "Restore the view shown before Automations.", "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "closed": { "type": "boolean" } }, "required": ["closed"] } },
       { "id": "settings", "description": "Open Automation settings even when its sidebar shortcut is hidden.", "params": { "type": "object", "properties": {}, "additionalProperties": false }, "result": { "type": "object", "properties": { "opened": { "type": "boolean" } }, "required": ["opened"] } },
@@ -148,6 +148,7 @@
       },
       {
         "id": "run",
+        "timeout": "24h",
         "description": "Persists a manual run even when paused, then dispatches in the background and returns its current truthful state.",
         "params": { "type": "object", "properties": { "id": { "type": "string" }, "expectedOwner": {} }, "required": ["id"], "additionalProperties": false },
         "result": {
@@ -193,6 +194,7 @@
       },
       {
         "id": "dispatch",
+        "timeout": "24h",
         "description": "Dispatches a pending run once and returns the current durable run state.",
         "params": { "type": "object", "properties": { "runId": { "type": "string" } }, "required": ["runId"], "additionalProperties": false },
         "result": {
@@ -311,14 +313,15 @@
       },
       {
         "id": "tick",
+        "timeout": "24h",
         "description": "Evaluates due schedules using the daemon's current time.",
         "params": { "type": "object", "properties": {}, "additionalProperties": false },
         "result": { "type": "object", "properties": { "now": { "type": "integer" }, "evaluated": { "type": "integer" } }, "required": ["now", "evaluated"], "additionalProperties": false }
       }
     ],
     "event": [
-      { "id": "changed", "description": "An automation definition or run changed after its durable write completed." },
-      { "id": "uiChanged", "description": "Automation navigation or retained editor draft changed." }
+      { "id": "changed", "description": "An automation definition or run changed after its durable write completed.", "coalesce": ["automationId"] },
+      { "id": "uiChanged", "description": "Automation navigation or retained editor draft changed.", "coalesce": [] }
     ],
     "view": [
       { "id": "automations", "title": "Automations" },

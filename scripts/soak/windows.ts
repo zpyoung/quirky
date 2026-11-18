@@ -2,36 +2,98 @@ import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
 import type { FixtureWorktree } from '../ui-review/fixtures.ts'
-import type { WindowRecord } from './contracts.ts'
+import type { SwitchRecord, WindowRecord, WindowRequestObservation } from './contracts.ts'
 import type { SoakWorld } from './world.ts'
 
+export type WindowStartupObservation = {
+  stage: 'launch' | 'connect' | 'context' | 'page' | 'navigation'
+    | 'connection' | 'shell' | 'shell-ready' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
+  elapsedMs: number
+  index?: number
+  worktree?: string
+  connId?: number
+  browserPid?: number
+  message?: string
+  pageErrors?: string[]
+  failedRequests?: Array<{ path: string; message: string }>
+}
+
+type RequestFrame = { at: number; method: string; params: unknown }
+
+type WindowAttribution = { settled: string; target: string | null }
+
+const REQUEST_RING_CAPACITY = 2_000
+const RECONCILE_MS = 5_000
 type WindowMetrics = {
   closed: boolean
   crashed: boolean
   requests: Map<string, number>
+  requestRing: (RequestFrame | undefined)[]
+  requestCount: number
+  nextRequestSlot: number
+  requestListeners: Set<(request: RequestFrame) => void>
   sockets: number
   lastRequestAt: number | null
   pageErrors: number
   pageErrorExamples: string[]
+  failedRequests?: Array<{ path: string; message: string }>
 }
 
 type OpenWindow = {
   index: number
-  worktree: string
+  attribution: WindowAttribution
   connId: number
   page: Page
   metrics: WindowMetrics
+  statusRequests: Map<string, number>
 }
+
+export type WindowLiveness = Pick<WindowRecord, 'index' | 'connId' | 'worktree' | 'open'>
 
 export type SoakWindows = {
   pages: readonly Page[]
   browserPid: number
   finish(): Promise<{ records: WindowRecord[]; requests: { method: string; total: number }[] }>
+  liveness?(): WindowLiveness[]
+  navigate?(index: number, worktreeId: string, options: { signal: AbortSignal; followTimeoutMs: number }): Promise<Omit<SwitchRecord, 'at' | 'seq'>>
+  waitForRequest?(index: number, matches: (method: string, params: unknown) => boolean,
+    options: { since: number; timeoutMs: number; signal: AbortSignal }): Promise<{ at: number; method: string; params: unknown } | null>
   stop(): Promise<void>
 }
 
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+function sanitizeDiagnostic(value: string, home: string, limit: number): string {
+  const redacted = value.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/gi, (raw) => {
+    const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
+    try {
+      const url = new URL(raw.slice(0, raw.length - trailing.length))
+      return `${url.origin}${url.pathname}${trailing}`
+    } catch {
+      return raw
+    }
+  }).replaceAll(home, '<soak-home>')
+  return redacted.slice(0, limit)
+}
+
+function localRequestFailure(
+  urlValue: string,
+  message: string,
+  port: number,
+  home: string
+): { path: string; message: string } | null {
+  try {
+    const url = new URL(urlValue)
+    if (url.origin !== `http://127.0.0.1:${port}`) return null
+    return {
+      path: url.pathname.slice(0, 300),
+      message: sanitizeDiagnostic(message, home, 300)
+    }
+  } catch {
+    return null
+  }
 }
 
 function interrupted(): Error {
@@ -158,7 +220,17 @@ function isRpcSocket(url: string): boolean {
   }
 }
 
-function attachMetrics(page: Page, metrics: WindowMetrics, allRequests: Map<string, number>, home: string): void {
+export function attachMetrics(
+  page: Page,
+  metrics: WindowMetrics,
+  allRequests: Map<string, number>,
+  home: string,
+  observer?: {
+    index: number
+    worktree: string | ((method: string, params: unknown) => string)
+    onRequest: (request: WindowRequestObservation) => void
+  },
+): void {
   page.on('websocket', (socket) => {
     if (!isRpcSocket(socket.url())) return
     metrics.sockets++
@@ -171,21 +243,104 @@ function attachMetrics(page: Page, metrics: WindowMetrics, allRequests: Map<stri
         return
       }
       if (request === null || typeof request !== 'object' || Array.isArray(request)) return
-      const method = (request as Record<string, unknown>).method
+      const requestRecord = request as Record<string, unknown>
+      const method = requestRecord.method
       if (typeof method !== 'string') return
       metrics.requests.set(method, (metrics.requests.get(method) ?? 0) + 1)
       allRequests.set(method, (allRequests.get(method) ?? 0) + 1)
       metrics.lastRequestAt = Date.now()
+      const frame: RequestFrame = {
+        at: performance.now(),
+        method,
+        params: requestRecord.params
+      }
+      metrics.requestRing[metrics.nextRequestSlot] = frame
+      metrics.nextRequestSlot = (metrics.nextRequestSlot + 1) % REQUEST_RING_CAPACITY
+      metrics.requestCount = Math.min(REQUEST_RING_CAPACITY, metrics.requestCount + 1)
+      for (const listener of metrics.requestListeners) listener(frame)
+      if (observer) {
+        observer.onRequest({
+          at: frame.at,
+          index: observer.index,
+          worktree: typeof observer.worktree === 'function'
+            ? observer.worktree(method, frame.params)
+            : observer.worktree,
+          method,
+          params: frame.params
+        })
+      }
     })
   })
+
   page.on('pageerror', (error) => {
     metrics.pageErrors++
     if (metrics.pageErrorExamples.length < 5) {
-      metrics.pageErrorExamples.push(error.message.replaceAll(home, '<soak-home>').slice(0, 300))
+      metrics.pageErrorExamples.push(sanitizeDiagnostic(error.message, home, 300))
     }
   })
   page.on('crash', () => { metrics.crashed = true })
   page.on('close', () => { metrics.closed = true })
+}
+
+function normalizedWorktree(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return value.startsWith('id:') ? value.slice(3) : value
+}
+
+function worktreeFromParams(params: unknown): string | null {
+  if (params === null || typeof params !== 'object' || Array.isArray(params)) return null
+  return normalizedWorktree((params as Record<string, unknown>).worktree)
+}
+
+function findRequest(
+  metrics: WindowMetrics,
+  matches: (method: string, params: unknown) => boolean,
+  since: number
+): RequestFrame | null {
+  const first = (metrics.nextRequestSlot - metrics.requestCount + REQUEST_RING_CAPACITY) % REQUEST_RING_CAPACITY
+  for (let offset = 0; offset < metrics.requestCount; offset++) {
+    const request = metrics.requestRing[(first + offset) % REQUEST_RING_CAPACITY]
+    if (request && request.at >= since && matches(request.method, request.params)) return request
+  }
+  return null
+}
+
+function waitForWindowRequest(
+  metrics: WindowMetrics,
+  matches: (method: string, params: unknown) => boolean,
+  options: { since: number; timeoutMs: number; signal: AbortSignal }
+): Promise<RequestFrame | null> {
+  if (options.signal.aborted) return Promise.reject(interrupted())
+  const buffered = findRequest(metrics, matches, options.since)
+  if (buffered) return Promise.resolve(buffered)
+
+  const { promise, resolve, reject } = Promise.withResolvers<RequestFrame | null>()
+  let settled = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const finish = (error?: Error, request?: RequestFrame | null): void => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    options.signal.removeEventListener('abort', abort)
+    metrics.requestListeners.delete(onRequest)
+    if (error) reject(error)
+    else resolve(request ?? null)
+  }
+  const abort = (): void => finish(interrupted())
+  const onRequest = (request: RequestFrame): void => {
+    if (request.at < options.since) return
+    try {
+      if (matches(request.method, request.params)) finish(undefined, request)
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  metrics.requestListeners.add(onRequest)
+  options.signal.addEventListener('abort', abort, { once: true })
+  timer = setTimeout(() => finish(), Math.max(0, options.timeoutMs))
+  if (options.signal.aborted) abort()
+  return promise
 }
 
 async function closeBounded(close: () => Promise<unknown>): Promise<void> {
@@ -201,8 +356,9 @@ async function closeBounded(close: () => Promise<unknown>): Promise<void> {
   }
 }
 
-async function currentWindowWorktree(world: SoakWorld, connId: number): Promise<string | null> {
-  const value = await world.control.callAny('ui.window.state', { connId }, { timeoutMs: 5_000 })
+async function currentWindowWorktree(world: SoakWorld, connId: number, timeoutMs = RECONCILE_MS): Promise<string | null> {
+  const task = world.control.callAny('ui.window.state', { connId }, { timeoutMs })
+  const value = await waitWithAbort(task, timeoutMs, new AbortController().signal, 'ui.window.state')
   const state = asRecord(value, 'ui.window.state')
   const layout = asRecord(state.layout, 'ui.window.state layout')
   return typeof layout.worktree === 'string' ? layout.worktree : null
@@ -253,6 +409,15 @@ export function assignWorktrees(worktrees: FixtureWorktree[], count: number): Fi
   return selected
 }
 
+/** Chromium arguments for an isolated headless browser, with the caller's extras last. */
+export function chromiumArgs(platform: NodeJS.Platform, extra: readonly string[]): string[] {
+  return [
+    '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1',
+    ...(platform === 'linux' ? ['--no-sandbox'] : []),
+    ...extra
+  ]
+}
+
 /** Opens real renderers and waits for each worktree's own Changes polling. */
 export async function openWindows(options: {
   world: SoakWorld
@@ -260,8 +425,18 @@ export async function openWindows(options: {
   executable: string
   out: string
   signal: AbortSignal
+  browserArgs?: readonly string[]
+  onRequest?: (request: WindowRequestObservation) => void
+  onStartup?: (observation: WindowStartupObservation) => void
 }): Promise<SoakWindows> {
-  const { world, count, executable, out, signal } = options
+
+  const startupStartedAt = performance.now()
+  const { world, count, executable, out, signal: parentSignal } = options
+  const acquisition = new AbortController()
+  const signal = acquisition.signal
+  const abort = () => acquisition.abort()
+  parentSignal.addEventListener('abort', abort, { once: true })
+  if (parentSignal.aborted) abort()
   const worktrees = assignWorktrees(world.fixtures.worktrees, count)
   const sessions: OpenWindow[] = []
   const pages: Page[] = []
@@ -269,11 +444,48 @@ export async function openWindows(options: {
   let server: BrowserServer | undefined
   let browser: Browser | undefined
   let launch: Promise<BrowserServer> | undefined
+  let browserPid: number | null = null
   let stopPromise: Promise<void> | undefined
+  type StartupContext = {
+    index?: number
+    worktree?: string
+    connId?: number
+    metrics?: WindowMetrics
+    stage: WindowStartupObservation['stage']
+  }
+  let current: StartupContext = { stage: 'launch' }
+  let firstFailure: { error: unknown; context: StartupContext } | undefined
+  const shellWaits: Promise<void>[] = []
+  const fail = (error: unknown, context: StartupContext): void => {
+    firstFailure ??= { error, context: { ...context } }
+    acquisition.abort()
+  }
+
+  const report = (stage: WindowStartupObservation['stage'], message?: string, context = current): void => {
+    context.stage = stage
+    const observation: WindowStartupObservation = {
+      stage,
+      elapsedMs: Math.max(0, performance.now() - startupStartedAt),
+      ...(context.index === undefined ? {} : { index: context.index }),
+      ...(context.worktree === undefined ? {} : { worktree: context.worktree }),
+      ...(context.connId === undefined ? {} : { connId: context.connId }),
+      ...(browserPid === null ? {} : { browserPid }),
+      ...(context.metrics === undefined ? {} : {
+        pageErrors: context.metrics.pageErrorExamples.slice(0, 5),
+        ...(context.metrics.failedRequests === undefined ? {} : {
+          failedRequests: context.metrics.failedRequests.slice(0, 5).map((failure) => ({ ...failure }))
+        })
+      })
+    }
+    if (message !== undefined) observation.message = sanitizeDiagnostic(message, world.home, 1_000)
+    options.onStartup?.(observation)
+  }
 
   const recordServer = (launched: BrowserServer): number | null => {
     const pid = launched.process().pid
     if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) return null
+    browserPid = pid
+    report('launch')
     world.track(pid)
     writeFileSync(join(out, 'browser.pid'), `${pid}\n`)
     return pid
@@ -288,12 +500,11 @@ export async function openWindows(options: {
     return stopPromise
   }
 
-  let failureIndex = 0
   try {
     throwIfAborted(signal)
     if (worktrees.length !== count) throw new Error(`requested ${count} windows but only ${worktrees.length} worktrees are available`)
-    const args = ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1']
-    if (process.platform === 'linux') args.push('--no-sandbox')
+    const args = chromiumArgs(process.platform, options.browserArgs ?? [])
+    report('launch')
     launch = chromium.launchServer({
       executablePath: executable,
       headless: true,
@@ -305,18 +516,22 @@ export async function openWindows(options: {
       args
     })
     server = await waitWithAbort(launch, 30_000, signal, 'Chromium launch')
-    const browserPid = recordServer(server)
+    browserPid = recordServer(server)
     if (browserPid === null) throw new Error('Chromium server did not report its process id')
     throwIfAborted(signal)
 
+    report('connect')
     const connection = chromium.connect(server.wsEndpoint(), { timeout: 30_000 })
     browser = await waitWithAbort(connection, 30_000, signal, 'Chromium connection', async (lateBrowser) => {
       await closeBounded(() => lateBrowser.close())
     })
 
     for (let index = 0; index < worktrees.length; index++) {
-      failureIndex = index
+      const worktree = worktrees[index]!.id
+      const owner: StartupContext = { index, worktree, stage: 'context' }
+      current = owner
       throwIfAborted(signal)
+      report('context')
       const before = new Set(connectionIds(await rpc(world, 'ui.state', {}, 5_000, signal)))
       throwIfAborted(signal)
       const context = await waitWithAbort(
@@ -327,6 +542,7 @@ export async function openWindows(options: {
         async (lateContext) => { await closeBounded(() => lateContext.close()) }
       )
       throwIfAborted(signal)
+      report('page')
       const page = await waitWithAbort(
         context.newPage(),
         30_000,
@@ -341,45 +557,107 @@ export async function openWindows(options: {
         closed: false,
         crashed: false,
         requests: new Map(),
+        requestRing: new Array(REQUEST_RING_CAPACITY),
+        requestCount: 0,
+        nextRequestSlot: 0,
+        requestListeners: new Set(),
         sockets: 0,
         lastRequestAt: null,
         pageErrors: 0,
-        pageErrorExamples: []
+        pageErrorExamples: [],
+        failedRequests: []
       }
-      attachMetrics(page, metrics, requests, world.home)
+      const attribution: WindowAttribution = { settled: worktree, target: null }
+      const statusRequests = new Map<string, number>()
+      owner.metrics = metrics
+      attachMetrics(page, metrics, requests, world.home, {
+        index,
+        worktree: (_method, params) => {
+          const requestedWorktree = worktreeFromParams(params)
+          return attribution.target !== null && requestedWorktree === attribution.target
+            ? attribution.target
+            : attribution.settled
+        },
+        onRequest: (request) => {
+          if (request.method === 'quirky.git/status') {
+            const requestedWorktree = worktreeFromParams(request.params)
+            if (requestedWorktree !== null) {
+              statusRequests.set(requestedWorktree, (statusRequests.get(requestedWorktree) ?? 0) + 1)
+            }
+          }
+          options.onRequest?.(request)
+        }
+      })
+      const recordFailedRequest = (url: string, message: string): void => {
+        const failures = metrics.failedRequests!
+        if (failures.length >= 5) return
+        const failure = localRequestFailure(url, message, world.runtime.port, world.home)
+        if (failure !== null) failures.push(failure)
+      }
+      page.on('requestfailed', (request) => {
+        recordFailedRequest(request.url(), request.failure()?.errorText ?? 'request failed')
+      })
+      page.on('response', (response) => {
+        const status = response.status()
+        if (status >= 400) recordFailedRequest(response.url(), `HTTP ${status}`)
+      })
       pages.push(page)
 
       throwIfAborted(signal)
+      report('navigation')
       await waitWithAbort(page.goto(`http://127.0.0.1:${world.runtime.port}/#token=${encodeURIComponent(world.runtime.token)}`, {
         waitUntil: 'domcontentloaded',
         timeout: 30_000
       }), 30_000, signal, 'renderer navigation')
+      report('connection')
       const connId = await waitForNewConnection(world, before, signal)
+      owner.connId = connId
+      report('connection')
       throwIfAborted(signal)
-      await waitWithAbort(
-        page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: 30_000 }),
-        30_000,
-        signal,
-        '.shell-workspace visibility'
-      )
-      sessions.push({ index, worktree: worktrees[index]!.id, connId, page, metrics })
+      sessions.push({ index, attribution, connId, page, metrics, statusRequests })
+      report('shell')
+      shellWaits.push((async () => {
+        try {
+          await waitWithAbort(
+            page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: 30_000 }),
+            30_000,
+            signal,
+            '.shell-workspace visibility'
+          )
+          throwIfAborted(signal)
+          report('shell-ready', undefined, owner)
+        } catch (error) {
+          fail(error, owner)
+        }
+      })())
     }
 
-    failureIndex = 0
+    await Promise.all(shellWaits)
+    throwIfAborted(signal)
+    current = { stage: 'changes' }
+    report('changes')
     await rpc(world, 'quirky.worktree/setOptions', { filterRepoIds: [] }, 5_000, signal)
     await rpc(world, 'ui.tool.open', { id: 'panel:quirky.git/source-control' }, 5_000, signal)
 
     for (const session of sessions) {
-      failureIndex = session.index
+      current = {
+        index: session.index,
+        worktree: session.attribution.settled,
+        connId: session.connId,
+        metrics: session.metrics,
+        stage: 'worktree'
+      }
       throwIfAborted(signal)
       const worktree = worktrees[session.index]!
+      report('worktree')
+      const statusRequestsBeforeNavigation = session.statusRequests.get(worktree.id) ?? 0
       const result = asRecord(await rpc(world, 'quirky.worktree/navigate', {
         worktree: `id:${worktree.id}`,
         window: session.connId
       }, 5_000, signal), 'quirky.worktree/navigate')
       if (result.worktreeId !== worktree.id) throw new Error(`navigation did not select worktree ${worktree.id}`)
 
-      const statusRequestsBeforeReturn = session.metrics.requests.get('quirky.git/status') ?? 0
+      report('layout')
       const value = await rpc(world, 'ui.window.state', { connId: session.connId }, 5_000, signal)
       throwIfAborted(signal)
       const state = asRecord(value, 'ui.window.state')
@@ -392,57 +670,191 @@ export async function openWindows(options: {
         throw new Error(`window layout did not show worktree ${worktree.id} with terminal and Changes`)
       }
 
+      report('changes')
+      const pageIsOpen = (): boolean => {
+        try {
+          return !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed()
+        } catch {
+          return false
+        }
+      }
       const deadline = Date.now() + 30_000
-      while ((session.metrics.requests.get('quirky.git/status') ?? 0) <= statusRequestsBeforeReturn && Date.now() < deadline) {
+      while ((session.statusRequests.get(worktree.id) ?? 0) <= statusRequestsBeforeNavigation
+        && pageIsOpen() && Date.now() < deadline) {
         throwIfAborted(signal)
         await pauseWithAbort(Math.min(100, Math.max(1, deadline - Date.now())), signal)
       }
-      if ((session.metrics.requests.get('quirky.git/status') ?? 0) <= statusRequestsBeforeReturn) {
+      if (!pageIsOpen()) throw new Error('renderer page closed before Changes readiness')
+      if ((session.statusRequests.get(worktree.id) ?? 0) <= statusRequestsBeforeNavigation) {
         throw new Error('did not send its first quirky.git/status request within 30000ms')
+      }
+      report('ready')
+    }
+
+    const readyBrowserPid = browserPid
+    if (readyBrowserPid === null) throw new Error('Chromium server did not report its process id')
+
+    const isOpen = (session: OpenWindow): boolean => {
+      try {
+        return !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed() && browser?.isConnected() === true
+      } catch {
+        return false
       }
     }
 
     return {
       pages,
-      browserPid,
-      async finish() {
-        let currentWorktrees = new Set<string>()
-        try {
-          const state = await world.control.callAny('ui.state', {}, { timeoutMs: 5_000 })
-          const ids = connectionIds(state)
-          const visible = await Promise.all(ids.map(async (connId) => {
-            try {
-              return await currentWindowWorktree(world, connId)
-            } catch {
-              return null
-            }
-          }))
-          currentWorktrees = new Set(visible.filter((worktree): worktree is string => worktree !== null))
-        } catch {
-          currentWorktrees = new Set()
+      browserPid: readyBrowserPid,
+      liveness() {
+        return sessions.map((session): WindowLiveness => ({
+          index: session.index,
+          connId: session.connId,
+          worktree: session.attribution.settled,
+          open: isOpen(session)
+        }))
+      },
+      waitForRequest(index, matches, requestOptions) {
+        const session = sessions.find((candidate) => candidate.index === index)
+        if (!session) return Promise.reject(new Error(`window ${index} does not exist`))
+        return waitForWindowRequest(session.metrics, matches, requestOptions)
+      },
+      async navigate(index, worktreeId, navigationOptions) {
+        const session = sessions.find((candidate) => candidate.index === index)
+        if (!session) throw new Error(`window ${index} does not exist`)
+        if (navigationOptions.signal.aborted) throw interrupted()
+
+        const since = performance.now()
+        const deadline = since + navigationOptions.followTimeoutMs
+        const previous = session.attribution.settled
+        session.attribution.target = worktreeId
+        const reconcile = async (): Promise<boolean> => {
+          try {
+            const worktree = await currentWindowWorktree(world, session.connId, RECONCILE_MS)
+            if (worktree !== null) session.attribution.settled = worktree
+            return worktree !== null
+          } catch {
+            return false
+          } finally {
+            session.attribution.target = null
+          }
+        }
+        const failedRecord = (error: string): Omit<SwitchRecord, 'at' | 'seq'> => ({
+          index,
+          from: previous,
+          requested: worktreeId,
+          settled: session.attribution.settled,
+          proof: null,
+          ok: false,
+          followMs: null,
+          error
+        })
+
+        const failedFollow = async (): Promise<Omit<SwitchRecord, 'at' | 'seq'>> => {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `did not request status for ${worktreeId} within ${navigationOptions.followTimeoutMs}ms`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
         }
 
-        const now = Date.now()
-        const records = sessions.map((session): WindowRecord => {
-          let open = false
+        let result: Record<string, unknown>
+        try {
+          const timeoutMs = Math.max(0, deadline - performance.now())
+          const task = world.control.callAny('quirky.worktree/navigate', {
+            worktree: `id:${worktreeId}`,
+            window: session.connId
+          }, { timeoutMs })
+          result = asRecord(await waitWithAbort(
+            task,
+            timeoutMs,
+            navigationOptions.signal,
+            'quirky.worktree/navigate'
+          ), 'quirky.worktree/navigate')
+        } catch (error) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const errorText = errorMessage(error)
+          const timedOut = errorText.startsWith('quirky.worktree/navigate timed out after ')
+            || /^RPC call timed out after \d+(?:\.\d+)? ms$/.test(errorText)
+          const message = timedOut
+            ? `quirky.worktree/navigate timed out after ${navigationOptions.followTimeoutMs}ms`
+            : errorText
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        if (performance.now() > deadline) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `quirky.worktree/navigate timed out after ${navigationOptions.followTimeoutMs}ms`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        if (result.worktreeId !== worktreeId) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `navigation selected ${String(result.worktreeId)}, expected ${worktreeId}`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        session.attribution.settled = worktreeId
+        session.attribution.target = null
+        let proof: RequestFrame | null
+        try {
+          proof = await waitForWindowRequest(session.metrics, (method, params) =>
+            method === 'quirky.git/status' && worktreeFromParams(params) === worktreeId, {
+            since,
+            timeoutMs: Math.max(0, deadline - performance.now()),
+            signal: navigationOptions.signal
+          })
+        } catch (error) {
+          if (navigationOptions.signal.aborted) {
+            await reconcile()
+            throw interrupted()
+          }
+          throw error
+        }
+        if (navigationOptions.signal.aborted) {
+          await reconcile()
+          throw interrupted()
+        }
+        if (proof === null || proof.at > deadline) return await failedFollow()
+        const observedWorktree = worktreeFromParams(proof.params)
+        if (observedWorktree === null) return await failedFollow()
+        return {
+          index,
+          from: previous,
+          requested: worktreeId,
+          settled: session.attribution.settled,
+          proof: { at: proof.at, method: proof.method, worktree: observedWorktree },
+          ok: true,
+          followMs: proof.at - since,
+          error: null
+        }
+      },
+      async finish() {
+        const daemonWindows = await Promise.all(sessions.map(async (session) => {
           try {
-            open = !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed() && browser?.isConnected() === true
+            const worktree = await currentWindowWorktree(world, session.connId)
+            return {
+              worktree: worktree ?? session.attribution.settled,
+              shown: worktree !== null && worktree === session.attribution.settled
+            }
           } catch {
-            open = false
+            return { worktree: session.attribution.settled, shown: false }
           }
-          return {
-            index: session.index,
-            worktree: session.worktree,
-            connId: session.connId,
-            open,
-            shown: currentWorktrees.has(session.worktree),
-            lastRequestAgeSeconds: session.metrics.lastRequestAt === null ? null : Math.max(0, (now - session.metrics.lastRequestAt) / 1000),
-            requests: totalRequests(session.metrics),
-            sockets: session.metrics.sockets,
-            pageErrors: session.metrics.pageErrors,
-            pageErrorExamples: session.metrics.pageErrorExamples.slice(0, 5)
-          }
-        })
+        }))
+        const now = Date.now()
+        const records = sessions.map((session, index): WindowRecord => ({
+          index: session.index,
+          worktree: daemonWindows[index]!.worktree,
+          connId: session.connId,
+          open: isOpen(session),
+          shown: daemonWindows[index]!.shown,
+          lastRequestAgeSeconds: session.metrics.lastRequestAt === null ? null : Math.max(0, (now - session.metrics.lastRequestAt) / 1000),
+          requests: totalRequests(session.metrics),
+          sockets: session.metrics.sockets,
+          pageErrors: session.metrics.pageErrors,
+          pageErrorExamples: session.metrics.pageErrorExamples.slice(0, 5)
+        }))
         const topRequests = [...requests.entries()]
           .sort((left, right) => right[1] - left[1])
           .slice(0, 15)
@@ -452,14 +864,22 @@ export async function openWindows(options: {
       stop
     }
   } catch (error) {
+    fail(error, current)
+    await Promise.all(shellWaits)
+    const failure = firstFailure!
     if (!server && launch) {
       try {
         server = await launch
-        recordServer(server)
+        browserPid = recordServer(server)
       } catch {}
     }
+    try {
+      report('failed', `${failure.context.stage}: ${errorMessage(failure.error)}`, failure.context)
+    } catch {}
     await stop()
-    if (/^window \d+:/.test(errorMessage(error))) throw error
-    throw new Error(`window ${failureIndex}: ${errorMessage(error)}`)
+    if (/^window \d+:/.test(errorMessage(failure.error))) throw failure.error
+    throw new Error(`window ${failure.context.index ?? 0}: ${errorMessage(failure.error)}`)
+  } finally {
+    parentSignal.removeEventListener('abort', abort)
   }
 }

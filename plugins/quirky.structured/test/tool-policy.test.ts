@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -14,8 +14,10 @@ import {
   type SessionStatus,
   type StructuredMessage
 } from '@quirky/protocol'
+import { createProcessRunner } from '../../../packages/process/src/api'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
+import { journalMigrations } from '../journal'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
 import { createCodexRunner, type CodexRunnerDeps } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner, StructuredRunnerFactory, StructuredStartOptions } from '../runner'
@@ -28,6 +30,9 @@ import { FakeQuery } from './fakes/fake-query'
 import { FakeWorld } from './fakes/world'
 
 const DENY = 'tools are disabled for this session'
+const processRunner = createProcessRunner({ owner: 'tool-policy-test' })
+
+afterAll(() => processRunner.dispose())
 
 // The JSONL peer is a child process, so these waits need the real OS event loop.
 async function until(check: () => boolean) {
@@ -44,6 +49,9 @@ function processIsAlive(pid: number): boolean {
     return false
   }
 }
+
+/** The chat journal closes each open tool call when a turn ends; that entry carries no provider item. */
+const isClosure = (data: unknown): boolean => typeof data === 'object' && data !== null && 'closed' in data
 
 async function expectFixtureStopped(fixture: CodexAppServerFixture) {
   const pid = fixture.processId()
@@ -63,6 +71,7 @@ function recorder(): Recorder {
   const statuses: SessionStatus[] = []
   const asks: AskSpec[] = []
   const context: StructuredContext = {
+    process: { spawn: (argv, options) => processRunner.spawn(argv, options) },
     appendMessage(msg: NewStructuredMessage) {
       const stored = { ...msg, seq: messages.length + 1, at: msg.at ?? Date.now() } as StructuredMessage
       messages.push(stored)
@@ -75,9 +84,11 @@ function recorder(): Recorder {
       asks.push(spec)
       return new Promise<AskEnvelope>(() => {})
     },
+    async cancelAsk() {},
     async setProviderSession() {},
     resolveClaudePath: async () => '/usr/local/bin/claude',
-    resolveCodexPath: async () => '/not-used/codex'
+    resolveCodexPath: async () => '/not-used/codex',
+    resolvePiPath: async () => '/not-used/pi'
   }
   return { messages, statuses, asks, context }
 }
@@ -443,7 +454,7 @@ describe('Codex runner', () => {
         expect(fixture.requests().filter((request) => request.method === 'turn/interrupt')).toHaveLength(1)
         const refusal = rec.messages.find((message) => message.role === 'system' && message.text === DENY)
         expect(refusal?.data).toEqual(item)
-        expect(rec.messages.filter((message) => message.role === 'tool').map((message) => message.data))
+        expect(rec.messages.filter((message) => message.role === 'tool' && !isClosure(message.data)).map((message) => message.data))
           .toEqual(method === 'item/started' ? [] : [item])
         expect(rec.statuses).toContain('done')
         expect(rec.statuses).not.toContain('exited')
@@ -685,8 +696,9 @@ describe('Codex runner', () => {
     await runner.start(session, 'scripted turn')
     await until(() => rec.statuses.includes('done'))
     expect(fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(false)
-    expect(rec.messages.filter((message) => message.role === 'tool')).toMatchObject([
-      { text: 'cat file.txt\nfile.txt' }
+    expect(rec.messages.filter((message) => message.role === 'tool' && !isClosure(message.data)).map((message) => message.text)).toEqual([
+      'cat file.txt',
+      'cat file.txt\nfile.txt'
     ])
     expect(rec.messages.some((message) => message.role === 'system' && message.text === DENY)).toBe(false)
   })
@@ -744,6 +756,10 @@ describe('create and resume', () => {
 
     async send(sessionId: string, text: string) {
       await this.codexDelegate?.send(sessionId, text)
+    }
+
+    async interrupt(sessionId: string) {
+      await this.codexDelegate?.interrupt(sessionId)
     }
 
     async stop(sessionId: string) {
@@ -952,7 +968,7 @@ describe('create and resume', () => {
     })
   }
 
-  test('a fresh store stays at version two without a policy table through create, resume and removal', async () => {
+  test('a fresh store keeps only the journal migrations and has no policy table through create, resume and removal', async () => {
     const original = await create({ agent: 'claude', options: { toolPolicy: 'deny-all' } })
     await until(() => runner.started.length === 1)
     await provideAndStop(original, 'stored-provider-thread')
@@ -965,7 +981,7 @@ describe('create and resume', () => {
     try {
       const tableName = ['structured', 'tool', 'policy'].join('_')
       expect(database.query('SELECT name FROM sqlite_master WHERE name = ?').all(tableName)).toEqual([])
-      expect(database.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(database.query('PRAGMA user_version').get()).toEqual({ user_version: journalMigrations('').length })
     } finally {
       database.close()
     }

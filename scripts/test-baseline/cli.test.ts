@@ -3,6 +3,9 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
+import { CLI_FILES_TEST_FILE } from '../parity/cli-files-limits'
+import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
+import { runCi } from '../speed/ci'
 import { type Context, runCli } from './cli'
 import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
@@ -133,6 +136,10 @@ function attempt(tests: Record<string, 'pass' | 'fail' | 'skip'> = {}, file = 'a
   }
 }
 
+function attemptWithResults(tests: Attempt['tests']): Attempt {
+  return { exitCode: 0, fileError: null, tests }
+}
+
 function fileResult(file: string, first: Attempt, rerun?: Attempt, platform: 'linux' | 'macos' = 'linux'): FileResult {
   return { file, platform, durationMs: 100, first, ...(rerun ? { rerun } : {}) }
 }
@@ -159,23 +166,28 @@ function writePlan(dir: string, plan: Plan, baseline?: Baseline) {
 
 const reportOf = (args: string[]) => args.find((arg) => arg.startsWith('--reporter-outfile='))!.slice('--reporter-outfile='.length)
 
-type Calls = { files: string[]; active: number; maxActive: number }
+type Calls = { files: string[]; active: number; maxActive: number; limits?: Array<{ file: string; limitMs: number }> }
+type FakeStatus = 'pass' | 'fail' | 'skip'
 
 /** A fake `bun test`: each file's attempts are consumed in order, the last one repeating. */
-function fakeRun(script: Record<string, Record<string, 'pass' | 'fail'>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
+function fakeRun(script: Record<string, Record<string, FakeStatus>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
   const used: Record<string, number> = {}
-  return async (_cwd, args) => {
+  return async (_cwd, args, limitMs) => {
     const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
     const attempts = script[file]
     if (!attempts) throw new Error(`unexpected file ${file}`)
     const tests = attempts[Math.min(used[file] ?? 0, attempts.length - 1)]
     used[file] = (used[file] ?? 0) + 1
     calls.files.push(file)
+    calls.limits?.push({ file, limitMs })
     calls.active++
     calls.maxActive = Math.max(calls.maxActive, calls.active)
     await Bun.sleep(15)
     calls.active--
-    const cases = Object.entries(tests).map(([name, s]) => (s === 'fail' ? `<testcase name="${name}" classname=""><failure message="x" /></testcase>` : `<testcase name="${name}" classname="" />`))
+    const cases = Object.entries(tests).map(([name, status]) => {
+      const body = status === 'fail' ? '<failure message="x" />' : status === 'skip' ? '<skipped />' : ''
+      return `<testcase name="${name}" classname="">${body}</testcase>`
+    })
     writeFileSync(reportOf(args), `<testsuites><testsuite name="${file}">${cases.join('')}</testsuite></testsuites>`)
     return { code: Object.values(tests).includes('fail') ? 1 : 0, output: '', timedOut: false }
   }
@@ -534,6 +546,92 @@ describe('run-shard', () => {
     expect(calls.files.filter((f) => f === 'm1.test.ts')).toHaveLength(2)
   })
 
+  test('run-shard applies the CLI-files timeout to the selected macOS file and its rerun', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const ordinaryFile = 'macos-ordinary.test.ts'
+    writePlan(planDir, planOf({ macos: [CLI_FILES_TEST_FILE, ordinaryFile] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0, limits: [] }
+    const run = fakeRun({
+      [CLI_FILES_TEST_FILE]: [{ selected: 'fail' }, { selected: 'pass' }],
+      [ordinaryFile]: [{ ordinary: 'pass' }]
+    }, calls)
+    const out = join(dirOf('out'), 'macos-limits.json')
+    const { ctx } = harness(cwd, { run })
+
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+    const results = readJson<FileResult[]>(out)
+    expect(results.map((result) => result.file)).toEqual([CLI_FILES_TEST_FILE, ordinaryFile])
+    expect(results[0].platform).toBe('macos')
+    expect(results[0].first.tests[0].status).toBe('failed')
+    expect(results[0].rerun?.tests[0].status).toBe('passed')
+    expect(results[1].rerun).toBeUndefined()
+    expect(calls.limits?.filter((call) => call.file === CLI_FILES_TEST_FILE).map((call) => call.limitMs)).toEqual([840_000, 840_000])
+    expect(calls.limits?.filter((call) => call.file === ordinaryFile).map((call) => call.limitMs)).toEqual([600_000])
+  })
+
+  test('run-shard applies test-alone entries to both macOS and Linux jobs', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const linuxFiles = ['linux-a.test.ts', 'linux-alone.test.ts', 'linux-b.test.ts', 'linux-c.test.ts']
+    const macosFiles = ['macos-a.test.ts', 'macos-alone.test.ts', 'macos-b.test.ts']
+    writePlan(planDir, planOf({ linuxShards: [linuxFiles], macos: macosFiles }))
+    put(cwd, 'scripts/test-alone.txt', [
+      '# Files that need an uncontended first attempt.',
+      'linux-alone.test.ts fails beside other files',
+      'macos-alone.test.ts fails beside other files',
+      'not-in-this-job.test.ts ignored when absent'
+    ].join('\n'))
+
+    const linuxCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const linuxHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(linuxFiles.map((file) => [file, [{ ok: 'pass' as const }]])), linuxCalls)
+    })
+    const linuxOut = join(dirOf('out'), 'linux.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', linuxOut], linuxHarness.ctx)).toBe(0)
+    expect(linuxCalls.files).toEqual(['linux-alone.test.ts', 'linux-a.test.ts', 'linux-b.test.ts', 'linux-c.test.ts'])
+    expect(readJson<FileResult[]>(linuxOut).map((result) => result.file)).toEqual(linuxFiles)
+    expect(linuxHarness.err).toEqual(['::group::linux-alone.test.ts passed alone\n\n::endgroup::\n'])
+
+    const macosCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const macosHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(macosFiles.map((file) => [file, [{ ok: 'pass' as const }]])), macosCalls)
+    })
+    const macosOut = join(dirOf('out'), 'macos.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', macosOut], macosHarness.ctx)).toBe(0)
+    expect(macosCalls.files).toEqual(['macos-alone.test.ts', 'macos-a.test.ts', 'macos-b.test.ts'])
+    expect(readJson<FileResult[]>(macosOut).map((result) => result.file)).toEqual(macosFiles)
+    expect(macosHarness.err).toEqual(['::group::macos-alone.test.ts passed alone\n\n::endgroup::\n'])
+  })
+
+  test('a missing or empty test-alone list leaves a macOS shard unchanged', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const files = ['m1.test.ts', 'm2.test.ts', 'm3.test.ts', 'm4.test.ts']
+    writePlan(planDir, planOf({ macos: files }))
+    const listPath = join(cwd, 'scripts/test-alone.txt')
+
+    for (const contents of [undefined, '']) {
+      if (contents === undefined) {
+        if (existsSync(listPath)) rmSync(listPath)
+      } else {
+        put(cwd, 'scripts/test-alone.txt', contents)
+      }
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, err } = harness(cwd, {
+        run: fakeRun(Object.fromEntries(files.map((file) => [file, [{ ok: 'pass' as const }]])), calls)
+      })
+      const out = join(dirOf('out'), `macos-${contents === undefined ? 'missing' : 'empty'}.json`)
+
+      expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+      expect(calls.files).toEqual(files)
+      expect(calls.maxActive).toBe(3)
+      expect(readJson<FileResult[]>(out).map((result) => result.file)).toEqual(files)
+      expect(err).toEqual([])
+    }
+  })
+
+
   test('a shard index outside the plan is an argument error', async () => {
     const planDir = dirOf('plan')
     writePlan(planDir, planOf())
@@ -665,6 +763,200 @@ describe('verdict', () => {
     expect(code).toBe(1)
     expect(verdict?.runBroken).toBe(true)
     expect(verdict?.ok).toBe(false)
+  })
+
+  describe('Linux daemon skip coverage', () => {
+    const daemonFile = 'packages/daemon/test/index-preload.browser.test.ts'
+    const daemonName = 'modulepreload assertion'
+    const daemonKey = (file = daemonFile, classname = '', name = daemonName) => [file, classname, name].join('\0')
+    const daemonPlan = (over: Partial<Plan> = {}) => planOf({
+      selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      linuxShards: [[daemonFile]],
+      ...over,
+    })
+    const skippedDaemon = (file = daemonFile, classname = '', name = daemonName) =>
+      fileResult(file, attemptWithResults([{ key: daemonKey(file, classname, name), status: 'skipped' }]))
+    const writeSkipMap = (cwd: string, contents: string) => put(cwd, 'scripts/test-baseline/daemon-linux-skips.json', contents)
+
+    test('rejects a Linux daemon skip on every event with or without a baseline entry', async () => {
+      for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+        for (const hasBaseline of [false, true]) {
+          const skippedKey = daemonKey()
+          const baseline = hasBaseline ? baselineOf(sha(1), { [skippedKey]: 'skipped' }) : undefined
+          const plan = daemonPlan({
+            event,
+            ...(baseline ? { baseline: { commit: baseline.commit, createdAt: baseline.createdAt } } : {}),
+          })
+          const staged = stage(plan, { 'linux-0.json': [skippedDaemon()] }, baseline)
+          const cwd = dirOf('cwd')
+          const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+          expect(code).toBe(1)
+          expect(verdict?.ok).toBe(false)
+          expect(verdict?.runBroken).toBe(true)
+          expect(err.join('')).toContain(daemonFile)
+          expect(err.join('')).toContain(daemonName)
+          expect(readFileSync(join(staged.outDir, 'comment.md'), 'utf8')).toContain('The run itself broke')
+          expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+        }
+      }
+    })
+
+    test('applies the Linux skip policy to every daemon test file', async () => {
+      const file = 'packages/daemon/test/other-daemon.test.ts'
+      const staged = stage(daemonPlan({
+        selection: { mode: 'all', files: [file], reasons: [] },
+        linuxShards: [[file]],
+      }), { 'linux-0.json': [skippedDaemon(file)] })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(file)
+      expect(err.join('')).toContain(daemonName)
+    })
+
+    const daemonCoverageCases: [string, FileResult[], string][] = [
+      ['the first attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), attempt({ [daemonName]: 'pass' }, daemonFile))], daemonName],
+      ['the rerun attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile), attempt({ [daemonName]: 'skip' }, daemonFile))], daemonName],
+      ['after 1,001 passing entries', [fileResult(daemonFile, attemptWithResults([
+        ...Array.from({ length: 1001 }, (_, index) => ({ key: daemonKey(daemonFile, '', `passing ${index}`), status: 'passed' as const })),
+        { key: daemonKey(daemonFile, '', 'late skipped test'), status: 'skipped' as const },
+      ]))], 'late skipped test'],
+      ['an earlier duplicate file result', [
+        skippedDaemon(),
+        fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile)),
+      ], daemonName],
+    ]
+    test.each(daemonCoverageCases)('%s cannot hide a skipped daemon test', async (_name, results, expectedName) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': results })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+      expect(err.join('')).toContain(expectedName)
+    })
+
+    test('rejects a daemon file assigned to Linux but reported as macOS', async () => {
+      const staged = stage(daemonPlan(), {
+        'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')],
+      })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+    })
+
+    test('leaves genuine macOS daemon skips and non-daemon Linux skips under existing policy', async () => {
+      const macos = stage(daemonPlan({
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+        linuxShards: [],
+        macos: [daemonFile],
+      }), { 'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')] })
+      const macosResult = await verdictOf(macos)
+      expect(macosResult.code).toBe(0)
+      expect(macosResult.verdict?.runBroken).toBe(false)
+
+      const uiFile = 'packages/ui/test/a.test.ts'
+      const nonDaemon = stage(daemonPlan({
+        selection: { mode: 'all', files: [uiFile], reasons: [] },
+        linuxShards: [[uiFile]],
+      }), { 'linux-0.json': [fileResult(uiFile, attempt({ 'still skipped': 'skip' }, uiFile))] })
+      const uiResult = await verdictOf(nonDaemon)
+      expect(uiResult.code).toBe(0)
+      expect(uiResult.verdict?.runBroken).toBe(false)
+    })
+
+    test('keeps a missing selected daemon file incomplete rather than a skip violation', async () => {
+      const staged = stage(daemonPlan())
+      const { code, verdict } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.incomplete).toEqual([daemonFile])
+      expect(verdict?.runBroken).toBe(false)
+    })
+
+    test('accepts and reports an exact full JUnit key with its readable reason', async () => {
+      const classname = 'index preload > module requests'
+      const name = 'uses the preload map#2'
+      const exactKey = daemonKey(daemonFile, classname, name)
+      const reason = 'fixture-only platform limitation'
+      const staged = stage(daemonPlan(), {
+        'linux-0.json': [skippedDaemon(daemonFile, classname, name)],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [exactKey]: reason }))
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(0)
+      expect(verdict?.runBroken).toBe(false)
+      expect(err.join('')).toContain('index preload > module requests')
+      expect(err.join('')).toContain(name)
+      expect(err.join('')).toContain(reason)
+    })
+
+    test.each([
+      ['a different key', daemonKey(daemonFile, 'another class')],
+      ['a wildcard-like key', daemonKey(daemonFile, '', '*')],
+      ['a sibling file key', daemonKey('packages/daemon/test/sibling.test.ts')],
+    ])('%s does not excuse the skipped test', async (_name, configuredKey) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [configuredKey]: 'fixture-only platform limitation' }))
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+    })
+
+    test.each(['toString', '__proto__'])('an inherited %s property cannot excuse a daemon skip', async (key) => {
+      const staged = stage(daemonPlan({ event: 'push' }), {
+        'linux-0.json': [fileResult(daemonFile, attemptWithResults([{ key, status: 'skipped' }]))],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, '{}')
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
+    const invalidMaps: [string, string][] = [
+      ['malformed JSON', '{'],
+      ['a non-object', '[]'],
+      ['an empty reason', JSON.stringify({ [daemonKey()]: '' })],
+      ['a whitespace reason', JSON.stringify({ [daemonKey()]: ' \t\n ' })],
+      ['a non-string reason', JSON.stringify({ [daemonKey()]: 42 })],
+    ]
+    test.each(invalidMaps)('a %s exception map breaks the verdict without publishing a baseline', async (_name, contents) => {
+      const staged = stage(daemonPlan({
+        event: 'push',
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      }), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, contents)
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain('daemon-linux-skips.json')
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
+
+    test('keeps a skipped JUnit result through run-shard and rejects it in verdict', async () => {
+      const cwd = dirOf('cwd')
+      const planDir = dirOf('plan')
+      const plan = daemonPlan()
+      writePlan(planDir, plan)
+      const resultsDir = dirOf('results')
+      const resultPath = join(resultsDir, 'linux-0.json')
+      const runContext = harness(cwd, {
+        run: fakeRun({ [daemonFile]: [{ [daemonName]: 'skip' }] }),
+      })
+      expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', resultPath], runContext.ctx)).toBe(0)
+      const results = readJson<FileResult[]>(resultPath)
+      expect(results[0].first.tests).toEqual([{ key: daemonKey(), status: 'skipped' }])
+      expect(results[0].rerun).toBeUndefined()
+
+      const staged = { planDir, inDir: resultsDir, outDir: dirOf('out') }
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(readJson<FileResult[]>(resultPath)[0].first.tests[0].status).toBe('skipped')
+    })
   })
 
   test('every fileError the runner can produce is accepted', async () => {
@@ -800,6 +1092,86 @@ describe('verdict', () => {
   })
 })
 
+describe('advisory speed evidence', () => {
+  for (const fails of [false, true]) {
+    for (const evidence of ['missing', 'malformed', 'failed', 'cancelled']) {
+      test(`${evidence} speed does not change ${fails ? 'failing' : 'passing'} unit verdict`, async () => {
+        const planDir = dirOf('plan')
+        const inDir = dirOf('results')
+        const outDir = dirOf('out')
+        const speed = dirOf('speed')
+        writePlan(planDir, planOf())
+        writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+        if (evidence === 'malformed') writeFileSync(join(speed, 'report.json'), '{')
+        if (evidence === 'failed' || evidence === 'cancelled') writeFileSync(join(speed, 'comparison.json'), JSON.stringify({ status: 'error', reason: evidence }))
+        const h = harness(dirOf('cwd'))
+        const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], h.ctx)
+        expect(code).toBe(fails ? 1 : 0)
+        const verdict = readJson<Verdict>(join(outDir, 'verdict.json'))
+        expect(verdict.runBroken).toBe(false)
+        const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+        expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+        expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+        expect(comment).toContain('not measured:')
+      })
+    }
+  }
+  for (const fails of [false, true]) {
+    test(`a paired speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
+      const planDir = dirOf('plan')
+      const inDir = dirOf('results')
+      const outDir = dirOf('out')
+      const speed = dirOf('speed')
+      writePlan(planDir, planOf({ head: sha(8) }))
+      writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+      const current: SpeedReport = {
+        version: 1, commit: sha(9), runId: '123', createdAt: NOW.toISOString(), status: 'complete', qualified: true,
+        profile: { workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000, renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context', floodChunkBytes: 65536, floodIntervalMs: 16, runner: 'macos-15', os: 'darwin', arch: 'arm64', cpuModel: 'CPU', cpuCount: 4, bun: '1.4.0', chromium: 'test', imageVersion: 'test' },
+        metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
+        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json'], misses: 'misses.json' },
+      }
+      const pair = {
+        version: 1,
+        runId: current.runId,
+        createdAt: current.createdAt,
+        status: 'complete',
+        qualified: true,
+        head: { commit: current.commit },
+        base: { commit: sha(1), basis: 'merge-base' },
+        metrics: Object.fromEntries(METRICS.map(metric => {
+          const pairs = metric === 'startup' || metric === 'diff' ? 20 : 60
+          return [metric, { headSamplesMs: Array(pairs).fill(52), baseSamplesMs: Array(pairs).fill(40) }]
+        })),
+        failures: [],
+        evidence: { samples: 'pair-samples.jsonl' },
+      }
+      const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
+      const miss = {
+        metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 50.001, commit: current.commit, runId: current.runId,
+        samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding,
+      }
+      writeFileSync(join(speed, 'report.json'), JSON.stringify(current))
+      writeFileSync(join(speed, 'pair.json'), JSON.stringify(pair))
+      writeFileSync(join(speed, 'misses.json'), JSON.stringify([miss]))
+      expect(await runCi([
+        'compare', '--current', join(speed, 'report.json'), '--pair', join(speed, 'pair.json'),
+        '--out', speed, '--head', current.commit,
+      ], { cwd: dirOf('ci-cwd'), err: () => {} })).toBe(0)
+      expect(existsSync(join(speed, 'baseline.json'))).toBe(false)
+
+      const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
+      expect(code).toBe(fails ? 1 : 0)
+      expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)
+      const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+      expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+      expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+      expect(comment).toContain('REGRESSION')
+      expect(comment).toContain(finding)
+      expect(comment).toContain(fails ? '## Tests failed' : '## Tests passed')
+    })
+  }
+})
+
 describe('verdict without bun install', () => {
   const HERE = import.meta.dir
   const staticImports = (source: string) =>
@@ -807,8 +1179,8 @@ describe('verdict without bun install', () => {
 
   test('cli.ts statically imports only node built-ins and dependency-free modules', () => {
     const specs = staticImports(readFileSync(join(HERE, 'cli.ts'), 'utf8'))
-    const allowed = new Set(['./baseline', './compare', './issues', './report', './select', './shards'])
-    for (const spec of specs) expect(spec.startsWith('node:') || allowed.has(spec)).toBe(true)
+    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true, '../parity/cli-files-limits': true }
+    for (const spec of specs) expect(spec.startsWith('node:') || allowed[spec] === true).toBe(true)
     expect(specs).not.toContain('./runner')
     expect(specs).not.toContain('./graph')
     expect(specs.some((spec) => spec.includes('suite'))).toBe(false)
@@ -827,6 +1199,12 @@ describe('verdict without bun install', () => {
     const lib = join(dirOf('lib'), 'scripts', 'test-baseline')
     mkdirSync(lib, { recursive: true })
     for (const name of ['cli', 'baseline', 'compare', 'issues', 'report', 'select', 'shards', 'types']) copyFileSync(join(HERE, `${name}.ts`), join(lib, `${name}.ts`))
+    const speedLib = join(lib, '..', 'speed')
+    mkdirSync(speedLib)
+    for (const name of ['ci', 'contracts', 'report']) copyFileSync(join(HERE, '..', 'speed', `${name}.ts`), join(speedLib, `${name}.ts`))
+    const parityLib = join(lib, '..', 'parity')
+    mkdirSync(parityLib)
+    copyFileSync(join(HERE, '../parity/cli-files-limits.ts'), join(parityLib, 'cli-files-limits.ts'))
     const planDir = dirOf('plan')
     const inDir = dirOf('in')
     const outDir = join(dirOf('o'), 'verdict')

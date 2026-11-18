@@ -100,21 +100,18 @@ function Row({ id, children }: { id: string; children: ReactNode }) {
 }
 
 /** A range input that shows its draft while dragging and saves once, when the change is committed. */
-function VolumeSlider({ value, disabled, onCommit }: { value: number; disabled: boolean; onCommit: (volume: number) => void }) {
+function VolumeSlider({ value, disabled, store }: { value: number; disabled: boolean; store: NotificationsStore }) {
   const id = `${useId()}-notification-sound-volume`
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLInputElement>(null)
-  const commit = useRef(onCommit)
-  commit.current = onCommit
-
   useEffect(() => setDraft(value), [value])
   useEffect(() => {
     const input = ref.current
     if (!input) return
-    const onChange = () => commit.current(Number(input.value))
+    const onChange = () => void store.set('volume', Number(input.value))
     input.addEventListener('change', onChange)
     return () => input.removeEventListener('change', onChange)
-  }, [])
+  }, [store])
 
   return (
     <FormRow label="Notification sound volume" htmlFor={id} help={`${draft}%`}>
@@ -135,7 +132,7 @@ function VolumeSlider({ value, disabled, onCommit }: { value: number; disabled: 
   )
 }
 
-function CustomPath({ initial, error, busy, onUse }: { initial: string; error: string | null; busy: boolean; onUse: (path: string) => void }) {
+function CustomPath({ initial, error, busy, store }: { initial: string; error: string | null; busy: boolean; store: NotificationsStore }) {
   const [draft, setDraft] = useState(initial)
   const path = draft.trim()
   return (
@@ -148,9 +145,9 @@ function CustomPath({ initial, error, busy, onUse }: { initial: string; error: s
         aria-invalid={error !== null}
         error={error ?? undefined}
         onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => event.key === 'Enter' && path !== '' && onUse(path)}
+        onKeyDown={(event) => event.key === 'Enter' && path !== '' && void store.useCustom(path)}
       />
-      <Button type="button" disabled={busy || path === ''} onClick={() => onUse(path)}>
+      <Button type="button" disabled={busy || path === ''} onClick={() => void store.useCustom(path)}>
         Use
       </Button>
     </div>
@@ -219,14 +216,14 @@ export function NotificationsView({ store }: { store: NotificationsStore }) {
                     Custom: <code style={customCodeStyle}>{values.customSoundPath}</code>
                   </span>
                   {!customOpen && (
-                    <Button type="button" disabled={off} onClick={() => store.openCustom()}>
+                    <Button type="button" disabled={off} onClick={() => store.editCustom()}>
                       Change
                     </Button>
                   )}
                 </div>
               )}
-              {customOpen && <CustomPath initial={values.customSoundPath} error={customError} busy={busy} onUse={(path) => void store.useCustom(path)} />}
-              {values.sound !== 'system' && <VolumeSlider value={values.volume} disabled={off} onCommit={(volume) => void store.set('volume', volume)} />}
+              {customOpen && <CustomPath initial={values.customSoundPath} error={customError} busy={busy} store={store} />}
+              {values.sound !== 'system' && <VolumeSlider value={values.volume} disabled={off} store={store} />}
             </div>
           </Row>
           {suppress}

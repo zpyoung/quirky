@@ -8,14 +8,14 @@ export type InputGate = {
 
 /** Decides whether terminal-generated input (`onData`) may reach the shell right now. */
 export function createInputGate(): InputGate {
-  let muted = false
+  let pendingReplays = 0
   return {
-    allows: () => !muted,
+    allows: () => pendingReplays === 0,
     mute: () => {
-      muted = true
+      pendingReplays += 1
     },
     unmute: () => {
-      muted = false
+      pendingReplays = Math.max(0, pendingReplays - 1)
     }
   }
 }

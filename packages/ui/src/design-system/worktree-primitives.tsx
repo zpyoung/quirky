@@ -110,7 +110,7 @@ export function TagChips({ tags, max = 2, nameShare }: TagChipsProps & { nameSha
 }
 
 /** A native checkbox that can show a mixed state; `onChange` receives the value the click asks for. */
-export function Checkbox({ checked, indeterminate = false, label, onChange, hideLabel = false, tone, accessibleName }: CheckboxProps) {
+export function Checkbox({ checked, indeterminate = false, label, onChange, hideLabel = false, id, disabled, 'aria-describedby': describedBy, 'aria-invalid': invalid, tone, accessibleName }: CheckboxProps) {
   const input = useRef<HTMLInputElement>(null)
   useLayoutEffect(() => {
     if (input.current) input.current.indeterminate = indeterminate
@@ -119,6 +119,10 @@ export function Checkbox({ checked, indeterminate = false, label, onChange, hide
     <label className={`ui-checkbox${tone === 'needs-you' ? ' ui-checkbox--needs-you' : ''}`}>
       <input
         ref={input}
+        id={id}
+        disabled={disabled}
+        aria-describedby={describedBy}
+        aria-invalid={invalid}
         type="checkbox"
         className="ui-checkbox__input"
         checked={checked}

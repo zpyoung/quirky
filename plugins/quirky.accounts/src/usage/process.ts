@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import type { ProcessSpawner, SpawnOptions, SpawnedProcess } from '@quirky/protocol'
 
 export type ProcessResult = {
   code: number | null
@@ -17,99 +17,161 @@ export type ProcessOptions = {
   cwd?: string
 }
 
-export class ProviderProcessOwner {
-  private readonly children = new Set<ChildProcess>()
-  private closed = false
+const DEFAULT_MAX_OUTPUT_BYTES = 524_288
+const KILL_GRACE_MS = 1_000
 
-  async run(program: string, args: string[], options: ProcessOptions): Promise<ProcessResult> {
-    if (this.closed || options.signal?.aborted) {
-      return { code: null, signal: null, stdout: '', stderr: '', timedOut: false, outputLimitExceeded: false }
-    }
-    const child = spawn(program, args, {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
+function emptyResult(): ProcessResult {
+  return { code: null, signal: null, stdout: '', stderr: '', timedOut: false, outputLimitExceeded: false }
+}
+
+function decode(chunks: Uint8Array[]): string {
+  const decoder = new TextDecoder('utf-8', { ignoreBOM: true })
+  let text = ''
+  for (const chunk of chunks) text += decoder.decode(chunk, { stream: true })
+  return text + decoder.decode()
+}
+
+export class ProviderProcessOwner {
+  private readonly handles = new Set<SpawnedProcess>()
+  private readonly runs = new Set<Promise<ProcessResult>>()
+  private closed = false
+  private shutdownPromise: Promise<void> | null = null
+
+  constructor(private readonly spawner: ProcessSpawner) {}
+
+  run(program: string, args: string[], options: ProcessOptions): Promise<ProcessResult> {
+    if (this.closed || options.signal?.aborted) return Promise.resolve(emptyResult())
+    const operation = this.runProcess(program, args, options)
+    this.runs.add(operation)
+    void operation.then(
+      () => this.runs.delete(operation),
+      () => this.runs.delete(operation)
+    )
+    return operation
+  }
+
+  spawn(program: string, args: string[], options: SpawnOptions): SpawnedProcess {
+    if (this.closed) throw new Error('Provider process owner is shut down')
+    const handle = this.start(program, args, options)
+    void handle.exited.then(
+      () => this.handles.delete(handle),
+      () => this.handles.delete(handle)
+    )
+    return handle
+  }
+
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise
+    this.closed = true
+    const handles = [...this.handles]
+    const runs = [...this.runs]
+    const { promise, resolve } = Promise.withResolvers<void>()
+    this.shutdownPromise = promise
+    const stops = handles.map(async (handle) => {
+      try {
+        await handle.stop({ graceMs: KILL_GRACE_MS })
+      } catch {}
+      try {
+        await handle.exited
+      } catch {}
     })
-    this.children.add(child)
-    const { promise, resolve } = Promise.withResolvers<ProcessResult>()
-    const outputLimit = options.maxOutputBytes ?? 512 * 1024
-    let stdout = ''
-    let stderr = ''
-    let bytes = 0
-    let outputLimitExceeded = false
-    let timedOut = false
-    let settled = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      terminate(child)
-    }, options.timeoutMs)
-    const abort = (): void => terminate(child)
-    const finish = (result: ProcessResult): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      options.signal?.removeEventListener('abort', abort)
-      this.children.delete(child)
-      resolve(result)
-    }
-    const append = (current: string, chunk: Buffer): string => {
-      bytes += chunk.byteLength
-      if (bytes > outputLimit) {
-        outputLimitExceeded = true
-        terminate(child)
-        const remaining = Math.max(0, outputLimit - (bytes - chunk.byteLength))
-        return current + chunk.subarray(0, remaining).toString('utf8')
-      }
-      return current + chunk.toString('utf8')
-    }
-    child.stdout?.on('data', (chunk: Buffer) => { stdout = append(stdout, chunk) })
-    child.stderr?.on('data', (chunk: Buffer) => { stderr = append(stderr, chunk) })
-    child.once('error', () => finish({ code: null, signal: null, stdout, stderr: '', timedOut, outputLimitExceeded }))
-    child.once('close', (code: number | null, signal: NodeJS.Signals | null) => {
-      finish({ code, signal, stdout, stderr, timedOut, outputLimitExceeded })
-    })
-    options.signal?.addEventListener('abort', abort, { once: true })
-    if (options.signal?.aborted) abort()
+    void Promise.allSettled([...stops, ...runs]).then(() => resolve())
     return promise
   }
 
-  track(child: ChildProcess): void {
-    if (this.closed) terminate(child)
-    else this.children.add(child)
-    child.once('close', () => this.children.delete(child))
-    child.once('error', () => this.children.delete(child))
+  private start(program: string, args: string[], options: SpawnOptions): SpawnedProcess {
+    if (this.closed) throw new Error('Provider process owner is shut down')
+    const handle = this.spawner.spawn([program, ...args], options)
+    this.handles.add(handle)
+    return handle
   }
 
-  async shutdown(): Promise<void> {
-    this.closed = true
-    const children = [...this.children]
-    await Promise.all(children.map((child) => terminateAndWait(child)))
-    this.children.clear()
+  private async runProcess(program: string, args: string[], options: ProcessOptions): Promise<ProcessResult> {
+    let handle: SpawnedProcess | undefined
+    try {
+      handle = this.start(program, args, {
+        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options.env !== undefined ? { env: options.env } : {}),
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        timeoutMs: options.timeoutMs,
+        killGraceMs: KILL_GRACE_MS,
+        signal: options.signal
+      })
+      const outputLimit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES
+      const stdoutChunks: Uint8Array[] = []
+      const stderrChunks: Uint8Array[] = []
+      let retainedBytes = 0
+      let outputLimitExceeded = false
+      let readFailed = false
+      const stop = (): void => {
+        try {
+          void handle!.stop({ graceMs: KILL_GRACE_MS }).catch(() => {})
+        } catch {}
+      }
+      const append = (chunks: Uint8Array[], chunk: Uint8Array): void => {
+        if (outputLimitExceeded) return
+        const remaining = Math.max(0, outputLimit - retainedBytes)
+        const retained = Math.min(chunk.byteLength, remaining)
+        if (retained > 0) chunks.push(retained === chunk.byteLength ? chunk : chunk.subarray(0, retained))
+        retainedBytes += retained
+        if (retained < chunk.byteLength) {
+          outputLimitExceeded = true
+          stop()
+        }
+      }
+      const consume = async (stream: ReadableStream<Uint8Array>, chunks: Uint8Array[]): Promise<void> => {
+        let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+        try {
+          reader = stream.getReader()
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) return
+            append(chunks, value)
+          }
+        } catch {
+          readFailed = true
+          stop()
+        } finally {
+          reader?.releaseLock()
+        }
+      }
+      const stdoutDone = consume(handle.stdout, stdoutChunks)
+      const stderrDone = consume(handle.stderr, stderrChunks)
+      const exitPromise = handle.exited.catch(() => {
+        readFailed = true
+        stop()
+        return null
+      })
+      const [exit] = await Promise.all([exitPromise, stdoutDone, stderrDone])
+      if (!exit || exit.spawnError || (readFailed && exit.stopped !== 'timeout' && !outputLimitExceeded)) {
+        return emptyResult()
+      }
+      const stdout = decode(stdoutChunks)
+      const stderr = decode(stderrChunks)
+      const signal = exit.signal as NodeJS.Signals | null
+      const timedOut = exit.stopped === 'timeout'
+      if (timedOut) {
+        return { code: null, signal, stdout, stderr, timedOut: true, outputLimitExceeded }
+      }
+      if (options.signal?.aborted || this.closed || exit.stopped === 'aborted') {
+        return { code: null, signal, stdout, stderr, timedOut: false, outputLimitExceeded }
+      }
+      return {
+        code: exit.stopped === 'stop' ? null : exit.exitCode,
+        signal,
+        stdout,
+        stderr,
+        timedOut: false,
+        outputLimitExceeded
+      }
+    } catch {
+      return emptyResult()
+    } finally {
+      if (handle) this.handles.delete(handle)
+    }
   }
-}
-
-function terminate(child: ChildProcess): void {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  child.kill('SIGTERM')
-  const killTimer = setTimeout(() => {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-  }, 1_000)
-  child.once('close', () => clearTimeout(killTimer))
-}
-
-function terminateAndWait(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
-  const { promise, resolve } = Promise.withResolvers<void>()
-  const deadline = setTimeout(resolve, 1_500)
-  const complete = (): void => {
-    clearTimeout(deadline)
-    resolve()
-  }
-  child.once('close', complete)
-  child.once('error', complete)
-  terminate(child)
-  return promise
 }
 
 export type ProviderRuntime = {

@@ -1,7 +1,12 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
+import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
+import bundleSizeSpec from '../../plugins/quirky.view/test/fixtures/bundle-size.json'
+import { approvalSpec } from '../../plugins/quirky.structured/native-questions'
 
 const FIXTURE_FILES = {
   source: 'src/app.ts',
@@ -113,7 +118,7 @@ export function createIsolatedRuntimeEnvironment(
 ): Record<string, string> {
   const root = resolve(home)
   const env: Record<string, string> = {
-    PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+    PATH: `${join(root, 'fakebin')}${delimiter}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: root,
     TMPDIR: join(root, 'tmp'),
     TMP: join(root, 'tmp'),
@@ -124,7 +129,8 @@ export function createIsolatedRuntimeEnvironment(
     XDG_STATE_HOME: join(root, 'state'),
     XDG_RUNTIME_DIR: join(root, 'runtime'),
     QUIRKY_HOME: root,
-    SHELL: '/bin/sh',
+    QUIRKY_AGENT_SEARCH_DIRS: join(root, 'fakebin'),
+    SHELL: join(root, 'fakebin', 'sh'),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
@@ -142,6 +148,7 @@ export function createIsolatedRuntimeEnvironment(
     env.QUIRKY_BUILTIN_PLUGINS_DIR = join(repoRoot, 'plugins')
     env.QUIRKY_UI_DIR = resolve(options.uiDir ?? join(repoRoot, 'packages/ui/dist'))
     env.QUIRKY_CLI_ENTRY = join(repoRoot, 'packages/cli/src/main.ts')
+    env.WORKER_TEST_CLI = env.QUIRKY_CLI_ENTRY
   }
   return env
 }
@@ -243,6 +250,55 @@ function writeFile(root: string, relativePath: string, content: string): void {
   writeFileSync(path, content, { mode: 0o600 })
 }
 
+export function prepareProviderExecutables(root: string): void {
+  const bin = join(root, 'fakebin')
+  const native = createCodexAppServerFixture(join(root, 'providers', 'codex-native'), { uniqueThreads: true })
+  const acceptanceAgent = resolve(import.meta.dir, '../../plugins/quirky.orchestration/test/workers/acceptance-agent.ts')
+  mkdirSync(bin, { recursive: true, mode: 0o700 })
+  writeFileSync(join(bin, 'sh'), '#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec /bin/sh "$@"\n', { mode: 0o700 })
+  for (const provider of ['claude', 'codex'] as const) {
+    const source = `#!${process.execPath}
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+const provider = ${JSON.stringify(provider)}
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(provider === 'claude' ? 'Claude Code 2.1.80' : 'codex 1.0.0')
+  process.exit(0)
+}
+if (process.argv.includes('login')) {
+  const home = provider === 'claude' ? process.env.CLAUDE_CONFIG_DIR : process.env.CODEX_HOME
+  if (!home) throw new Error('Missing isolated provider home')
+  mkdirSync(home, { recursive: true, mode: 0o700 })
+  if (provider === 'claude') {
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'claude@example.test', organizationUuid: 'fixture-org', organizationName: 'Fixture Org' } }))
+    writeFileSync(join(home, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'fixture-claude-token', refreshToken: 'fixture-claude-refresh' } }), { mode: 0o600 })
+    if (process.env.BROWSER) {
+      const browser = Bun.spawn([process.env.BROWSER, 'https://claude.ai/oauth/authorize?client_id=fixture&redirect_uri=http%3A%2F%2Flocalhost%3A54545%2Fcallback&state=fixture'], { stdout: 'ignore', stderr: 'ignore' })
+      await browser.exited
+    }
+  } else {
+    const claims = { email: 'codex@example.test', 'https://api.openai.com/auth': { chatgpt_account_id: 'fixture-workspace' }, 'https://api.openai.com/profile': { email: 'codex@example.test' } }
+    writeFileSync(join(home, 'auth.json'), JSON.stringify({ auth_mode: 'chatgpt', tokens: { access_token: 'fixture-codex-token', id_token: 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature', account_id: 'fixture-workspace' } }), { mode: 0o600 })
+  }
+  process.exit(0)
+}
+if (provider === 'codex') {
+  // The app-server executable is generated under this fixture's private home.
+  await import(${JSON.stringify(native.executable)})
+} else if (process.env.QUIRKY_SESSION_ID && process.env.WORKER_TEST_CLI) {
+  process.stdout.write('\\x1b[?2004h')
+  // This fake agent is selected only for the private worker bridge.
+  await import(${JSON.stringify(acceptanceAgent)})
+}
+process.on('SIGTERM', () => process.exit(0))
+process.on('SIGINT', () => process.exit(0))
+setInterval(() => {}, 60_000)
+`
+    writeFileSync(join(bin, provider), source, { mode: 0o700 })
+  }
+  writeFileSync(join(bin, 'security'), '#!/bin/sh\ncase "$1" in\n  find-generic-password|delete-generic-password) exit 44 ;;\n  *) exit 2 ;;\nesac\n', { mode: 0o700 })
+}
+
 /** Creates a real local Git repository under the disposable app home. */
 export async function prepareCaptureFixtureHome(
   home: string,
@@ -256,7 +312,7 @@ export async function prepareCaptureFixtureHome(
     path: project === PRIMARY_PROJECT ? repoPath : join(root, 'projects', project)
   }))
   const worktreesRoot = join(root, 'worktrees')
-  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin')]
+  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin'), join(root, 'providers'), join(root, 'transcripts'), join(root, 'origin.git'), join(root, 'origin-seed')]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -278,6 +334,7 @@ export async function prepareCaptureFixtureHome(
     mkdirSync(join(root, 'projects'), { recursive: true, mode: 0o700 })
     mkdirSync(worktreesRoot, { recursive: true, mode: 0o700 })
     const tasks = prepareTasksFixture(root, PRIMARY_PROJECT, env)
+    prepareProviderExecutables(root)
     writeFile(repoPath, 'README.md', '# UI screenshot fixture\n\nA disposable local project for renderer capture.\n')
     writeFile(repoPath, FIXTURE_FILES.source, INITIAL_SOURCE)
     writeFile(repoPath, FIXTURE_FILES.markdown, SAMPLE_MARKDOWN)
@@ -291,8 +348,25 @@ export async function prepareCaptureFixtureHome(
     await runGit(['-C', repoPath, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'add', '--all'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'commit', '-m', 'Seed UI screenshot fixture'], root, env, options.timeoutMs, options.signal)
+    const bareOrigin = join(root, 'origin.git')
+    const remoteSeed = join(root, 'origin-seed')
+    await runGit(['init', '--bare', '--initial-branch=main', bareOrigin], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'remote', 'add', 'origin', tasks.originUrl], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'config', '--local', 'core.sshCommand', tasks.sshCommand], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'push', 'origin', 'main'], root, env, options.timeoutMs, options.signal)
+
+    await runGit(['clone', bareOrigin, remoteSeed], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'config', 'user.name', 'UI Screenshot Fixture'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
+    writeFile(remoteSeed, 'origin-only.txt', 'A commit made on the local bare origin.\n')
+    await runGit(['-C', remoteSeed, 'add', 'origin-only.txt'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'commit', '-m', 'Advance the local bare origin'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'push', 'origin', 'main'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'fetch', 'origin'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'branch', '--set-upstream-to=origin/main', 'main'], root, env, options.timeoutMs, options.signal)
+    writeFile(repoPath, 'src/local-review-fixture.ts', 'export const localReviewFixture = true\n')
+    await runGit(['-C', repoPath, 'add', 'src/local-review-fixture.ts'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'commit', '-m', 'Add a local Reviews fixture commit'], root, env, options.timeoutMs, options.signal)
 
     for (const project of projects.filter((candidate) => candidate.path !== repoPath)) {
       writeFile(project.path, 'README.md', `# ${project.name}\n\nA second disposable project for renderer capture.\n`)
@@ -337,6 +411,127 @@ async function callRpc(
     options.signal,
     method
   )
+}
+
+type BridgeReply = { code: number; stdout: string; stderr: string }
+
+async function waitForFile(path: string, options: FixtureOptions, label: string): Promise<string> {
+  const deadline = Date.now() + options.timeoutMs
+  for (;;) {
+    options.signal?.throwIfAborted()
+    if (existsSync(path)) return readFileSync(path, 'utf8')
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error(`${label} exceeded ${options.timeoutMs}ms`)
+    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, label)
+  }
+}
+
+/** Waits for the isolated fake provider to accept CLI bridge requests. */
+export async function waitForStartedEvent(home: string, session: string, options: FixtureOptions): Promise<void> {
+  const path = join(home, 'worker-fixture', `${session}.events.jsonl`)
+  const deadline = Date.now() + options.timeoutMs
+  for (;;) {
+    options.signal?.throwIfAborted()
+    if (existsSync(path)) {
+      const events = readFileSync(path, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as Record<string, unknown>)
+      if (events.some(event => event.type === 'started')) return
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) throw new Error(`coordinator ${session} did not write a started event within ${options.timeoutMs}ms`)
+    await bounded(Bun.sleep(Math.min(25, remaining)), options.timeoutMs, options.signal, 'coordinator started event')
+  }
+}
+
+/** Runs a fixture CLI request inside the provider's attested session environment. */
+export async function runBridgeCommand(
+  home: string,
+  session: string,
+  args: string[],
+  options: FixtureOptions
+): Promise<unknown> {
+  options.signal?.throwIfAborted()
+  const root = join(home, 'worker-fixture')
+  const id = randomUUID()
+  appendFileSync(join(root, `${session}.requests.jsonl`), JSON.stringify({ id, args }) + '\n', { mode: 0o600 })
+  const raw = await waitForFile(join(root, `${id}.reply.json`), options, `worker CLI ${args.slice(0, 2).join(' ')}`)
+  const reply = JSON.parse(raw) as BridgeReply
+  if (!reply || typeof reply !== 'object' || typeof reply.code !== 'number' || typeof reply.stdout !== 'string' || typeof reply.stderr !== 'string') {
+    throw new Error('worker CLI bridge returned an invalid reply')
+  }
+  if (reply.code !== 0) throw new Error(`worker CLI ${args[1]} exited ${reply.code}: ${reply.stderr.trim() || reply.stdout.trim() || 'no details'}`)
+  try {
+    return JSON.parse(reply.stdout) as unknown
+  } catch {
+    throw new Error(`worker CLI ${args[1]} did not return JSON: ${reply.stdout}`)
+  }
+}
+
+export type ViewFixture = { sessionId: string; inlineViewId: string; paneViewIds: [string, string] }
+
+/** Seeds representative stored views through an isolated live session, never through its database. */
+export async function createViewFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<ViewFixture> {
+  checkAbort(options.signal)
+  // cancellation stops waiting, not the daemon's session creation
+  const creation = client.callAny('quirky.session/create', {
+    worktree: fixtures.primaryWorktree.id, agent: 'claude', title: 'UI review views'
+  })
+  let acquiredSession: string | undefined
+  try {
+    const created = record(await bounded(creation, options.timeoutMs, options.signal, 'quirky.session/create'))
+    const sessionId = requiredString(created.id, 'quirky.session/create')
+    acquiredSession = sessionId
+    await waitForStartedEvent(fixtures.home, sessionId, options)
+    const open = async (spec: unknown, placement: 'inline' | 'pane') => {
+      const reply = record(await runBridgeCommand(fixtures.home, sessionId, [
+        'view', 'open', '--spec', JSON.stringify(spec), '--placement', placement, '--json'
+      ], options))
+      return requiredString(reply.viewId, 'view open')
+    }
+    const moduleMapSpec = { title: 'Module map', root: { type: 'markdown', props: { text: 'Module map body' } } }
+    const inlineViewId = await open(bundleSizeSpec, 'inline')
+    const firstPaneViewId = await open(bundleSizeSpec, 'pane')
+    const secondPaneViewId = await open(moduleMapSpec, 'pane')
+    const records = await runBridgeCommand(fixtures.home, sessionId, [
+      'api', 'call', 'quirky.view/list', '--session', sessionId, '--json'
+    ], options)
+    const expected = [
+      { viewId: inlineViewId, placement: 'inline', spec: bundleSizeSpec },
+      { viewId: firstPaneViewId, placement: 'pane', spec: bundleSizeSpec },
+      { viewId: secondPaneViewId, placement: 'pane', spec: moduleMapSpec }
+    ]
+    if (new Set(expected.map(({ viewId }) => viewId)).size !== 3 || !Array.isArray(records) || records.length !== 3 ||
+      expected.some((view, index) => {
+        const stored = record(records[index])
+        return stored.viewId !== view.viewId || stored.sessionId !== sessionId || stored.closed !== false ||
+          stored.placement !== view.placement || stored.title !== view.spec.title ||
+          !isDeepStrictEqual(stored.spec, view.spec)
+      })) {
+      throw new Error('view fixture list did not contain the three expected stored views')
+    }
+    return { sessionId, inlineViewId, paneViewIds: [firstPaneViewId, secondPaneViewId] }
+  } catch (error) {
+    if (acquiredSession === undefined) {
+      void creation.then(async (created) => {
+        const session = record(created).id
+        if (typeof session === 'string' && session !== '') {
+          await callRpc(client, 'quirky.session/close', { session }, { timeoutMs: options.timeoutMs })
+        }
+      }, () => undefined).catch((cleanupError) => {
+        console.error(`view fixture late-session cleanup failed: ${errorInHome(cleanupError, fixtures.home).message}`)
+      })
+      throw error
+    }
+    try {
+      await callRpc(client, 'quirky.session/close', { session: acquiredSession }, { timeoutMs: options.timeoutMs })
+    } catch (cleanupError) {
+      throw new Error(`${errorMessage(error)}; view fixture cleanup failed: ${errorMessage(cleanupError)}`)
+    }
+    throw error
+  }
 }
 
 /**
@@ -476,19 +671,257 @@ export type CaptureTerminalFixture = { sessionId: string; tabId: string; paneId:
 export async function createCaptureTerminalFixture(
   client: FixtureRpcClient,
   fixtures: RegisteredCaptureFixtures,
-  options: FixtureOptions
+  options: FixtureOptions,
+  title = 'UI Review Fixture Shell',
+  acquisition: { worktree?: Pick<FixtureWorktree, 'id' | 'path'>; onAcquired?: (terminal: CaptureTerminalFixture) => void } = {}
 ): Promise<CaptureTerminalFixture> {
-  const result = record(await callRpc(client, 'quirky.terminal/newTab', {
-    workspace: fixtures.primaryWorktree.id,
-    cwd: fixtures.primaryWorktree.path,
+  checkAbort(options.signal)
+  const worktree = acquisition.worktree ?? fixtures.primaryWorktree
+  const creating = client.callAny('quirky.terminal/newTab', {
+    workspace: worktree.id,
+    cwd: worktree.path,
     agent: 'shell',
-    title: 'UI Review Fixture Shell',
+    title,
     activate: true
-  }, options))
-  return {
-    sessionId: requiredString(result.session, 'quirky.terminal/newTab'),
-    tabId: requiredString(result.tab, 'quirky.terminal/newTab tab'),
-    paneId: requiredString(result.pane, 'quirky.terminal/newTab pane')
+  }, { timeoutMs: options.timeoutMs }).then((reply) => {
+    const result = record(reply)
+    const terminal = {
+      sessionId: requiredString(result.session, 'quirky.terminal/newTab'),
+      tabId: requiredString(result.tab, 'quirky.terminal/newTab tab'),
+      paneId: requiredString(result.pane, 'quirky.terminal/newTab pane')
+    }
+    acquisition.onAcquired?.(terminal)
+    return terminal
+  })
+  void creating.catch(() => undefined)
+  return await bounded(creating, options.timeoutMs, options.signal, 'quirky.terminal/newTab')
+}
+
+export async function closeCaptureTerminalFixture(
+  client: FixtureRpcClient,
+  terminal: CaptureTerminalFixture,
+  options: FixtureOptions
+): Promise<void> {
+  await callRpc(client, 'quirky.terminal/closeTab', { tab: terminal.tabId, yes: true }, options)
+}
+
+export const CAPTURE_TERMINAL_READY_MARKER = 'UI review terminal ready'
+
+/** Proves that the owned shell has executed a marker before its renderer is admitted. */
+export async function prepareCaptureTerminalFixture(
+  client: FixtureRpcClient, terminal: CaptureTerminalFixture, options: FixtureOptions
+): Promise<void> {
+  const deadline = Date.now() + options.timeoutMs
+  const remaining = () => {
+    checkAbort(options.signal)
+    const timeoutMs = deadline - Date.now()
+    if (timeoutMs <= 0) throw new Error('terminal fixture readiness deadline exceeded')
+    return { ...options, timeoutMs }
+  }
+  let ready = false
+  while (Date.now() < deadline) {
+    const snapshot = record(await callRpc(client, 'quirky.terminal/snapshot', { session: terminal.sessionId }, remaining()))
+    if (snapshot.shellState === 'ready' || snapshot.shellState === 'unsupported') {
+      ready = true
+      break
+    }
+    if (snapshot.shellState === 'timed_out') throw new Error('terminal fixture shell timed out before readiness')
+    await bounded(Bun.sleep(Math.min(50, remaining().timeoutMs)), remaining().timeoutMs, options.signal, 'terminal fixture shell readiness')
+  }
+  if (!ready) throw new Error('terminal fixture shell did not become ready')
+  await callRpc(client, 'quirky.terminal/write', {
+    session: terminal.sessionId,
+    data: `printf '\\n${CAPTURE_TERMINAL_READY_MARKER}\\n'\n`
+  }, remaining())
+  while (Date.now() < deadline) {
+    const snapshot = record(await callRpc(client, 'quirky.terminal/snapshot', { session: terminal.sessionId }, remaining()))
+    if (typeof snapshot.ansi === 'string' && stripVTControlCharacters(snapshot.ansi).split(/\r?\n/)
+      .some((line) => line.trim() === CAPTURE_TERMINAL_READY_MARKER)) return
+    const history = record(await callRpc(client, 'quirky.terminal/history', { session: terminal.sessionId, lines: 100, format: 'text' }, remaining()))
+    if (Array.isArray(history.lines) && history.lines.some((line) =>
+      typeof line === 'string' && line.split(/\r?\n/).some((part) => part.trim() === CAPTURE_TERMINAL_READY_MARKER))) return
+    await bounded(Bun.sleep(Math.min(50, remaining().timeoutMs)), remaining().timeoutMs, options.signal, 'terminal fixture marker output')
+  }
+  throw new Error('terminal fixture did not produce the readiness marker')
+}
+
+export const ASK_CARD_FIXTURE_COMMAND = 'Bash: bun run build'
+export type AskCardFixture = { askId: string; command: string }
+
+/** Acquires an unscoped approval and hands off ownership before any fallible read-back. */
+export async function createAskCardFixture(
+  client: FixtureRpcClient, options: FixtureOptions, own: (fixture: AskCardFixture) => void
+): Promise<AskCardFixture> {
+  checkAbort(options.signal)
+  const spec = approvalSpec(ASK_CARD_FIXTURE_COMMAND)
+  const creating = client.callAny('quirky.ask/create', { spec }, { timeoutMs: options.timeoutMs }).then((reply) => {
+    const fixture = { askId: requiredString(record(reply).askId, 'quirky.ask/create askId'), command: ASK_CARD_FIXTURE_COMMAND }
+    own(fixture)
+    return fixture
+  })
+  void creating.catch(() => undefined)
+  const fixture = await bounded(creating, options.timeoutMs, options.signal, 'quirky.ask/create')
+  const rows = await callRpc(client, 'quirky.ask/list', { pendingOnly: false, askId: fixture.askId }, options)
+  const ask = Array.isArray(rows) ? rows.map(record).find((row) => row.id === fixture.askId) : undefined
+  if (!ask) throw new Error('Ask card fixture read-back did not return the owned ask')
+  if (record(ask.envelope).status !== 'pending') throw new Error('Ask card fixture is not pending')
+  if (ask.queued !== false) throw new Error('Ask card fixture is queued')
+  if (ask.sessionId !== null || ask.worktreeId !== null) throw new Error('Ask card fixture is scoped to a session or worktree')
+  if (!isDeepStrictEqual(ask.spec, spec)) throw new Error('Ask card fixture spec does not match the approval command')
+  return fixture
+}
+
+/** Cancels the owned approval durably; renderer effects remain the capture's responsibility. */
+export async function closeAskCardFixture(
+  client: FixtureRpcClient, fixture: AskCardFixture, options: FixtureOptions
+): Promise<void> {
+  const cleanup = { timeoutMs: options.timeoutMs }
+  await callRpc(client, 'quirky.ask/cancel', { askId: fixture.askId }, cleanup)
+  const rows = await callRpc(client, 'quirky.ask/list', { pendingOnly: false, askId: fixture.askId }, cleanup)
+  if (!Array.isArray(rows)) throw new Error('Ask card fixture cancellation read-back was not a list')
+  const ask = rows.map(record).find((row) => row.id === fixture.askId)
+  if (!ask) throw new Error('Ask card fixture cancellation read-back did not return the owned ask')
+  if (record(ask.envelope).status === 'pending') {
+    throw new Error('Ask card fixture is still pending after cancellation')
+  }
+}
+
+export type TranscriptFixture = { sessionId: string; transcriptPath: string }
+
+export async function createTranscriptFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<TranscriptFixture> {
+  const terminal = await createCaptureTerminalFixture(client, fixtures, options, 'UI Review Transcript')
+  const transcriptPath = join(fixtures.home, 'transcripts', 'ui-review-transcript.jsonl')
+  const records = [
+    {
+      type: 'user',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      message: { id: 'ui-review-transcript-user-1', role: 'user', content: 'Summarize the fixture change.' }
+    },
+    {
+      type: 'assistant',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      cwd: fixtures.primaryWorktree.path,
+      gitBranch: 'ui-review-fixture',
+      message: {
+        id: 'ui-review-transcript-answer-1',
+        role: 'assistant',
+        model: 'fixture-model',
+        usage: { input_tokens: 6, output_tokens: 9 },
+        content: [{ type: 'text', text: 'The fixture provides local, deterministic review data.' }]
+      }
+    },
+    {
+      type: 'user',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      message: { id: 'ui-review-transcript-user-2', role: 'user', content: 'What must stay local?' }
+    },
+    {
+      type: 'assistant',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      cwd: fixtures.primaryWorktree.path,
+      gitBranch: 'ui-review-fixture',
+      message: {
+        id: 'ui-review-transcript-answer-2',
+        role: 'assistant',
+        model: 'fixture-model',
+        usage: { input_tokens: 5, output_tokens: 10 },
+        content: [{ type: 'text', text: 'All provider and GitHub activity stays inside this fixture.' }]
+      }
+    }
+  ]
+  writeFile(fixtures.home, 'transcripts/ui-review-transcript.jsonl', `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)
+  await callRpc(client, 'quirky.session/setProviderSession', {
+    session: terminal.sessionId,
+    id: 'ui-review-transcript',
+    transcriptPath
+  }, options)
+  return { sessionId: terminal.sessionId, transcriptPath }
+}
+
+export type LoopFixture = { loopId: string }
+
+export async function createLoopFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<LoopFixture> {
+  let step = 'quirky.agents/refresh'
+  let loopId: string | null = null
+  let lastSnapshot: Record<string, unknown> | null = null
+  try {
+    await callRpc(client, step, {}, options)
+    step = 'quirky.agents/setEnabled'
+    await callRpc(client, step, { agent: 'codex', enabled: true }, options)
+    step = 'quirky.loops/create'
+    const created = record(await callRpc(client, step, {
+      worktreeId: fixtures.primaryWorktree.id,
+      name: 'UI review loop',
+      agent: 'codex',
+      config: {
+        promptSource: { kind: 'repeat', body: 'Summarize the fixture change in one sentence.' },
+        pacing: { kind: 'on-idle' },
+        sessionPolicy: 'fresh',
+        done: {},
+        caps: { maxIterations: 1 },
+        noProgress: false,
+        checkpointCommits: false,
+        askBeforeNext: false,
+        resumeAtLimitReset: false
+      }
+    }, options))
+    loopId = requiredString(created.id, step)
+
+    step = 'quirky.loops/get'
+    const deadline = Date.now() + options.timeoutMs
+    for (;;) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) {
+        throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+      }
+      try {
+        lastSnapshot = record(await callRpc(client, step, { loopId }, {
+          ...options,
+          timeoutMs: Math.max(1, Math.min(options.timeoutMs, remaining))
+        }))
+      } catch (error) {
+        if (Date.now() >= deadline) {
+          throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+        }
+        throw error
+      }
+      if (
+        lastSnapshot.state === 'paused' &&
+        lastSnapshot.pauseReason === 'cap-iterations' &&
+        lastSnapshot.iterationsCompleted === 1
+      ) return { loopId }
+
+      const waitMs = deadline - Date.now()
+      if (waitMs <= 0) {
+        throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+      }
+      await Bun.sleep(Math.min(100, waitMs))
+    }
+  } catch (error) {
+    if (loopId) {
+      const timeoutMs = Math.max(1, Math.min(options.timeoutMs, 1_000))
+      try {
+        await bounded(
+          client.callAny('quirky.loops/stop', { loopId, mode: 'now' }, { timeoutMs }),
+          timeoutMs,
+          undefined,
+          'quirky.loops/stop'
+        )
+      } catch {}
+    }
+    throw new Error(`loop fixture ${step}: ${errorMessage(error)}`)
   }
 }
 

@@ -135,7 +135,8 @@ async function dispatch(runtime: Runtime, out: Printer, argv: readonly string[])
   }
   const { command } = target
   if (helpRequested && command.name !== 'help') {
-    writer.stdout(`${helpText(command.name.split(' '), commands)}\n`)
+    const extra = await command.extraHelp?.()
+    writer.stdout(`${helpText(command.name.split(' '), commands)}\n${extra ? `\n${extra}\n` : ''}`)
     return
   }
   const args = command.rawArgs
@@ -150,7 +151,9 @@ const RPC_ERROR_CODES: Record<number, string> = {
   [RpcErrorCode.Conflict]: 'conflict',
   [RpcErrorCode.MethodNotFound]: 'method-not-found',
   [RpcErrorCode.Unauthorized]: 'unauthorized',
-  [RpcErrorCode.ConfirmationRequired]: 'confirmation-required'
+  [RpcErrorCode.ConfirmationRequired]: 'confirmation-required',
+  [RpcErrorCode.Timeout]: 'timeout',
+  [RpcErrorCode.Busy]: 'busy'
 }
 
 function errorCode(error: unknown): string {
@@ -221,7 +224,7 @@ export async function run(runtime: Runtime): Promise<number> {
     const target = resolveRuntimeSelection(parsed.options, runtime.env)
     if (target.kind !== 'local') {
       const command = route(parsed.argv, COMMANDS)
-      if (command.kind === 'command' && /^(?:plugin|distro|daemon|skill)(?: |$)/.test(command.command.name)) {
+      if (command.kind === 'command' && /^(?:plugin|distro|daemon|skill|serve)(?: |$)/.test(command.command.name)) {
         throw new UsageError(`${command.command.name} is local-only; select --runtime local explicitly`)
       }
       const env = { ...runtime.env }
@@ -279,8 +282,9 @@ if (import.meta.main) {
   const stderr = (text: string) => void process.stderr.write(text)
   const invocation = route(argv)
   const isOpenCommand = invocation.kind === 'command' && invocation.command.name === 'open'
+  const isServeCommand = invocation.kind === 'command' && invocation.command.name === 'serve'
   const connectOptions: Parameters<typeof connectDaemon>[0] = {
-    ...(isOpenCommand ? { autostart: false } : {}),
+    ...(isOpenCommand || isServeCommand ? { autostart: false } : {}),
     role: 'cli',
     name: 'quirky',
     transport: 'socket',

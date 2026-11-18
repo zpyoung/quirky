@@ -1,0 +1,761 @@
+import { describe, expect, spyOn, test } from 'bun:test'
+import * as ts from 'typescript'
+import type { CheckResult, CoverageFile, Inventory, PluginInventory, Ref } from './contracts'
+import { auditPlugin } from './audit'
+import { parseCoverage } from './audit-evidence'
+
+const file = 'plugins/acme.app/src/ui.tsx'
+const ref = (quote: string, path = file): Ref => ({ file: path, quote })
+const sharedImport = "import { EmptyState, InlineError } from '@quirky/ui'"
+const busy = '<EmptyState message="Loading items" />'
+const empty = '<EmptyState message="No items yet" />'
+const error = '<InlineError message="Could not load" />'
+const save = "context.call('acme.app/save', {})"
+const fullSource = `${sharedImport}
+export function Main({ status }: { status: string }) {
+  if (status === 'busy') return ${busy}
+  if (status === 'none') return ${empty}
+  if (status === 'bad') return ${error}
+  return <button onClick={() => ${save}}>Save</button>
+}`
+
+function fullCoverage(): CoverageFile {
+  return {
+    schemaVersion: 1,
+    surfaces: { 'view:acme.app/main': { loading: { applicable: true }, empty: { applicable: true }, error: { applicable: true } } },
+    states: (['loading', 'empty', 'error'] as const).map((state, index) => ({
+      surface: 'view:acme.app/main', state,
+      site: ref(["if (status === 'busy')", "if (status === 'none')", "if (status === 'bad')"][index]!),
+      render: { component: state === 'error' ? 'InlineError' : 'EmptyState', element: ref([busy, empty, error][index]!), import: ref(sharedImport) }
+    })),
+    notState: [],
+    actions: [{ site: ref('onClick'), route: { invoke: ref(save), target: 'acme.app/save' } }]
+  }
+}
+
+type AuditFixture = { plugin: PluginInventory; inventory: Inventory; results: () => CheckResult[] }
+function fixture(content = fullSource, coverage: CoverageFile | string | undefined = fullCoverage(), extras: Record<string, string> = {}, fragments: Record<string, CoverageFile | string> = {}): AuditFixture {
+  const plugin: PluginInventory = {
+    id: 'acme.app', directory: 'plugins/acme.app', hasUi: true, targets: ['view:acme.app/main'],
+    sources: [{ file, content }, ...Object.entries(extras).map(([file, content]) => ({ file, content }))],
+    contributions: { methods: ['acme.app/save', 'acme.app/load'], commands: ['command:acme.app/refresh'], cliCommands: [{ id: 'save', words: 'save', methods: ['acme.app/save'] }] },
+    ...(coverage === undefined ? {} : { coverage: { file: 'plugins/acme.app/ui-scoreboard.json', content: typeof coverage === 'string' ? coverage : JSON.stringify(coverage) } }),
+    coverageFragments: Object.entries(fragments).map(([name, content]) => ({
+      file: `plugins/acme.app/ui-scoreboard/${name}.json`, content: typeof content === 'string' ? content : JSON.stringify(content)
+    }))
+  }
+  const inventory: Inventory = { repoRoot: '/repo', commit: 'test', sourceDigest: 'test', dirty: false, plugins: [plugin], targets: [], sharedSources: [], exclusions: [], failures: [] }
+  return { plugin, inventory, results: () => auditPlugin(inventory, plugin) }
+}
+
+function actionFixture(content: string, classification: Record<string, unknown>, site = 'onClick') {
+  const coverage: CoverageFile = {
+    schemaVersion: 1,
+    surfaces: { 'view:acme.app/main': Object.fromEntries(['loading', 'empty', 'error'].map((state) => [state, { applicable: false, reason: 'No asynchronous state', evidence: [ref(content)] }])) as CoverageFile['surfaces'][string] },
+    states: [], notState: [], actions: [{ site: ref(site), ...classification } as CoverageFile['actions'][number]]
+  }
+  return fixture(content, coverage)
+}
+function cell(data: AuditFixture, id: string) { return data.results().find((result) => result.id === id)! }
+function codes(data: AuditFixture, id: string) { return cell(data, id).evidence.map((item) => item.code) }
+
+describe('audit-scoped evidence reuse', () => {
+  test('bounds full-source parsing across root and fragment witnesses without losing routes', () => {
+    const calls = Array.from({ length: 24 }, (_, id) => `context.call('acme.app/save', { id: ${id} })`)
+    const lines = calls.map((call) => `  <button onClick={() => ${call}}>Save</button>`)
+    const content = `export function Main() {\nreturn <>\n${lines.join('\n')}\n</>\n}`
+    const actions = calls.map((call) => ({
+      site: ref(`onClick={() => ${call}}`),
+      route: { invoke: ref(call), target: 'acme.app/save' },
+    }))
+    const coverage: CoverageFile = {
+      schemaVersion: 1,
+      surfaces: {
+        'view:acme.app/main': Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+          state, { applicable: false, reason: 'No asynchronous state', evidence: [ref('export function Main')] },
+        ])) as CoverageFile['surfaces'][string],
+      },
+      states: [], notState: [], actions: actions.slice(0, 12),
+    }
+    const data = fixture(content, coverage, {}, {
+      actions: { schemaVersion: 1, surfaces: {}, states: [], notState: [], actions: actions.slice(12) },
+    })
+    const parser = spyOn(ts, 'createSourceFile')
+    try {
+      const results = data.results()
+      expect(results.map(({ id, status, applicable }) => [id, status, applicable])).toEqual([
+        ['loading', 'pass', false], ['empty', 'pass', false], ['error', 'pass', false], ['commands', 'pass', true],
+      ])
+      expect(results[3]!.evidence).toEqual(calls.map((_, index) => ({
+        code: 'action-routed', message: 'Action routes through acme.app/save', basis: 'source-audit',
+        api: 'acme.app/save', cli: 'quirky acme.app save',
+        source: { file, line: index + 3, column: lines[index]!.indexOf('context.call') + 1 },
+        coverageFile: index < 12 ? 'plugins/acme.app/ui-scoreboard.json' : 'plugins/acme.app/ui-scoreboard/actions.json',
+      })))
+      expect(parser.mock.calls.filter(([path, text]) => path === file && text === content).length).toBeLessThanOrEqual(4)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('fresh audits observe in-place source, coverage and route contribution mutations', () => {
+    const content = `export function Main() { return <button onClick={() => ${save}}>Save</button> }`
+    const coverage: CoverageFile = {
+      schemaVersion: 1,
+      surfaces: {
+        'view:acme.app/main': Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+          state, { applicable: false, reason: 'No asynchronous state', evidence: [ref('export function Main')] },
+        ])) as CoverageFile['surfaces'][string],
+      },
+      states: [], notState: [], actions: [{ site: ref('onClick'), route: { invoke: ref(save), target: 'acme.app/save' } }],
+    }
+    const data = fixture(content, coverage)
+    const original = data.results()
+    expect(original.every((result) => result.status === 'pass')).toBe(true)
+    data.plugin.sources[0]!.content = `\n${content}`
+    const shifted = data.results()
+    expect(shifted.every((result) => result.status === 'pass')).toBe(true)
+    expect(shifted[3]!.evidence[0]!.source!.line).toBe(2)
+    expect(original[3]!.evidence[0]!.source!.line).toBe(1)
+
+    const load = "context.call('acme.app/load', {})"
+    data.plugin.sources[0]!.content = content.replace(save, load)
+    expect(data.results()[3]!.evidence.some((item) => item.code === 'evidence-missing')).toBe(true)
+    coverage.actions[0] = { site: ref('onClick'), route: { invoke: ref(load), target: 'acme.app/load' } }
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    data.plugin.contributions!.methods = ['acme.app/save']
+    expect(data.results()[3]!.evidence.some((item) => item.code === 'route-undeclared')).toBe(true)
+    data.plugin.contributions!.methods.push('acme.app/load')
+    data.plugin.contributions!.cliCommands[0]!.methods.push('acme.app/load')
+    const updated = data.results()
+    expect(updated.every((result) => result.status === 'pass')).toBe(true)
+    expect(updated[3]!.evidence[0]).toMatchObject({ code: 'action-routed', api: 'acme.app/load', cli: 'quirky acme.app save' })
+  })
+})
+
+describe('quote-bound source audit', () => {
+  test('passes shared states and the action public route, including contained leaf candidates', () => {
+    const data = fixture()
+    expect(data.results().map(({ id, status, applicable }) => ({ id, status, applicable }))).toEqual(
+      (['loading', 'empty', 'error', 'commands'] as const).map((id) => ({ id, status: 'pass', applicable: true }))
+    )
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'action-routed', basis: 'source-audit', api: 'acme.app/save', cli: 'quirky acme.app save' }))
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({ code: 'state-covered', component: 'EmptyState' }))
+  })
+
+  test('unrelated edits shift display locations without invalidating quotes or adding daemon candidates', () => {
+    const original = cell(fixture(), 'loading').evidence.find((item) => item.code === 'state-covered')!
+    const data = fixture(fullSource.replace('  if (status', '  const unused = 1\n  if (status') + '\nfunction helper() { return 1 }', fullCoverage(), { 'plugins/acme.app/src/main.ts': 'setTimeout(() => {}, 30_000); const options = { onTimeout() {} }' })
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+    expect(cell(data, 'loading').evidence.find((item) => item.code === 'state-covered')!.source!.line).toBe(original.source!.line + 1)
+  })
+
+  test('changed state and invocation witnesses fail only the relevant cells', () => {
+    const changed = fixture(fullSource.replace('Loading items', 'Loading entries'))
+    expect(codes(changed, 'loading')).toContain('evidence-missing')
+    expect(['empty', 'error', 'commands'].map((id) => cell(changed, id).status)).toEqual(['pass', 'pass', 'pass'])
+    expect(codes(fixture(fullSource.replace(save, "context.call('acme.app/load', {})")), 'commands')).toContain('evidence-missing')
+  })
+
+  test('duplicate witnesses report ambiguity and leave the new branch uncovered', () => {
+    const data = fixture(fullSource.replace(`  if (status === 'busy') return ${busy}`, `  if (status === 'busy') return ${busy}\n  if (status === 'busy') return ${busy}`))
+    expect(codes(data, 'loading').filter((code) => code === 'evidence-ambiguous').length).toBeGreaterThanOrEqual(2)
+    expect(codes(data, 'loading')).toContain('coverage-missing')
+  })
+
+  test.each(['if (!rows) return null', 'if (rows.length === 0) return <p>Nothing here</p>'])('finds unclassified branch %s without state variable names', (branch) => {
+    const data = fixture(fullSource.replace('  if (status', `  ${branch}\n  if (status`))
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).status).toBe('fail')
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({ code: 'coverage-missing', source: expect.objectContaining({ file, line: 3 }) }))
+    }
+    expect(cell(data, 'commands').status).toBe('pass')
+  })
+
+  test.each([
+    'export function Main({ rows }) { if (!rows) return null; return rows.map((r) => <Row key={r.id} />) }',
+    'const body = ready ? rows.map((r) => <Row />) : null'
+  ])('callback-only renders still require source-state coverage: %s', (content) => {
+    const data = actionFixture(content, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).status).toBe('fail')
+      expect(codes(data, id)).toContain('coverage-missing')
+    }
+  })
+
+  test('an unclassified leaf outside a valid shared render fails all three state checks', () => {
+    const content = fullSource.replace(`if (status === 'busy') return ${busy}`, `if (status === 'busy') { const extra = <p>Offline</p>; return ${busy} }`)
+    const data = fixture(content)
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).status).toBe('fail')
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({ code: 'coverage-missing', message: expect.stringContaining('Offline') }))
+    }
+    expect(cell(data, 'commands').status).toBe('pass')
+  })
+
+  test('both same-start logical candidates can be classified by their exact anchors', () => {
+    const expression = 'a && <b /> || <i />'
+    const data = actionFixture(`export const Main = () => <div>{${expression}}</div>`, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    coverage.notState = [
+      { site: ref(expression), anchor: 'a &&', reason: 'Layout choice' },
+      { site: ref(expression), anchor: 'a && <b /> ||', reason: 'Layout fallback' }
+    ]
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+  })
+
+  test('a branch that writes the DOM and returns has one addressable classification', () => {
+    const content = 'export function Main() { if (!rows) { el.append(d); return null } return <div /> }'
+    const data = actionFixture(content, {})
+    const coverage = JSON.parse(data.plugin.coverage!.content)
+    coverage.actions = []
+    coverage.notState = [{ site: ref('if (!rows)'), reason: 'Layout choice' }]
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+  })
+
+  test('a parameter cannot borrow a shadowed top-level route prefix', () => {
+    const invoke = 'context.call(`${API}save`)'
+    const content = `const API = 'acme.app/'; export function Main(API) { return <button onClick={() => ${invoke}}>Save</button> }`
+    const data = actionFixture(content, { route: { invoke: ref(invoke), target: 'acme.app/save' } })
+    expect(codes(data, 'commands')).toContain('route-target-unresolved')
+  })
+
+  test('rejects raw elements and unaccepted component/state pairs', () => {
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'EmptyState', element: ref('<p className="muted">Loading…</p>'), import: ref(sharedImport) }
+    expect(codes(fixture(fullSource.replace(busy, '<p className="muted">Loading…</p>'), coverage), 'loading')).toContain('render-element-invalid')
+    const invalid = fullCoverage()
+    invalid.states[1]!.render.component = 'NoticeLine'
+    expect(codes(fixture(fullSource, invalid), 'empty')).toContain('render-not-accepted')
+  })
+
+  test('accepts a quote-bound NoticeLine directly controlled by an error condition', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>Could not load all sources.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[2]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine).replace(error, notice)
+    expect(cell(fixture(content, coverage), 'error').status).toBe('pass')
+  })
+
+  test('rejects a real NoticeLine element for an empty state', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>No items yet.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[1]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine).replace(empty, notice)
+    expect(codes(fixture(content, coverage), 'empty')).toContain('render-not-accepted')
+  })
+
+  test('rejects an unrelated nearby NoticeLine as the error witness', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>Could not load all sources.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[2]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine) + `\nconst unrelated = ${notice}`
+    expect(codes(fixture(content, coverage), 'error')).toContain('render-not-linked')
+  })
+
+  test.each(['function EmptyState() { return null }', 'const EmptyState = () => null', 'function Other(EmptyState: unknown) { return null }'])('rejects local shared-component shadow %s', (binding) => {
+    expect(codes(fixture(`${fullSource}\n${binding}`), 'loading')).toContain('render-binding-shadowed')
+  })
+
+  test.each(["import type { EmptyState, InlineError } from '@quirky/ui'", "import { EmptyState, InlineError } from './design'"])('rejects invalid shared import %s', (importLine) => {
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'EmptyState', element: ref(busy), import: ref(importLine) }
+    expect(codes(fixture(fullSource.replace(sharedImport, importLine), coverage, { 'plugins/acme.app/src/design.ts': 'export const EmptyState = 1; export const InlineError = 1' }), 'loading')).toContain('render-binding-invalid')
+  })
+
+  test('accepts a value import alias but not an import witness from another file', () => {
+    const importLine = "import { EmptyState as Empty, InlineError } from '@quirky/ui'"
+    const coverage = fullCoverage()
+    for (const entry of coverage.states) if (entry.render.component !== 'toast') {
+      entry.render.import = ref(importLine)
+      entry.render.element = ref(entry.render.element.quote.replace('EmptyState', 'Empty'))
+    }
+    expect(fixture(fullSource.replace(sharedImport, importLine).replaceAll('<EmptyState', '<Empty'), coverage).results().every((result) => result.status === 'pass')).toBe(true)
+    coverage.states[0]!.render = { component: 'EmptyState', element: ref('<Empty message="Loading items" />'), import: ref(importLine, 'plugins/acme.app/src/other.tsx') }
+    const data = fixture(`${fullSource.replace(sharedImport, importLine).replaceAll('<EmptyState', '<Empty')}\nimport './other'`, coverage, { 'plugins/acme.app/src/other.tsx': importLine })
+    expect(codes(data, 'loading')).toContain('render-binding-invalid')
+  })
+
+  test('requires the state render to be in its classified branch', () => {
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'EmptyState', element: ref(empty), import: ref(sharedImport) }
+    expect(codes(fixture(fullSource, coverage), 'loading')).toContain('render-not-linked')
+  })
+
+  test('links a complete helper by name and rejects a truncated or stale via witness', () => {
+    const helperFile = 'plugins/acme.app/src/busy.tsx'
+    const helperImport = "import { EmptyState } from '@quirky/ui'"
+    const helper = `export function Busy() { return ${busy} }`
+    const content = fullSource.replace(sharedImport, `${sharedImport}\nimport { Busy } from './busy'`).replace(`return ${busy}`, 'return <Busy />')
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'EmptyState', element: ref(busy, helperFile), import: ref(helperImport, helperFile), via: [ref(helper, helperFile)] }
+    expect(cell(fixture(content, coverage, { [helperFile]: `${helperImport}\n${helper}` }), 'loading').status).toBe('pass')
+    coverage.states[0]!.render.via = [ref('export function Busy() {', helperFile)]
+    expect(codes(fixture(content, coverage, { [helperFile]: `${helperImport}\n${helper}` }), 'loading')).toContain('via-invalid')
+    coverage.states[0]!.render.via = [ref(helper, helperFile)]
+    const stale = fixture(content, coverage, { [helperFile]: `${helperImport}\n${helper.replace('Loading items', 'Loading entries')}` })
+    expect(codes(stale, 'loading')).toContain('evidence-missing')
+    expect(['empty', 'error', 'commands'].map((id) => cell(stale, id).status)).toEqual(['pass', 'pass', 'pass'])
+  })
+
+  test('accepts error toast evidence and rejects a toast with no arguments', () => {
+    const toast = "context.toast('Load failed', 'Try again')"
+    const coverage = fullCoverage()
+    coverage.states[2]!.site = ref(toast)
+    coverage.states[2]!.anchor = 'context.toast('
+    coverage.states[2]!.render = { component: 'toast', call: ref(toast) }
+    const content = fullSource.replace(`if (status === 'bad') return ${error}`, `try { await context.call('acme.app/load', {}) } catch { ${toast} }`)
+    expect(cell(fixture(content, coverage), 'error').status).toBe('pass')
+    coverage.states[2]!.site = ref('context.toast()')
+    coverage.states[2]!.render = { component: 'toast', call: ref('context.toast()') }
+    expect(codes(fixture(content.replace(toast, 'context.toast()'), coverage), 'error')).toContain('render-element-invalid')
+  })
+
+  test('a loading state cannot use toast even when the call is valid and linked', () => {
+    const toast = "context.toast('Loading items')"
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'toast', call: ref(toast) }
+    const content = fullSource.replace(`return ${busy}`, `{ ${toast}; return null }`)
+    expect(codes(fixture(content, coverage), 'loading')).toContain('render-not-accepted')
+  })
+
+  test('accepts NoticeLine for loading and FormRow only with an error attribute', () => {
+    const importLine = "import { EmptyState, NoticeLine, FormRow } from '@quirky/ui'"
+    const notice = '<NoticeLine message="Loading items" />'
+    const form = '<FormRow error="Could not load" />'
+    const coverage = fullCoverage()
+    coverage.states[0]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    coverage.states[1]!.render = { component: 'EmptyState', element: ref(empty), import: ref(importLine) }
+    coverage.states[2]!.render = { component: 'FormRow', element: ref(form), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine).replace(busy, notice).replace(error, form)
+    expect(fixture(content, coverage).results().every((result) => result.status === 'pass')).toBe(true)
+    coverage.states[2]!.render = { component: 'FormRow', element: ref('<FormRow />'), import: ref(importLine) }
+    expect(codes(fixture(content.replace(form, '<FormRow />'), coverage), 'error')).toContain('render-element-invalid')
+  })
+
+  test('requires decisions for every surface and rejects unknown surfaces and conflicts', () => {
+    const data = fixture()
+    data.plugin.targets.push('panel:acme.app/side')
+    for (const id of ['loading', 'empty', 'error']) expect(codes(data, id)).toContain('surface-decision-missing')
+    const coverage = fullCoverage()
+    coverage.surfaces['view:acme.app/gone'] = coverage.surfaces['view:acme.app/main']!
+    expect(codes(fixture(fullSource, coverage), 'loading')).toContain('surface-unknown')
+    coverage.surfaces = { 'view:acme.app/main': { loading: { applicable: true }, empty: { applicable: true }, error: { applicable: false, reason: 'No failures', evidence: [ref(error)] } } }
+    expect(codes(fixture(fullSource, coverage), 'error')).toContain('applicability-conflict')
+    coverage.states = coverage.states.filter((entry) => entry.state !== 'empty')
+    expect(codes(fixture(fullSource, coverage), 'empty')).toContain('state-missing')
+  })
+
+  test('uses ui for a plugin without declared surfaces', () => {
+    const coverage = fullCoverage()
+    coverage.surfaces.ui = coverage.surfaces['view:acme.app/main']!
+    delete coverage.surfaces['view:acme.app/main']
+    for (const entry of coverage.states) entry.surface = 'ui'
+    const data = fixture(fullSource, coverage)
+    data.plugin.targets = []
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+  })
+
+  test('an unrelated action cannot borrow another handler route', () => {
+    const content = fullSource.replace('return <button', "return <><button onClick={() => setShowAll(true)}>All</button><button").replace('Save</button>', 'Save</button></>')
+    const coverage = fullCoverage()
+    coverage.actions[0]!.site = ref(`onClick={() => ${save}}`)
+    expect(codes(fixture(content, coverage), 'commands')).toContain('coverage-missing')
+    coverage.actions.push({ site: ref('onClick={() => setShowAll(true)}'), route: { invoke: ref(save), target: 'acme.app/save' } })
+    expect(codes(fixture(content, coverage), 'commands')).toContain('route-not-linked')
+  })
+
+  test('links action helpers only through complete via witnesses', () => {
+    const helper = `function saveItem() { return ${save} }`
+    const content = `${helper}\n<button onClick={saveItem}>Save</button>`
+    const data = actionFixture(content, { route: { invoke: ref(save), target: 'acme.app/save', via: [ref(helper)] } })
+    expect(cell(data, 'commands').status).toBe('pass')
+    const noVia = actionFixture(content, { route: { invoke: ref(save), target: 'acme.app/save' } })
+    expect(codes(noVia, 'commands')).toContain('route-not-linked')
+  })
+
+  test('a handler attribute without an expression cannot borrow an unrelated route', () => {
+    const data = actionFixture(`<button onClick>Save</button>; ${save}`, { route: { invoke: ref(save), target: 'acme.app/save' } })
+    expect(codes(data, 'commands')).toContain('route-not-linked')
+  })
+
+  test('an enclosing API call cannot certify a nested decisive callback', () => {
+    const invoke = "context.call('acme.app/save', { onConfirm: () => setShowAll(true) })"
+    const data = actionFixture(invoke, { route: { invoke: ref(invoke), target: 'acme.app/save' } }, 'onConfirm')
+    expect(codes(data, 'commands')).toContain('route-not-linked')
+  })
+
+  test.each([
+    ["context.executeCommand('command:acme.app/refresh')", 'command:acme.app/refresh', 'ui.command.run', 'quirky ui run command:acme.app/refresh'],
+    ["context.openView('view:acme.app/main')", 'view:acme.app/main', 'ui.view.open', 'quirky ui open-view view:acme.app/main'],
+    ["context.togglePanel('panel:acme.app/side')", 'panel:acme.app/side', 'ui.panel.open', 'quirky ui open-panel panel:acme.app/side'],
+    ['context.closeView()', 'ui.view.close', 'ui.view.close', 'quirky ui close-view'],
+    ["context.call('setting.set', {})", 'setting.set', 'setting.set', 'quirky setting set']
+  ])('resolves public route %s', (invoke, target, api, cli) => {
+    const data = actionFixture(`<button onClick={() => ${invoke}}>Run</button>`, { route: { invoke: ref(invoke), target } })
+    data.plugin.targets.push('panel:acme.app/side')
+    const coverage = JSON.parse(data.plugin.coverage!.content) as CoverageFile
+    coverage.surfaces['panel:acme.app/side'] = coverage.surfaces['view:acme.app/main']!
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    expect(cell(data, 'commands')).toMatchObject({ status: 'pass', evidence: [expect.objectContaining({ code: 'action-routed', api, cli })] })
+  })
+
+  test('uses generated method CLI words and rejects undeclared, changed, unresolved, and non-CLI targets', () => {
+    const generated = actionFixture(`<button onClick={() => ${save}}>Save</button>`, { route: { invoke: ref(save), target: 'acme.app/save' } })
+    generated.plugin.contributions!.cliCommands = []
+    expect(cell(generated, 'commands').evidence).toContainEqual(expect.objectContaining({ cli: 'quirky acme.app save' }))
+    generated.plugin.contributions!.methods = []
+    expect(codes(generated, 'commands')).toContain('route-undeclared')
+    for (const [invoke, target, code] of [
+      ["context.call('acme.app/missing')", 'acme.app/missing', 'route-undeclared'],
+      [save, 'acme.app/load', 'route-target-changed'],
+      ['context.call(methodName)', 'acme.app/save', 'route-target-unresolved'],
+      ["context.call('ui.window.view.open')", 'ui.window.view.open', 'route-no-cli'],
+      ['context.setPalette(true)', 'palette', 'route-no-cli']
+    ]) expect(codes(actionFixture(`<button onClick={() => ${invoke}}>Run</button>`, { route: { invoke: ref(invoke!), target } }), 'commands')).toContain(code!)
+  })
+
+  test('rejects generated plugin methods shadowed by kernel CLI commands', () => {
+    const invoke = "context.call('quirky.setting/set')"
+    const data = actionFixture(`<button onClick={() => ${invoke}}>Run</button>`, { route: { invoke: ref(invoke), target: 'quirky.setting/set' } })
+    data.inventory.plugins.push({ id: 'quirky.setting', directory: 'plugins/quirky.setting', hasUi: false, targets: [], sources: [], contributions: { methods: ['quirky.setting/set'], commands: [], cliCommands: [] } })
+    expect(codes(data, 'commands')).toContain('route-cli-shadowed')
+  })
+
+  test('rejects a generated CLI route shadowed by a different declared method command', () => {
+    const data = actionFixture(`<button onClick={() => ${save}}>Save</button>`, { route: { invoke: ref(save), target: 'acme.app/save' } })
+    data.plugin.contributions!.cliCommands = [{ id: 'load-as-save', words: 'save', methods: ['acme.app/load'] }]
+    expect(codes(data, 'commands')).toContain('route-cli-shadowed')
+  })
+
+  test.each(['command', "'command'", '["command"]'])('routes %s entries through declared commands', (name) => {
+    const property = `${name}: 'command:acme.app/refresh'`
+    expect(cell(actionFixture(`const menu = { ${property} }`, { route: { invoke: ref(property), target: 'command:acme.app/refresh' } }, property), 'commands').status).toBe('pass')
+  })
+
+  test.each([
+    ['<div onMouseEnter={() => showTip()} />', 'onMouseEnter', { transient: 'hover', reason: 'Hover only' }],
+    ['<input onChange={() => setDraft(value)} />', 'onChange', { transient: 'draft', reason: 'Unsaved draft' }],
+    ['<div onScroll={() => rememberOffset()} />', 'onScroll', { transient: 'caret', reason: 'Scroll position' }],
+    ['<img onLoad={() => resize()} />', 'onLoad', { notAction: 'lifecycle', reason: 'Image loaded' }],
+    ["el.addEventListener('message', receive)", "el.addEventListener('message'", { notAction: 'subscription', reason: 'Incoming message' }],
+    ['<button onClick={props.onPick} />', 'onClick', { notAction: 'forwarded', reason: 'Parent routes' }],
+    ['<button onClick={() => onPick?.(row)} />', 'onClick', { notAction: 'forwarded', reason: 'Parent routes' }],
+    ['<button {...rest} />', '...rest', { notAction: 'forwarded', reason: 'Parent props' }]
+  ])('accepts named non-route classification %s', (content, site, classification) => {
+    expect(cell(actionFixture(content, classification, site), 'commands').status).toBe('pass')
+  })
+
+  test.each(['onClick', 'onDoubleClick', 'onAuxClick', 'onSubmit', 'onDrop', 'onAction', 'onSelect', 'onChoose', 'onConfirm', 'onRetry', 'onSave'])('requires decisive event %s to route or forward', (name) => {
+    expect(codes(actionFixture(`const props = { ${name}: () => change() }`, { transient: 'draft', reason: 'Unsaved' }, name), 'commands')).toContain('transient-not-allowed')
+  })
+
+  test.each([
+    ['<button onClick={() => destroy()} />', 'onClick'],
+    ["el.addEventListener('click', () => destroy())", "el.addEventListener('click'"],
+    ['el.onclick = () => destroy()', 'el.onclick'],
+    ["el['onclick'] = () => destroy()", "el['onclick']"]
+  ])('decisive handler %s rejects transient and subscription classifications', (content, site) => {
+    for (const classification of [{ transient: 'hover', reason: 'Temporary' }, { notAction: 'subscription', reason: 'Listener' }]) {
+      expect(codes(actionFixture(content, classification, site), 'commands')).toContain('transient-not-allowed')
+    }
+  })
+
+  test('a dynamic element assignment requires a route or forwarding', () => {
+    const content = 'el[eventName] = () => destroy()'
+    expect(codes(actionFixture(content, { transient: 'hover', reason: 'Unknown' }, 'el[eventName]'), 'commands')).toContain('transient-not-allowed')
+    const routed = actionFixture(`el[eventName] = () => ${save}`, { route: { invoke: ref(save), target: 'acme.app/save' } }, 'el[eventName]')
+    expect(cell(routed, 'commands').status).toBe('pass')
+    expect(cell(actionFixture('el[eventName] = onPick', { notAction: 'forwarded', reason: 'Parent handles it' }, 'el[eventName]'), 'commands').status).toBe('pass')
+  })
+
+  test.each(['get', 'set'])('computed %s accessors are unresolved candidates, not silent passes', (accessor) => {
+    const signature = accessor === 'get' ? 'get [key]()' : 'set [key](value)'
+    const content = `createElement('div', { ${signature} { ${accessor === 'get' ? 'return f' : 'destroy()'} } })`
+    expect(codes(actionFixture(content, { transient: 'hover', reason: 'Temporary' }, '[key]'), 'commands')).toContain('transient-not-allowed')
+    const routed = `createElement('div', { ${signature} { ${save} } })`
+    expect(cell(actionFixture(routed, { route: { invoke: ref(save), target: 'acme.app/save' } }, '[key]'), 'commands').status).toBe('pass')
+  })
+
+  test.each(['js', 'mjs', 'cjs'])('discovery and audit parse .%s modules identically', (extension) => {
+    const helperFile = `plugins/acme.app/src/handlers.${extension}`
+    const entry = `import './handlers.${extension}'`
+    const rejected = actionFixture(entry, { site: ref('onClick', helperFile), transient: 'draft', reason: 'Unsaved' })
+    rejected.plugin.sources.push({ file: helperFile, content: 'export const Action = () => <button onClick={() => destroy()}>Run</button>' })
+    expect(codes(rejected, 'commands')).toContain('transient-not-allowed')
+    const routed = actionFixture(entry, { site: ref('onClick', helperFile), route: { invoke: ref(save, helperFile), target: 'acme.app/save' } })
+    routed.plugin.sources.push({ file: helperFile, content: `export const Action = () => <button onClick={() => ${save}}>Save</button>` })
+    expect(cell(routed, 'commands').status).toBe('pass')
+  })
+
+  test('computed literal decisive handler names still require a public route', () => {
+    const data = actionFixture('const props = { [\"onClick\"]: () => change() }', { transient: 'draft', reason: 'Unsaved' }, '[\"onClick\"]')
+    expect(codes(data, 'commands')).toContain('transient-not-allowed')
+  })
+
+  const barrierReason = 'Keeps overlay events from shell listeners'
+  const barrierClassification = { notAction: 'barrier', reason: barrierReason } as const
+  const barrierFailure = 'A barrier must be a jsx handler that only calls stopPropagation() and preventDefault() on its event parameter'
+
+  test('parses barrier action classifications', () => {
+    const barrier = { site: ref('onClick'), notAction: 'barrier', reason: 'x' } as const
+    const parsed = parseCoverage(JSON.stringify({ schemaVersion: 1, surfaces: {}, states: [], notState: [], actions: [barrier] }))
+    expect(parsed.actions).toEqual([barrier])
+  })
+
+  test.each([
+    ['inline block handler', '<div onClick={(event) => { event.stopPropagation() }} />', 'onClick'],
+    ['prevent default and stop propagation', '<div onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }} />', 'onContextMenu'],
+    ['inline expression handler', '<div onClick={(e) => e.stopPropagation()} />', 'onClick'],
+    ['function declaration handler', 'function stop(event: SyntheticEvent): void { event.stopPropagation() }\n<div onClick={stop} />', 'onClick'],
+    ['const arrow handler', 'const stop = (event: SyntheticEvent) => event.stopPropagation();\n<div onDoubleClick={stop} />', 'onDoubleClick']
+  ])('accepts a strict event barrier: %s', (_name, content, site) => {
+    const data = actionFixture(content, barrierClassification, site)
+    expect(cell(data, 'commands')).toMatchObject({ status: 'pass' })
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'action-not-user', message: barrierReason }))
+  })
+
+  test.each([
+    ['module function', 'export function stop(event) { event.stopPropagation() }\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['module const', 'const stop = (event) => event.stopPropagation();\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['enclosing function local', 'export function View() { function stop(event) { event.stopPropagation() } return <button onClick={stop}>Print</button> }'],
+    ['enclosing const local', 'export function View() { const stop = (event) => event.stopPropagation(); return <button onClick={stop}>Print</button> }'],
+    ['enclosing closure', 'export function View() { const stop = (event) => event.stopPropagation(); return () => <button onClick={stop}>Print</button> }'],
+  ])('accepts a barrier binding visible from its JSX use: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('pass')
+    expect(codes(data, 'commands')).toContain('action-not-user')
+  })
+
+  test.each([
+    ['another function const', 'export function unused() { const print = (event) => event.stopPropagation(); return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['another function declaration', 'export function unused() { function print(event) { event.stopPropagation() } return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['sibling block const', 'export function View() { { const print = (event) => event.stopPropagation(); } { return <button onClick={print}>Print</button> } }'],
+    ['sibling block function', 'export function View() { { function print(event) { event.stopPropagation() } } { return <button onClick={print}>Print</button> } }'],
+    ['nested block escaped', 'export function View() { { const print = (event) => event.stopPropagation(); } return <button onClick={print}>Print</button> }'],
+  ])('rejects an out-of-scope barrier binding: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('fail')
+    expect(codes(data, 'commands')).toContain('barrier-invalid')
+  })
+
+  test.each([
+    ['extra call', '<div onClick={(e) => { e.stopPropagation(); destroy() }} />', 'onClick'],
+    ['prevent default only', '<div onClick={(e) => { e.preventDefault() }} />', 'onClick'],
+    ['call argument', '<div onClick={(e) => { e.stopPropagation(destroy()) }} />', 'onClick'],
+    ['another receiver', '<div onClick={(e) => { other.stopPropagation() }} />', 'onClick'],
+    ['optional call', '<div onClick={(e) => e.stopPropagation?.()} />', 'onClick'],
+    ['another method', '<div onClick={(e) => e.stopImmediatePropagation()} />', 'onClick'],
+    ['comma expression', '<div onClick={(e) => (e.preventDefault(), e.stopPropagation())} />', 'onClick'],
+    ['async handler', '<div onClick={async (e) => { e.stopPropagation() }} />', 'onClick'],
+    ['parameter default', '<div onClick={(e = destroy()) => { e.stopPropagation() }} />', 'onClick'],
+    ['destructured parameter', '<div onClick={({ stopPropagation }) => stopPropagation()} />', 'onClick'],
+    ['shadowing parameter', 'function stop(e) { e.stopPropagation() }\nfunction View(stop) { return <div onClick={stop} /> }', 'onClick'],
+    ['let binding', 'let stop = (e) => e.stopPropagation();\n<div onClick={stop} />', 'onClick'],
+    ['reassigned declaration', 'function stop(e) { e.stopPropagation() }\nstop = destroy;\n<div onClick={stop} />', 'onClick'],
+    ['imported handler', "import { stop } from './stop'\n<div onClick={stop} />", 'onClick'],
+    ['property access', '<div onClick={handlers.stop} />', 'onClick'],
+    ['non-JSX candidate', "el.addEventListener('click', (e) => e.stopPropagation())", "el.addEventListener('click'"]
+  ])('rejects an invalid event barrier: %s', (_name, content, site) => {
+    const data = actionFixture(content, barrierClassification, site)
+    expect(cell(data, 'commands').status).toBe('fail')
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'barrier-invalid', message: `${barrierFailure} [plugins/acme.app/ui-scoreboard.json]` }))
+  })
+
+  test('restricts lifecycle/subscription and validates forwarding shape', () => {
+    expect(codes(actionFixture('<div onChange={() => change()} />', { notAction: 'lifecycle', reason: 'Changed' }, 'onChange'), 'commands')).toContain('transient-not-allowed')
+    expect(codes(actionFixture('<div onMessage={() => change()} />', { notAction: 'subscription', reason: 'Message' }, 'onMessage'), 'commands')).toContain('transient-not-allowed')
+    expect(codes(actionFixture('<button onClick={() => { onPick(row); setOpen(false) }} />', { notAction: 'forwarded', reason: 'Parent' }), 'commands')).toContain('forwarded-invalid')
+  })
+
+  test.each([
+    ['<button {...props} />', '...props'],
+    ["createElement('button', { ...handlers })", '...handlers'],
+    ["createElement('div', { [eventName]: fn })", '[eventName]'],
+    ['el.addEventListener(eventName, fn)', 'el.addEventListener(eventName']
+  ])('keeps unresolved action %s and requires route or forwarding', (content, site) => {
+    expect(codes(actionFixture(content, { transient: 'hover', reason: 'Temporary' }, site), 'commands')).toContain('transient-not-allowed')
+    const data = actionFixture(content, { notAction: 'forwarded', reason: 'Delegated' }, site)
+    data.plugin.coverage!.content = JSON.stringify({ ...JSON.parse(data.plugin.coverage!.content), actions: [] })
+    expect(codes(data, 'commands')).toContain('coverage-missing')
+  })
+
+  test('a native form submit always fails even when mapped', () => {
+    const data = actionFixture('<form><input /></form>', { notAction: 'forwarded', reason: 'Native' }, '<form')
+    expect(codes(data, 'commands')).toContain('native-form-submit')
+  })
+
+  test('missing or malformed coverage fails cells but still lists discoveries', () => {
+    const missing = fixture()
+    delete missing.plugin.coverage
+    for (const id of ['loading', 'empty', 'error', 'commands']) {
+      expect(codes(missing, id)).toContain('coverage-file-missing')
+      expect(codes(missing, id)).toContain('coverage-missing')
+    }
+    const malformed = fixture(fullSource, '{ nope')
+    expect(malformed.results().every((result) => result.evidence.some((item) => item.code === 'coverage-file-invalid'))).toBe(true)
+  })
+
+  test('rejects stale entries and duplicate explicit or automatic coverage', () => {
+    const coverage = fullCoverage()
+    coverage.notState.push({ site: ref(busy), reason: 'Decorative', anchor: '<EmptyState' })
+    expect(codes(fixture(fullSource, coverage), 'loading')).toContain('coverage-duplicate')
+    coverage.notState = [{ site: ref('export function Main'), reason: 'Not state' }]
+    expect(codes(fixture(fullSource, coverage), 'loading')).toContain('site-not-candidate')
+  })
+})
+
+describe('coverage fragments', () => {
+  const rootFile = 'plugins/acme.app/ui-scoreboard.json'
+  const fragmentFile = (name: string) => `plugins/acme.app/ui-scoreboard/${name}.json`
+  function splitFixture(options: { root?: boolean; extra?: Record<string, CoverageFile | string>; coverage?: CoverageFile } = {}) {
+    const coverage = options.coverage ?? fullCoverage()
+    const root = { ...coverage, states: [], notState: [], actions: [] }
+    const states = { ...coverage, surfaces: {}, actions: [] }
+    const actions = { ...coverage, surfaces: {}, states: [], notState: [] }
+    const data = fixture(fullSource, root, {}, {
+      ...(options.root === false ? { a: root } : {}),
+      actions, states, ...options.extra
+    })
+    if (options.root === false) delete data.plugin.coverage
+    return data
+  }
+
+  test.each([true, false])('audits split coverage with root=%s', (root) => {
+    const data = splitFixture({ root })
+    expect(data.results().map(({ id, status, applicable }) => ({ id, status, applicable }))).toEqual(
+      (['loading', 'empty', 'error', 'commands'] as const).map((id) => ({ id, status: 'pass', applicable: true }))
+    )
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({
+      code: 'action-routed', coverageFile: fragmentFile('actions'), message: 'Action routes through acme.app/save'
+    }))
+  })
+
+  test('reports one duplicate action with both claiming files', () => {
+    const coverage = fullCoverage()
+    const data = splitFixture({ extra: { more: { ...coverage, surfaces: {}, states: [] } } })
+    expect(cell(data, 'commands')).toMatchObject({ status: 'fail', reason: 'coverage-duplicate' })
+    expect(cell(data, 'commands').evidence.filter((item) => item.code === 'coverage-duplicate')).toEqual([
+      expect.objectContaining({
+        coverageFile: fragmentFile('more'),
+        message: `Candidate jsx-handler is covered more than once [${fragmentFile('actions')}, ${fragmentFile('more')}]`
+      })
+    ])
+  })
+
+  test('rejects duplicate surfaces while evaluating the first declaration', () => {
+    const coverage = fullCoverage()
+    const duplicateDecisions = Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+      state, { applicable: false, reason: 'No asynchronous state', evidence: [ref(fullSource)] }
+    ])) as CoverageFile['surfaces'][string]
+    const data = splitFixture({ extra: { states: { ...coverage, surfaces: { 'view:acme.app/main': duplicateDecisions }, actions: [] } } })
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id)).toMatchObject({ status: 'fail', reason: 'coverage-surface-duplicate' })
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-surface-duplicate', targetId: 'view:acme.app/main', coverageFile: fragmentFile('states'),
+        message: `Surface view:acme.app/main is also declared in ${rootFile} [${fragmentFile('states')}]`
+      }))
+      expect(codes(data, id)).toContain('state-covered')
+      expect(codes(data, id)).not.toContain('applicability-conflict')
+    }
+    expect(cell(data, 'commands').status).toBe('pass')
+  })
+
+  test('an invalid fragment fails all checks without hiding valid evidence', () => {
+    const data = splitFixture({ extra: { bad: JSON.stringify({ ...fullCoverage(), extra: true }) } })
+    for (const result of data.results()) {
+      expect(result).toMatchObject({ status: 'fail', reason: 'coverage-file-invalid' })
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-file-invalid', coverageFile: fragmentFile('bad'),
+        message: `Invalid coverage file: coverage file has unknown key extra [${fragmentFile('bad')}]`
+      }))
+    }
+    expect(codes(data, 'commands')).toContain('action-routed')
+  })
+
+  test('entry errors name the fragment while preserving source location', () => {
+    const coverage = fullCoverage()
+    const render = coverage.states[0]!.render
+    if (render.component === 'toast') throw new Error('Expected shared element')
+    render.element = ref('<EmptyState message="Loading things" />')
+    const data = splitFixture({ coverage })
+    expect(cell(data, 'loading')).toMatchObject({ status: 'fail', reason: 'evidence-missing' })
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'evidence-missing', coverageFile: fragmentFile('states'),
+      message: expect.stringContaining(` [${fragmentFile('states')}]`)
+    }))
+    expect(cell(data, 'commands').evidence.find((item) => item.code === 'action-routed')?.source?.file).toBe(file)
+  })
+
+  test('unmapped candidates have no coverage file', () => {
+    const coverage = fullCoverage()
+    coverage.actions = []
+    const data = splitFixture({ coverage })
+    expect(cell(data, 'commands')).toMatchObject({ status: 'fail', reason: 'coverage-missing' })
+    const missing = cell(data, 'commands').evidence.find((item) => item.code === 'coverage-missing')!
+    expect(missing.message).toBe('Unmapped action candidate jsx-handler: onClick')
+    expect(missing).not.toHaveProperty('coverageFile')
+  })
+
+  test('missing state evidence points to the surface declaration', () => {
+    const coverage = fullCoverage()
+    coverage.states = []
+    const data = splitFixture({ coverage })
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({
+        code: 'state-missing', coverageFile: rootFile,
+        message: expect.stringContaining(` [${rootFile}]`)
+      }))
+    }
+  })
+
+  test('inapplicable decisions keep their declaration provenance across files', () => {
+    const coverage = fullCoverage()
+    coverage.surfaces['view:acme.app/main']!.loading = {
+      applicable: false, reason: 'No loading state', evidence: [ref(fullSource)]
+    }
+    const data = splitFixture({ root: false, coverage })
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'applicability-conflict', coverageFile: fragmentFile('a'),
+      message: expect.stringContaining(` [${fragmentFile('a')}]`)
+    }))
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'state-not-applicable', coverageFile: fragmentFile('a'), message: 'No loading state'
+    }))
+  })
+
+  test('missing coverage points to both supported locations', () => {
+    const data = fixture()
+    delete data.plugin.coverage
+    for (const result of data.results()) {
+      expect(result).toMatchObject({ status: 'fail', reason: 'coverage-file-missing' })
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-file-missing',
+        message: 'Missing plugins/acme.app/ui-scoreboard.json or plugins/acme.app/ui-scoreboard/*.json'
+      }))
+    }
+  })
+
+  test('single-file passing evidence gains provenance without changing messages', () => {
+    const data = fixture()
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({
+      code: 'action-routed', coverageFile: rootFile, message: 'Action routes through acme.app/save'
+    }))
+    for (const result of data.results()) {
+      for (const item of result.evidence) {
+        expect(item.coverageFile).toBe(rootFile)
+        expect(item.message).not.toContain(` [${rootFile}]`)
+      }
+    }
+  })
+})

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION } from '@quirky/protocol'
 import { stopAllProcesses } from '@quirky/process'
@@ -17,6 +17,7 @@ import { defaultCliEntry, installIntegrationFiles } from './launch'
 import { InteractivePath } from './interactive-path'
 import { osascriptNotifier, type Notifier } from './notify'
 import { PluginHost } from './plugins/host'
+import { createPluginChangedBroadcast } from './plugins/changed-broadcast'
 import { createPluginRuntime, type PluginRuntime } from './plugins/runtime'
 import { buildUiModel } from './plugins/ui-model'
 import { PtyClient } from './pty-client'
@@ -25,6 +26,8 @@ import { createRpcHandler } from './rpc-handler'
 import { startServer } from './server'
 import { startSocketServer } from './socket-server'
 import { Core } from './service'
+import { describeSqliteRecovery } from './sqlite'
+import { createStartupGate } from './startup-gate'
 import { Store } from './store'
 import { migrateV1Settings } from './v1-settings'
 import { HostPowerService } from './host-power'
@@ -43,6 +46,8 @@ export type DaemonOptions = {
   builtinPluginsDir?: string | null
   /** Bounds each plugin activation and deactivate; defaults to 10 seconds. */
   pluginActivationTimeoutMs?: number
+  /** Bounds all plugin shutdown work together; defaults to 5 seconds. */
+  pluginStopTimeoutMs?: number
   /** Bounds each launch hook when a session starts; defaults to 5 seconds. */
   launchHookTimeoutMs?: number
   /** Longest a job timer sleeps before re-checking the clock; defaults to 60 seconds. */
@@ -67,6 +72,8 @@ export type DaemonOptions = {
   socketPath?: string
   /** Called when `daemon.stop` asks the daemon to stop; defaults to stopping this daemon handle. */
   onStopRequested?: () => void
+  /** Publishes the listening handle before startup activation settles. */
+  onListening?: (handle: DaemonHandle) => void
   /** How long without input before a window stops counting as present; defaults to `$QUIRKY_DESKTOP_AWAY_MS` (a positive integer) or `DESKTOP_AWAY_MS`. */
   desktopAwayMs?: number
   /** Trusted embedded-host/test injection only; undefined selects the platform's real native source. */
@@ -153,8 +160,11 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
   const listenSocketPath = options.socketPath ?? socketPath(home, 'quirkyd.sock')
+  const uiDir = resolve(options.uiDir ?? defaultUiDir())
 
-  const store = new Store(join(home, 'quirky.db'))
+  const store = new Store(join(home, 'quirky.db'), {
+    onRecover: (recovery) => log(describeSqliteRecovery(recovery))
+  })
   migrateV1Settings(store, log)
   const pty = new PtyClient({
     home,
@@ -165,6 +175,9 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   const sessionAuthority = new RuntimeSessionAuthority(store, pty)
   const interactivePath = options.interactivePath ? new InteractivePath({ home, shell, log }) : undefined
   let port = 0
+  let stopped = false
+  let runtimeClosed = false
+  let lastPluginRevision = 0
   // the core and the host are built before the runtime that serves them, so they reach it late-bound
   let lateRuntime: PluginRuntime | undefined
   const core = new Core({
@@ -176,9 +189,16 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     hookToken,
     hookUrl: () => `http://127.0.0.1:${port}/hook`,
     safeMode: options.safeMode ?? false,
+    browserUiUrl: () => `http://127.0.0.1:${port}/#token=${encodeURIComponent(rpcToken)}`,
+    browserUiIndexPath: join(uiDir, 'index.html'),
     socketPath: listenSocketPath,
     onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event)
+  })
+  const pluginChanged = createPluginChangedBroadcast({
+    send: () => {
+      if (!stopped) core.broadcast({ type: 'plugin.changed' })
+    }
   })
 
   const plugins = new PluginHost({
@@ -186,8 +206,18 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     installedDir: installedPluginsDir,
     store,
     emit: (event) => {
-      core.broadcast(event)
-      if (event.type === 'plugin.changed') lateRuntime?.scheduler.sync()
+      if (event.type === 'plugin.changed') {
+        lateRuntime?.scheduler.sync()
+        const revision = plugins.revision()
+        if (revision !== lastPluginRevision) {
+          lastPluginRevision = revision
+          if (!stopped) core.broadcast({ type: 'plugin.changed' })
+        } else {
+          pluginChanged.signal()
+        }
+      } else {
+        core.broadcast(event)
+      }
     },
     log,
     activationTimeoutMs: options.pluginActivationTimeoutMs,
@@ -195,7 +225,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     distroDisabled: () => lateRuntime?.distros.active()?.disable ?? [],
     deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
-      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
+      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, () => runtimeClosed || isRevoked()),
       revoke: (pluginId) => lateRuntime?.extension.revoke(pluginId)
     }
   })
@@ -232,10 +262,10 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   }
 
   plugins.load()
-  await plugins.activateStartup()
-  pluginRuntime.scheduler.start()
+  lastPluginRevision = plugins.revision()
 
-  const rpcHandler = createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log })
+  const gate = createStartupGate(log)
+  const rpcHandler = gate.rpc(createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log }))
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
@@ -243,10 +273,20 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       handle: rpcHandler,
       pluginFile: (id) => plugins.pluginFiles(id),
       fileResources: pluginRuntime.fileResources,
+      modulePreloads: () => Object.values(pluginRuntime.ui.contributions().modules).map((module) => module.url),
+      deliverHook: (event, bodyBytes) => gate.hook(event, bodyBytes, (held) => {
+        if (stopped) return
+        try {
+          core.deliverToPlugins(held)
+        } catch (error) {
+          log(`hook.received delivery failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }),
       port: listenPort,
       rpcToken,
       daemonVersion,
-      uiDir: options.uiDir ?? defaultUiDir(),
+      uiDir,
+      startupSettled: () => gate.isOpen,
       log
     })
   let server: ReturnType<typeof listen>
@@ -283,8 +323,8 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     ...(options.entryHash === undefined ? {} : { entryHash: options.entryHash })
   }
   writePrivateJson(runtimeFilePath(home), runtime)
+  const listenMs = Date.now() - startedAt
 
-  let stopped = false
   handle = {
     port,
     runtime,
@@ -298,7 +338,21 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       await server.stop(true)
       pluginRuntime.scheduler.stop()
       try {
-        await plugins.stop()
+        const pluginStopTimeoutMs = options.pluginStopTimeoutMs ?? 5000
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          const timedOut = await Promise.race([
+            plugins.stop().then(() => false),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(() => resolve(true), pluginStopTimeoutMs)
+            })
+          ])
+          if (timedOut) log(`plugins did not stop within ${pluginStopTimeoutMs} ms; continuing shutdown`)
+        } finally {
+          clearTimeout(timer)
+          runtimeClosed = true
+        }
+        pluginChanged.dispose()
       } finally {
         try {
           await stopAllProcesses()
@@ -311,5 +365,10 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       store.close()
     }
   }
+  options.onListening?.(handle)
+  await plugins.activateStartup()
+  gate.open()
+  if (!stopped) pluginRuntime.scheduler.start()
+  log(`listening after ${listenMs} ms; startup plugins settled after ${Date.now() - startedAt} ms`)
   return handle
 }

@@ -14,13 +14,14 @@ const BROWSER_IMPORTS: Record<string, string> = {
   'react-dom/client': join(EDITOR_MODULES, 'react-dom/client.js'),
   '@quirky/ui': join(ROOT, 'packages/ui/src/design-system/index.ts'),
   '@codemirror/view': Bun.resolveSync('@codemirror/view', EDITOR_MODULES),
-  '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts')
+  '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts'),
+  'editor-activation-fixture': join(ROOT, 'plugins/quirky.editor/src/ui.tsx')
 }
 const browserDependencyResolver: Bun.BunPlugin = {
   name: 'document-header-layout-browser-dependencies',
   setup(builder) {
     builder.onResolve(
-      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol|@codemirror\/view)$/ },
+      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol|@codemirror\/view|editor-activation-fixture)$/ },
       ({ path }) => ({ path: BROWSER_IMPORTS[path] })
     )
   }
@@ -40,11 +41,14 @@ let browserBundle = ''
 
 function browserEntry(): string {
   const documentSurface = join(ROOT, 'plugins/quirky.editor/src/window/DocumentSurface.tsx')
+  const controls = join(ROOT, 'plugins/quirky.editor/src/window/uiControl.tsx')
   return `
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
     import type { UiPluginContext } from '@quirky/protocol'
     import { DocumentSurface } from ${JSON.stringify(documentSurface)}
+    import { EditorUiControlProvider, createEditorUiControlReportScope } from ${JSON.stringify(controls)}
+    import { activate } from 'editor-activation-fixture'
 
     const bufferId = 'buffer-document-header-layout'
     const tabId = 'tab-document-header-layout'
@@ -116,9 +120,13 @@ function browserEntry(): string {
       editorMinimapEnabled: false,
       editorSidebarWidth: 300
     }
+    const provided = new Map<string, (...args: unknown[]) => unknown>()
     const context = {
       pluginId: 'quirky.editor',
+      provide(id: string, handler: (...args: unknown[]) => unknown) { provided.set(id, handler) },
       call(method: string, params: Record<string, unknown> = {}) {
+        if (method === 'ui.window.self') return Promise.resolve({ connId: 22 })
+        if (method === 'ui.window.command.run') return Promise.resolve(provided.get(String(params.id))!(params.args)).then((result) => ({ result }))
         if (method === 'quirky.editor/viewer' && csv) {
           if (params.action === 'metadata') return Promise.resolve({ rows: csvRows.length, columns: 2, delimiter: ',' })
           if (params.action === 'filter') {
@@ -164,9 +172,11 @@ function browserEntry(): string {
       confirm() { return Promise.resolve(false) },
       nativeDropPaths() { return Promise.resolve(null) }
     } as unknown as UiPluginContext
+    activate(context)
+    const scope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document' })
 
     createRoot(document.getElementById('document-root')!).render(
-      createElement(DocumentSurface, { context, input: { bufferId, tabId, mode } })
+      createElement(EditorUiControlProvider, { scope, children: createElement(DocumentSurface, { context, input: { bufferId, tabId, mode } }) })
     )
   `
 }
@@ -186,6 +196,12 @@ function pageMarkup(): string {
       </head>
       <body><main id="document-pane"><div id="document-root"></div></main></body>
     </html>`
+}
+async function loadFixturePage(page: Page): Promise<void> {
+  await page.route('http://127.0.0.1/document-header-layout', (route) =>
+    route.fulfill({ contentType: 'text/html', body: pageMarkup() })
+  )
+  await page.goto('http://127.0.0.1/document-header-layout')
 }
 
 async function measureHeader(page: Page) {
@@ -307,7 +323,7 @@ test.skipIf(!existsSync(executable))('keeps the Markdown document header in two 
   const context = await browser!.newContext({ viewport: { width: 800, height: 600 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -360,7 +376,7 @@ test.skipIf(!existsSync(executable))('keeps every rich Markdown toolbar command 
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -419,7 +435,7 @@ test.skipIf(!existsSync(executable))('spans the Markdown preview toolbar across 
   const context = await browser!.newContext({ viewport: { width: 800, height: 600 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -461,7 +477,7 @@ test.skipIf(!existsSync(executable))('keeps CSV rows visible with paste and rang
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }

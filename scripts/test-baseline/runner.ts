@@ -9,6 +9,7 @@ export const FILES_AT_ONCE_CI = 3
 export const FILE_LIMIT_MS = 600_000
 export const TEST_LIMIT_MS = 30_000
 export const RERUN_LIMIT = 5
+export const ALONE_OUTPUT_TAIL_BYTES = 16_384
 
 /** What a run needs: the files to run from `cwd`, how many at once, and how long each may take. */
 export type RunOptions = {
@@ -17,8 +18,10 @@ export type RunOptions = {
   platform: Platform
   jobs: number
   limitMs: number
+  fileLimits?: ReadonlyMap<string, number>
   run?: typeof bunTestFile
   log?: (text: string) => void
+  alone?: ReadonlySet<string>
 }
 
 type Outcome = { attempt: Attempt; durationMs: number }
@@ -29,22 +32,40 @@ function fileErrorOf(timedOut: boolean, code: number, hasReport: boolean, failed
   return hasReport ? 'exit-mismatch' : 'no-report'
 }
 
+function outputTailOnLineBoundary(output: string): string {
+  let start = output.length
+  let tailBytes = 0
+  while (start > 0) {
+    const contentEnd = output.charCodeAt(start - 1) === 10 ? start - 1 : start
+    const lineStart = (contentEnd === 0 ? -1 : output.lastIndexOf('\n', contentEnd - 1)) + 1
+    const lineBytes = Buffer.byteLength(output.slice(lineStart, start), 'utf8')
+    if (tailBytes + lineBytes > ALONE_OUTPUT_TAIL_BYTES) break
+    tailBytes += lineBytes
+    start = lineStart
+  }
+  return output.slice(start)
+}
+
 async function attemptFile(opts: RunOptions, file: string): Promise<Outcome> {
   const scratch = mkdtempSync(join(tmpdir(), 'test-baseline-'))
   const report = join(scratch, 'junit.xml')
   try {
     const began = performance.now()
     const run = opts.run ?? bunTestFile
+    const limitMs = opts.fileLimits?.get(file) ?? opts.limitMs
     const { code, output, timedOut } = await run(
       opts.cwd,
       [isAbsolute(file) ? file : `./${file}`, '--reporter=junit', `--reporter-outfile=${report}`, `--timeout=${TEST_LIMIT_MS}`],
-      opts.limitMs
+      limitMs
     )
     const durationMs = performance.now() - began
     if (code !== 0 || timedOut) opts.log?.(`::group::${file} failed\n${output}\n::endgroup::\n`)
     const xml = existsSync(report) ? readFileSync(report, 'utf8') : ''
     const tests = parseJunit(xml, file)
     const failed = tests.some((test) => test.status === 'failed')
+    if (opts.alone?.has(file) && code === 0 && !timedOut && !failed) {
+      opts.log?.(`::group::${file} passed alone\n${outputTailOnLineBoundary(output)}\n::endgroup::\n`)
+    }
     return { attempt: { exitCode: code, fileError: fileErrorOf(timedOut, code, xml.trim() !== '', failed), tests }, durationMs }
   } finally {
     rmSync(scratch, { recursive: true, force: true })
@@ -52,21 +73,25 @@ async function attemptFile(opts: RunOptions, file: string): Promise<Outcome> {
 }
 
 /**
- * Runs each of `opts.files` in its own `bun test` process, `opts.jobs` at a time, and returns exactly
- * one result per file in input order. Test failures, load failures and timeouts are recorded on the
- * result's first attempt, never thrown; only a failure to run at all rejects.
+ * Runs each listed file alone first, then the rest up to `opts.jobs` at a time, returning one result
+ * per file in input order. Test failures, load failures and timeouts are recorded, never thrown.
  */
 export async function runTestFiles(opts: RunOptions): Promise<FileResult[]> {
   const results: FileResult[] = new Array(opts.files.length)
   let next = 0
-  const worker = async () => {
+  const worker = async (listed: boolean) => {
     for (let index = next++; index < opts.files.length; index = next++) {
       const file = opts.files[index]
+      if (listed ? !opts.alone?.has(file) : opts.alone?.has(file)) continue
       const { attempt, durationMs } = await attemptFile(opts, file)
       results[index] = { file, platform: opts.platform, durationMs, first: attempt }
     }
   }
-  await Promise.all(Array.from({ length: Math.max(1, opts.jobs) }, worker))
+  if (opts.alone?.size) {
+    await worker(true)
+    next = 0
+  }
+  await Promise.all(Array.from({ length: Math.max(1, opts.jobs) }, () => worker(false)))
   return results
 }
 

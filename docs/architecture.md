@@ -50,6 +50,32 @@ pays for that split and has learned its protocol (`src/main/daemon/`, protocol v
 the split and drops Orca's other copies of terminal state (see [Terminal history](#terminal-history)).
 The PTY host's protocol is small and versioned so a new `quirkyd` can adopt an old PTY host.
 
+Every PTY `hello` has a 5 s deadline, shortened when the connection budget is smaller. If the
+host is unavailable, the daemon logs the failure and still starts its API. Shutdown gives plugins
+5 s together before continuing cleanup; an 8 s process watchdog kills registered children and
+exits if shutdown is still stuck. Repeated stop signals do not interrupt that cleanup.
+
+Daemon replacement waits for the old pid to disappear, not just for `/health` to go quiet. It
+sends SIGKILL after 10 s and allows another 2 s for exit. `quirky daemon restart` also bounds its
+connection, handshake and stop request together at 5 s, closes its link before signalling, and
+reports whether the old process stopped cleanly, was terminated, was killed, or was not running.
+
+`quirky serve` starts and owns one foreground daemon, reporting readiness only when runtime,
+health and status agree on its identity. A signal or loss of `serve`'s parent forwards one SIGTERM,
+waits up to 10 s, then sends SIGKILL if needed. The daemon's `--exit-with-parent=<pid>` flag exits
+before startup if its owner is gone, or shuts it down when that parent later exits. The PTY host
+and its terminal sessions survive because `serve` does not own or stop them.
+
+The daemon sends its supported protocol range in `hello`; the host chooses the highest version
+both speak. A host built before negotiation is adopted with an exact-version hello when its
+version is in range. A host below the daemon's minimum is shut down and replaced; an incompatible
+newer host is refused without starting another one.
+
+Each daemon and PTY host holds its own kernel lock on the home until it exits. A slow or paused
+holder keeps ownership. During an upgrade from a build without these locks, an accepting PTY
+socket or a live pid in the old pid file also keeps the home. The only live-pid exception is a
+matching last-holder record from the now-free kernel lock, which proves that pid has been reused.
+
 Orca by comparison runs Electron main (runtime, RPC, a second headless emulator per PTY), the
 terminal daemon, several renderers, one Chromium process per browser tab, and forked helpers for
 plugins, vault scanning, file watching and computer use
@@ -80,6 +106,12 @@ as notifications. Terminal output travels in binary frames (`[kind u8][stream u3
 the same shape as Orca's `binary-v1` in `src/main/daemon/daemon-stream-binary-framing.ts`), so bytes
 are never JSON-encoded. `quirkyd` relays PTY frames without parsing them.
 
+The window host's refresh reads and the shell's attention reads have a 30 s deadline. A failed
+refresh releases the queue so the next refresh can run; it does not reconnect or cancel daemon
+work. Mutations and plugin UI calls keep their own timing contracts. The attention projection
+applies valid session change/removal events directly after its first successful load; malformed
+events or events during a session-list read trigger a fresh list read instead.
+
 ### Method groups
 
 The API mirrors the kept features. Names are indicative; the prototype fixes them.
@@ -93,6 +125,11 @@ The API mirrors the kept features. Names are indicative; the prototype fixes the
   and `git.*`.
 - **Hosting:** `hosting.*` covers PRs, issues, checks, reviews and merges across GitHub, GitLab,
   Bitbucket, Gitea and Azure DevOps.
+  `quirky.hosting` uses `gh` for GitHub. GitLab hosts are selected through `gitlabHosts`
+  (default `gitlab.com`), with `GITLAB_TOKEN` or the host's `glab` token used for REST v4.
+  GitLab supports repository identity, auth diagnosis, merge-request reads, creation and state
+  changes, comments and discussions. GitLab merging, checks, file APIs and Reviews UI support
+  are not implemented.
 - **Browser:** `browser.*` keeps the command set agents already use (snapshot, click, fill,
   screenshot, tabs and the rest; `src/cli/browser-handler-groups.ts`).
 - **Background work:** `automation.*`, `orchestration.*`, `heimdall.*`, `sitter.*`, `objective.*`,
@@ -183,9 +220,23 @@ quirks Orca records in `TuiAgentConfig` (`src/shared/agent-prompt-injection.ts`,
 `src/shared/tui-agent-config.ts`). The terminal dock uses this path.
 
 Background agents run structured: orchestration workers, loops, sitter fix agents, objectives and
-automations. Interactive Claude and Codex sessions stay in terminal panes with the dock, because a
-structured interactive session needs a chat view, and native chat is on the dropped list. Once
-hidden panes are unmounted, an interactive terminal costs memory only while it's on screen.
+automations. Interactive structured sessions are allowed too, through the chat view, for Claude,
+Codex, pi and omp. Mobile chat, voice and native mirroring stay out of scope. Interactive terminals
+stay in terminal panes with the dock. Once hidden panes are unmounted, an interactive terminal costs
+memory only while it's on screen.
+
+### Federated worker reports
+
+Paired hosts queue worker reports durably and wait for their home's result. A relay pass already
+running when a report is queued is not proof of delivery: after that pass settles, the host reads
+the stored result or joins one new pass. Errors from that new pass reach the caller without retry.
+
+When a peer pulls mail, `quirky.orchestration/federationAck` carries the imported page's
+`results`: up to 50 `{ sequence, id, result }` entries. An acknowledgement that advances the
+cursor must cover every newly acknowledged item. The sender stores those results before moving
+the cursor; missing or mismatched entries leave both unchanged. Replayed acknowledgements at or
+below the cursor remain no-ops. Both paired daemons should run the same build; an older peer's
+result-free acknowledgements are refused, while push-side imports still deliver mail.
 
 ## Browser
 
@@ -309,7 +360,7 @@ Decided with the user on 2026-10-23:
   contract (about 193 RPC methods, `src/main/runtime/rpc/e2ee-channel.ts`). Quirky doesn't use
   upstream's hosted relay (`relay.onorca.dev`). Phones connect directly over LAN or a tailnet, and a
   self-hosted relay built from Orca's `cloud/apps/relay` can be added later if needed.
-- **Structured sessions:** background agents only, as in
+- **Structured sessions:** background agents, and interactive sessions through the chat view, as in
   [Structured agent sessions](#structured-agent-sessions).
 - **Browser:** the system webview for people and an on-demand Chrome for agents, as in
   [Browser](#browser).

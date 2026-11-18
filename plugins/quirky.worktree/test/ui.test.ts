@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { basename } from 'node:path'
 import type { AgentDisplayState, AgentStatusSummary, Ask, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
 import type * as React from 'react'
 import type { Root } from 'react-dom/client'
@@ -13,7 +14,7 @@ const SLOT = 'sidebar-section:quirky.worktree/worktrees'
 const COMMAND = 'command:quirky.worktree/new-worktree'
 const ADD_PROJECT_COMMAND = 'command:quirky.worktree/add-project'
 const SESSION_VIEW = 'view:quirky.session/worktree'
-
+const UI_CONTROL = UI_CONTROL_COMMAND
 const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
   kind: 'git',
   displayName: null,
@@ -152,6 +153,9 @@ type World = {
   options: StockWorktreeOptions
   origins: WorkspaceOriginView[]
   desktopClientId: string | null
+  windowCommandGate: Promise<void> | null
+  windowCommandStarted: (() => void) | null
+  windowCommandDispatched: (() => void) | null
   cleanupCandidates: CleanupCandidate[]
   cleanupResults: CleanupRemovalResult[]
   folderPickResult: { cancelled: boolean; paths: string[] }
@@ -178,6 +182,9 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
     options: { ...DEFAULT_STOCK_OPTIONS, filterRepoIds: [], showProperties: [...DEFAULT_STOCK_OPTIONS.showProperties] },
     origins: [],
     desktopClientId: null,
+    windowCommandGate: null,
+    windowCommandStarted: null,
+    windowCommandDispatched: null,
     cleanupCandidates: [
       { worktreeId: 'w2', name: 'fix-login', fingerprint: 'fix-fingerprint', reason: 'idle-clean', ignored: false, eligible: true, blockers: [] },
       { worktreeId: 'w1', name: 'main', fingerprint: 'main-fingerprint', reason: 'idle-clean', ignored: false, eligible: false, blockers: [{ code: 'main-worktree', detail: 'Primary worktrees cannot be deleted.' }] }
@@ -208,6 +215,24 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
       switch (method) {
         case 'ui.window.self':
           return { connId: 1, ...(world.desktopClientId === null ? {} : { desktopClientId: world.desktopClientId }) }
+        case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+          const args = params.args
+          const handler = provided.get(String(params.id))
+          let result: unknown
+          if (typeof handler === 'function') {
+            world.windowCommandStarted?.()
+            if (world.windowCommandGate) await world.windowCommandGate
+            result = await (handler as (args: unknown) => unknown)(args)
+            world.windowCommandDispatched?.()
+          } else {
+            const scoped = params.id === UI_CONTROL_COMMAND &&
+              typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+            if (!scoped) throw new Error(`unexpected command ${String(params.id)}`)
+            result = dispatchUiControl(context, args)
+          }
+          return { result }
+        }
         case 'quirky.worktree/origins':
           return [...world.origins]
         case 'quirky.worktree/availableHosts':
@@ -389,7 +414,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
       return () => void eventListeners.delete(listener)
     },
     getSetting: (name: string) => (name === 'setting:quirky.worktree/confirmDelete' ? world.confirmDelete : undefined),
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
@@ -428,6 +453,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
 
   return {
     world,
+    context,
     calls,
     confirmed,
     toasts,
@@ -546,7 +572,10 @@ const pendingRow = (name: string, repoName: string) =>
     const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
     return text.includes(name) && text.includes('Creating…')
   })
-const click = (element: Element) => act(async () => void (element as HTMLElement).click())
+const click = (element: Element) => act(async () => {
+  ;(element as HTMLElement).click()
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+})
 const buttonNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
     button.getAttribute('aria-label') === name || button.textContent?.replace(/\s+/g, ' ').trim() === name
@@ -597,6 +626,7 @@ const noticeAction = (line: Element | undefined, label: string) =>
 const contextMenu = (element: Element, x = 30, y = 40) =>
   act(async () => {
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+    for (let i = 0; i < 12; i++) await Promise.resolve()
   })
 const menu = () =>
   [...document.body.querySelectorAll<HTMLElement>('[role="menu"]')]
@@ -627,6 +657,7 @@ const press = (key: string) => act(async () => {
   } else {
     window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   }
+  for (let i = 0; i < 12; i++) await Promise.resolve()
 })
 const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
@@ -1647,21 +1678,81 @@ test('SC-42: Rename saves the display name and notes through set', async () => {
   expect(h.callsTo('quirky.worktree/set')).toEqual([{ worktree: 'w2', displayName: 'Login fix', comment: 'some notes' }])
   expect(dialogTitles()).toEqual([])
 })
+test('the UI control command is provided and returns zero when no worktree dialog is mounted', async () => {
+  const h = setup()
+  await h.mountInto(host)
+  const run = h.provided.get(UI_CONTROL) as ((args: unknown) => unknown) | undefined
+  expect(typeof run).toBe('function')
+  expect(run!({ action: 'add-reference', worktree: 'w9', url: 'https://example.com/x' })).toEqual({
+    action: 'add-reference',
+    worktree: 'w9',
+    url: 'https://example.com/x',
+    label: '',
+    delivered: 0
+  })
+})
+
 
 test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s', async (dismissal) => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
+  const openDetailsRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'worktrees-section',
+      target: 'worktrees',
+      operation: 'open-dialog',
+      payload: { owner: expect.any(String), dialog: { kind: 'update', worktreeId: 'w2' } }
+    }
+  }
   await h.mountInto(host)
   await click(actionButton(rowOf('fix-login', 'api'))!)
   await chooseMore('Details…')
   await click(dialogButton('Unlink'))
   expect(h.callsTo('quirky.worktree/unlinkReference')).toEqual([])
+  const treeOpenRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'open-workspace-menu',
+      payload: { x: expect.any(Number), y: expect.any(Number), focus: true }
+    }
+  }
+  const treeCloseRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'close-menu',
+      payload: { seq: expect.any(Number) }
+    }
+  }
+  expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
+    openDetailsRequest,
+    { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } }
+  ])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).not.toContain('Saved task')
 
   await typeInto(dialogField('Reference URL')!, 'https://example.com/draft')
   await typeInto(dialogField('Reference label')!, 'Draft task')
   await click(dialogButton('Add reference'))
   expect(h.callsTo('quirky.worktree/linkReference')).toEqual([])
+  expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
+    openDetailsRequest,
+    { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } },
+    { connId: 1, id: UI_CONTROL, args: { action: 'add-reference', worktree: 'w2', url: 'https://example.com/draft', label: 'Draft task' } }
+  ])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
 
   if (dismissal === 'Cancel') await click(dialogButton('Cancel'))
@@ -1673,6 +1764,108 @@ test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s
   expect(linked.textContent).toContain('Saved task')
   expect(linked.textContent).not.toContain('Draft task')
 })
+test('the UI control command edits references in the addressed worktree details dialog', async () => {
+  const h = setup()
+  h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
+  await h.mountInto(host)
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  await chooseMore('Details…')
+
+  const listedWorktrees = await h.context.call('quirky.worktree/list') as WorktreeControl[]
+  const worktreeId = listedWorktrees.find((worktree) => worktree.name === 'fix-login')!.id
+  const run = h.provided.get(UI_CONTROL) as (args: unknown) => unknown
+  let added: unknown
+  await act(async () => {
+    added = await run({
+      action: 'add-reference',
+      worktree: worktreeId,
+      url: 'https://example.com/cli',
+      label: ' CLI task '
+    })
+  })
+  expect(added).toEqual({
+    action: 'add-reference',
+    worktree: worktreeId,
+    url: 'https://example.com/cli',
+    label: ' CLI task ',
+    delivered: 1
+  })
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('CLI task')
+
+  let unlinked: unknown
+  await act(async () => {
+    unlinked = await run({ action: 'unlink-reference', worktree: worktreeId, url: 'https://example.com/saved' })
+  })
+  expect(unlinked).toEqual({
+    action: 'unlink-reference',
+    worktree: worktreeId,
+    url: 'https://example.com/saved',
+    delivered: 1
+  })
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).not.toContain('Saved task')
+  expect(run({ action: 'unlink-reference', worktree: worktreeId, url: 'https://example.com/none' })).toEqual({
+    action: 'unlink-reference',
+    worktree: worktreeId,
+    url: 'https://example.com/none',
+    delivered: 0
+  })
+
+  await click(dialogButton('Save'))
+  expect(h.callsTo('quirky.worktree/set')).toEqual([{
+    worktree: worktreeId,
+    displayName: '',
+    comment: '',
+    references: [{ url: 'https://example.com/cli', label: 'CLI task' }]
+  }])
+  expect(dialogTitles()).toEqual([])
+  expect(run({
+    action: 'add-reference',
+    worktree: worktreeId,
+    url: 'https://example.com/cli',
+    label: ' CLI task '
+  })).toEqual({
+    action: 'add-reference',
+    worktree: worktreeId,
+    url: 'https://example.com/cli',
+    label: ' CLI task ',
+    delivered: 0
+  })
+})
+
+test('preserves newer reference inputs while an earlier add request is pending', async () => {
+  const h = setup()
+  const gate = Promise.withResolvers<void>()
+  const started = Promise.withResolvers<void>()
+  const dispatched = Promise.withResolvers<void>()
+  const detailsDispatched = Promise.withResolvers<void>()
+  await h.mountInto(host)
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  h.world.windowCommandDispatched = () => detailsDispatched.resolve()
+  await chooseMore('Details…')
+  await act(async () => { await detailsDispatched.promise })
+  expect(dialogField('Reference URL')).toBeDefined()
+  h.world.windowCommandGate = gate.promise
+  h.world.windowCommandStarted = () => started.resolve()
+  h.world.windowCommandDispatched = () => dispatched.resolve()
+
+  await typeInto(dialogField('Reference URL')!, 'https://example.com/earlier')
+  await typeInto(dialogField('Reference label')!, 'Earlier task')
+  await click(dialogButton('Add reference'))
+  await started.promise
+
+  await typeInto(dialogField('Reference URL')!, 'https://example.com/later')
+  await typeInto(dialogField('Reference label')!, 'Later task')
+  await act(async () => {
+    gate.resolve()
+    await dispatched.promise
+  })
+
+  expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Earlier task · https://example.com/earlier')
+  expect((dialogField('Reference URL') as HTMLInputElement).value).toBe('https://example.com/later')
+  expect((dialogField('Reference label') as HTMLInputElement).value).toBe('Later task')
+})
+
+
 
 test('Worktree details keeps its reference draft on failed Save and submits it with metadata on retry', async () => {
   const h = setup()

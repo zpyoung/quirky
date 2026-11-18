@@ -263,8 +263,13 @@ export async function createWorkspace(
           choices.trustSetup = true
           choices.trustSetupHash = data.hash
         }
-      } else if (choice === 'skip') choices[kind === 'issue' ? 'issueCommand' : 'setup'] = 'skip'
-      else {
+      } else if (choice === 'skip') {
+        if (kind === 'issue') {
+          choices.issueCommand = 'skip'
+        } else {
+          choices.setup = 'skip'
+        }
+      } else {
         if (typeof data.hash !== 'string' || data.hash.length === 0) {
           context.toast(
             `Could not trust ${kindLabel}`,

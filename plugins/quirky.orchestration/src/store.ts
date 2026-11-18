@@ -1,5 +1,9 @@
 import type { PluginStore, StoreMigration } from '@quirky/protocol'
 
+/** ORDER BY fragments for tasks, dispatches and gates: random ids cannot order timestamp ties; rowid preserves insertion order. */
+export const CREATED_OLDEST_FIRST = 'created_at, rowid'
+export const CREATED_NEWEST_FIRST = 'created_at DESC, rowid DESC'
+
 /** The core's private database. Worker-owned migrations append after this v1 step. */
 export const migrations: StoreMigration[] = [
   `

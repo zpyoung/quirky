@@ -141,14 +141,33 @@ describe('tags: create, rename, recolor, delete', () => {
     expect((await tags(w)).assignments).toEqual({ [docs.id]: [urgent.id] })
   })
 
-  test('every tag mutation emits tagsChanged', async () => {
+  test('every tag mutation emits its own tagsChanged event', async () => {
     const w = await start()
     const [fix] = await twoWorktrees(w)
     const watcher = await w.t.h.connectWithEvents('cli')
-    const urgent = await create(w, 'urgent')
-    await call(w.client, 'quirky.worktree/tagUpdate', { id: urgent.id, color: 'blue' })
-    await call(w.client, 'quirky.worktree/tagAssign', { worktreeIds: [fix.id], tagId: urgent.id, assigned: true })
-    await call(w.client, 'quirky.worktree/tagDelete', { id: urgent.id })
-    await waitFor(() => (watcher.events.filter((e) => e.type === 'quirky.worktree/tagsChanged').length === 4 ? true : undefined))
+    const changes = () => watcher.events.filter((event) => event.type === 'quirky.worktree/tagsChanged')
+    const expectNextChange = async (action: () => Promise<unknown>) => {
+      // Let the production 250 ms COALESCE_INTERVAL_MS window from the prior mutation expire.
+      await Bun.sleep(300)
+      const before = changes().length
+      await action()
+      const delivered = await waitFor(() => {
+        const current = changes()
+        return current.length > before ? current.slice(before) : undefined
+      })
+      expect(delivered).toEqual([{ type: 'quirky.worktree/tagsChanged', data: {} }])
+    }
+
+    let urgent!: Tag
+    await expectNextChange(async () => {
+      urgent = await create(w, 'urgent')
+    })
+    await expectNextChange(() => call(w.client, 'quirky.worktree/tagUpdate', { id: urgent.id, color: 'blue' }))
+    await expectNextChange(() => call(w.client, 'quirky.worktree/tagAssign', {
+      worktreeIds: [fix!.id],
+      tagId: urgent.id,
+      assigned: true
+    }))
+    await expectNextChange(() => call(w.client, 'quirky.worktree/tagDelete', { id: urgent.id }))
   })
 })

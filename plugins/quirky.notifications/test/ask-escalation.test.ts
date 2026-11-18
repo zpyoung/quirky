@@ -205,7 +205,7 @@ describe('delayed ask notifications', () => {
       data: { source: 'ask', sessionId: 'session_1', worktreeId: 'worktree_1' }
     })
     expect(app.calls).toContainEqual({ method: 'quirky.session/setUnread', params: { session: 'session_1', unread: 'notification' } })
-    expect(app.calls).toContainEqual({ method: 'quirky.worktree/set', params: { worktree: 'id:worktree_1', unread: true } })
+    expect(app.calls).toContainEqual({ method: 'quirky.worktree/set', params: { worktree: 'id:worktree_1', unread: true, unreadSource: 'notifications' } })
     expect(app.events.find((item) => item.event === 'decided')).toMatchObject({ data: { source: 'ask', result: 'delivered' } })
   })
 

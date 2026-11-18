@@ -143,7 +143,7 @@
   gap: var(--ui-space-6);
 }
 
-.ui-checkbox__input {
+.ui-checkbox > .ui-checkbox__input {
   accent-color: var(--ui-accent);
   cursor: pointer;
   flex: 0 0 auto;
@@ -296,4 +296,20 @@
   .ui-bulk-bar {
     animation: none;
   }
+}
+
+.worktree-create-error {
+  box-sizing: border-box;
+  max-height: 6rem;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  width: 100%;
+}
+
+.worktree-create-error .ui-inline-error__message {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }

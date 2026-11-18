@@ -85,7 +85,7 @@ let teardown: (() => void) | null = null
 
 async function start(seed: Comment[] = [], plugins: unknown = []) {
   const fake = fakeContext(seed, plugins)
-  await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+  await act(async () => { teardown = mountFeedbackMode(fake.context) })
   await flush()
   return fake
 }
@@ -224,7 +224,7 @@ describe('adding', () => {
       if (method === 'quirky.feedback/list' && ++lists === 1) await new Promise<void>((resolve) => { release = resolve })
       return answer
     }) as typeof fake.context.call
-    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await act(async () => { teardown = mountFeedbackMode(fake.context) })
     await flush()
     await click(toggle())
     await pick(item)
@@ -247,7 +247,7 @@ describe('adding', () => {
       }
       return call(method, params)
     }) as typeof fake.context.call
-    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await act(async () => { teardown = mountFeedbackMode(fake.context) })
     await flush()
     await click(toggle())
     await pick(item)
@@ -255,7 +255,8 @@ describe('adding', () => {
     await submit()
     await act(async () => { fail(); await tick(10) })
     expect(rows()).toHaveLength(1)
-    expect(fake.toasts[0]!.title).toBe('Could not load feedback comments')
+    expect(root().querySelector('[data-feedback-tray] .ui-inline-error__message')?.textContent).toBe('Could not load feedback comments: daemon away')
+    expect(fake.toasts).toHaveLength(0)
   })
 
   test('slow plugin names do not hold back the comments', async () => {
@@ -266,7 +267,7 @@ describe('adding', () => {
       if (method === 'plugin.list') await new Promise<void>((resolve) => { release = resolve })
       return call(method, params)
     }) as typeof fake.context.call
-    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await act(async () => { teardown = mountFeedbackMode(fake.context) })
     await flush()
     await click(toggle())
     expect(rows()).toHaveLength(1)
@@ -381,6 +382,29 @@ describe('rows', () => {
     expect(card()).toBeNull()
     expect(rows()[0]!.textContent).toContain('better')
   })
+  test('Save is disabled for invalid text and while its update is pending', async () => {
+    const fake = await startOpen([sample('a')])
+    await click(button('Edit comment 1'))
+    expect(button('Save').hasAttribute('data-feedback-submit')).toBe(true)
+    expect(button('Save').disabled).toBe(false)
+    await type('')
+    expect(button('Save').disabled).toBe(true)
+    await type('x'.repeat(2001))
+    expect(button('Save').disabled).toBe(true)
+    await type('x')
+    expect(button('Save').disabled).toBe(false)
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    const update = Promise.withResolvers<unknown>()
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.feedback/update') return update.promise
+      return call(method, params)
+    }) as typeof fake.context.call
+    await click(button('Save'))
+    expect(button('Save').disabled).toBe(true)
+    await act(async () => { update.resolve(sample('a', {}, 'x')); await tick(10) })
+    expect(card()).toBeNull()
+  })
+
 
   test('a failed edit keeps the card and the row as they were', async () => {
     const fake = await startOpen([sample('a', {}, 'first')])
@@ -565,9 +589,32 @@ describe('tray', () => {
   test('a recovered comments file opens the panel so its line is visible', async () => {
     recovered.value = true
     await start()
-    expect(root().querySelector('[data-feedback-recovered]')!.textContent).toContain('set aside')
+    const recoveredLine = root().querySelector('[data-feedback-recovered]')!
+    expect(recoveredLine.querySelector('.ui-inline-error__message')?.textContent).toBe('An unreadable comments file was set aside, so the tray started empty.')
+    expect(recoveredLine.textContent).toContain('set aside')
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
   })
+  test('shows loading feedback until an empty comments list returns', async () => {
+    const fake = fakeContext()
+    const call = fake.context.call as (method: string, params?: Record<string, unknown>) => Promise<unknown>
+    const listResult = Promise.withResolvers<unknown>()
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.feedback/list') return listResult.promise
+      return call(method, params)
+    }) as typeof fake.context.call
+    await act(async () => { teardown = mountFeedbackMode(fake.context) })
+    await flush()
+    await click(toggle())
+    expect(tray()!.querySelector('.ui-notice-line')?.textContent).toBe('Loading feedback comments…')
+    expect(tray()!.querySelector('.ui-empty-state')).toBeNull()
+    expect(button('Copy').disabled).toBe(true)
+    expect(button('File issue').disabled).toBe(true)
+    expect(button('Clear').disabled).toBe(true)
+    await act(async () => { listResult.resolve({ comments: [], recovered: false }); await tick(10) })
+    expect(tray()!.querySelector('.ui-notice-line')).toBeNull()
+    expect(tray()!.querySelector('.ui-empty-state')?.textContent).toBe('Click part of the app to add a comment.')
+  })
+
 
   test('closing the panel after a recovered file keeps it closed until asked', async () => {
     recovered.value = true
@@ -598,14 +645,21 @@ describe('tray', () => {
     expect(toggle().getAttribute('aria-expanded')).toBe('true')
   })
 
-  test('a failed list shows a toast and an empty tray', async () => {
-    const fake = fakeContext()
+  test('a failed list opens an error tray that Retry can recover', async () => {
+    const fake = fakeContext([sample('a')])
     fake.failures.set('quirky.feedback/list', new Error('unreadable'))
-    await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async () => {} }) })
+    await act(async () => { teardown = mountFeedbackMode(fake.context) })
     await flush()
-    expect(fake.toasts).toHaveLength(1)
-    expect(toggle().textContent).toBe('0 comments')
-    expect(tray()).toBeNull()
+    expect(fake.toasts).toHaveLength(0)
+    expect(toggle().getAttribute('aria-expanded')).toBe('true')
+    expect(root().querySelector('[data-feedback-tray] .ui-inline-error__message')?.textContent).toBe('Could not load feedback comments: unreadable')
+    expect(root().querySelector('.ui-empty-state')).toBeNull()
+    expect(rows()).toHaveLength(0)
+    fake.failures.delete('quirky.feedback/list')
+    await click(button('Retry', tray()!))
+    expect(fake.calls.filter((call) => call.method === 'quirky.feedback/list')).toHaveLength(2)
+    expect(rows()).toHaveLength(1)
+    expect(root().querySelector('.ui-inline-error')).toBeNull()
   })
 
   test('Exit turns the mode off and a failure shows a toast', async () => {

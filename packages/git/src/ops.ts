@@ -1,13 +1,14 @@
 /**
- * Git primitives for the worktree create/delete pipeline. Each spawns the `git` binary through
- * `runGit`/`git`; a function throws `GitError` on an unexpected git failure unless its doc says
- * it reports failure through its return value.
+ * Git primitives for the worktree create/delete pipeline. Operations use `runGit`/`git`; a function
+ * throws `GitError` on an unexpected git failure unless its doc says it reports failure through
+ * its return value.
  */
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { BranchCheckedOutError, GitError } from './index'
-import { git, runGit } from './run'
+import { git, readRunner, runGit } from './run'
+import { readWorktreeList } from './worktree-list'
 
 export type GitRegistration = {
   path: string
@@ -29,7 +30,7 @@ const nonEmpty = (lines: string[]): string[] => lines.filter((l) => l.length > 0
 
 /** Every `git worktree list --porcelain` entry (prunable and missing-folder ones included), main first, bare skipped. */
 export async function listRegistrations(repo: string): Promise<GitRegistration[]> {
-  const out = await git(repo, ['worktree', 'list', '--porcelain'], { readOnly: true })
+  const out = await readWorktreeList(repo)
   const result: GitRegistration[] = []
   let isFirst = true
   for (const block of out.split(/\n\n+/)) {
@@ -313,7 +314,7 @@ export async function showFile(repo: string, ref: string, path: string): Promise
     throw new GitError(`refusing ${ref.startsWith('-') ? 'ref' : 'path'} that starts with '-'`, '', -1)
   }
   const r = await runGit(repo, ['show', `${ref}:${path}`], { readOnly: true })
-  return r.exitCode === 0 ? text(r.stdout) : null
+  return r.exitCode === 0 && !r.overflow ? text(r.stdout) : null
 }
 
 /** Ignored, untracked files under `cwd` per the standard excludes, with directories expanded to files. */
@@ -373,14 +374,9 @@ export function resetGhFailureCache(): void {
 
 async function runGh(args: string[], timeoutMs: number): Promise<string | null> {
   try {
-    const proc = Bun.spawn(['gh', ...args], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
-    const timer = setTimeout(() => proc.kill(), timeoutMs)
-    try {
-      const [out, code] = await Promise.all([new Response(proc.stdout as ReadableStream).text(), proc.exited])
-      return code === 0 ? out : null
-    } finally {
-      clearTimeout(timer)
-    }
+    const r = await readRunner.run(['gh', ...args], { timeoutMs })
+    if (r.spawnError !== undefined || r.stopped !== undefined || r.exitCode !== 0) return null
+    return text(r.stdout)
   } catch {
     return null
   }

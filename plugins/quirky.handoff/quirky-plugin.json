@@ -1,6 +1,6 @@
 {
   "id": "quirky.handoff",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Session handoff",
   "version": "0.1.0",
   "description": "Continues an agent's work in a fresh session: composes a brief from the old one, lets the person edit it, and starts the new session with it.",
@@ -1201,6 +1201,7 @@
       },
       {
         "id": "start",
+        "timeout": "24h",
         "description": "Starts the new session and delivers the brief.",
         "params": {
           "type": "object",

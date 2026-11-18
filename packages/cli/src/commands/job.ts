@@ -49,9 +49,14 @@ export const jobList: Command = {
         ? formatTable(
             ['ID', 'PLUGIN', 'INTERVAL', 'STATE', 'NEXT', 'LAST'],
             jobs.map((job) =>
-              [job.id, job.plugin, formatDuration(job.intervalMs), job.state, isoOrDash(job.nextRunAt), lastRun(job.lastRun)].map(
-                singleLine
-              )
+              [
+                job.id,
+                job.plugin,
+                formatDuration(job.intervalMs),
+                job.stalled ? 'stalled' : job.state,
+                isoOrDash(job.nextRunAt),
+                lastRun(job.lastRun)
+              ].map(singleLine)
             )
           )
         : 'no jobs'

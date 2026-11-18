@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
-import { Button, ListRow, SectionHeader, SelectField, StatusDot, TextField } from '@quirky/ui'
+import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, StatusDot, TextField } from '@quirky/ui'
 import type { RemoteCleanupPreview, RemoteWorkspaceMirror } from './remote-types'
 import { isRecord } from './loop-status'
 import { recordOf } from './values'
@@ -365,9 +365,9 @@ export function RemoteWorkspace({ context, workspace }: Props) {
         </div>
       </header>
 
-      {error && <p className="ui-error-text" role="alert">{error}</p>}
+      {error && <InlineError message={error} />}
       {notice && <p className="ui-text-muted" role="status">{notice}</p>}
-      {loading && <p className="ui-text-muted" role="status">Loading the owner-bound workspace…</p>}
+      {loading && <div role="status"><NoticeLine>Loading the owner-bound workspace…</NoticeLine></div>}
 
       {mirror && (
         <section aria-label="Remote workspace details" className="remote-workspace__section">
@@ -392,7 +392,11 @@ export function RemoteWorkspace({ context, workspace }: Props) {
         <SectionHeader title="Changes" />
         {mirror?.worktree.kind === 'folder' ? <p className="ui-text-muted">Folder workspaces do not have Git changes.</p> : <>
           <div className="ui-text-muted">Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
-          {files.length === 0 ? <p className="ui-text-muted">{connected ? 'No changed files were reported.' : 'Remote changes are unavailable.'}</p> : (
+          {files.length === 0 && connected ? (
+            <EmptyState message="No changed files were reported." />
+          ) : files.length === 0 && !connected ? (
+            <div role="status"><NoticeLine>Remote changes are unavailable.</NoticeLine></div>
+          ) : (
             <ul className="remote-changes">{files.map((change) => (
               <li key={changeKey(change)}>
                 <ListRow
@@ -440,14 +444,14 @@ export function RemoteWorkspace({ context, workspace }: Props) {
             {screen.lines.join('\n')}
           </pre>
         )}
-        {!selectedSession && <p className="ui-text-muted">No remote terminal session is attached to this workspace.</p>}
+        {!loading && connected && !selectedSession && <EmptyState message="No remote terminal session is attached to this workspace." />}
       </section>
 
       {cleanup && (
         <section aria-label="Canonical cleanup preview" className="remote-workspace__section">
           <SectionHeader title="Canonical cleanup preview" />
           <p>Owner generation: {cleanup.identity.generation} · filesystem instance: <span className="ui-text-mono">{cleanup.instanceId}</span></p>
-          {!cleanup.candidate ? <p className="ui-text-muted">No canonical cleanup suggestion exists for this workspace.</p> : (
+          {!cleanup.candidate ? <EmptyState message="No canonical cleanup suggestion exists for this workspace." /> : (
             <>
               <p>{cleanup.candidate.reason} · {cleanup.candidate.eligible ? 'eligible' : 'blocked'}</p>
               {cleanup.candidate.blockers.length > 0 && <ul className="remote-blockers">{cleanup.candidate.blockers.map((blocker, index) => <li key={`${blocker.code}:${index}`}>{blocker.detail}</li>)}</ul>}

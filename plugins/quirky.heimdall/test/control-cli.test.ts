@@ -128,6 +128,29 @@ function commandContext(result: CommandResult, json = false) {
 }
 
 describe('Heimdall control CLI', () => {
+  test('objective reads quirky.objective/detail for a local watcher and refuses a paired one', async () => {
+    const projection = { watcherId: row.watcherId, draft: null, revision: null }
+    const local = contextFor(method => {
+      if (method === 'quirky.heimdall/detail') return watcher
+      if (method === 'quirky.objective/detail') return projection
+      throw new Error(`unexpected method ${method}`)
+    }, true)
+    await invoke('objective', [row.watcherId], {}, local.ctx)
+    expect(local.calls.at(-1)).toEqual({ method: 'quirky.objective/detail', params: { watcherId: row.watcherId } })
+    expect(JSON.parse(local.lines[0]!)).toEqual(projection)
+
+    const target = { watcherId: row.watcherId, connectionId: 'peer-a', pairingRevision: 2 }
+    const paired = contextFor(method => {
+      if (method === 'quirky.heimdall/fleet') return {
+        ...fleet, rows: [{ ...watcher, target, workspaceName: 'project', branch: 'main', phase: null, lastSuccessfulTickAtMs: null, runningWorkers: 0, maxConcurrency: null, pendingQuestion: false }]
+      }
+      if (method === 'quirky.heimdall/detail') return { ...watcher, target }
+      throw new Error(`unexpected method ${method}`)
+    })
+    await expect(invoke('objective', ['peer-a::watcher-1'], {}, paired.ctx)).rejects.toThrow('objective detail is available only for local watchers')
+    expect(paired.calls.some(call => call.method === 'quirky.objective/detail')).toBe(false)
+  })
+
   test('list filters on kind and worktree while preserving global JSON output', async () => {
     const snapshot = {
       ...fleet,
@@ -186,6 +209,42 @@ describe('Heimdall control CLI', () => {
     expect(budget.calls.some(call => call.method === 'quirky.heimdall/command')).toBe(false)
   })
 
+
+  test('defaults hosted-review merge check scope to all', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-default' } }))
+
+    await invoke('create', ['hosted-review'], {}, ctx)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'quirky.heimdall/enroll',
+      params: { kind: 'hosted-review', kindPayload: { mergeCheckScope: 'all' } }
+    })
+  })
+
+  test('accepts hosted-review merge check scope all', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-all' } }))
+
+    await invoke('create', ['hosted-review'], { 'merge-check-scope': 'all' }, ctx)
+
+    expect(calls[0]?.params.kindPayload).toMatchObject({ mergeCheckScope: 'all' })
+  })
+
+  test('accepts hosted-review merge check scope required', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-required' } }))
+
+    await invoke('create', ['hosted-review'], { 'merge-check-scope': 'required' }, ctx)
+
+    expect(calls[0]?.params.kindPayload).toMatchObject({ mergeCheckScope: 'required' })
+  })
+
+  test('rejects invalid hosted-review merge check scope before enrollment', async () => {
+    const { ctx, calls } = contextFor(() => { throw new Error('must not call enrollment') })
+
+    await expect(invoke('create', ['hosted-review'], { 'merge-check-scope': 'bogus' }, ctx))
+      .rejects.toMatchObject({ name: 'UsageError', message: '--merge-check-scope must be all or required' })
+    expect(calls).toHaveLength(0)
+  })
 
   test('rejects an unsupported owner agent before enrollment', async () => {
     const { ctx, calls } = contextFor(() => { throw new Error('must not call enrollment') })

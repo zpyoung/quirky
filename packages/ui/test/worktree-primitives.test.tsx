@@ -263,6 +263,24 @@ describe('Checkbox', () => {
     await render(h(Checkbox, { checked: true, label: 'Select row', hideLabel: true, accessibleName: 'Select row (group)', onChange: () => undefined }))
     expect(container.querySelector('input')!.getAttribute('aria-label')).toBe('Select row (group)')
   })
+
+  test('forwards native input associations and disabling without changing mixed semantics', async () => {
+    const seen: boolean[] = []
+    await render(h(Checkbox, {
+      id: 'select-worktree', checked: false, indeterminate: true, disabled: true,
+      label: 'Select worktree', hideLabel: true, 'aria-describedby': 'selection-help',
+      'aria-invalid': 'grammar', onChange: (value: boolean) => seen.push(value),
+    }))
+    const input = container.querySelector<HTMLInputElement>('#select-worktree')!
+    expect(input.getAttribute('aria-describedby')).toBe('selection-help')
+    expect(input.getAttribute('aria-invalid')).toBe('grammar')
+    expect(input.indeterminate).toBe(true)
+    expect(input.getAttribute('aria-checked')).toBe('mixed')
+    expect(input.disabled).toBe(true)
+    await act(async () => input.click())
+    expect(seen).toEqual([])
+    expect(container.querySelector('label')?.hasAttribute('aria-describedby')).toBe(false)
+  })
 })
 
 describe('SwatchGroup', () => {

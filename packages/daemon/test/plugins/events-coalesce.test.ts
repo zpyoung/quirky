@@ -11,6 +11,10 @@ afterEach(removeTempDirs)
 
 const COALESCE_MS = 40
 const changed = (n: number): PluginEvent => ({ type: 'acme.tools/changed', data: { n } })
+const row = (sessionId: string, n: number): PluginEvent => ({
+  type: 'acme.tools/row',
+  data: { sessionId, n },
+})
 const refreshed: PluginEvent = { type: 'acme.tools/refreshed', data: {} }
 const waitWindows = (windows = 3) => Bun.sleep(COALESCE_MS * windows)
 
@@ -189,14 +193,487 @@ describe('PluginEvents coalescing and worktree tags', () => {
     expect(t.broadcasts.map((event) => event.data)).toEqual([{}, { sessionId: 'a' }, 5])
   })
 
-  test('allows a held event to arrive after an event of another type', async () => {
+  test('sends held events before plain events and keeps their windows armed', async () => {
     const t = setup()
     t.events.emit('acme.tools', 'changed', { n: 1 })
     t.events.emit('acme.tools', 'changed', { n: 2 })
     t.events.emit('acme.tools', 'refreshed', {})
-    expect(t.broadcasts).toEqual([changed(1), refreshed])
+    expect(t.broadcasts).toEqual([changed(1), changed(2), refreshed])
+
+    t.events.emit('acme.tools', 'changed', { n: 3 })
+    expect(t.broadcasts).toEqual([changed(1), changed(2), refreshed])
     await waitWindows()
-    expect(t.broadcasts).toEqual([changed(1), refreshed, changed(2)])
+    expect(t.broadcasts).toEqual([changed(1), changed(2), refreshed, changed(3)])
+  })
+
+  test('sends held events oldest first, with replacements taking their newer place', () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 3 })
+    t.events.emit('acme.tools', 'refreshed', {})
+    expect(t.broadcasts).toEqual([
+      row('a', 1),
+      row('b', 1),
+      row('b', 2),
+      row('a', 3),
+      refreshed,
+    ])
+  })
+
+  test('an emit of an idle key does not release another held event', async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    expect(t.broadcasts).toEqual([changed(1), row('a', 1)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), row('a', 1), changed(2)])
+  })
+
+  test("another plugin's emits do not release held events", async () => {
+    const t = setup({
+      plugins: [{ id: 'acme.other', contributes: { event: [{ id: 'ping' }] } }],
+    })
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    t.events.emit('acme.other', 'ping', {})
+    expect(t.broadcasts).toEqual([changed(1), { type: 'acme.other/ping', data: {} }])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([
+      changed(1),
+      { type: 'acme.other/ping', data: {} },
+      changed(2),
+    ])
+  })
+
+  test('an emit that sends nothing does not release held events', async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    await t.host.setEnabled('event:acme.tools/refreshed', false)
+    expect(t.events.emit('acme.tools', 'refreshed', {})).toBe(false)
+    expect(t.broadcasts).toEqual([changed(1)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), changed(2)])
+  })
+
+  test('logs and drops a held event that cannot be sent before a plain event', () => {
+    const t = setup()
+    const events = t.createEvents((event) => {
+      if (isPluginEvent(event) && event.type === 'acme.tools/changed' && numberFromPluginEvent(event) === 2) {
+        throw new Error('boom')
+      }
+      recordPluginEvent(t.broadcasts, event)
+    })
+    events.emit('acme.tools', 'changed', { n: 1 })
+    events.emit('acme.tools', 'changed', { n: 2 })
+    expect(events.emit('acme.tools', 'refreshed', {})).toBe(true)
+    expect(t.broadcasts).toEqual([changed(1), refreshed])
+    expect(t.logs).toEqual(['acme.tools: could not send acme.tools/changed: boom'])
+  })
+
+  test('a plain event still throws after held events have been sent', async () => {
+    const t = setup()
+    const events = t.createEvents((event) => {
+      if (isPluginEvent(event) && event.type === 'acme.tools/refreshed') throw new Error('boom')
+      recordPluginEvent(t.broadcasts, event)
+    })
+    events.emit('acme.tools', 'changed', { n: 1 })
+    events.emit('acme.tools', 'changed', { n: 2 })
+    expect(() => events.emit('acme.tools', 'refreshed', {})).toThrow('boom')
+    expect(t.broadcasts).toEqual([changed(1), changed(2)])
+    expect(t.logs).toEqual([])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), changed(2)])
+  })
+
+  test("an unloaded plugin's held events stay dropped", () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    t.events.removeAll('acme.tools')
+    t.events.emit('acme.tools', 'refreshed', {})
+    expect(t.broadcasts).toEqual([changed(1), refreshed])
+  })
+
+  test('a reentrant plain event takes its place while held events are sent', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let reentered = false
+    events = t.createEvents((event) => {
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !reentered &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'a' &&
+        'n' in event.data &&
+        event.data.n === 2
+      ) {
+        reentered = true
+        events.emit('acme.tools', 'tree', { worktreeId: 'w' })
+      }
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    events.emit('acme.tools', 'refreshed', {})
+    const tree: PluginEvent = {
+      type: 'acme.tools/tree',
+      data: { worktreeId: 'w' },
+      worktreeId: 'w',
+    }
+    expect(t.broadcasts).toEqual([
+      row('a', 1),
+      row('b', 1),
+      row('a', 2),
+      row('b', 2),
+      tree,
+      refreshed,
+    ])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([
+      row('a', 1),
+      row('b', 1),
+      row('a', 2),
+      row('b', 2),
+      tree,
+      refreshed,
+    ])
+  })
+
+  test('a coalesced event emitted while held events are sent stays held', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let reentered = false
+    events = t.createEvents((event) => {
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !reentered &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/changed' &&
+        numberFromPluginEvent(event) === 2
+      ) {
+        reentered = true
+        events.emit('acme.tools', 'changed', { n: 3 })
+      }
+    })
+    events.emit('acme.tools', 'changed', { n: 1 })
+    events.emit('acme.tools', 'changed', { n: 2 })
+    events.emit('acme.tools', 'refreshed', {})
+    expect(t.broadcasts).toEqual([changed(1), changed(2), refreshed])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), changed(2), refreshed, changed(3)])
+  })
+
+  test('an unload while held events are sent stops the remaining sends', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let unloaded = false
+    events = t.createEvents((event) => {
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !unloaded &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'a' &&
+        'n' in event.data &&
+        event.data.n === 2
+      ) {
+        unloaded = true
+        events.removeAll('acme.tools')
+      }
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    events.emit('acme.tools', 'refreshed', {})
+    expect(t.broadcasts).toEqual([row('a', 1), row('b', 1), row('a', 2), refreshed])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('a', 1), row('b', 1), row('a', 2), refreshed])
+  })
+
+  test('a plain event releases at most one held event per key', () => {
+    const t = setup()
+    for (let n = 1; n <= 6; n++) {
+      t.events.emit('acme.tools', 'changed', { n })
+      if (n % 2 === 0) t.events.emit('acme.tools', 'refreshed', {})
+    }
+    expect(t.broadcasts).toEqual([
+      changed(1),
+      changed(2),
+      refreshed,
+      changed(4),
+      refreshed,
+      changed(6),
+      refreshed,
+    ])
+  })
+
+  test('an immediate emit sends now and replaces its held event', async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    expect(t.events.emit('acme.tools', 'changed', { n: 3 }, { immediate: true })).toBe(true)
+    expect(t.broadcasts).toEqual([changed(1), changed(3)])
+    t.events.emit('acme.tools', 'changed', { n: 4 })
+    expect(t.broadcasts).toEqual([changed(1), changed(3)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), changed(3), changed(4)])
+  })
+
+  test("an immediate emit sends the plugin's other held events first", async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 3 }, { immediate: true })
+    expect(t.broadcasts).toEqual([row('a', 1), row('b', 1), row('b', 2), row('a', 3)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('a', 1), row('b', 1), row('b', 2), row('a', 3)])
+  })
+
+  test('repeated immediate emits of one key all arrive', async () => {
+    const t = setup()
+    for (let n = 1; n <= 6; n++) {
+      t.events.emit('acme.tools', 'row', { sessionId: 'a', n }, { immediate: true })
+    }
+    expect(t.broadcasts).toEqual([1, 2, 3, 4, 5, 6].map((n) => row('a', n)))
+    await waitWindows()
+    expect(t.broadcasts).toEqual([1, 2, 3, 4, 5, 6].map((n) => row('a', n)))
+  })
+
+  test('an immediate emit of an idle key arms its window', async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'changed', { n: 1 }, { immediate: true })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    expect(t.broadcasts).toEqual([changed(1)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([changed(1), changed(2)])
+  })
+
+  test('an immediate emit does not depend on another event', async () => {
+    const t = setup({
+      plugins: [{ id: 'acme.override', overrides: [{ id: 'event:acme.tools/tree' }] }],
+    })
+    await t.host.setEnabled('event:acme.tools/refreshed', false)
+    expect(t.events.emit('acme.tools', 'refreshed', {})).toBe(false)
+    expect(t.events.emit('acme.tools', 'tree', { worktreeId: 'w' })).toBe(false)
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 })
+    t.events.emit('acme.tools', 'changed', { n: 3 }, { immediate: true })
+    t.events.emit('acme.tools', 'changed', { n: 4 }, { immediate: true })
+    expect(t.broadcasts).toEqual([changed(1), changed(3), changed(4)])
+  })
+
+  test('a disabled event sends nothing and releases nothing, even when immediate', async () => {
+    const t = setup()
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 })
+    t.events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+    await t.host.setEnabled('event:acme.tools/changed', false)
+    expect(t.events.emit('acme.tools', 'changed', { n: 1 }, { immediate: true })).toBe(false)
+    expect(t.broadcasts).toEqual([row('a', 1)])
+  })
+
+  test('only immediate true counts, and a plain event ignores the option', async () => {
+    const t = setup()
+    const invalidImmediate = { immediate: 'yes' } as unknown as { immediate?: boolean }
+    t.events.emit('acme.tools', 'changed', { n: 1 })
+    t.events.emit('acme.tools', 'changed', { n: 2 }, { immediate: false })
+    t.events.emit('acme.tools', 'changed', { n: 3 }, invalidImmediate)
+    expect(t.broadcasts).toEqual([changed(1)])
+    t.events.emit('acme.tools', 'refreshed', {}, { immediate: true })
+    expect(t.broadcasts).toEqual([changed(1), changed(3), refreshed])
+  })
+
+  test('an immediate send failure throws after held events have gone out', async () => {
+    const t = setup()
+    const events = t.createEvents((event) => {
+      if (isPluginEvent(event) && event.type === 'acme.tools/changed' && numberFromPluginEvent(event) === 3) {
+        throw new Error('boom')
+      }
+      recordPluginEvent(t.broadcasts, event)
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    events.emit('acme.tools', 'changed', { n: 1 })
+    expect(() => events.emit('acme.tools', 'changed', { n: 3 }, { immediate: true })).toThrow('boom')
+    expect(t.broadcasts).toEqual([row('b', 1), changed(1), row('b', 2)])
+    events.emit('acme.tools', 'changed', { n: 4 })
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('b', 1), changed(1), row('b', 2), changed(4)])
+  })
+
+  test('replacing a held event with an immediate emit counts as a merge', () => {
+    let now = 0
+    const t = setup({ now: () => now })
+    t.events.emit('acme.tools', 'changed', { n: 0 })
+    for (let n = 1; n <= 600; n++) {
+      t.events.emit('acme.tools', 'changed', { n })
+      t.events.emit('acme.tools', 'changed', { n }, { immediate: true })
+    }
+    now = 60_000
+    t.events.emit('acme.tools', 'changed', { n: 601 })
+    t.events.emit('acme.tools', 'changed', { n: 602 }, { immediate: true })
+    expect(t.logs).toEqual(['acme.tools: acme.tools/changed merged 601 emits in the last 60 s'])
+  })
+
+  test('an immediate emit reserves its place before draining other keys', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let reentered = false
+    events = t.createEvents((event) => {
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !reentered &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'b' &&
+        'n' in event.data &&
+        event.data.n === 2
+      ) {
+        reentered = true
+        events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 })
+      }
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 }, { immediate: true })
+    expect(t.broadcasts).toEqual([row('b', 1), row('b', 2), row('a', 1)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('b', 1), row('b', 2), row('a', 1), row('a', 2)])
+  })
+
+  test('a reentrant immediate emit cannot overtake the older immediate emit', async () => {
+    const run = async (activeTarget: boolean) => {
+      const t = setup()
+      let events!: PluginEvents
+      let reentered = false
+      events = t.createEvents((event) => {
+        recordPluginEvent(t.broadcasts, event)
+        if (
+          !reentered &&
+          isPluginEvent(event) &&
+          event.type === 'acme.tools/row' &&
+          event.data !== null &&
+          typeof event.data === 'object' &&
+          'sessionId' in event.data &&
+          event.data.sessionId === 'b' &&
+          'n' in event.data &&
+          event.data.n === 2
+        ) {
+          reentered = true
+          events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 }, { immediate: true })
+        }
+      })
+      if (activeTarget) {
+        events.emit('acme.tools', 'row', { sessionId: 'a', n: -1 })
+        events.emit('acme.tools', 'row', { sessionId: 'a', n: 0 })
+      }
+      events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+      events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+      events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 }, { immediate: true })
+      const expected = activeTarget
+        ? [row('a', -1), row('b', 1), row('b', 2), row('a', 1), row('a', 2)]
+        : [row('b', 1), row('b', 2), row('a', 1), row('a', 2)]
+      expect(t.broadcasts).toEqual(expected)
+      await waitWindows()
+      expect(t.broadcasts).toEqual(expected)
+    }
+
+    await run(false)
+    await run(true)
+  })
+
+  test('a failed outer immediate send does not strand a reentrant immediate emit', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let reentered = false
+    events = t.createEvents((event) => {
+      if (
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'a' &&
+        'n' in event.data &&
+        event.data.n === 1
+      ) {
+        throw new Error('boom')
+      }
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !reentered &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'b' &&
+        'n' in event.data &&
+        event.data.n === 2
+      ) {
+        reentered = true
+        events.emit('acme.tools', 'row', { sessionId: 'a', n: 2 }, { immediate: true })
+      }
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    expect(() =>
+      events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 }, { immediate: true })
+    ).toThrow('boom')
+    expect(t.broadcasts).toEqual([row('b', 1), row('b', 2), row('a', 2)])
+    expect(t.logs).toEqual([])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('b', 1), row('b', 2), row('a', 2)])
+    expect(t.logs).toEqual([])
+  })
+
+  test('removing an owner while draining held events keeps the immediate emit', async () => {
+    const t = setup()
+    let events!: PluginEvents
+    let removed = false
+    events = t.createEvents((event) => {
+      recordPluginEvent(t.broadcasts, event)
+      if (
+        !removed &&
+        isPluginEvent(event) &&
+        event.type === 'acme.tools/row' &&
+        event.data !== null &&
+        typeof event.data === 'object' &&
+        'sessionId' in event.data &&
+        event.data.sessionId === 'b' &&
+        'n' in event.data &&
+        event.data.n === 2
+      ) {
+        removed = true
+        events.removeAll('acme.tools')
+      }
+    })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'c', n: 1 })
+    events.emit('acme.tools', 'row', { sessionId: 'b', n: 2 })
+    events.emit('acme.tools', 'row', { sessionId: 'c', n: 2 })
+    events.emit('acme.tools', 'row', { sessionId: 'a', n: 1 }, { immediate: true })
+    expect(t.broadcasts).toEqual([row('b', 1), row('c', 1), row('b', 2), row('a', 1)])
+    await waitWindows()
+    expect(t.broadcasts).toEqual([row('b', 1), row('c', 1), row('b', 2), row('a', 1)])
   })
 
   test('delivers the same coalesced stream to plugin listeners', async () => {

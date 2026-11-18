@@ -1,6 +1,14 @@
 import { UI_TOOL_SLOTS, type PluginContext, type Schema, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import type { AutomationService } from '../service'
-import { AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationMethods, type AutomationNavigation, type AutomationUiEnv, type AutomationUiState } from './ui-contracts'
+import { AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationMethods, type AutomationNavigation, type AutomationUiState } from './ui-contracts'
+
+export type AutomationUiEnv = {
+  context: PluginContext
+  service: AutomationService
+  read(): AutomationUiState
+  update(change: (state: AutomationUiState) => void): AutomationUiState
+  navigate(patch: Partial<AutomationNavigation>): Promise<AutomationUiState>
+}
 
 export const navigationSchema: Schema = {
   type: 'object',
@@ -13,7 +21,11 @@ export const navigationSchema: Schema = {
     lastRun: { type: 'string', enum: ['all', 'failed', 'succeeded', 'never'] },
     agent: { type: 'string' }, sort: { type: 'string', enum: ['name', 'lastRun'] },
     direction: { type: 'string', enum: ['asc', 'desc'] }, runQuery: { type: 'string' },
-    runStatus: { type: 'string', enum: ['all', 'successful', 'failed', 'progress', 'skipped'] }
+    runStatus: { type: 'string', enum: ['all', 'successful', 'failed', 'progress', 'skipped'] },
+    promptExpanded: { type: 'boolean' },
+    historyStarts: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 1_000_000 } },
+    runLimit: { type: 'integer', minimum: 1, maximum: 1_000_000 },
+    settingsNotice: { type: 'boolean' }
   },
   additionalProperties: false
 }
@@ -21,7 +33,11 @@ export const navigationSchema: Schema = {
 export function initialUiState(): AutomationUiState {
   return {
     revision: 0,
-    navigation: { page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all', status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all' },
+    navigation: {
+      page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all',
+      status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '',
+      runStatus: 'all', promptExpanded: false, historyStarts: [0], runLimit: 100, settingsNotice: false
+    },
     editor: null
   }
 }
@@ -63,6 +79,19 @@ function validateNavigation(context: PluginContext, input: Record<string, unknow
     if (!Object.hasOwn(keys, key)) throw context.error('invalid-params', `Unknown automation navigation field: ${key}`)
     if (key === 'automationId' || key === 'runId') {
       if (value !== null && (typeof value !== 'string' || value.length === 0 || value.length > 4096)) throw context.error('invalid-params', `${key} must be an identity or null`)
+    } else if (key === 'historyStarts') {
+      if (!Array.isArray(value) || value.length < 1 || value.length > 4096 || value[0] !== 0) throw context.error('invalid-params', 'Invalid automation historyStarts')
+      let previous = -1
+      for (const start of value) {
+        if (typeof start !== 'number' || !Number.isSafeInteger(start) || start < 0 || start > 1_000_000 || start <= previous) {
+          throw context.error('invalid-params', 'Invalid automation historyStarts')
+        }
+        previous = start
+      }
+    } else if (key === 'runLimit') {
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 1_000_000) throw context.error('invalid-params', 'Invalid automation runLimit')
+    } else if (key === 'promptExpanded' || key === 'settingsNotice') {
+      if (typeof value !== 'boolean') throw context.error('invalid-params', `Invalid automation ${key}`)
     } else if (enums[key]) {
       if (typeof value !== 'string' || !enums[key]!.includes(value)) throw context.error('invalid-params', `Invalid automation ${key}`)
     } else if (typeof value !== 'string' || new TextEncoder().encode(value).length > (key === 'query' || key === 'runQuery' ? 65536 : 4096)) {
@@ -98,7 +127,16 @@ export function createAutomationUiEnv(context: PluginContext, service: Automatio
       const currentView = toolState.layout?.view ?? null
       rememberPrevious(toolState.layout)
       const returningFromSettings = record(currentView) && currentView.id === AUTOMATIONS_SETTINGS_VIEW
-      const next = env.update(value => { Object.assign(value.navigation, patch) })
+      const next = env.update(value => {
+        const navigation = value.navigation
+        const pageChanged = Object.hasOwn(patch, 'page') && patch.page !== navigation.page
+        const historyRouteChanged = pageChanged ||
+          (Object.hasOwn(patch, 'tab') && patch.tab !== navigation.tab) ||
+          (Object.hasOwn(patch, 'automationId') && patch.automationId !== navigation.automationId)
+        if (historyRouteChanged && !Object.hasOwn(patch, 'historyStarts')) patch.historyStarts = [0]
+        if (pageChanged && !Object.hasOwn(patch, 'runLimit')) patch.runLimit = 100
+        Object.assign(navigation, patch)
+      })
       if (toolState.slot === null) {
         const hasAutomationTab = toolState.layout?.viewTabs?.some((view) => view.id === AUTOMATIONS_VIEW) ?? false
         if (returningFromSettings && hasAutomationTab) await context.call('ui.view.close', {})

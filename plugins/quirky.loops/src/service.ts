@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, appendFileSync, statSync, writeSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import type { PluginCaller, PluginContext, PluginStore, StoreMigration, StructuredMessage } from '@quirky/protocol'
+import type { PluginCaller, PluginContext, PluginStore, ProcessRunner, StoreMigration, StructuredMessage } from '@quirky/protocol'
+import { createSupervision, type SupervisionEngine } from '@quirky/supervision'
+
 import { EvidenceEngine } from './evidence'
 import { mergeLoopConfig, normalizeLoopConfig, validateLoopAgent } from './config'
 import { computePacing } from './pacing'
@@ -102,11 +103,21 @@ function createOnce(path: string, contents: string): void {
   }
 }
 
-function installPrivateExclude(cwd: string): void {
-  const raw = execFileSync('git', ['-C', cwd, 'rev-parse', '--git-path', 'info/exclude'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  }).trim()
+async function installPrivateExclude(cwd: string, runner: ProcessRunner): Promise<void> {
+  let stdoutText: string
+  try {
+    const result = await runner.run(['git', '-C', cwd, 'rev-parse', '--git-path', 'info/exclude'], {
+      rerunnable: true,
+      maxOutputBytes: 1048576
+    })
+    if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) {
+      throw new Error('git rev-parse failed')
+    }
+    stdoutText = result.stdoutText
+  } catch {
+    throw new Error('git rev-parse failed')
+  }
+  const raw = stdoutText.trim()
   if (raw === '') throw new Error('git did not return a private info/exclude path')
   const exclude = isAbsolute(raw) ? raw : resolve(cwd, raw)
   mkdirSync(dirname(exclude), { recursive: true, mode: 0o700 })
@@ -115,13 +126,13 @@ function installPrivateExclude(cwd: string): void {
   if (!hasEntry) appendFileSync(exclude, `${contents !== '' && !contents.endsWith('\n') ? '\n' : ''}/.quirky/loops/\n`, { encoding: 'utf8', mode: 0o600 })
 }
 
-function createLoopFiles(cwd: string, slug: string, workspaceKind: 'git' | 'folder'): string {
+async function createLoopFiles(cwd: string, slug: string, workspaceKind: 'git' | 'folder', runner: ProcessRunner): Promise<string> {
   const directory = join(cwd, '.quirky', 'loops', slug)
   mkdirSync(directory, { recursive: true, mode: 0o700 })
   const notesPath = join(directory, 'notes.md')
   createOnce(notesPath, 'Notes for this loop. Edit freely; the loop does not rewrite this file.\n')
   createOnce(join(directory, 'log.md'), '')
-  if (workspaceKind === 'git') installPrivateExclude(cwd)
+  if (workspaceKind === 'git') await installPrivateExclude(cwd, runner)
   return notesPath
 }
 
@@ -166,6 +177,7 @@ function cloneSnapshot(snapshot: LoopSnapshot): LoopSnapshot {
 
 export class LoopService implements LoopServiceContract {
   private readonly store: LoopStore
+  private readonly supervision: SupervisionEngine
   private readonly evidence: EvidenceEngineContract
   private readonly timing?: LoopTiming
   private readonly drivers = new Map<string, LoopDriver>()
@@ -179,7 +191,17 @@ export class LoopService implements LoopServiceContract {
     const openStore = context.openStore as OpenReadOnlyStore
     const pluginStore = openStore.call(context, loopMigrations(), { newerVersion: 'read-only' })
     this.store = new LoopStore(pluginStore)
-    this.evidence = new EvidenceEngine(context)
+    this.supervision = createSupervision(context, {
+      clock: {
+        now: () => this.now(),
+        setTimer: (callback, ms) => {
+          const timer = setTimeout(callback, ms)
+          return () => clearTimeout(timer)
+        }
+      }
+    })
+    this.evidence = new EvidenceEngine(context, this.supervision)
+
   }
 
   start(): Promise<void> {
@@ -367,7 +389,7 @@ export class LoopService implements LoopServiceContract {
     await this.evidence.validate(input.agent, config, worktree.path)
     let notesPath: string
     try {
-      notesPath = createLoopFiles(worktree.path, slug, worktree.kind)
+      notesPath = await createLoopFiles(worktree.path, slug, worktree.kind, this.context.process)
     } catch (error) {
       throw this.context.error('conflict', `could not prepare loop notes and private git exclusion: ${errorMessage(error)}`)
     }
@@ -638,6 +660,7 @@ export class LoopService implements LoopServiceContract {
       context: this.context,
       store: this.store,
       evidence: this.evidence,
+      supervision: this.supervision,
       loopId,
       timing: this.timing,
       hooks: {
@@ -656,11 +679,12 @@ export class LoopService implements LoopServiceContract {
   private async stopSession(sessionId: string | null): Promise<void> {
     if (sessionId === null) return
     try {
-      await this.context.call('quirky.structured/stop', { session: sessionId })
+      await this.supervision.stop({ kind: 'structured', session: sessionId })
     } catch (error) {
       this.context.log(`could not stop loop session ${sessionId}: ${errorMessage(error)}`)
     }
   }
+
   private async closeSession(loopId: string, sessionId: string | null): Promise<void> {
     if (sessionId === null) return
     try {
@@ -738,5 +762,6 @@ export class LoopService implements LoopServiceContract {
       }))
     }
     await this.evidence.shutdown().catch((error: unknown) => this.context.log(`loop evidence shutdown failed: ${errorMessage(error)}`))
+    this.supervision.dispose()
   }
 }

@@ -1,11 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf, type } = s
+const { act, byLabel, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, settleAfter, statusOf, type } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -72,24 +72,33 @@ const three = (f: Fake) => {
 
 describe('scenario 7: the agent commits without changing content', () => {
   test('marks stay, the uncommitted count drops and the button moves to the next step', async () => {
-    const files = ['a.ts', 'b.ts', 'c.ts', 'd.ts']
-    const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf(files.map((path) => entry(path)), { upstreamStatus: NO_UPSTREAM, upstream: null })
-      f.marks = { 'a.ts': 'reviewed', 'b.ts': 'reviewed', 'c.ts': 'reviewed' }
-    })
-    expect(q(element, '[data-count-line]')?.textContent).toBe('3 of 4 reviewed · 4 uncommitted')
-    expect(shipButton(element)?.textContent).toBe('Commit 4 files')
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const files = ['a.ts', 'b.ts', 'c.ts', 'd.ts']
+      const opened = await open((f) => {
+        f.status = statusOf(files.map((path) => entry(path)), { upstreamStatus: NO_UPSTREAM, upstream: null })
+        f.marks = { 'a.ts': 'reviewed', 'b.ts': 'reviewed', 'c.ts': 'reviewed' }
+      })
+      unmount = opened.unmount
+      const { fake, element } = opened
+      expect(q(element, '[data-count-line]')?.textContent).toBe('3 of 4 reviewed · 4 uncommitted')
+      expect(shipButton(element)?.textContent).toBe('Commit 4 files')
 
-    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: NO_UPSTREAM, upstream: null })
-    fake.compare = compareOf({ entries: files.map((path) => ({ path, status: 'modified', added: 1, removed: 0, binary: false })), added: 4, ahead: 1 })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
+      fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: NO_UPSTREAM, upstream: null })
+      fake.compare = compareOf({ entries: files.map((path) => ({ path, status: 'modified', added: 1, removed: 0, binary: false })), added: 4, ahead: 1 })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      await settleAfter(3_000)
 
-    expect(q(element, '[data-count-line]')?.textContent).toBe('3 of 4 reviewed')
-    expect(shipButton(element)?.textContent).toBe('Publish branch')
-    expect(message(element)).toBeNull()
-    expect(fake.marks).toEqual({ 'a.ts': 'reviewed', 'b.ts': 'reviewed', 'c.ts': 'reviewed' })
-    unmount()
+      expect(q(element, '[data-count-line]')?.textContent).toBe('3 of 4 reviewed')
+      expect(shipButton(element)?.textContent).toBe('Publish branch')
+      expect(message(element)).toBeNull()
+      expect(fake.marks).toEqual({ 'a.ts': 'reviewed', 'b.ts': 'reviewed', 'c.ts': 'reviewed' })
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 })
 
@@ -305,7 +314,10 @@ describe('scenario 25: committing only some files', () => {
     await click(shipButton(element))
     expect(fake.called('quirky.git/stage')).toHaveLength(1)
     expect(fake.called('quirky.git/commit')).toHaveLength(0)
-    expect(errorLine(element)?.textContent).toContain('The branch or HEAD changed')
+    expect(errorLine(element)).toBeNull()
+    expect(message(element)?.value).toBe('wrong branch')
+    expect(fake.reports.at(-1)).toMatchObject({ branch: 'other-branch', busy: null })
+    expect(shipButton(element)?.disabled).toBe(false)
     unmount()
   })
 
@@ -567,9 +579,23 @@ describe('scenario 28: a step that can not run', () => {
 
 describe('scenario 29: a step fails', () => {
   const rejected = (f: Fake) => {
-    f.status = statusOf([], { upstreamStatus: up(4, 0) })
+    f.status = statusOf([], { ahead: 4, behind: 0, upstreamStatus: up(4, 0) })
     f.on('quirky.git/push', () => {
       throw failure('Push rejected: remote has newer commits.', { reason: 'non-fast-forward' })
+    })
+    const fetchedUpstream = { ...up(4, 1), sha: 'c'.repeat(40) }
+    f.on('quirky.git/fetch', () => {
+      f.status = statusOf([], { ahead: 4, behind: 1, upstreamStatus: fetchedUpstream })
+      return { ok: true }
+    })
+    f.on('quirky.git/pull', () => {
+      f.status = statusOf([], {
+        head: 'd'.repeat(40),
+        ahead: 5,
+        behind: 0,
+        upstreamStatus: { ...fetchedUpstream, ahead: 5, behind: 0 }
+      })
+      return { ok: true }
     })
   }
 
@@ -587,11 +613,17 @@ describe('scenario 29: a step fails', () => {
     unmount()
   })
 
-  test('Pull first runs a pull and the line clears on the next attempt', async () => {
+  test('Pull first runs a pull and clears the line after it settles', async () => {
     const { fake, element, unmount } = await open(rejected)
     await click(shipButton(element))
     await click(q(errorLine(element)!, '.ui-inline-error__action'))
+    await s.waitForState(element, () =>
+      fake.called('quirky.git/pull').length === 1 &&
+      fake.reports.at(-1)?.behind === 0 &&
+      fake.reports.at(-1)?.busy === null
+    )
     expect(fake.called('quirky.git/pull')).toHaveLength(1)
+    expect(fake.called('quirky.git/pull').at(-1)?.params).toEqual({ worktree: 'feat' })
     expect(errorLine(element)).toBeNull()
     unmount()
   })
@@ -885,103 +917,141 @@ describe('the caret menu outlives the ship bar it was opened from', () => {
     fake.status = statusOf([], { upstreamStatus: up(0, 1) })
     fake.compare = oneFile
   }
-  const changed = (fake: Fake) => act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+  const changed = async (fake: Fake) => {
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settle()
+    await settleAfter(3_000)
+  }
   const menu = () => q(document.body, '[role="menu"]')
   const quiet = (element: HTMLElement) => q(element, '[data-git-up-to-date]')
   const caret = (element: HTMLElement) => byLabel(element, CARET)
 
   test('button to quiet line keeps the menu and refreshes its entries', async () => {
-    const { fake, element, unmount } = await open(behind)
-    expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
-    await openCaret(element)
-    expect(menuItem('Fast-forward')?.disabled).toBe(false)
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open(behind)
+      unmount = opened.unmount
+      const { fake, element } = opened
+      expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
+      await openCaret(element)
+      expect(menuItem('Fast-forward')?.disabled).toBe(false)
 
-    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
-    await changed(fake)
-    await settle()
+      fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+      await changed(fake)
 
-    expect(shipButton(element)).toBeNull()
-    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
-    expect(menu()).not.toBeNull()
-    expect(menuItem('Fast-forward')?.disabled).toBe(true)
-    expect(detailOf('Fast-forward')).toBe('nothing to pull')
-    expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
-    const before = fake.calls.length
-    await click(menuItem('Fetch'))
-    expect(fake.calls.slice(before).filter((call) => call.method === 'quirky.git/fetch')).toHaveLength(1)
-    expect(menu()).toBeNull()
-    expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
-    expect(document.activeElement).toBe(caret(element))
-    unmount()
+      expect(shipButton(element)).toBeNull()
+      expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+      expect(menu()).not.toBeNull()
+      expect(menuItem('Fast-forward')?.disabled).toBe(true)
+      expect(detailOf('Fast-forward')).toBe('nothing to pull')
+      expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
+      const before = fake.calls.length
+      await click(menuItem('Fetch'))
+      expect(fake.calls.slice(before).filter((call) => call.method === 'quirky.git/fetch')).toHaveLength(1)
+      expect(menu()).toBeNull()
+      expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
+      expect(document.activeElement).toBe(caret(element))
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('quiet line to button keeps the menu and enables Fast-forward', async () => {
-    const { fake, element, unmount } = await open((f) => { f.compare = oneFile })
-    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
-    await openCaret(element)
-    expect(detailOf('Fast-forward')).toBe('nothing to pull')
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open((f) => { f.compare = oneFile })
+      unmount = opened.unmount
+      const { fake, element } = opened
+      expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+      await openCaret(element)
+      expect(detailOf('Fast-forward')).toBe('nothing to pull')
 
-    fake.status = statusOf([], { upstreamStatus: up(0, 1) })
-    await changed(fake)
-    await settle()
+      fake.status = statusOf([], { upstreamStatus: up(0, 1) })
+      await changed(fake)
 
-    expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
-    expect(menu()).not.toBeNull()
-    expect(menuItem('Fast-forward')?.disabled).toBe(false)
-    expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
-    unmount()
+      expect(shipButton(element)?.textContent).toBe('Pull 1 commit')
+      expect(menu()).not.toBeNull()
+      expect(menuItem('Fast-forward')?.disabled).toBe(false)
+      expect(caret(element)?.getAttribute('aria-expanded')).toBe('true')
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('the menu survives the bar disappearing and returning, then runs a choice once', async () => {
-    const { fake, element, unmount } = await open(behind)
-    await openCaret(element)
-    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
-    fake.compare = compareOf()
-    await changed(fake)
-    await settle()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open(behind)
+      unmount = opened.unmount
+      const { fake, element } = opened
+      await openCaret(element)
+      fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+      fake.compare = compareOf()
+      await changed(fake)
 
-    expect(caret(element)).toBeNull()
-    expect(q(element, '[data-git-ship-bar]')).toBeNull()
-    expect(menu()).not.toBeNull()
+      expect(caret(element)).toBeNull()
+      expect(q(element, '[data-git-ship-bar]')).toBeNull()
+      expect(menu()).not.toBeNull()
 
-    fake.compare = oneFile
-    await changed(fake)
-    await settle()
+      fake.compare = oneFile
+      await changed(fake)
 
-    expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
-    expect(menu()).not.toBeNull()
-    await click(menuItem('Rebase from origin/main'))
-    expect(fake.called('quirky.git/rebaseFromBase')).toHaveLength(1)
-    expect(menu()).toBeNull()
-    expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
-    unmount()
+      expect(quiet(element)?.textContent).toBe('Pushed to origin/zoe/feat')
+      expect(menu()).not.toBeNull()
+      await click(menuItem('Rebase from origin/main'))
+      expect(fake.called('quirky.git/rebaseFromBase')).toHaveLength(1)
+      expect(menu()).toBeNull()
+      expect(caret(element)?.getAttribute('aria-expanded')).toBe('false')
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('Escape focuses the caret shown now, not the detached opening caret', async () => {
-    const { fake, element, unmount } = await open(behind)
-    const openingCaret = caret(element)
-    await openCaret(element)
-    fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
-    await changed(fake)
-    await settle()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open(behind)
+      unmount = opened.unmount
+      const { fake, element } = opened
+      const openingCaret = caret(element)
+      await openCaret(element)
+      fake.status = statusOf([], { head: 'c'.repeat(40), upstreamStatus: up() })
+      await changed(fake)
 
-    expect(caret(element)).not.toBe(openingCaret)
-    await press(menu()!, 'Escape')
-    expect(menu()).toBeNull()
-    expect(document.activeElement).toBe(caret(element))
-    unmount()
+      expect(caret(element)).not.toBe(openingCaret)
+      await press(menu()!, 'Escape')
+      expect(menu()).toBeNull()
+      expect(document.activeElement).toBe(caret(element))
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('a merge operation closes the menu with the ship bar', async () => {
-    const { fake, element, unmount } = await open(behind)
-    await openCaret(element)
-    expect(menu()).not.toBeNull()
-    fake.status = statusOf([], { operation: 'merge', upstreamStatus: up(0, 1) })
-    await changed(fake)
-    await settle()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open(behind)
+      unmount = opened.unmount
+      const { fake, element } = opened
+      await openCaret(element)
+      expect(menu()).not.toBeNull()
+      fake.status = statusOf([], { operation: 'merge', upstreamStatus: up(0, 1) })
+      await changed(fake)
 
-    expect(q(element, '[data-git-ship-bar]')).toBeNull()
-    expect(menu()).toBeNull()
-    unmount()
+      expect(q(element, '[data-git-ship-bar]')).toBeNull()
+      expect(menu()).toBeNull()
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 })

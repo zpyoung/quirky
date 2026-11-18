@@ -12,6 +12,17 @@ export class DaemonError extends Error {
   }
 }
 
+const refusalErrors = new WeakSet<object>()
+
+function markRefusal(error: DaemonError): DaemonError {
+  refusalErrors.add(error)
+  return error
+}
+
+export function isRefusal(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && refusalErrors.has(error)
+}
+
 export const invalidParams = (message: string) => new DaemonError(RpcErrorCode.InvalidParams, message)
 export const notFound = (message: string) => new DaemonError(RpcErrorCode.NotFound, message)
 export const conflict = (message: string) => new DaemonError(RpcErrorCode.Conflict, message)
@@ -21,3 +32,29 @@ export const unauthorized = () => new DaemonError(RpcErrorCode.Unauthorized, 'no
 /** The destructive call needs an answered confirm ask; `data` names the ask and what it confirms. */
 export const confirmationRequired = (data: { askId: string; action: string }) =>
   new DaemonError(RpcErrorCode.ConfirmationRequired, `confirmation required: ${data.action}`, data)
+
+export const timedOut = (method: string, timeoutMs: number) =>
+  new DaemonError(RpcErrorCode.Timeout, `${method} did not answer within ${timeoutMs} ms`, {
+    reason: 'timeout',
+    method,
+    timeoutMs
+  })
+
+export const notAnswering = (method: string, unanswered: number) =>
+  markRefusal(
+    new DaemonError(
+      RpcErrorCode.Timeout,
+      `${method} is not answering: ${unanswered} calls are still running past their deadline`,
+      { reason: 'stalled', method, unanswered }
+    )
+  )
+
+export const busy = (method: string, running: number, limit: number) =>
+  markRefusal(
+    new DaemonError(RpcErrorCode.Busy, `${method} is busy: ${running} calls are already running`, {
+      reason: 'busy',
+      method,
+      running,
+      limit
+    })
+  )

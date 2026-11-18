@@ -3,6 +3,7 @@ import { chmod, lstat, mkdir, open, readdir, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { basename, join, relative, resolve, sep } from 'node:path'
 import type { Session } from '@quirky/protocol'
+import { createSupervision, type SupervisionEngine } from '@quirky/supervision'
 import type { Json, JournalAppend, JournalEntry, Snapshot } from '../contracts'
 import { budgetUsage } from '../budget'
 import {
@@ -336,6 +337,7 @@ function deviationFactFrom(entry: JournalEntry): DeviationFact | null {
 export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
   const instanceId = randomUUID()
   const reportDirectory = resolve(host.reportDirectory)
+  const engine: SupervisionEngine = createSupervision(host.context)
   let shuttingDown = false
   let shutdownPromise: Promise<void> | null = null
   const watcherLocks = new Map<string, Promise<void>>()
@@ -994,16 +996,12 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     return session
   }
 
-  function validateSendReceipt(value: unknown): void {
-    if (!isRecord(value) || value.ok !== true) throw new Error('structured owner send did not confirm success')
-  }
-
   function persistReturnedSession(watcherId: string, state: OwnerRuntimeState, raw: unknown): Session {
     ensureWatcherOpen(watcherId)
     const sessionId = returnedSessionId(raw)
     if (!sessionId) throw new Error('structured owner call returned no session ID; conversation outcome is ambiguous')
     addOwnedSession(watcherId, sessionId)
-    append(watcherId, 'owner-session', { sessionId, agent: 'claude', kind: 'structured' })
+    append(watcherId, 'owner-session', { sessionId, agent: 'claude' })
     state.sessionId = sessionId
     state.instanceId = instanceId
     if (state.requestedOwnerConfig) state.ownerConfig = state.requestedOwnerConfig
@@ -1023,11 +1021,15 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     return 'owner-dispatch-fenced'
   }
 
-  async function ownerCall(watcherId: string, method: string, params: Record<string, unknown>): Promise<unknown> {
+  async function ownerCall<T>(
+    watcherId: string,
+    invoke: () => Promise<T>,
+    cleanupLateLaunch = false
+  ): Promise<T> {
     ensureWatcherOpen(watcherId)
-    const result = await host.context.call(method, params)
+    const result = await invoke()
     if (shuttingDown || releasedWatchers.has(watcherId)) {
-      if (method === 'quirky.structured/create' || method === 'quirky.structured/resume') {
+      if (cleanupLateLaunch) {
         try {
           const stopped = parseOwnedStopResult(await stopOwnedForWatcher(watcherId))
           if (stopped.unknown.length > 0) throw new Error('late keyed owner stop returned unknown owner connections')
@@ -1064,27 +1066,30 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       persistState(watcherId, state)
       if (state.sessionId === null) {
         if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
-        const raw = await ownerCall(watcherId, 'quirky.structured/create', {
+        const raw = await ownerCall(watcherId, () => engine.create({
           lifetime: 'plugin',
           lifetimeKey: watcherId,
+          background: true,
           worktree: enrollment.worktreeId ? `id:${enrollment.worktreeId}` : `path:${enrollment.workspacePath}`,
           agent: 'claude',
           prompt,
           ...(config.model === undefined ? {} : { model: config.model }),
           ...(config.effort === undefined ? {} : { options: { effort: config.effort } })
-        })
+        }), true)
         persistReturnedSession(watcherId, state, raw)
       } else if (recovering) {
         const oldSessionId = state.sessionId
         if (!oldSessionId) throw new Error('owner session identity is missing during restart')
-        const oldSession = await ownerCall(watcherId, 'quirky.session/get', { session: oldSessionId })
+        const oldSession = await ownerCall(watcherId, () => host.context.call('quirky.session/get', { session: oldSessionId }))
         validateNativeSession(oldSession, oldSessionId)
         if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
-        const raw = await ownerCall(watcherId, 'quirky.structured/resume', { lifetime: 'plugin', lifetimeKey: watcherId, session: oldSessionId, prompt })
+        const raw = await ownerCall(watcherId, () => engine.resume({
+          lifetime: 'plugin', lifetimeKey: watcherId, session: oldSessionId, prompt
+        }), true)
         persistReturnedSession(watcherId, state, raw)
       } else {
         if (host.canDispatch?.(watcherId) === false) return deferDispatch(watcherId, state)
-        validateSendReceipt(await ownerCall(watcherId, 'quirky.structured/send', { session: state.sessionId, text: prompt }))
+        await ownerCall(watcherId, () => engine.send({ session: state.sessionId!, text: prompt }))
       }
       ensureWatcherOpen(watcherId)
       pending.phase = 'waiting'
@@ -1297,7 +1302,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
         clearError(state)
         persistState(watcherId, state)
         const reminder = `one reminder: finish the current owner report and run ${reportCommand(watcherId, pending)}. Write the proposal to ${pending.reportPath}.`
-        validateSendReceipt(await ownerCall(watcherId, 'quirky.structured/send', { session: sessionId, text: reminder }))
+        await ownerCall(watcherId, () => engine.send({ session: sessionId, text: reminder }))
         ensureWatcherOpen(watcherId)
         pending.phase = 'waiting'
         persistState(watcherId, state)
@@ -1326,7 +1331,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
   function stopOwnedForWatcher(watcherId: string): Promise<unknown> {
     const running = releaseStopWork.get(watcherId)
     if (running) return running
-    const work = Promise.resolve().then(() => host.context.call('quirky.structured/stopOwned', { key: watcherId }))
+    const work = Promise.resolve().then(() => engine.stopOwned({ key: watcherId }))
     releaseStopWork.set(watcherId, work)
     void work.then(
       () => { if (releaseStopWork.get(watcherId) === work) releaseStopWork.delete(watcherId) },
@@ -1929,12 +1934,14 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       persistState(watcherId, state)
       const prompt = answerPrompt(watcherId, body, renewed)
       if (recovering) {
-        const oldSession = await ownerCall(watcherId, 'quirky.session/get', { session: ownerSessionId })
+        const oldSession = await ownerCall(watcherId, () => host.context.call('quirky.session/get', { session: ownerSessionId }))
         validateNativeSession(oldSession, ownerSessionId)
-        const resumedRaw = await ownerCall(watcherId, 'quirky.structured/resume', { lifetime: 'plugin', lifetimeKey: watcherId, session: ownerSessionId, prompt })
+        const resumedRaw = await ownerCall(watcherId, () => engine.resume({
+          lifetime: 'plugin', lifetimeKey: watcherId, session: ownerSessionId, prompt
+        }), true)
         persistReturnedSession(watcherId, state, resumedRaw)
       } else {
-        validateSendReceipt(await ownerCall(watcherId, 'quirky.structured/send', { session: ownerSessionId, text: prompt }))
+        await ownerCall(watcherId, () => engine.send({ session: ownerSessionId, text: prompt }))
       }
       ensureWatcherOpen(watcherId)
       renewed.phase = 'waiting'
@@ -1987,6 +1994,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     shuttingDown = true
     shutdownPromise = (async () => {
       await waitUntilOwnerShutdownDeadline(Promise.allSettled([...activeOperations, ...releaseWork.values()]), deadlineAtMs)
+      engine.dispose()
       for (const [watcherId, intervalId] of activeIntervals) {
         try {
           if (intervalIsOpen(watcherId, intervalId) && watcherCanWrite(watcherId)) {
@@ -2015,7 +2023,7 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
       }
       const stopWork = Promise.allSettled([...allOwnedSessions].map(async (sessionId) => {
         try {
-          await host.context.call('quirky.structured/stop', { session: sessionId })
+          await engine.stop({ kind: 'structured', session: sessionId })
         } catch {
           // A missing or already-stopped owner session does not prevent cleanup of the rest.
         }

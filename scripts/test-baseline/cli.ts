@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
+import { CLI_FILES_LIMITS, CLI_FILES_TEST_FILE } from '../parity/cli-files-limits'
 import type { bunTestFile } from '../suite'
+import { readSpeedEvidence } from '../speed/ci'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
-import { renderComment } from './report'
+import { displayKey, renderComment } from './report'
 import { findSpawners, selectTests } from './select'
 import { DURATION_BASELINES, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
@@ -14,7 +16,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
   plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
-  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
+  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false> [--speed <dir>]
   issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json]
 `
@@ -22,6 +24,9 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
+const ALONE_LIST = 'scripts/test-alone.txt'
+
+const DAEMON_LINUX_SKIPS = 'scripts/test-baseline/daemon-linux-skips.json'
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -151,6 +156,23 @@ function readJson(path: string): unknown {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+function readDaemonSkipReasons(path: string): Record<string, string> {
+  let value: unknown
+  try {
+    value = readJson(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw new Error(`cannot read ${path}: ${error instanceof Error ? error.message : error}`)
+  }
+  if (!isRecord(value) || Array.isArray(value)) throw new Error(`${path} must contain a JSON object`)
+  for (const [key, reason] of Object.entries(value)) {
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+      throw new Error(`${path} has an invalid reason for ${JSON.stringify(key)}`)
+    }
+  }
+  return value as Record<string, string>
+}
 
 function asPlan(value: unknown): Plan {
   if (
@@ -311,8 +333,20 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
   const files = values.macos ? plan.macos : plan.linuxShards[Number(values.shard)]
   if (!files) throw new UsageError(`--shard ${values.shard} is outside the plan's ${plan.linuxShards.length} shards`)
 
+  const { macosOnly } = await import('../suite')
+  const alone = macosOnly(join(ctx.cwd, ALONE_LIST))
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
+  const options = {
+    cwd: ctx.cwd,
+    files,
+    platform: values.macos ? ('macos' as const) : ('linux' as const),
+    jobs: FILES_AT_ONCE_CI,
+    limitMs: FILE_LIMIT_MS,
+    run: ctx.run,
+    log: ctx.err,
+    alone,
+    fileLimits: new Map<string, number>([[CLI_FILES_TEST_FILE, CLI_FILES_LIMITS.fileMs]])
+  }
   const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
   writeJson(out, rerun.results)
@@ -321,7 +355,7 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
 }
 
 async function verdictCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' } })
+  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' }, speed: { type: 'string' } })
   const planDir = need(values.plan, 'plan')
   const inDir = need(values.in, 'in')
   const outDir = need(values.out, 'out')
@@ -362,8 +396,35 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
 
   const loaded = loadResults(inDir)
   problems.push(...loaded.problems)
+  let daemonSkipReasons: Record<string, string> = {}
+  try {
+    daemonSkipReasons = readDaemonSkipReasons(join(ctx.cwd, DAEMON_LINUX_SKIPS))
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error))
+  }
+  const linuxDaemonFiles = new Set(plan.linuxShards.flat().filter((file) => file.startsWith('packages/daemon/')))
+  const reportedExceptions = new Set<string>()
+  for (const result of loaded.results) {
+    if (!result.file.startsWith('packages/daemon/')) continue
+    if (linuxDaemonFiles.has(result.file) && result.platform !== 'linux') {
+      problems.push(`daemon file planned for Linux was reported as ${result.platform}: ${result.file}`)
+    }
+    if (result.platform !== 'linux') continue
+    for (const attempt of [result.first, result.rerun]) {
+      if (!attempt) continue
+      for (const test of attempt.tests) {
+        if (test.status !== 'skipped') continue
+        const reason = Object.hasOwn(daemonSkipReasons, test.key) ? daemonSkipReasons[test.key] : undefined
+        if (reason === undefined) {
+          problems.push(`unlisted Linux daemon skip: ${displayKey(test.key)}`)
+        } else if (!reportedExceptions.has(test.key)) {
+          ctx.err(`allowed Linux daemon skip: ${displayKey(test.key)} — ${reason}\n`)
+          reportedExceptions.add(test.key)
+        }
+      }
+    }
+  }
   const merged = [...new Map<string, FileResult>(loaded.results.map((result) => [result.file, result])).values()]
-
   const verdict = compareResults({
     baseline,
     results: merged,
@@ -374,7 +435,15 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
     runBroken: problems.length > 0,
   })
 
-  writeText(join(outDir, 'comment.md'), renderComment(verdict, ctx.now()))
+  let comment = renderComment(verdict, ctx.now())
+  if (values.speed !== undefined) {
+    try {
+      comment += '\n' + readSpeedEvidence(values.speed, ctx.env.SPEED_HEAD || plan.head)
+    } catch {
+      comment += '\n### Speed\n\nnot measured: speed evidence reader failed\n'
+    }
+  }
+  writeText(join(outDir, 'comment.md'), comment)
   writeJson(join(outDir, 'verdict.json'), verdict)
   const baselinePath = join(outDir, 'baseline.json')
   rmSync(baselinePath, { force: true })

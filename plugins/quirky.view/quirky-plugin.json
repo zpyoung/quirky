@@ -1,0 +1,601 @@
+{
+  "id": "quirky.view",
+  "apiVersion": "1.0.0",
+  "name": "Views",
+  "version": "0.1.0",
+  "description": "Views an agent draws in its chat with quirky view: checked against a fixed catalog, stored per session, and answered by actions.",
+  "main": "main.ts",
+  "cli": "cli.ts",
+  "ui": "dist/ui.js",
+  "activation": "lazy",
+  "contributes": {
+    "method": [
+      {
+        "id": "open",
+        "description": "Checks and stores a view for the caller's live session and returns its ID. A refused spec emits `rejected` and fails with invalid-params. Placement defaults to inline.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "spec": {
+              "description": "The view spec, as an object or as JSON text."
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "pane"
+              ]
+            }
+          },
+          "required": [
+            "spec"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "viewId"
+          ]
+        }
+      },
+      {
+        "id": "update",
+        "description": "Replaces the content of the caller's open view in place. Placement is kept, and a user's move holds.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "spec": {
+              "description": "The view spec, as an object or as JSON text."
+            }
+          },
+          "required": [
+            "viewId",
+            "spec"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "close",
+        "description": "Closes the caller's view and releases its waits.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "viewId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "wait",
+        "description": "Long-polls up to `timeoutMs` (max 60000) for an action on the caller's view. Returns {action}, {status:'timeout'}, or {status:'closed'} when the view is closed.",
+        "readOnly": true,
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "viewId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "{name, viewId, source, at, data?}."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "timeout",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "list",
+        "description": "A session's views in the order they were opened, closed ones included.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "viewId": {
+                "type": "string"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "spec": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "The checked view spec: a title and a root node."
+              },
+              "placement": {
+                "type": "string",
+                "enum": [
+                  "inline",
+                  "pane"
+                ]
+              },
+              "movedByUser": {
+                "type": "boolean"
+              },
+              "updates": {
+                "type": "integer"
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "closed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "viewId",
+              "sessionId",
+              "title",
+              "spec",
+              "placement",
+              "movedByUser",
+              "updates",
+              "createdAt",
+              "updatedAt",
+              "closed"
+            ]
+          }
+        }
+      },
+      {
+        "id": "get",
+        "description": "One view.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "viewId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The checked view spec: a title and a root node."
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "pane"
+              ]
+            },
+            "movedByUser": {
+              "type": "boolean"
+            },
+            "updates": {
+              "type": "integer"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "closed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "viewId",
+            "sessionId",
+            "title",
+            "spec",
+            "placement",
+            "movedByUser",
+            "updates",
+            "createdAt",
+            "updatedAt",
+            "closed"
+          ]
+        }
+      },
+      {
+        "id": "move",
+        "description": "Moves a view between the transcript and the Views pane at the user's choice. Window only.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "pane"
+              ]
+            }
+          },
+          "required": [
+            "viewId",
+            "placement"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The checked view spec: a title and a root node."
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "pane"
+              ]
+            },
+            "movedByUser": {
+              "type": "boolean"
+            },
+            "updates": {
+              "type": "integer"
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "closed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "viewId",
+            "sessionId",
+            "title",
+            "spec",
+            "placement",
+            "movedByUser",
+            "updates",
+            "createdAt",
+            "updatedAt",
+            "closed"
+          ]
+        }
+      },
+      {
+        "id": "action",
+        "description": "Sends a click from a view to its agent: to a pending `wait` first, else as a message that queues behind a working turn. Window only.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "description": "The action name from the button or field."
+            },
+            "source": {
+              "type": "string",
+              "description": "What was clicked."
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "viewId",
+            "name",
+            "source"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "delivered": {
+              "type": "string",
+              "enum": [
+                "wait",
+                "message"
+              ]
+            }
+          },
+          "required": [
+            "delivered"
+          ]
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "A view was opened, updated, closed or moved.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "viewId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "viewId"
+          ]
+        }
+      },
+      {
+        "id": "rejected",
+        "description": "An open or update was refused. The refused spec is not stored; `source` is its text, capped at 64 KiB.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "errors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId",
+            "title",
+            "errors",
+            "source"
+          ]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "view",
+        "words": "",
+        "summary": "draw a view in your chat; run `quirky view` with no arguments for the component catalog",
+        "flags": {},
+        "methods": []
+      },
+      {
+        "id": "view-open",
+        "words": "open",
+        "summary": "open a view from a spec; prints {viewId}; an invalid spec exits 2 with the errors",
+        "flags": {
+          "spec": {
+            "type": "string",
+            "description": "view spec as JSON, or @path to a file",
+            "required": true
+          },
+          "placement": {
+            "type": "string",
+            "description": "where the view opens; defaults to inline",
+            "enum": [
+              "inline",
+              "pane"
+            ]
+          }
+        },
+        "methods": [
+          "quirky.view/open"
+        ]
+      },
+      {
+        "id": "view-update",
+        "words": "update",
+        "summary": "replace the content of a view in place",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to update",
+            "required": true
+          },
+          "spec": {
+            "type": "string",
+            "description": "view spec as JSON, or @path to a file",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.view/update"
+        ]
+      },
+      {
+        "id": "view-close",
+        "words": "close",
+        "summary": "close a view",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to close",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.view/close"
+        ]
+      },
+      {
+        "id": "view-wait",
+        "words": "wait",
+        "summary": "wait for the user to click a button or answer a field in a view; prints the action, or {status:'timeout'}",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to wait on",
+            "required": true
+          },
+          "timeout-ms": {
+            "type": "integer",
+            "description": "give up after this many milliseconds"
+          }
+        },
+        "methods": [
+          "quirky.view/wait"
+        ]
+      }
+    ],
+    "command": [
+      {
+        "id": "move",
+        "title": "Move view",
+        "description": "Move a view between the transcript and Views pane.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "viewId": { "type": "string" },
+            "placement": { "type": "string", "enum": ["inline", "pane"] }
+          },
+          "required": ["viewId", "placement"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "action",
+        "title": "Send view action",
+        "description": "Send a button or field action from a view to its agent.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "viewId": { "type": "string" },
+            "name": { "type": "string" },
+            "source": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["viewId", "name", "source"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "control",
+        "title": "Control view UI",
+        "description": "Discover mounted view surfaces and control pane tabs, refreshes, and link confirmations.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["state", "refresh", "select-tab", "dismiss-tab", "link-preview", "link-cancel", "link-confirm"] },
+            "instance": { "type": "string" },
+            "viewId": { "type": "string" },
+            "href": { "type": "string" }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "view": [
+      {
+        "id": "render",
+        "title": "View card"
+      },
+      {
+        "id": "pane",
+        "title": "Views pane"
+      }
+    ]
+  }
+}

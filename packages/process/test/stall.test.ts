@@ -85,6 +85,34 @@ test('rejects a stalled output stream when the command is not rerunnable', async
   expect(starts).toBe(1)
 }, 15_000)
 
+for (const stalled of ['stdout', 'stderr', 'both'] as const) {
+  test.each([
+    { exitCode: 0, signal: null },
+    { exitCode: 7, signal: null },
+    { exitCode: null, signal: 'SIGTERM' }
+  ])(`includes the captured result when ${stalled} stalls after exit %j`, async (exit) => {
+    const stdout = Uint8Array.from([0x00, 0xff, 0x0a])
+    const stderr = new TextEncoder().encode('diagnostic\n')
+    let starts = 0
+    const child = fakeChild({
+      stdout: stream([stdout], stalled === 'stderr'),
+      stderr: stream([stderr], stalled === 'stdout'),
+      exited: Promise.resolve(exit)
+    })
+    const runner = makeRunner({ stallMs: 10, start: () => { starts++; return child } })
+    const error = await runner.run(['/fake/stalled'], { timeoutMs: 1_000, rerunnable: false }).then(
+      () => undefined,
+      (reason: unknown) => reason
+    )
+    expect(error).toBeInstanceOf(ProcessStalledError)
+    expect(error).toMatchObject({
+      attempts: 1,
+      partialResult: { stdout, stderr: 'diagnostic\n', ...exit }
+    })
+    expect(starts).toBe(1)
+  })
+}
+
 test('retries stalled rerunnable output up to three times', async () => {
   let successStarts = 0
   const successRunner = makeRunner({

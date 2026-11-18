@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { decodeTerminalOutput, RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import {
+  WsFrameKind,
+  decodeTerminalOutput,
+  encodeTerminalLagged,
+  encodeTerminalOutput,
+  RpcErrorCode,
+  type QuirkyEvent
+} from '@quirky/protocol'
 import { Core, type CoreOptions } from '../../src/service'
 import { Store } from '../../src/store'
 import { openStream } from '../../src/plugins/streams'
@@ -66,6 +73,64 @@ describe('openStream', () => {
     expect(decodeTerminalOutput(conn.binary[0])).toEqual({ streamId: 2, bytes: new Uint8Array([104, 105]) })
   })
 
+  test('lag sends one frame, notifies once and rejects later sends', () => {
+    const conn = fakeConn()
+    const stream = openStream(conn)
+    const first = new Uint8Array([0x61])
+    const calls: string[] = []
+
+    expect(stream.lagged).toBe(false)
+    expect(stream.send(first)).toBe(true)
+    stream.onLag?.(() => calls.push('first'))
+    stream.lag?.()
+    stream.lag?.()
+    expect(stream.lagged).toBe(true)
+    expect(calls).toEqual(['first'])
+
+    stream.onLag?.(() => calls.push('late'))
+    expect(calls).toEqual(['first', 'late'])
+    expect(stream.send(new Uint8Array([0x62]))).toBe(false)
+    expect(conn.binary).toEqual([encodeTerminalOutput(1, first), encodeTerminalLagged(1)])
+  })
+
+  test('a rejected output send lags once and reports failure while void transports stay accepted', () => {
+    const conn = fakeConn()
+    const attempts: Uint8Array[] = []
+    let rejectOutput = true
+    conn.sendBinary = (bytes) => {
+      attempts.push(bytes)
+      if (bytes[0] === WsFrameKind.TerminalOutput && rejectOutput) {
+        rejectOutput = false
+        return false
+      }
+      return undefined
+    }
+    const stream = openStream(conn)
+    const lagged: number[] = []
+    stream.onLag?.(() => lagged.push(stream.streamId))
+
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
+    expect(stream.lagged).toBe(true)
+    expect(stream.send(new Uint8Array([2]))).toBe(false)
+    expect(lagged).toEqual([stream.streamId])
+    expect(attempts).toEqual([encodeTerminalOutput(stream.streamId, new Uint8Array([1])), encodeTerminalLagged(stream.streamId)])
+
+    const legacy = openStream(fakeConn())
+    expect(legacy.send(new Uint8Array([3]))).toBe(true)
+  })
+
+  test('closing a stream releases its output controller marker', () => {
+    const conn = fakeConn()
+    const closedOutput: number[] = []
+    conn.closeStreamOutput = (streamId) => closedOutput.push(streamId)
+    const stream = openStream(conn)
+
+    stream.close()
+    stream.close()
+
+    expect(closedOutput).toEqual([stream.streamId])
+  })
+
   test('close runs every onClose callback once, unregisters the closer and stops sends', () => {
     const conn = fakeConn()
     const stream = openStream(conn)
@@ -73,15 +138,20 @@ describe('openStream', () => {
     stream.onClose(() => calls.push('a'))
     stream.onClose(() => calls.push('b'))
 
+    let lagCalls = 0
+    stream.onLag?.(() => lagCalls++)
     stream.close()
     stream.close()
 
     expect(calls).toEqual(['a', 'b'])
     expect(conn.streamClosers.size).toBe(0)
-    stream.send(new Uint8Array([1]))
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
+    stream.lag?.()
+    expect(stream.lagged).toBe(false)
     expect(conn.binary).toEqual([])
-  })
+    expect(lagCalls).toBe(0)
 
+  })
   test('onClose on a closed stream runs the callback at once', () => {
     const stream = openStream(fakeConn())
     stream.close()
@@ -99,7 +169,7 @@ describe('openStream', () => {
     expect(ran).toBe(1)
     expect(conn.streamClosers.size).toBe(0)
 
-    stream.send(new Uint8Array([1]))
+    expect(stream.send(new Uint8Array([1]))).toBe(false)
     stream.close()
     expect(ran).toBe(1)
     expect(conn.binary).toEqual([])
@@ -113,6 +183,17 @@ describe('openStream', () => {
     })
     stream.onClose(() => calls.push('after'))
     stream.close()
+    expect(calls).toEqual(['after'])
+  })
+
+  test('a throwing onLag callback does not stop the others', () => {
+    const stream = openStream(fakeConn())
+    const calls: string[] = []
+    stream.onLag?.(() => {
+      throw new Error('boom')
+    })
+    stream.onLag?.(() => calls.push('after'))
+    stream.lag?.()
     expect(calls).toEqual(['after'])
   })
 

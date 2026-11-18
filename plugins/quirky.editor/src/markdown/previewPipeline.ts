@@ -42,8 +42,8 @@ function rehypeMarkMarkdownNodes() {
     visitPreviewNodes(tree, (node) => {
       if (node.type !== 'element') return
       const data = { ...node.data }
-      if (node.properties && 'className' in node.properties) data[MARKDOWN_CLASS_MARKER] = true
-      if (/^h[1-5]$/.test(node.tagName ?? '')) data[MARKDOWN_HEADING_MARKER] = true
+      if (node.properties && 'className' in node.properties) Reflect.set(data, MARKDOWN_CLASS_MARKER, true)
+      if (/^h[1-5]$/.test(node.tagName ?? '')) Reflect.set(data, MARKDOWN_HEADING_MARKER, true)
       if (Object.keys(data).length > 0) node.data = data
     })
   }

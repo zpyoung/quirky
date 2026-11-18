@@ -1,0 +1,1322 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
+import { createActorReceiptStore, readActorReceipts, type CliActorReceipt, type CliActorReceiptStore } from './cli-actor'
+import type { CliCheckContext } from './cli-checks'
+import { COORDINATOR_PHASE_ONE_IDS, COORDINATOR_PHASE_TWO_IDS } from './cli-worker-actor'
+
+export const WORKER_CHECK_IDS = [
+  'workers-run-use',
+  'workers-dispatch-dry-run', 'workers-dispatch', 'workers-dispatch-show',
+  'workers-start-complete', 'workers-start-stop', 'workers-start-abandon',
+  'workers-ask', 'workers-reply', 'workers-reply-replay', 'workers-request-show', 'workers-done',
+  'workers-show', 'workers-list',
+  'workers-read-live', 'workers-read-terminal', 'workers-read-archived',
+  'workers-stop', 'workers-retain', 'workers-abandon', 'workers-release',
+  'workers-reset-messages', 'workers-reset-all',
+  'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks', 'workers-ps-summary'
+] as const
+
+type ObjectValue = Record<string, unknown>
+type TerminalPane = { tabId: string; paneId: string; sessionId: string }
+
+function isObject(value: unknown): value is ObjectValue {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function object(value: unknown, label: string): ObjectValue {
+  if (!isObject(value)) throw new Error(`${label} must be an object`)
+  return value
+}
+
+function array(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
+  return value
+}
+
+function text(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
+  return value
+}
+
+function nonEmptyText(value: unknown, label: string): string {
+  const result = text(value, label)
+  if (result.length === 0) throw new Error(`${label} must not be empty`)
+  return result
+}
+
+function ensure(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message)
+}
+
+function equal(actual: unknown, expected: unknown, label: string): void {
+  if (!isDeepStrictEqual(actual, expected)) throw new Error(`${label} did not match the expected value`)
+}
+
+function field(value: unknown, key: string, label = key): unknown {
+  return object(value, label)[key]
+}
+
+function stringField(value: unknown, key: string, label: string): string {
+  return text(field(value, key, label), `${label}.${key}`)
+}
+
+function listObjects(value: unknown, label: string): ObjectValue[] {
+  return array(value, label).map((entry, index) => object(entry, `${label}[${index}]`))
+}
+
+function parseJson(value: string, label: string): unknown {
+  try {
+    return JSON.parse(value) as unknown
+  } catch (error) {
+    throw new Error(`${label} did not contain JSON`, { cause: error })
+  }
+}
+
+function controllerRefusal(value: unknown, label: string): ObjectValue {
+  const refusal = object(value, label)
+  equal(refusal.code, 'conflict', `${label} code`)
+  equal(refusal.message, 'consumer_fenced: this operation requires a live runtime-attested session caller', `${label} message`)
+  return refusal
+}
+
+export function assertControllerRefusal(value: unknown): void {
+  controllerRefusal(value, 'controller refusal')
+}
+
+export function assertRunUseEvidence(value: {
+  runId: string; coordinatorSessionId: string; beforeGeneration: number; run: unknown; controllerRefusal: unknown
+}): { runId: string; coordinator: string; generation: { before: number; after: number }; controllerRefusal: 'consumer_fenced' } {
+  const run = object(value.run, 'run-use result')
+  equal(run.id, value.runId, 'run-use Run ID')
+  equal(run.coordinatorSessionId, value.coordinatorSessionId, 'run-use coordinator')
+  const history = array(run.coordinatorHistory, 'run-use coordinator history')
+  ensure(history.includes(value.coordinatorSessionId), 'run-use coordinator history omitted the new coordinator')
+  const after = run.consumerGeneration
+  ensure(typeof after === 'number' && Number.isInteger(after), 'run-use consumer generation must be an integer')
+  equal(after, value.beforeGeneration + 1, 'run-use consumer generation')
+  controllerRefusal(value.controllerRefusal, 'run-use controller refusal')
+  return {
+    runId: value.runId,
+    coordinator: value.coordinatorSessionId,
+    generation: { before: value.beforeGeneration, after },
+    controllerRefusal: 'consumer_fenced'
+  }
+}
+
+export function assertDispatchEvidence(value: {
+  taskId: string; dryRun: unknown; dispatch: unknown; dispatchShow: unknown; readback: unknown
+}): { taskId: string; dispatchId: string; assigneeSessionId: string } {
+  const dryRun = object(value.dryRun, 'dispatch dry-run result')
+  equal(dryRun.dryRun, true, 'dispatch dry-run flag')
+  equal(dryRun.dispatch, null, 'dispatch dry-run dispatch')
+  ensure(typeof dryRun.preamble === 'string' && dryRun.preamble.includes(value.taskId), 'dispatch dry-run preamble omitted the Task ID')
+
+  const result = object(value.dispatch, 'dispatch result')
+  equal(result.dryRun, false, 'dispatch result dry-run flag')
+  const dispatch = object(result.dispatch, 'dispatch result.dispatch')
+  const dispatchId = nonEmptyText(dispatch.id, 'dispatch result.dispatch.id')
+  ensure(dispatchId.startsWith('ctx_'), 'context Dispatch ID must start with ctx_')
+  equal(dispatch.taskId, value.taskId, 'context Dispatch Task ID')
+  const assigneeSessionId = nonEmptyText(dispatch.assigneeSessionId, 'context Dispatch assignee')
+  equal(dispatch.status, 'dispatched', 'context Dispatch status')
+
+  const shown = object(value.dispatchShow, 'dispatch-show result')
+  equal(object(shown.dispatch, 'dispatch-show result.dispatch').id, dispatchId, 'dispatch-show Dispatch ID')
+  equal(shown.worker, null, 'context dispatch worker')
+  ensure(typeof shown.preamble === 'string' && shown.preamble.length > 0, 'dispatch-show preamble must not be empty')
+  equal(object(object(value.readback, 'dispatch-show readback').dispatch, 'dispatch-show readback.dispatch').id, dispatchId, 'controller dispatch-show readback ID')
+  return { taskId: value.taskId, dispatchId, assigneeSessionId }
+}
+
+export function assertWorkerStartEvidence(
+  startsValue: unknown,
+  runId: string,
+  workerLog: string
+): string[] {
+  const starts = listObjects(startsValue, 'worker-start results')
+  equal(starts.length, 3, 'worker-start count')
+  const ids = starts.map((start, index) => {
+    equal(start.state, 'ready', `worker-start[${index}] state`)
+    const dispatchId = nonEmptyText(start.dispatchId, `worker-start[${index}] dispatch ID`)
+    ensure(dispatchId.startsWith('ctx_'), `worker-start[${index}] Dispatch ID must start with ctx_`)
+    equal(start.runId, runId, `worker-start[${index}] Run ID`)
+    const launch = object(start.launch, `worker-start[${index}] launch`)
+    equal(object(launch.effective, `worker-start[${index}] launch.effective`).agent, 'claude', `worker-start[${index}] effective agent`)
+    equal(object(start.mode, `worker-start[${index}] mode`).mode, 'terminal', `worker-start[${index}] mode`)
+    return dispatchId
+  })
+  equal(new Set(ids).size, 3, 'worker-start Dispatch IDs')
+  const lines = workerLog.split(/\r?\n/)
+  if (lines.at(-1) === '') lines.pop()
+  equal(lines, [
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings',
+    '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings'
+  ], 'Claude worker log')
+  return ids
+}
+
+export function assertQuestionReplyEvidence(value: {
+  messageId: string; requestId: string; absentRequestId: string; ask: unknown; reply: unknown; replay: unknown;
+  mismatch: unknown; request: unknown; absent: unknown; readback: unknown
+}): { replayed: true; sameAnswer: true; mismatch: 'request_mismatch' } {
+  const ask = object(value.ask, 'worker ask result')
+  equal(ask.state, 'answered', 'worker ask state')
+  equal(ask.answer, 'cli-parity-answer', 'worker ask answer')
+  equal(ask.messageId, value.messageId, 'worker ask message ID')
+
+  const reply = object(value.reply, 'coordinator reply result')
+  equal(reply.kind, 'question_answer', 'coordinator reply kind')
+  equal(reply.messageId, value.messageId, 'coordinator reply message ID')
+  equal(reply.duplicate, false, 'coordinator reply duplicate flag')
+  equal(object(reply.mutation, 'coordinator reply mutation').replayed, false, 'coordinator reply replay flag')
+  const answerMessageId = nonEmptyText(reply.answerMessageId, 'coordinator reply answer message ID')
+
+  const replay = object(value.replay, 'coordinator reply replay result')
+  equal(object(replay.mutation, 'coordinator reply replay mutation').replayed, true, 'coordinator reply replay flag')
+  equal(replay.answerMessageId, answerMessageId, 'replayed answer message ID')
+  const mismatch = object(value.mismatch, 'reply mismatch refusal')
+  equal(mismatch.code, 'conflict', 'reply mismatch code')
+  const mismatchMessage = text(mismatch.message, 'reply mismatch message')
+  ensure(mismatchMessage.startsWith(`request_mismatch: request ${value.requestId} was`), 'reply mismatch message did not identify the reused request')
+  equal(object(value.request, 'request-show result').state, 'completed', 'completed request state')
+  equal(object(value.absent, 'absent request-show result').state, 'absent', 'absent request state')
+  equal(object(value.readback, 'controller request-show readback').state, 'completed', 'controller completed request state')
+  return { replayed: true, sameAnswer: true, mismatch: 'request_mismatch' }
+}
+
+export function assertWorkerCompletion(value: { receipt: unknown; show: unknown; dispatchId: string }): void {
+  equal(object(value.receipt, 'worker_done receipt').exitCode, 0, 'worker_done exit code')
+  const show = object(value.show, 'completed worker-show')
+  equal(object(show.worker, 'completed worker-show worker').state, 'succeeded', 'completed worker state')
+  equal(object(show.dispatch, 'completed worker-show dispatch').id, value.dispatchId, 'completed worker Dispatch ID')
+  equal(object(show.dispatch, 'completed worker-show dispatch').status, 'completed', 'completed Dispatch status')
+}
+
+function terminalSessions(value: unknown, label: string): ObjectValue[] {
+  return listObjects(object(value, label).sessions, `${label}.sessions`)
+}
+
+export function assertWorkerStopEvidence(value: {
+  sessionId: string; stop: unknown; repeat: unknown; show: unknown; terminalSessions: unknown; unauthorized: unknown
+}): { state: 'stopped'; processAction: 'closed_agent_terminal'; ptyAlive: false; unauthorized: 'consumer_fenced' } {
+  const stop = object(value.stop, 'worker-stop result')
+  equal(stop.state, 'stopped', 'worker-stop state')
+  equal(stop.processAction, 'closed_agent_terminal', 'worker-stop process action')
+  const repeat = object(value.repeat, 'repeated worker-stop result')
+  equal(repeat.state, 'stopped', 'repeated worker-stop state')
+  equal(repeat.processAction, 'none', 'repeated worker-stop process action')
+  equal(repeat.alreadySettled, true, 'repeated worker-stop settlement')
+  const shown = object(value.show, 'stopped worker-show')
+  equal(object(shown.worker, 'stopped worker-show worker').state, 'stopped', 'stopped worker state')
+  equal(object(shown.dispatch, 'stopped worker-show dispatch').status, 'failed', 'stopped Dispatch status')
+  const live = terminalSessions(value.terminalSessions, 'worker-stop terminal sessions')
+    .some(session => session.sessionId === value.sessionId && session.alive === true)
+  equal(live, false, 'stopped worker PTY liveness')
+  const refusal = object(value.unauthorized, 'unauthorized worker-stop result')
+  equal(refusal.code, 'conflict', 'unauthorized worker-stop code')
+  const message = text(refusal.message, 'unauthorized worker-stop message')
+  ensure(message.includes('consumer_fenced') && message.includes('live runtime-attested session caller'), 'unauthorized worker-stop did not report consumer_fenced')
+  return { state: 'stopped', processAction: 'closed_agent_terminal', ptyAlive: false, unauthorized: 'consumer_fenced' }
+}
+
+export function assertWorkerRetain(value: unknown): void {
+  const result = object(value, 'worker-retain result')
+  equal(result.state, 'retained', 'worker-retain state')
+  equal(result.processAction, 'none', 'worker-retain process action')
+}
+
+export function assertWorkerAbandonEvidence(value: {
+  sessionId: string; abandon: unknown; coordinatorShow: unknown; controllerShow: unknown; terminalSessions: unknown;
+  pidAlive: boolean; closedByCoordinator: boolean
+}): { state: 'abandoned'; processAction: 'none'; ptyAlive: true; pidAlive: true } {
+  const abandon = object(value.abandon, 'worker-abandon result')
+  equal(abandon.state, 'abandoned', 'worker-abandon state')
+  equal(abandon.processAction, 'none', 'worker-abandon process action')
+  equal(abandon.warning, 'Possibly-live resources were retained; no process was stopped or deleted.', 'worker-abandon warning')
+  for (const [label, raw] of [['coordinator', value.coordinatorShow], ['controller', value.controllerShow]] as const) {
+    const shown = object(raw, `${label} abandoned worker-show`)
+    equal(object(shown.worker, `${label} abandoned worker-show worker`).state, 'abandoned', `${label} abandoned worker state`)
+    ensure(object(shown.terminal, `${label} abandoned worker-show terminal`).status !== 'exited', `${label} abandoned terminal unexpectedly exited`)
+  }
+  const matching = terminalSessions(value.terminalSessions, 'worker-abandon terminal sessions')
+    .filter(session => session.sessionId === value.sessionId)
+  equal(matching.length, 1, 'abandoned worker terminal session count')
+  equal(matching[0]!.alive, true, 'abandoned worker PTY liveness')
+  ensure(typeof matching[0]!.pid === 'number' && matching[0]!.pid > 0, 'abandoned worker PID must be positive')
+  equal(value.pidAlive, true, 'abandoned worker process liveness')
+  equal(value.closedByCoordinator, true, 'abandoned worker coordinator close')
+  return { state: 'abandoned', processAction: 'none', ptyAlive: true, pidAlive: true }
+}
+
+export function assertWorkerListEvidence(value: {
+  list: unknown; runId: string; worktreeId: string; dispatchIds: readonly string[]; contextDispatchId: string
+}): { runId: string; worktreeId: string; contextIncluded: boolean } {
+  const list = object(value.list, 'worker-list result')
+  const scope = object(list.scope, 'worker-list scope')
+  equal(scope.runId, value.runId, 'worker-list Run scope')
+  equal(scope.source, 'flag', 'worker-list scope source')
+  const workers = listObjects(list.workers, 'worker-list workers')
+  const expectedStates = ['succeeded', 'stopped', 'abandoned']
+  for (const [index, dispatchId] of value.dispatchIds.entries()) {
+    const matches = workers.filter(worker => worker.dispatchId === dispatchId)
+    equal(matches.length, 1, `worker-list row count for ${dispatchId}`)
+    const row = matches[0]!
+    equal(row.workerState, expectedStates[index], `worker-list state for ${dispatchId}`)
+    equal(object(row.resource, `worker-list ${dispatchId} resource`).worktreeId, value.worktreeId, `worker-list ${dispatchId} worktree`)
+    if (index === 2) equal(row.terminalState, 'retained', 'abandoned worker terminal state')
+  }
+  return { runId: value.runId, worktreeId: value.worktreeId, contextIncluded: workers.some(worker => worker.dispatchId === value.contextDispatchId) }
+}
+
+export function assertWorkerReadArchived(value: unknown, dispatchId: string): void {
+  const result = object(value, 'archived worker-read result')
+  equal(result.archived, true, 'archived worker-read flag')
+  const content = text(result.content, 'archived worker-read content').replace(/[\r\n]/g, '')
+  ensure(content.includes(`CLI-PARITY-WORKER-DONE:${dispatchId}`), 'archived worker-read omitted the completion marker')
+}
+
+export function assertWorkerReadLive(value: {
+  dispatchId: string
+  sessionId: string
+  viewport: unknown
+  history: unknown
+  automatic: unknown
+  terminal: unknown
+}): void {
+  const dispatchId = nonEmptyText(value.dispatchId, 'worker-read dispatch ID')
+  const sessionId = nonEmptyText(value.sessionId, 'worker-read session ID')
+  const marker = `CLI-PARITY-WORKER-DONE:${dispatchId}`
+  const viewport = object(value.viewport, 'worker-read viewport')
+  const viewportLines = array(viewport.lines, 'worker-read viewport.lines')
+    .map((line, index) => text(line, `worker-read viewport.lines[${index}]`))
+  ensure(typeof viewport.cols === 'number' && Number.isInteger(viewport.cols) && viewport.cols > 0, 'worker-read viewport.cols must be a positive integer')
+  ensure(typeof viewport.rows === 'number' && Number.isInteger(viewport.rows) && viewport.rows > 0, 'worker-read viewport.rows must be a positive integer')
+  ensure(typeof viewport.alt === 'boolean', 'worker-read viewport.alt must be a boolean')
+  ensure(viewportLines.join('\n').replace(/[\r\n]/g, '').includes(marker), 'worker-read viewport omitted the completion marker')
+
+  const history = object(value.history, 'worker-read newest history page')
+  const historyLines = array(history.lines, 'worker-read newest history page.lines')
+    .map((line, index) => text(line, `worker-read newest history page.lines[${index}]`))
+  ensure(history.cursor === null || (typeof history.cursor === 'string' && history.cursor.length > 0), 'worker-read newest history page.cursor must be a non-empty string or null')
+  ensure(!historyLines.join('\n').replace(/[\r\n]/g, '').includes(marker), 'worker-read newest history page unexpectedly contained the completion marker')
+
+  for (const [label, raw, fallbackReason, contentComplete] of [
+    ['automatic worker-read', value.automatic, 'session_not_reported', false],
+    ['explicit terminal worker-read', value.terminal, null, true]
+  ] as const) {
+    const result = object(raw, label)
+    equal(result.dispatchId, dispatchId, `${label} Dispatch ID`)
+    equal(result.sessionId, sessionId, `${label} session ID`)
+    equal(result.source, 'terminal', `${label} source`)
+    equal(result.archived, false, `${label} archived flag`)
+    equal(result.sourceExact, true, `${label} exact source`)
+    equal(result.fallbackReason, fallbackReason, `${label} fallback reason`)
+    ensure(text(result.content, `${label} content`).replace(/[\r\n]/g, '').includes(marker), `${label} omitted the completion marker`)
+    equal(result.contentComplete, contentComplete, `${label} content completeness`)
+    equal(result.clipping, { clipped: false, maxBytes: 524288 }, `${label} clipping`)
+    equal(result.nextCursor, null, `${label} continuation cursor`)
+    equal(result.warnings, [], `${label} warnings`)
+  }
+}
+
+export function assertWorkerReleaseEvidence(value: {
+  dispatchId: string; sessionId: string; release: unknown; repeat: unknown; releaseAbandoned: unknown; terminalSessions: unknown
+}): { state: 'released'; archive: 'captured'; ptyAlive: false } {
+  const release = object(value.release, 'worker-release result')
+  equal(release.state, 'released', 'worker-release state')
+  equal(release.processAction, 'closed_agent_terminal', 'worker-release process action')
+  equal(object(release.archive, 'worker-release archive').status, 'captured', 'worker-release archive status')
+  const repeat = object(value.repeat, 'repeated worker-release result')
+  equal(repeat.state, 'already_released', 'repeated worker-release state')
+  equal(repeat.alreadySettled, true, 'repeated worker-release settlement')
+  const abandoned = object(value.releaseAbandoned, 'abandoned worker-release result')
+  equal(abandoned.state, 'retained', 'abandoned worker release state')
+  equal(abandoned.processAction, 'none', 'abandoned worker release process action')
+  const live = terminalSessions(value.terminalSessions, 'worker-release terminal sessions')
+    .some(session => session.sessionId === value.sessionId && session.alive === true)
+  equal(live, false, 'released worker PTY liveness')
+  return { state: 'released', archive: 'captured', ptyAlive: false }
+}
+
+export function assertResetEvidence(value: {
+  runId: string; messagesReset: unknown; inbox: unknown; allReset: unknown; runList: unknown;
+  messagesRefusal: unknown; allRefusal: unknown
+}): void {
+  const messagesReset = object(value.messagesReset, 'messages reset result')
+  equal(messagesReset.mode, 'messages', 'messages reset mode')
+  equal(object(messagesReset.mutation, 'messages reset mutation').replayed, false, 'messages reset replay flag')
+  equal(array(object(value.inbox, 'reset inbox result').messages, 'reset inbox messages').length, 0, 'inbox messages after reset')
+  equal(object(value.allReset, 'all reset result').mode, 'all', 'all reset mode')
+  const runs = listObjects(object(value.runList, 'reset run-list result').runs, 'reset run-list runs')
+  ensure(!runs.some(run => run.id === value.runId), 'run-list still contained the reset Run')
+  controllerRefusal(value.messagesRefusal, 'unauthorized messages reset')
+  controllerRefusal(value.allRefusal, 'unauthorized all reset')
+}
+
+export function assertWorktreeDashboardEvidence(value: {
+  dashboard: unknown; worktreeId: string; sessionIds: readonly string[]
+}): void {
+  const cards = listObjects(object(value.dashboard, 'agent-status dashboard').cards, 'agent-status dashboard cards')
+  for (const sessionId of value.sessionIds) {
+    const matches = cards.filter(card => isObject(card.thread) && card.thread.sessionId === sessionId)
+    equal(matches.length, 1, `dashboard card count for ${sessionId}`)
+    equal(object(matches[0]!.thread, `dashboard card ${sessionId} thread`).worktreeId, value.worktreeId, `dashboard ${sessionId} worktree`)
+  }
+}
+
+export function assertWorktreeRunEvidence(value: {
+  runList: unknown; runId: string; coordinatorSessionId: string
+}): void {
+  const runs = listObjects(object(value.runList, 'worktree run-list result').runs, 'worktree run-list runs')
+  const matches = runs.filter(run => run.id === value.runId)
+  equal(matches.length, 1, 'worktree run-list target count')
+  equal(matches[0]!.coordinatorSessionId, value.coordinatorSessionId, 'worktree run-list coordinator')
+}
+
+export function assertWorktreeTaskEvidence(value: {
+  taskList: unknown; workers: unknown; dashboard: unknown; runId: string; worktreeId: string;
+  taskId: string; dispatchId: string; assigneeSessionId: string; workerTaskId: string; workerDispatchId: string
+}): { correlation: { worktreeToSession: true; sessionToWorker: true; taskToDispatch: true; cardToTask: false; worktreePath: false; hostScope: false } } {
+  const taskList = object(value.taskList, 'worktree task-list result')
+  equal(taskList.runId, value.runId, 'worktree task-list Run ID')
+  const tasks = listObjects(taskList.tasks, 'worktree task-list tasks')
+  const contextTask = tasks.find(task => task.id === value.taskId)
+  ensure(contextTask !== undefined, 'worktree task-list omitted the context Task')
+  equal(contextTask.status, 'dispatched', 'context Task status')
+  equal(contextTask.dispatchId, value.dispatchId, 'context Task Dispatch ID')
+  equal(contextTask.assigneeSessionId, value.assigneeSessionId, 'context Task assignee')
+  const workerTask = tasks.find(task => task.id === value.workerTaskId)
+  ensure(workerTask !== undefined, 'worktree task-list omitted the completed worker Task')
+  equal(workerTask.status, 'completed', 'worker Task status')
+
+  const workers = listObjects(object(value.workers, 'worktree worker-list result').workers, 'worktree worker-list workers')
+  const completed = workers.filter(worker => worker.workerState === 'succeeded')
+  const abandoned = workers.filter(worker => worker.workerState === 'abandoned')
+  equal(completed.length, 1, 'completed worker row count')
+  equal(abandoned.length, 1, 'abandoned worker row count')
+  const completedWorker = completed[0]!
+  equal(completedWorker.dispatchId, value.workerDispatchId, 'completed worker Dispatch ID')
+  equal(completedWorker.taskId, value.workerTaskId, 'worker Dispatch Task ID')
+  const cards = listObjects(object(value.dashboard, 'worktree dashboard').cards, 'worktree dashboard cards')
+  for (const [label, worker] of [['completed', completedWorker], ['abandoned', abandoned[0]!] ] as const) {
+    const resource = object(worker.resource, `${label} worker resource`)
+    equal(resource.worktreeId, value.worktreeId, `${label} worker resource worktree`)
+    const sessionId = nonEmptyText(resource.sessionId, `${label} worker resource session ID`)
+    const matchingCards = cards.filter(card => isObject(card.thread) && card.thread.sessionId === sessionId)
+    equal(matchingCards.length, 1, `${label} worker dashboard card count`)
+    const thread = object(matchingCards[0]!.thread, `${label} worker dashboard thread`)
+    equal(thread.worktreeId, value.worktreeId, `${label} worker dashboard worktree`)
+    ensure(!Object.hasOwn(thread, 'taskId') && !Object.hasOwn(thread, 'dispatchId'), `${label} dashboard card unexpectedly names a Task or Dispatch`)
+    ensure(!Object.hasOwn(resource, 'worktreePath') && !Object.hasOwn(resource, 'worktreeName'), `${label} worker resource unexpectedly names a worktree path or name`)
+  }
+
+  const correlation = {
+    worktreeToSession: true as const,
+    sessionToWorker: true as const,
+    taskToDispatch: true as const,
+    cardToTask: false as const,
+    worktreePath: false as const,
+    hostScope: false as const
+  }
+  return { correlation }
+}
+
+export function assertWorktreeSummaryEvidence(value: {
+  summary: unknown; worktrees: unknown; sessions: unknown; dashboard: unknown
+  runList: unknown; taskList: unknown; workers: unknown
+  worktreeId: string; runId: string; coordinatorSessionId: string
+  contextTaskId: string; contextDispatchId: string; assigneeSessionId: string
+  workerTaskId: string; completeDispatchId: string; stopDispatchId: string; abandonDispatchId: string
+}): {
+  worktreeId: string
+  metadataMatched: true
+  sessionsMatched: true
+  displaysMatched: true
+  runsMatched: true
+  tasksMatched: true
+  dispatchesMatched: true
+  workerStatesMatched: true
+  terminalStatesMatched: true
+  scope: 'local'
+} {
+  const summaryResult = object(value.summary, 'worktree summary result')
+  equal(summaryResult.scope, 'local', 'worktree summary scope')
+  const summaryRows = listObjects(summaryResult.rows, 'worktree summary rows')
+  const summaryMatches = summaryRows.filter(row => isObject(row.worktree) && row.worktree.id === value.worktreeId)
+  equal(summaryMatches.length, 1, 'worktree summary target row count')
+  const summaryRow = summaryMatches[0]!
+  const summaryWorktree = object(summaryRow.worktree, 'worktree summary metadata')
+
+  const worktreeRows = listObjects(value.worktrees, 'worktree-list result')
+  const worktreeMatches = worktreeRows.filter(worktree => worktree.id === value.worktreeId)
+  equal(worktreeMatches.length, 1, 'worktree-list target row count')
+  const listedWorktree = worktreeMatches[0]!
+  equal(nonEmptyText(summaryWorktree.id, 'summary worktree ID'), value.worktreeId, 'summary worktree ID')
+  for (const key of ['name', 'path', 'repoId'] as const) {
+    equal(nonEmptyText(summaryWorktree[key], `summary worktree ${key}`), nonEmptyText(listedWorktree[key], `worktree-list ${key}`), `summary worktree ${key}`)
+  }
+
+  const sessionRows = listObjects(value.sessions, 'session-list result')
+  const sessionsForWorktree = sessionRows.filter(session => stringField(session, 'worktreeId', 'session-list row') === value.worktreeId)
+  const listedSessions = new Map<string, ObjectValue>()
+  for (const session of sessionsForWorktree) {
+    const id = nonEmptyText(session.id, 'session-list session ID')
+    ensure(!listedSessions.has(id), `session-list repeated session ${id}`)
+    listedSessions.set(id, session)
+  }
+  const summarySessions = listObjects(summaryRow.sessions, 'worktree summary sessions')
+  const summarySessionsById = new Map<string, ObjectValue>()
+  for (const session of summarySessions) {
+    const id = nonEmptyText(session.id, 'summary session ID')
+    ensure(!summarySessionsById.has(id), `worktree summary repeated session ${id}`)
+    summarySessionsById.set(id, session)
+  }
+  equal([...summarySessionsById.keys()].sort(), [...listedSessions.keys()].sort(), 'summary session IDs')
+
+  const cards = listObjects(object(value.dashboard, 'worktree dashboard').cards, 'worktree dashboard cards')
+  for (const [id, session] of summarySessionsById) {
+    const listed = listedSessions.get(id)!
+    equal(stringField(session, 'agent', `summary session ${id}`), nonEmptyText(listed.agent, `session-list ${id} agent`), `session ${id} agent`)
+    const status = nonEmptyText(listed.status, `session-list ${id} status`)
+    equal(stringField(session, 'status', `summary session ${id}`), status, `session ${id} status`)
+    equal(field(session, 'live'), status !== 'exited', `session ${id} liveness`)
+    const matchingCards = cards.filter(card => isObject(card.thread) &&
+      card.thread.sessionId === id && card.thread.worktreeId === value.worktreeId)
+    ensure(matchingCards.length <= 1, `dashboard repeated session card ${id} for ${value.worktreeId}`)
+    if (matchingCards.length === 0) {
+      equal(field(session, 'display'), null, `session ${id} missing dashboard display`)
+    } else {
+      const thread = object(matchingCards[0]!.thread, `dashboard session ${id} thread`)
+      equal(field(session, 'display'), nonEmptyText(thread.display, `dashboard session ${id} display`), `session ${id} display`)
+    }
+  }
+
+  const taskList = object(value.taskList, 'worktree task-list result')
+  equal(taskList.runId, value.runId, 'summary task-list Run ID')
+  const taskRows = listObjects(taskList.tasks, 'worktree task-list tasks')
+  const workerList = object(value.workers, 'worktree worker-list result')
+  const workerScope = object(workerList.scope, 'worktree worker-list scope')
+  equal(workerScope.runId, value.runId, 'summary worker-list Run scope')
+  const workerRows = listObjects(workerList.workers, 'worktree worker-list workers')
+  const summaryDispatches = listObjects(summaryRow.dispatches, 'worktree summary dispatches')
+  const summaryDispatchesById = new Map<string, ObjectValue>()
+  for (const dispatch of summaryDispatches) {
+    const id = nonEmptyText(dispatch.id, 'summary Dispatch ID')
+    ensure(!summaryDispatchesById.has(id), `worktree summary repeated Dispatch ${id}`)
+    summaryDispatchesById.set(id, dispatch)
+  }
+
+  const expectedDispatches = [
+    value.contextDispatchId, value.completeDispatchId, value.stopDispatchId, value.abandonDispatchId
+  ]
+  const verifiedWorkerRows: ObjectValue[] = []
+  for (const dispatchId of expectedDispatches) {
+    const dispatch = summaryDispatchesById.get(dispatchId)
+    ensure(dispatch !== undefined, `worktree summary omitted Dispatch ${dispatchId}`)
+    const matches = workerRows.filter(worker => worker.dispatchId === dispatchId)
+    equal(matches.length, 1, `worker-list row count for ${dispatchId}`)
+    const worker = matches[0]!
+    equal(stringField(worker, 'dispatchId', `worker-list ${dispatchId}`), dispatchId, `${dispatchId} identity`)
+    equal(stringField(worker, 'runId', `worker-list ${dispatchId}`), value.runId, `${dispatchId} worker-list Run`)
+    equal(stringField(dispatch, 'runId', `summary ${dispatchId}`), stringField(worker, 'runId', `worker-list ${dispatchId}`), `${dispatchId} Run`)
+    const taskId = nonEmptyText(worker.taskId, `worker-list ${dispatchId} Task ID`)
+    equal(stringField(object(dispatch.task, `summary ${dispatchId} Task`), 'id', `summary ${dispatchId} Task`), taskId, `${dispatchId} Task ID`)
+    equal(stringField(dispatch, 'status', `summary ${dispatchId}`), nonEmptyText(worker.dispatchStatus, `worker-list ${dispatchId} status`), `${dispatchId} status`)
+    equal(field(dispatch, 'currentAssignment'), field(worker, 'currentAssignment'), `${dispatchId} current assignment`)
+    equal(field(dispatch, 'workerState'), field(worker, 'workerState'), `${dispatchId} worker state`)
+    equal(stringField(dispatch, 'terminalState', `summary ${dispatchId}`), nonEmptyText(worker.terminalState, `worker-list ${dispatchId} terminal state`), `${dispatchId} terminal state`)
+    const workerSessionId = field(worker, 'agentTerminalHandle')
+    equal(field(dispatch, 'workerSessionId'), workerSessionId, `${dispatchId} worker session`)
+    verifiedWorkerRows.push(worker)
+  }
+  equal(field(summaryDispatchesById.get(value.completeDispatchId)!, 'workerState'), 'succeeded', 'completed worker state')
+  equal(field(summaryDispatchesById.get(value.stopDispatchId)!, 'workerState'), 'stopped', 'stopped worker state')
+  equal(field(summaryDispatchesById.get(value.abandonDispatchId)!, 'workerState'), 'abandoned', 'abandoned worker state')
+  equal(field(summaryDispatchesById.get(value.contextDispatchId)!, 'workerState'), null, 'context Dispatch worker state')
+  equal(field(summaryDispatchesById.get(value.contextDispatchId)!, 'terminalState'), 'released', 'context Dispatch terminal state')
+
+  const compareTask = (taskId: string, dispatchId: string, checkAssignment: boolean): ObjectValue => {
+    const matches = taskRows.filter(task => task.id === taskId)
+    equal(matches.length, 1, `task-list row count for ${taskId}`)
+    const task = matches[0]!
+    const dispatch = summaryDispatchesById.get(dispatchId)!
+    equal(stringField(task, 'runId', `task-list ${taskId}`), value.runId, `${taskId} Run`)
+    const summaryTask = object(dispatch.task, `summary ${dispatchId} Task`)
+    equal(stringField(summaryTask, 'id', `summary ${dispatchId} Task`), taskId, `${dispatchId} Task identity`)
+    equal(stringField(summaryTask, 'title', `summary ${dispatchId} Task`), nonEmptyText(task.taskTitle, `task-list ${taskId} title`), `${taskId} title`)
+    equal(stringField(summaryTask, 'status', `summary ${dispatchId} Task`), nonEmptyText(task.status, `task-list ${taskId} status`), `${taskId} status`)
+    equal(field(dispatch, 'creatorSessionId'), field(task, 'createdBySessionId'), `${dispatchId} creator session`)
+    if (checkAssignment) {
+      equal(field(dispatch, 'assigneeSessionId'), field(task, 'assigneeSessionId'), `${dispatchId} assignee session`)
+      equal(field(task, 'dispatchId'), dispatchId, `${taskId} Dispatch association`)
+    }
+    return task
+  }
+  const contextTask = compareTask(value.contextTaskId, value.contextDispatchId, true)
+  equal(field(contextTask, 'assigneeSessionId'), value.assigneeSessionId, 'context Task assignee')
+  equal(field(contextTask, 'createdBySessionId'), value.coordinatorSessionId, 'context Task creator')
+  compareTask(value.workerTaskId, value.completeDispatchId, false)
+
+  const runRows = listObjects(object(value.runList, 'worktree run-list result').runs, 'worktree run-list runs')
+  const matchingRun = runRows.filter(run => run.id === value.runId)
+  equal(matchingRun.length, 1, 'summary run-list target count')
+  equal(field(matchingRun[0]!, 'coordinatorSessionId'), value.coordinatorSessionId, 'summary run-list coordinator')
+  ensure(summarySessionsById.has(value.coordinatorSessionId), 'summary omitted the current Run coordinator session')
+  const summaryRunIds = array(summaryRow.runIds, 'worktree summary Run IDs')
+    .map((runId, index) => nonEmptyText(runId, `worktree summary Run ID ${index}`))
+  ensure(new Set(summaryRunIds).size === summaryRunIds.length, 'worktree summary repeated a Run ID')
+  equal(summaryRunIds, [...summaryRunIds].sort(), 'worktree summary Run ID ordering')
+  ensure(summaryRunIds.includes(value.runId), 'worktree summary omitted the fixture Run')
+  const associatedRunIds = new Set<string>()
+  for (const run of runRows) {
+    const coordinator = field(run, 'coordinatorSessionId')
+    if (typeof coordinator === 'string' && summarySessionsById.has(coordinator)) {
+      associatedRunIds.add(nonEmptyText(run.id, 'worktree run-list Run ID'))
+    }
+  }
+  for (const task of taskRows) {
+    const creator = field(task, 'createdBySessionId')
+    if (typeof creator === 'string' && summarySessionsById.has(creator)) {
+      associatedRunIds.add(nonEmptyText(task.runId, 'worktree task-list Run ID'))
+    }
+  }
+  for (const worker of verifiedWorkerRows) associatedRunIds.add(nonEmptyText(worker.runId, 'worktree worker-list Run ID'))
+  for (const runId of associatedRunIds) {
+    ensure(summaryRunIds.includes(runId), `worktree summary omitted associated Run ${runId}`)
+  }
+  for (const runId of summaryRunIds) {
+    ensure(associatedRunIds.has(runId), `worktree summary included unrelated Run ${runId}`)
+    equal(runRows.filter(run => run.id === runId).length, 1, `run-list row count for ${runId}`)
+  }
+
+  return {
+    worktreeId: value.worktreeId,
+    metadataMatched: true,
+    sessionsMatched: true,
+    displaysMatched: true,
+    runsMatched: true,
+    tasksMatched: true,
+    dispatchesMatched: true,
+    workerStatesMatched: true,
+    terminalStatesMatched: true,
+    scope: 'local'
+  }
+}
+
+function stateString(context: CliCheckContext, key: string): string {
+  return nonEmptyText(context.state[key], `check state.${key}`)
+}
+
+async function productCall(context: CliCheckContext, id: string, argv: string[], checkId = id): Promise<unknown> {
+  context.check(checkId)
+  return context.call(id, argv, 'json')
+}
+
+async function productRefusal(context: CliCheckContext, id: string, argv: string[], checkId: string): Promise<{ code: string; message: string; data?: unknown }> {
+  context.check(checkId)
+  return context.refuse(id, argv)
+}
+
+function actorResult(receipt: CliActorReceipt, label = receipt.id): ObjectValue {
+  equal(receipt.exitCode, 0, `${label} actor exit code`)
+  return object(parseJson(receipt.stdout, `${label} actor result`), `${label} actor result`)
+}
+
+function actorReceipt(receipts: readonly CliActorReceipt[], id: string): CliActorReceipt {
+  const matches = receipts.filter(receipt => receipt.id === id)
+  equal(matches.length, 1, `actor receipt ${id} count`)
+  return matches[0]!
+}
+
+function actorArgument(receipt: CliActorReceipt, flag: string): string {
+  const index = receipt.argv.indexOf(flag)
+  ensure(index >= 0 && typeof receipt.argv[index + 1] === 'string', `actor receipt ${receipt.id} omitted ${flag}`)
+  return receipt.argv[index + 1]!
+}
+
+function coordinatorRun(receipt: CliActorReceipt, runId: string): ObjectValue {
+  const result = actorResult(receipt, 'coordinator run result')
+  const runs = listObjects(result.runs, 'coordinator run-list runs')
+  const matches = runs.filter(run => run.objective === 'cli-parity-objective')
+  equal(matches.length, 1, 'coordinator objective Run count')
+  equal(matches[0]!.id, runId, 'coordinator selected Run ID')
+  return matches[0]!
+}
+
+function assertCoordinatorWorkspace(value: unknown, worktreeId: string, identity: TerminalPane, label: string): void {
+  const workspace = object(value, label)
+  equal(nonEmptyText(workspace.id, `${label} ID`), worktreeId, `${label} ID`)
+  let claimedTab: ObjectValue | undefined
+  let tabCount = 0
+  const visitGroup = (value: unknown): void => {
+    const node = object(value, `${label} group`)
+    if (node.kind === 'split') {
+      visitGroup(node.first)
+      visitGroup(node.second)
+      return
+    }
+    equal(node.kind, 'group', `${label} group kind`)
+    for (const tab of array(node.tabs, `${label} tabs`)) {
+      if (isObject(tab) && tab.id === identity.tabId) {
+        claimedTab = tab
+        tabCount++
+      }
+    }
+  }
+  visitGroup(workspace.root)
+  equal(tabCount, 1, `${label} claimed tab count`)
+  ensure(claimedTab !== undefined && claimedTab.kind !== 'view', `${label} claimed tab must be a terminal`)
+  let paneCount = 0
+  const visitPane = (value: unknown): void => {
+    const node = object(value, `${label} pane`)
+    if (node.kind === 'split') {
+      visitPane(node.first)
+      visitPane(node.second)
+      return
+    }
+    equal(node.kind, 'pane', `${label} pane kind`)
+    paneCount++
+    equal(node.id, identity.paneId, `${label} pane ID`)
+    equal(node.session, identity.sessionId, `${label} session ID`)
+  }
+  visitPane(claimedTab.root)
+  equal(paneCount, 1, `${label} claimed terminal pane count`)
+}
+
+export function assertCoordinatorTerminalEvidence(value: {
+  creation: unknown;
+  layout: unknown;
+  worktreeId: string;
+  baselineTabIds: readonly string[];
+}): { tabId: string; paneId: string; sessionId: string } {
+  const creation = object(value.creation, 'coordinator terminal creation')
+  const identity = {
+    tabId: nonEmptyText(creation.tab, 'coordinator terminal creation tab'),
+    paneId: nonEmptyText(creation.pane, 'coordinator terminal creation pane'),
+    sessionId: nonEmptyText(creation.session, 'coordinator terminal creation session')
+  }
+  ensure(!value.baselineTabIds.includes(identity.tabId), 'coordinator terminal creation reused a baseline tab')
+  assertCoordinatorWorkspace(creation.workspace, value.worktreeId, identity, 'coordinator terminal creation workspace')
+  assertCoordinatorWorkspace(value.layout, value.worktreeId, identity, 'coordinator terminal layout')
+  return identity
+}
+
+function tabIds(value: unknown, label: string): string[] {
+  const found = new Set<string>()
+  const visit = (current: unknown): void => {
+    if (Array.isArray(current)) {
+      current.forEach(visit)
+      return
+    }
+    if (!isObject(current)) return
+    if (Array.isArray(current.tabs)) {
+      for (const tab of current.tabs) {
+        if (isObject(tab) && typeof tab.id === 'string') found.add(tab.id)
+        visit(tab)
+      }
+    }
+    for (const [key, child] of Object.entries(current)) if (key !== 'tabs') visit(child)
+  }
+  visit(value)
+  if (!isObject(value)) throw new Error(`${label} must be an object`)
+  return [...found]
+}
+
+
+function phaseFixedIds(ids: readonly string[]): string[] {
+  return ids.filter(id => !id.includes('poll'))
+}
+
+function assertPhaseReceipts(receipts: readonly CliActorReceipt[], expectedIds: readonly string[], label: string): void {
+  const present = new Set(receipts.map(receipt => receipt.id))
+  const missing = phaseFixedIds(expectedIds).filter(id => !present.has(id))
+  if (missing.length > 0) throw new Error(`${label} omitted actor receipts: ${missing.join(', ')}`)
+}
+
+function readStore(store: CliActorReceiptStore): CliActorReceipt[] {
+  try {
+    return store.read()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('manifest is unavailable') || message.includes('ENOENT')) return []
+    throw error
+  }
+}
+function importAvailableActorReceipts(context: CliCheckContext, receipts: readonly CliActorReceipt[], imported: Set<string>): void {
+  const current = receipts.filter(receipt => !imported.has(receipt.id))
+  for (const receipt of current) {
+    if (receipt.id === 'workers-reply-mismatch') context.importActorRefusal(receipt)
+    else context.importActor([receipt])
+    imported.add(receipt.id)
+  }
+}
+
+function availableWorkerReceipts(actorRoot: string): CliActorReceipt[] {
+  const sessionsRoot = join(actorRoot, 'sessions')
+  if (!existsSync(sessionsRoot)) return []
+  const receipts: CliActorReceipt[] = []
+  for (const entry of readdirSync(sessionsRoot, { withFileTypes: true })) {
+    if (entry.isDirectory()) receipts.push(...readStore(createActorReceiptStore(join(sessionsRoot, entry.name))))
+  }
+  return receipts
+}
+
+function actorReceiptCheckId(receiptId: string, fallback: string): string {
+  if ((WORKER_CHECK_IDS as readonly string[]).includes(receiptId)) return receiptId
+  if (/^workers-question-poll-\d+$/.test(receiptId)) return 'workers-ask'
+  if (/^workers-complete-poll-\d+$/.test(receiptId)) return 'workers-done'
+  switch (receiptId) {
+    case 'workers-run-list':
+      return 'workers-run-use'
+    case 'workers-target':
+    case 'workers-context-task':
+      return 'workers-dispatch'
+    case 'workers-request-absent':
+      return 'workers-request-show'
+    case 'workers-stop-repeat':
+      return 'workers-stop'
+    case 'workers-abandon-show':
+    case 'workers-close-abandoned':
+      return 'workers-abandon'
+    case 'workers-release-repeat':
+    case 'workers-read-archived':
+    case 'workers-release-abandoned':
+    case 'workers-close-target':
+      return 'workers-release'
+    case 'workers-reset-messages-readback':
+      return 'workers-reset-messages'
+    case 'workers-reset-all-readback':
+      return 'workers-reset-all'
+    default:
+      return fallback
+  }
+}
+
+function phaseFailureReceiptId(
+  receipts: readonly CliActorReceipt[], expectedIds: readonly string[], errorFile: string, fallback: string
+): string {
+  if (existsSync(errorFile)) {
+    try {
+      const failure = JSON.parse(readFileSync(errorFile, 'utf8')) as unknown
+      if (isObject(failure) && typeof failure.failedReceipt === 'string') {
+        return actorReceiptCheckId(failure.failedReceipt, fallback)
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error
+    }
+  }
+  const failed = receipts.find(receipt => receipt.exitCode !== 0 && receipt.id !== 'workers-reply-mismatch')
+  if (failed) return actorReceiptCheckId(failed.id, fallback)
+  const present = new Set(receipts.map(receipt => receipt.id))
+  const missing = phaseFixedIds(expectedIds).find(id => !present.has(id))
+  return missing === undefined ? fallback : actorReceiptCheckId(missing, fallback)
+}
+
+function terminalText(value: unknown, label: string): string {
+  const result = object(value, label)
+  if (typeof result.text === 'string') return result.text
+  if (Array.isArray(result.lines) && result.lines.every(line => typeof line === 'string')) return result.lines.join('\n')
+  if (typeof result.content === 'string') return result.content
+  throw new Error(`${label} did not contain terminal text`)
+}
+
+async function waitForWorkerCompletionViewport(context: CliCheckContext, sessionId: string, dispatchId: string): Promise<unknown> {
+  const marker = `CLI-PARITY-WORKER-DONE:${dispatchId}`
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    context.check('workers-read-live')
+    const viewport = await productCall(context, `workers-read-viewport-poll-${randomUUID()}`, [
+      'api', 'call', 'quirky.terminal/read', '--session', sessionId, '--lines', '0'
+    ], 'workers-read-live')
+    if (terminalText(viewport, 'worker-read viewport').replace(/[\r\n]/g, '').includes(marker)) return viewport
+    const remaining = deadline - Date.now()
+    if (remaining > 0) await Bun.sleep(Math.min(100, remaining))
+  }
+  throw new Error(`Timed out waiting for visible worker completion marker ${marker}`)
+}
+
+function actorError(path: string, home: string, token: string): string | undefined {
+  if (!existsSync(path)) return undefined
+  let content: string
+  try {
+    content = readFileSync(path, 'utf8')
+  } catch (error) {
+    return `coordinator error file could not be read: ${error instanceof Error ? error.message : String(error)}`
+  }
+  const redacted = content.replaceAll(home, '<cli-home>')
+  return token.length === 0 ? redacted : redacted.replaceAll(token, '<redacted>')
+}
+
+async function waitForCoordinatorPhase(
+  context: CliCheckContext,
+  store: CliActorReceiptStore,
+  expectedIds: readonly string[],
+  sessionId: string,
+  errorFile: string,
+  marker: string,
+  label: string,
+  timeoutMs: number,
+  checkId: string
+): Promise<CliActorReceipt[]> {
+  const deadline = Date.now() + timeoutMs
+  const phaseId = label.replaceAll(' ', '-')
+  let statusAt = 0
+  let readAt = 0
+  let attempt = 0
+  while (Date.now() < deadline) {
+    context.check(checkId)
+    const actorFailure = actorError(errorFile, context.world.home, context.world.env.QUIRKY_SESSION_TOKEN ?? '')
+    if (actorFailure !== undefined) throw new Error(`${label} failed: ${actorFailure}`)
+    const receipts = readStore(store)
+    const fixedIds = phaseFixedIds(expectedIds)
+    const present = new Set(receipts.map(receipt => receipt.id))
+    const ready = fixedIds.every(id => present.has(id))
+    const now = Date.now()
+    if (ready && now >= readAt) {
+      const value = await productCall(context, `${checkId}-${phaseId}-terminal-${++attempt}`, ['terminal', 'read', sessionId, '--lines', '200'], checkId)
+      if (terminalText(value, `${label} terminal read`).includes(marker)) {
+        assertPhaseReceipts(receipts, expectedIds, label)
+        if (label === 'coordinator phase 1') {
+          ensure(receipts.some(receipt => /^workers-question-poll-\d+$/.test(receipt.id)), 'coordinator phase 1 omitted question polling receipts')
+          ensure(receipts.some(receipt => /^workers-complete-poll-\d+$/.test(receipt.id)), 'coordinator phase 1 omitted completion polling receipts')
+        }
+        return receipts
+      }
+      readAt = now + 250
+    }
+    if (now >= statusAt) {
+      const status = object(await productCall(context, `${checkId}-${phaseId}-session-${++attempt}`, ['session', 'get', sessionId], checkId), `${label} coordinator session`)
+      if (status.status === 'exited') throw new Error(`${label} coordinator session exited before ${marker}`)
+      statusAt = now + 1_000
+    }
+    await Bun.sleep(100)
+  }
+  const latest = readStore(store)
+  const present = new Set(latest.map(receipt => receipt.id))
+  const missing = phaseFixedIds(expectedIds).filter(id => !present.has(id))
+  throw new Error(`Timed out waiting for ${label}${missing.length === 0 ? '' : `; missing receipts ${missing.join(', ')}`}`)
+}
+
+function importCoordinatorReceipts(
+  context: CliCheckContext,
+  receipts: readonly CliActorReceipt[],
+  phaseIds: readonly string[],
+  imported: Set<string>
+): void {
+  assertPhaseReceipts(receipts, phaseIds, 'coordinator phase 2')
+  const expected = new Set(phaseFixedIds(phaseIds))
+  importAvailableActorReceipts(context, receipts.filter(receipt => expected.has(receipt.id)), imported)
+}
+
+
+
+function requiredActorResult(receipts: readonly CliActorReceipt[], id: string): ObjectValue {
+  return actorResult(actorReceipt(receipts, id))
+}
+
+function proveWorkerStart(context: CliCheckContext, id: string, start: ObjectValue): void {
+  context.check(id)
+  context.prove(id, {
+    dispatchId: start.dispatchId,
+    runId: start.runId,
+    state: start.state,
+    agent: object(object(start.launch, `${id} launch`).effective, `${id} launch.effective`).agent,
+    mode: object(start.mode, `${id} mode`).mode
+  })
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitForWorkerReceipts(
+  context: CliCheckContext,
+  store: CliActorReceiptStore,
+  requiredIds: readonly string[],
+  checkId: string,
+  timeoutMs: number
+): Promise<CliActorReceipt[]> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    context.check(checkId)
+    const receipts = readStore(store)
+    const present = new Set(receipts.map(receipt => receipt.id))
+    if (requiredIds.every(id => present.has(id))) return receipts
+    await Bun.sleep(100)
+  }
+  const receipts = readStore(store)
+  const present = new Set(receipts.map(receipt => receipt.id))
+  const missing = requiredIds.filter(id => !present.has(id))
+  throw new Error(`Timed out waiting for worker receipts: ${missing.join(', ')}`)
+}
+
+export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
+  const { world } = context
+  const worktreeId = stateString(context, 'worktreeId')
+  const actorSessionId = stateString(context, 'actorSessionId')
+  const runId = stateString(context, 'actorRunId')
+  const actorRoot = world.paths.workerActorRoot
+  const coordinatorDirectory = join(actorRoot, 'coordinator')
+  const coordinatorError = join(coordinatorDirectory, 'error.json')
+  const coordinatorStore = createActorReceiptStore(coordinatorDirectory)
+  const importedCoordinatorIds = new Set<string>()
+
+  const baselineLayout = await productCall(context, 'workers-terminal-layout-before', ['terminal', 'layout', '--worktree', worktreeId], 'workers-run-use')
+  const baselineTabs = tabIds(baselineLayout, 'terminal layout before coordinator')
+  context.state.workersTerminalBaseline = baselineTabs
+  context.state.workersTerminalCreationStarted = true
+  const creation = await productCall(context, 'workers-coordinator-tab-create', [
+    'terminal', 'tab', 'new', '--worktree', worktreeId, '--agent', 'shell', '--command', world.paths.coordinatorCommand,
+    '--title', 'cli-parity-coordinator'
+  ], 'workers-run-use')
+  const createdLayout = await productCall(context, 'workers-coordinator-tab-layout', ['terminal', 'layout', '--worktree', worktreeId], 'workers-run-use')
+  const coordinatorPane = assertCoordinatorTerminalEvidence({
+    creation, layout: createdLayout, worktreeId, baselineTabIds: baselineTabs
+  })
+  context.prove('workers-coordinator-tab-layout', { worktreeId, ...coordinatorPane, creationMatched: true })
+  const coordinatorSessionId = coordinatorPane.sessionId
+  context.state.workersCoordinatorTabId = coordinatorPane.tabId
+  context.state.workersCoordinatorSessionId = coordinatorSessionId
+
+  let coordinatorReceipts: CliActorReceipt[]
+  try {
+    coordinatorReceipts = await waitForCoordinatorPhase(
+      context, coordinatorStore, COORDINATOR_PHASE_ONE_IDS, coordinatorSessionId, coordinatorError,
+      'CLI-COORDINATOR-PHASE-1', 'coordinator phase 1', 150_000, 'workers-run-use'
+    )
+  } catch (error) {
+    const partialReceipts = readStore(coordinatorStore)
+    importAvailableActorReceipts(context, partialReceipts, importedCoordinatorIds)
+    importAvailableActorReceipts(context, availableWorkerReceipts(actorRoot), new Set())
+    context.check(phaseFailureReceiptId(partialReceipts, COORDINATOR_PHASE_ONE_IDS, coordinatorError, 'workers-run-use'))
+    throw error
+  }
+  context.check('workers-run-use')
+  importAvailableActorReceipts(context, coordinatorReceipts, importedCoordinatorIds)
+  const coordinatorRunList = actorReceipt(coordinatorReceipts, 'workers-run-list')
+  coordinatorRun(coordinatorRunList, runId)
+  const targetReceipt = actorReceipt(coordinatorReceipts, 'workers-target')
+  const targetResult = actorResult(targetReceipt, 'coordinator target session')
+  const target = object(targetResult.session ?? targetResult, 'coordinator target session result')
+  const targetSessionId = nonEmptyText(target.id, 'coordinator target session ID')
+  equal(target.worktreeId, worktreeId, 'coordinator target worktree')
+  const taskReceipt = actorReceipt(coordinatorReceipts, 'workers-context-task')
+  const taskResult = actorResult(taskReceipt, 'context Task create')
+  const contextTask = object(taskResult.task ?? taskResult, 'context Task create result')
+  const contextTaskId = nonEmptyText(contextTask.id, 'context Task ID')
+  const contextDispatchReceipt = actorReceipt(coordinatorReceipts, 'workers-dispatch')
+  const contextDispatchId = nonEmptyText(object(actorResult(contextDispatchReceipt, 'context Dispatch create').dispatch, 'context Dispatch result.dispatch').id, 'context Dispatch ID')
+  const startComplete = requiredActorResult(coordinatorReceipts, 'workers-start-complete')
+  const startStop = requiredActorResult(coordinatorReceipts, 'workers-start-stop')
+  const startAbandon = requiredActorResult(coordinatorReceipts, 'workers-start-abandon')
+  const dispatchIds = assertWorkerStartEvidence([startComplete, startStop, startAbandon], runId, readFileSync(world.paths.claudeWorkerLog, 'utf8'))
+  const [completeDispatchId, stopDispatchId, abandonDispatchId] = dispatchIds as [string, string, string]
+  const taskWorkerId = nonEmptyText(startComplete.taskId, 'completion worker Task ID')
+  const controllerShowComplete = object(await productCall(context, 'workers-show', ['orchestration', 'worker-show', '--dispatch', completeDispatchId], 'workers-show'), 'completed controller worker-show')
+  const completionSessionId = nonEmptyText(object(controllerShowComplete.worker, 'completed controller worker-show worker').sessionId, 'completed worker session ID')
+  const questionWorkerStore = createActorReceiptStore(join(actorRoot, 'sessions', completionSessionId))
+  let questionWorkerReceipts: CliActorReceipt[]
+  try {
+    questionWorkerReceipts = await waitForWorkerReceipts(context, questionWorkerStore, ['workers-ask', 'workers-done'], 'workers-show', 20_000)
+  } catch (error) {
+    const partialReceipts = readStore(questionWorkerStore)
+    importAvailableActorReceipts(context, partialReceipts, new Set())
+    context.check(phaseFailureReceiptId(partialReceipts, ['workers-ask', 'workers-done'], '', 'workers-ask'))
+    throw error
+  }
+  importAvailableActorReceipts(context, questionWorkerReceipts, new Set())
+
+  const askReceipt = actorReceipt(questionWorkerReceipts, 'workers-ask')
+  const askResult = actorResult(askReceipt, 'worker ask')
+  const messageId = nonEmptyText(askResult.messageId, 'worker question message ID')
+  const replyReceipt = actorReceipt(coordinatorReceipts, 'workers-reply')
+  const replayReceipt = actorReceipt(coordinatorReceipts, 'workers-reply-replay')
+  const mismatchReceipt = actorReceipt(coordinatorReceipts, 'workers-reply-mismatch')
+  const requestId = actorArgument(replyReceipt, '--retry-request')
+  const absentRequestId = actorArgument(actorReceipt(coordinatorReceipts, 'workers-request-absent'), '--request')
+  const requestResult = requiredActorResult(coordinatorReceipts, 'workers-request-show')
+  const absentRequest = requiredActorResult(coordinatorReceipts, 'workers-request-absent')
+  const refusalEnvelope = object(parseJson(mismatchReceipt.stdout, 'reply mismatch refusal'), 'reply mismatch refusal')
+  const refusalError = object(refusalEnvelope.error, 'reply mismatch error')
+  const mismatch = {
+    code: stringField(refusalError, 'code', 'reply mismatch error'),
+    message: stringField(refusalError, 'message', 'reply mismatch error')
+  }
+  const requestReadback = await productCall(context, 'workers-request-show-readback', ['orchestration', 'request-show', '--request', requestId], 'workers-request-show')
+  const askAndReply = assertQuestionReplyEvidence({
+    messageId, requestId, absentRequestId,
+    ask: askResult, reply: actorResult(replyReceipt, 'coordinator reply'), replay: actorResult(replayReceipt, 'coordinator reply replay'),
+    mismatch, request: requestResult, absent: absentRequest, readback: requestReadback
+  })
+
+  const priorActorReceipts = readActorReceipts(world.home)
+  const priorRunShow = actorResult(actorReceipt(priorActorReceipts, 'actor-run-show'), 'original actor run-show')
+  const priorRun = object(priorRunShow.run, 'original actor run-show result.run')
+  equal(priorRun.id, runId, 'original actor Run ID')
+  equal(priorRun.coordinatorSessionId, actorSessionId, 'original actor Run coordinator')
+  const beforeGeneration = priorRun.consumerGeneration
+  ensure(typeof beforeGeneration === 'number' && Number.isInteger(beforeGeneration), 'original actor consumer generation must be an integer')
+  const runUseReceipt = actorReceipt(coordinatorReceipts, 'workers-run-use')
+  const runUseResult = actorResult(runUseReceipt, 'coordinator run-use')
+  const runUseRun = object(runUseResult.run, 'coordinator run-use result.run')
+  const unauthorizedRunUse = await productRefusal(context, 'workers-run-use-controller', ['orchestration', 'run-use', '--id', runId], 'workers-run-use')
+  const runUseEvidence = assertRunUseEvidence({
+    runId, coordinatorSessionId, beforeGeneration, run: runUseRun, controllerRefusal: unauthorizedRunUse
+  })
+
+  context.check('workers-run-use')
+  context.prove('workers-run-use', runUseEvidence)
+  const dryRun = actorResult(actorReceipt(coordinatorReceipts, 'workers-dispatch-dry-run'), 'dispatch dry-run')
+  const dispatchResult = actorResult(contextDispatchReceipt, 'context Dispatch create')
+  const dispatchShow = actorResult(actorReceipt(coordinatorReceipts, 'workers-dispatch-show'), 'context dispatch-show')
+  const readback = await productCall(context, 'workers-dispatch-show-readback', ['orchestration', 'dispatch-show', '--task', contextTaskId], 'workers-dispatch-show')
+  const dispatchEvidence = assertDispatchEvidence({ taskId: contextTaskId, dryRun, dispatch: dispatchResult, dispatchShow, readback })
+  context.check('workers-dispatch-dry-run')
+  context.check('workers-dispatch')
+  context.prove('workers-dispatch-dry-run', { dryRun: true, dispatch: null, preambleContainsTask: true })
+  context.prove('workers-dispatch', { dispatchId: dispatchEvidence.dispatchId, taskId: dispatchEvidence.taskId, assigneeSessionId: dispatchEvidence.assigneeSessionId, status: 'dispatched' })
+  context.prove('workers-dispatch-show', { dispatchId: dispatchEvidence.dispatchId, worker: null, preamble: true, readback: true })
+
+  proveWorkerStart(context, 'workers-start-complete', startComplete)
+  proveWorkerStart(context, 'workers-start-stop', startStop)
+  context.check('workers-start-abandon')
+  context.prove('workers-start-abandon', { ...startEvidence(startAbandon), workerLog: readFileSync(world.paths.claudeWorkerLog, 'utf8') })
+
+  const doneReceipt = actorReceipt(questionWorkerReceipts, 'workers-done')
+  assertWorkerCompletion({ receipt: doneReceipt, show: controllerShowComplete, dispatchId: completeDispatchId })
+  const completedTerminal = object(controllerShowComplete.terminal, 'completed worker public terminal')
+  equal(completedTerminal.id, completionSessionId, 'completed worker public terminal ID')
+  ensure(completedTerminal.providerSession === null || completedTerminal.providerSession === undefined, 'completed worker public terminal unexpectedly reported a provider session')
+  context.check('workers-ask')
+  context.check('workers-reply')
+  context.check('workers-reply-replay')
+  context.check('workers-request-show')
+  context.check('workers-done')
+  context.prove('workers-show', { dispatchId: completeDispatchId, workerState: 'succeeded', dispatchStatus: 'completed' })
+  context.prove('workers-ask', { state: 'answered', answer: 'cli-parity-answer', messageId })
+  context.prove('workers-reply', { kind: 'question_answer', messageId, duplicate: false, replayed: false })
+  context.prove('workers-reply-replay', askAndReply)
+  context.prove('workers-request-show', { requestId, state: 'completed', absentRequestId, absentState: 'absent', controllerReadback: 'completed' })
+  context.prove('workers-done', { dispatchId: completeDispatchId, exitCode: doneReceipt.exitCode, workerState: 'succeeded', dispatchStatus: 'completed' })
+
+  const stopReceipt = actorReceipt(coordinatorReceipts, 'workers-stop')
+  const stopRepeat = actorReceipt(coordinatorReceipts, 'workers-stop-repeat')
+  const stopResult = actorResult(stopReceipt, 'worker-stop')
+  const stopRepeatResult = actorResult(stopRepeat, 'worker-stop repeat')
+  const stoppedShow = object(await productCall(context, 'workers-show-stopped', ['orchestration', 'worker-show', '--dispatch', stopDispatchId], 'workers-stop'), 'stopped worker-show')
+  const stopSessions = await productCall(context, 'workers-stop-pty', ['terminal', 'sessions'], 'workers-stop')
+  const unauthorizedStop = await productRefusal(context, 'workers-unauthorized-stop', ['orchestration', 'worker-stop', '--dispatch', abandonDispatchId], 'workers-stop')
+  const stopSessionId = nonEmptyText(object(stoppedShow.worker, 'stopped worker-show worker').sessionId, 'stopped worker session ID')
+  const stopEvidence = assertWorkerStopEvidence({
+    sessionId: stopSessionId, stop: stopResult, repeat: stopRepeatResult, show: stoppedShow,
+    terminalSessions: stopSessions, unauthorized: unauthorizedStop
+  })
+  context.prove('workers-stop', stopEvidence)
+
+  const retainResult = actorResult(actorReceipt(coordinatorReceipts, 'workers-retain'), 'worker-retain')
+  assertWorkerRetain(retainResult)
+  context.check('workers-retain')
+  context.prove('workers-retain', { state: 'retained', processAction: 'none' })
+
+  const abandonedShowReceipt = actorReceipt(coordinatorReceipts, 'workers-abandon-show')
+  const abandonedShow = actorResult(abandonedShowReceipt, 'coordinator abandoned worker-show')
+  const controllerShowAbandoned = await productCall(context, 'workers-show-abandoned', ['orchestration', 'worker-show', '--dispatch', abandonDispatchId], 'workers-abandon')
+  const abandonedTerminal = object(abandonedShow.terminal, 'coordinator abandoned worker-show terminal')
+  const abandonSessionId = nonEmptyText(abandonedTerminal.id, 'abandoned worker session ID')
+  const abandonSessions = await productCall(context, 'workers-abandon-pty', ['terminal', 'sessions'], 'workers-abandon')
+  const abandonSession = terminalSessions(abandonSessions, 'abandoned worker sessions').find(session => session.sessionId === abandonSessionId)
+  ensure(abandonSession !== undefined && typeof abandonSession.pid === 'number', 'abandoned worker terminal PID was not returned')
+  const abandonPidAlive = pidIsAlive(abandonSession.pid as number)
+  const abandonReceipt = actorReceipt(coordinatorReceipts, 'workers-abandon')
+
+  const listResult = await productCall(context, 'workers-list', ['orchestration', 'worker-list', '--run', runId], 'workers-list')
+  const listEvidence = assertWorkerListEvidence({
+    list: listResult, runId, worktreeId,
+    dispatchIds: [completeDispatchId, stopDispatchId, abandonDispatchId], contextDispatchId
+  })
+  context.prove('workers-list', listEvidence)
+
+  const dashboard = await productCall(context, 'workers-ps-dashboard', ['agent-status', 'dashboard', '--show-idle'], 'workers-ps-dashboard')
+  assertWorktreeDashboardEvidence({ dashboard, worktreeId, sessionIds: [completionSessionId, abandonSessionId] })
+  context.prove('workers-ps-dashboard', { worktreeId, sessionIds: [completionSessionId, abandonSessionId] })
+
+  const runList = await productCall(context, 'workers-ps-runs', ['orchestration', 'run-list'], 'workers-ps-runs')
+  assertWorktreeRunEvidence({ runList, runId, coordinatorSessionId })
+  context.prove('workers-ps-runs', { runId, coordinatorSessionId })
+
+  const taskList = await productCall(context, 'workers-ps-tasks', ['orchestration', 'task-list', '--run', runId], 'workers-ps-tasks')
+  const correlation = assertWorktreeTaskEvidence({
+    taskList, workers: listResult, dashboard, runId, worktreeId,
+    taskId: contextTaskId, dispatchId: contextDispatchId, assigneeSessionId: targetSessionId,
+    workerTaskId: taskWorkerId, workerDispatchId: completeDispatchId
+  })
+  context.prove('workers-ps-tasks', correlation)
+  const viewport = await waitForWorkerCompletionViewport(context, completionSessionId, completeDispatchId)
+  const history = await productCall(context, 'workers-read-history', [
+    'terminal', 'history', completionSessionId, '--lines', '1024'
+  ], 'workers-read-live')
+  const automaticRead = await productCall(context, 'workers-read-live', [
+    'orchestration', 'worker-read', '--dispatch', completeDispatchId
+  ], 'workers-read-live')
+  const terminalRead = await productCall(context, 'workers-read-terminal', [
+    'orchestration', 'worker-read', '--dispatch', completeDispatchId, '--source', 'terminal'
+  ], 'workers-read-terminal')
+  assertWorkerReadLive({
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    viewport, history, automatic: automaticRead, terminal: terminalRead
+  })
+  const liveReadIdentity = {
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    source: 'terminal', archived: false, sourceExact: true,
+    completionMarker: true, viewportMarker: true, historyPageMarker: false
+  }
+  context.check('workers-read-live')
+  context.prove('workers-read-live', {
+    ...liveReadIdentity, fallbackReason: 'session_not_reported', contentComplete: false
+  })
+  context.check('workers-read-terminal')
+  context.prove('workers-read-terminal', {
+    ...liveReadIdentity, fallbackReason: null, contentComplete: true
+  })
+
+  const summary = await productCall(context, 'workers-ps-summary', ['orchestration', 'ps', '--limit', '100'], 'workers-ps-summary')
+  const worktrees = await context.call('workers-ps-worktrees', ['worktree', 'list'], 'json')
+  const sessions = await context.call('workers-ps-sessions', ['session', 'list'], 'json')
+  const summaryEvidence = assertWorktreeSummaryEvidence({
+    summary, worktrees, sessions, dashboard, runList, taskList, workers: listResult,
+    worktreeId, runId, coordinatorSessionId,
+    contextTaskId, contextDispatchId, assigneeSessionId: targetSessionId,
+    workerTaskId: taskWorkerId, completeDispatchId, stopDispatchId, abandonDispatchId
+  })
+  context.prove('workers-ps-summary', summaryEvidence)
+
+  const messagesRefusal = await productRefusal(context, 'workers-unauthorized-reset', ['orchestration', 'reset', '--messages', '--yes'], 'workers-reset-messages')
+  const releaseTrigger = await productCall(context, 'workers-release-trigger', ['terminal', 'send', coordinatorSessionId, 'cli-parity-release', '--enter'], 'workers-ps-tasks')
+  object(releaseTrigger, 'coordinator phase release trigger')
+
+  let phaseTwoReceipts: CliActorReceipt[]
+  try {
+    phaseTwoReceipts = await waitForCoordinatorPhase(
+      context, coordinatorStore, COORDINATOR_PHASE_TWO_IDS, coordinatorSessionId, coordinatorError,
+      'CLI-COORDINATOR-DONE', 'coordinator phase 2', 60_000, 'workers-release'
+    )
+  } catch (error) {
+    const partialReceipts = readStore(coordinatorStore)
+    importAvailableActorReceipts(context, partialReceipts, importedCoordinatorIds)
+    context.check(phaseFailureReceiptId(partialReceipts, COORDINATOR_PHASE_TWO_IDS, coordinatorError, 'workers-release'))
+    throw error
+  }
+  importCoordinatorReceipts(context, phaseTwoReceipts, COORDINATOR_PHASE_TWO_IDS, importedCoordinatorIds)
+
+  const releaseResult = requiredActorResult(phaseTwoReceipts, 'workers-release')
+  const releaseRepeat = requiredActorResult(phaseTwoReceipts, 'workers-release-repeat')
+  const releaseAbandoned = requiredActorResult(phaseTwoReceipts, 'workers-release-abandoned')
+  context.check('workers-release')
+  const archivedRead = requiredActorResult(phaseTwoReceipts, 'workers-read-archived')
+  assertWorkerReadArchived(archivedRead, completeDispatchId)
+  equal(archivedRead.dispatchId, completeDispatchId, 'archived worker-read Dispatch ID')
+  equal(archivedRead.sessionId, completionSessionId, 'archived worker-read session ID')
+  equal(archivedRead.source, 'terminal', 'archived worker-read source')
+  equal(archivedRead.sourceExact, true, 'archived worker-read exact source')
+  context.check('workers-read-archived')
+  context.prove('workers-read-archived', {
+    dispatchId: completeDispatchId, sessionId: completionSessionId,
+    source: 'terminal', archived: true, sourceExact: true, completionMarker: true
+  })
+  const releaseSessions = await productCall(context, 'workers-release-pty', ['terminal', 'sessions'], 'workers-release')
+  const releaseEvidence = assertWorkerReleaseEvidence({
+    dispatchId: completeDispatchId, sessionId: completionSessionId, release: releaseResult,
+    repeat: releaseRepeat, releaseAbandoned, terminalSessions: releaseSessions
+  })
+  context.check('workers-release')
+  context.prove('workers-release', { ...releaseEvidence, archivedCompletionMarker: true })
+
+  const closeAbandonedReceipt = actorReceipt(phaseTwoReceipts, 'workers-close-abandoned')
+  equal(closeAbandonedReceipt.exitCode, 0, 'coordinator abandoned session close exit code')
+  const abandonEvidence = assertWorkerAbandonEvidence({
+    sessionId: abandonSessionId, abandon: actorResult(abandonReceipt, 'worker-abandon'),
+    coordinatorShow: abandonedShow, controllerShow: controllerShowAbandoned, terminalSessions: abandonSessions,
+    pidAlive: abandonPidAlive, closedByCoordinator: true
+  })
+  context.check('workers-abandon')
+  context.prove('workers-abandon', abandonEvidence)
+
+  const messagesReset = requiredActorResult(phaseTwoReceipts, 'workers-reset-messages')
+  const resetInbox = requiredActorResult(phaseTwoReceipts, 'workers-reset-messages-readback')
+  const allReset = requiredActorResult(phaseTwoReceipts, 'workers-reset-all')
+  const resetRunList = requiredActorResult(phaseTwoReceipts, 'workers-reset-all-readback')
+  context.check('workers-reset-messages')
+  context.check('workers-reset-all')
+  assertResetEvidence({
+    runId, messagesReset, inbox: resetInbox, allReset, runList: resetRunList,
+    messagesRefusal, allRefusal: messagesRefusal
+  })
+  context.prove('workers-reset-messages', { mode: 'messages', replayed: false, messagesAfterReset: 0, controllerRefusal: 'consumer_fenced' })
+  context.prove('workers-reset-all', { mode: 'all', runAbsent: true, controllerRefusal: 'consumer_fenced' })
+
+  const coordinatorTabId = stateString(context, 'workersCoordinatorTabId')
+  await productCall(context, 'workers-coordinator-tab-close', ['terminal', 'tab', 'close', coordinatorTabId, '--yes'], 'workers-ps-tasks')
+  const finalLayout = await productCall(context, 'workers-terminal-layout-after', ['terminal', 'layout', '--worktree', worktreeId], 'workers-ps-tasks')
+  const finalTabs = tabIds(finalLayout, 'terminal layout after workers')
+  equal([...finalTabs].sort(), [...baselineTabs].sort(), 'terminal tabs after worker checks')
+  context.state.workersCleanupVerified = true
+}
+
+function startEvidence(start: ObjectValue): Record<string, unknown> {
+  return {
+    dispatchId: start.dispatchId,
+    runId: start.runId,
+    state: start.state,
+    agent: object(object(start.launch, 'worker-start launch').effective, 'worker-start launch.effective').agent,
+    mode: object(start.mode, 'worker-start mode').mode
+  }
+}
+
+
+export async function cleanupWorkerChecks(
+  context: Pick<CliCheckContext, 'state'>,
+  attempt: (argv: string[]) => Promise<unknown | undefined>,
+  errors: string[]
+): Promise<void> {
+  const state = context.state
+  if (state.workersCleanupVerified === true) return
+  const baselineValue = state.workersTerminalBaseline
+  const worktreeId = state.worktreeId
+  if (!Array.isArray(baselineValue) || !baselineValue.every((value): value is string => typeof value === 'string') ||
+      typeof worktreeId !== 'string' || worktreeId.length === 0) {
+    if (state.workersTerminalCreationStarted === true) errors.push('worker terminal cleanup lacks a valid baseline')
+    return
+  }
+  let layout: unknown | undefined
+  try {
+    layout = await attempt(['terminal', 'layout', '--worktree', worktreeId])
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error))
+    return
+  }
+  if (layout === undefined) return
+  let openTabs: string[]
+  try {
+    openTabs = tabIds(layout, 'worker cleanup terminal layout')
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error))
+    return
+  }
+  const baseline = new Set(baselineValue)
+  for (const tabId of openTabs) {
+    if (baseline.has(tabId)) continue
+    try {
+      await attempt(['terminal', 'tab', 'close', tabId, '--yes'])
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+}

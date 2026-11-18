@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
-import { Button, InlineAgentCard } from '@quirky/ui'
+import { Button, InlineAgentCard, InlineError } from '@quirky/ui'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
@@ -73,7 +73,7 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
     const timer = setTimeout(() => setSlow(true), 1000)
     return () => clearTimeout(timer)
   }, [retrying])
-  const retry = async () => {
+  const onRetryClick = async () => {
     setRetrying(true)
     try {
       await onRetry()
@@ -87,7 +87,7 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
         title="Too many changes detected. Only the first 1000 are shown."
         status="needs-you"
         description={
-          <Button disabled={retrying} onClick={() => void retry()}>
+          <Button disabled={retrying} onClick={onRetryClick}>
             {slow ? <span role="status" aria-label="Refreshing">◌</span> : 'Retry'}
           </Button>
         }
@@ -115,7 +115,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   if (!standalone) {
     return (
       <div className="ui-stack" role="status">
-        <p>{message}</p>
+        <InlineError message={message} />
         {controls}
       </div>
     )
@@ -127,7 +127,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
         status="failing"
         description={
           <div className="ui-stack">
-            <p>{message}</p>
+            <InlineError message={message} />
             {controls}
           </div>
         }
@@ -136,14 +136,3 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   )
 }
 
-/**
- * The one quiet line of a worktree that matches its base and its upstream. There is no ship bar
- * with it, so nothing here can be pressed.
- */
-export function CleanState({ base, upstream }: { base: string; upstream: string | null }) {
-  return (
-    <p className="ui-text-muted" role="status" data-git-clean>
-      {upstream === null ? `Nothing changed against ${base}` : `Nothing changed against ${base} · up to date with ${upstream}`}
-    </p>
-  )
-}

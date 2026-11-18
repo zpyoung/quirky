@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Button, Dialog, FormRow } from '@quirky/ui'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Button, Dialog, FormRow, InlineError, NoticeLine } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { CloseOverlay } from './window/CloseOverlay'
@@ -9,9 +9,14 @@ import { activeDocument, type ActiveDocumentCommand } from './window/activeDocum
 import { openExplorerSearch } from './window/explorerIntent'
 import { type EditorState, worktreeFromLayout } from './window/editorState'
 import { clearOverlayRequests, requestCloseAll, requestSingleClose, showMarkdownOpen, showNewMarkdown, showQuickOpen } from './window/overlayState'
+import { clearEditorUiControls, createEditorUiControlReportScope, EditorUiControlProvider, EDITOR_UI_CONTROL_COMMAND, runEditorUiControl } from './window/uiControl'
+import { useEditorUiControl, useEditorUiControlReport, useEditorUiControlSurface } from './window/uiControl'
+import type { EditorUiControl, EditorUiControlResult } from './window/uiControl'
 import { QuickOpenOverlay } from './window/QuickOpenOverlay'
 
-type MountProps = { input?: unknown; report?(state: unknown): void }
+type MountReport = (state: unknown) => void
+type MountProps = { input?: unknown; report?: MountReport }
+type MountNode = (report: MountReport) => ReactNode
 type CommandArgs = Record<string, unknown>
 
 const DOCUMENT_VIEW = 'view:quirky.editor/document'
@@ -37,11 +42,22 @@ function worktreeFor(context: UiPluginContext, args: CommandArgs): string | unde
 }
 
 
-function mount(element: HTMLElement, node: ReactNode, report: MountProps['report'], state: unknown): () => void {
+function mount(
+  element: HTMLElement,
+  node: MountNode,
+  report: MountProps['report'],
+  state: unknown,
+  surface: string,
+  context: UiPluginContext
+): () => void {
+  const scope = createEditorUiControlReportScope(report, { surface, context })
+  scope.report(state)
   const root = createRoot(element)
-  root.render(node)
-  report?.(state)
-  return () => root.unmount()
+  root.render(<EditorUiControlProvider scope={scope}>{node(scope.report)}</EditorUiControlProvider>)
+  return () => {
+    root.unmount()
+    scope.dispose()
+  }
 }
 
 function viewReport(input: unknown): Record<string, unknown> {
@@ -120,14 +136,16 @@ function clearSaveAsRequest(): void {
   cancelSaveAs(saveAsRequest.id)
 }
 
-function editorUiContext(context: UiPluginContext): UiPluginContext {
+function editorUiContext(context: UiPluginContext, isCurrent: () => boolean): UiPluginContext {
   const originalCall = context.call.bind(context)
   const call = async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
+    if (!isCurrent()) throw new Error('The editor control is no longer available.')
     const request = params ?? {}
     if (method === 'quirky.editor/save' && params && params.trigger !== 'autosave') {
       const bufferId = nonEmptyString(request.bufferId)
       if (bufferId) {
         const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (!isCurrent()) throw new Error('The editor control is no longer available.')
         if (result.buffer?.untitled) return await requestSaveAs(context, result.buffer)
       }
     }
@@ -135,11 +153,13 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
       const bufferId = nonEmptyString(request.bufferId)
       if (bufferId) {
         const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (!isCurrent()) throw new Error('The editor control is no longer available.')
         if (result.buffer?.untitled) {
           try {
             await requestSaveAs(context, result.buffer)
+            if (!isCurrent()) throw new Error('The editor control is no longer available.')
           } catch (reason) {
-            await originalCall(method, { ...request, choice: 'cancel' }).catch(() => undefined)
+            if (isCurrent()) await originalCall(method, { ...request, choice: 'cancel' }).catch(() => undefined)
             throw reason
           }
           const closeParams = { ...request }
@@ -148,6 +168,7 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
         }
       }
     }
+    if (!isCurrent()) throw new Error('The editor control is no longer available.')
     return await originalCall(method, params)
   }
   return new Proxy(context, {
@@ -159,61 +180,91 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
   })
 }
 
-function SaveAsOverlay() {
+function SaveAsOverlay({ context }: { context: UiPluginContext }) {
   const request = useSaveAsRequest()
+  const report = useEditorUiControlReport()
+  const surface = useEditorUiControlSurface()
+  const generation = useMemo(() => crypto.randomUUID(), [request?.id])
   const [path, setPath] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
   const pathInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setPath(request ? suggestedSaveAsPath(request.relativePath) : '')
     setError(null)
     setBusy(false)
+    busyRef.current = false
   }, [request?.id, request?.relativePath])
   useEffect(() => {
     if (!request) return
     const focusTimer = window.setTimeout(() => pathInput.current?.focus(), 0)
     return () => window.clearTimeout(focusTimer)
   }, [request?.id])
+  useEffect(() => {
+    report({ saveAs: {
+      open: request !== null,
+      requestId: request?.id ?? null,
+      bufferId: request?.bufferId ?? null,
+      busy: request !== null && busy,
+      error: request ? error : null
+    } })
+  }, [report, request?.id, request?.bufferId, busy, error])
+
+  async function handleControl(control: EditorUiControl): Promise<EditorUiControlResult> {
+    if (!request || saveAsRequest?.id !== request.id || !isCurrent() || busyRef.current) return { delivered: false }
+    const data = control.data ?? {}
+    if (Object.keys(data).some((key) => key !== 'path') || (Object.hasOwn(data, 'path') && typeof data.path !== 'string')) return { delivered: false }
+    if (control.action === 'cancel') {
+      if (Object.keys(data).length) return { delivered: false }
+      cancelSaveAs(request.id)
+      return { delivered: true }
+    }
+    if (control.action !== 'submit') return { delivered: false }
+    const destination = (typeof data.path === 'string' ? data.path : path).trim()
+    if (!destination) return { delivered: false }
+    busyRef.current = true
+    setBusy(true)
+    setPath(destination)
+    setError(null)
+    const completeSave = async (): Promise<void> => {
+      try {
+        const saved = await request.context.call('quirky.editor/saveAs', {
+          bufferId: request.bufferId,
+          path: destination,
+          expectedRevision: request.expectedRevision
+        })
+        if (!isCurrent() || saveAsRequest?.id !== request.id) return
+        saveAsRequest = null
+        notifySaveAs()
+        request.resolve(saved)
+      } catch (reason) {
+        if (!isCurrent() || saveAsRequest?.id !== request.id) return
+        setError(reason instanceof Error ? reason.message : String(reason))
+        busyRef.current = false
+        setBusy(false)
+      }
+    }
+    void completeSave()
+    return { delivered: true }
+  }
+  const { run, isCurrent } = useEditorUiControl({
+    context,
+    address: request ? { surface, target: `save-as:${request.bufferId}:${request.id}`, generation, actions: ['submit', 'cancel'] } : null,
+    handler: handleControl,
+    onError: (reason) => setError(reason.message)
+  })
 
   if (!request) return null
-  const cancel = () => {
-    if (!busy) cancelSaveAs(request.id)
-  }
-  const submit = async () => {
-    const destination = path.trim()
-    if (destination === '') {
-      setError('Enter a worktree-relative Markdown path.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const saved = await request.context.call('quirky.editor/saveAs', {
-        bufferId: request.bufferId,
-        path: destination,
-        expectedRevision: request.expectedRevision
-      })
-      if (saveAsRequest?.id !== request.id) return
-      saveAsRequest = null
-      notifySaveAs()
-      request.resolve(saved)
-    } catch (reason) {
-      if (saveAsRequest?.id !== request.id) return
-      setError(reason instanceof Error ? reason.message : String(reason))
-      setBusy(false)
-    }
-  }
-
   return (
     <Dialog
       open
       title="Save Markdown As"
-      onClose={cancel}
+      onClose={() => { void run('cancel') }}
       actions={
         <>
-          <Button disabled={busy} onClick={cancel}>Cancel</Button>
-          <Button variant="primary" disabled={busy || path.trim() === ''} onClick={() => void submit()}>Save</Button>
+          <Button disabled={busy} onClick={() => void run('cancel')}>Cancel</Button>
+          <Button variant="primary" disabled={busy || path.trim() === ''} onClick={() => void run('submit')}>Save</Button>
         </>
       }
     >
@@ -229,12 +280,13 @@ function SaveAsOverlay() {
             disabled={busy}
             onChange={(event) => setPath(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); void submit() }
-              if (event.key === 'Escape') { event.preventDefault(); cancel() }
+              if (event.key === 'Enter') { event.preventDefault(); void run('submit') }
+              if (event.key === 'Escape') { event.preventDefault(); void run('cancel') }
             }}
           />
         </FormRow>
-        {error && <p className="qe-editor-error" role="alert">{error}</p>}
+        {busy && <div role="status" aria-live="polite"><NoticeLine>Saving Markdown…</NoticeLine></div>}
+        {error && <InlineError message={error} />}
       </div>
     </Dialog>
   )
@@ -317,6 +369,8 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
     },
     find: (args?: unknown) => runActiveDocumentCommand('find', args),
     replace: (args?: unknown) => runActiveDocumentCommand('replace', args),
+    'go-to-definition': (args?: unknown) => runActiveDocumentCommand('go-to-definition', args),
+    'find-references': (args?: unknown) => runActiveDocumentCommand('find-references', args),
     'markdown-preview': (args?: unknown) => runActiveDocumentCommand('markdown-preview', args),
     'toggle-word-wrap': (args?: unknown) => runActiveDocumentCommand('toggle-word-wrap', args),
     'copy-context': (args?: unknown) => runActiveDocumentCommand('copy-context', args),
@@ -358,25 +412,34 @@ function configureExplorerPanel(context: UiPluginContext): void {
 }
 
 export function activate(context: UiPluginContext): void {
-  const uiContext = editorUiContext(context)
   deactivateCurrent?.()
+  let active = true
+  const uiContext = editorUiContext(context, () => active)
+  clearEditorUiControls()
 
   context.provide(DOCUMENT_VIEW, (element: HTMLElement, props: MountProps) =>
-    mount(element, <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input))
+    mount(element, (_report) => <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input), DOCUMENT_VIEW, uiContext)
   )
-  const mountExplorer = (element: HTMLElement, props: MountProps) =>
-    mount(element, <ExplorerPanel context={context} report={props.report} />, props.report, {
+  const mountExplorer = (surface: string) => (element: HTMLElement, props: MountProps) =>
+    mount(element, (report) => <ExplorerPanel context={context} report={report} />, props.report, {
       mounted: true,
       worktreeId: worktreeFor(context, {}) ?? null
-    })
-  context.provide(EXPLORER_SECTION, mountExplorer)
-  context.provide(EXPLORER_PANEL, mountExplorer)
+    }, surface, context)
+  context.provide(EXPLORER_SECTION, mountExplorer(EXPLORER_SECTION))
+  context.provide(EXPLORER_PANEL, mountExplorer(EXPLORER_PANEL))
   context.provide(QUICK_OPEN_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, <QuickOpenOverlay context={context} report={props.report} />, props.report, { open: false, requestId: null })
+    mount(element, (report) => <QuickOpenOverlay context={context} report={report} />, props.report, { open: false, requestId: null }, QUICK_OPEN_OVERLAY, context)
   )
   context.provide(CLOSE_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, <><CloseOverlay report={props.report} /><SaveAsOverlay /></>, props.report, { open: false, kind: null, targetCount: 0, dirtyCount: 0, error: null })
+    mount(element, (report) => <><CloseOverlay context={uiContext} report={report} /><SaveAsOverlay context={context} /></>, props.report, {
+      open: false,
+      kind: null,
+      targetCount: 0,
+      dirtyCount: 0,
+      error: null
+    }, CLOSE_OVERLAY, uiContext)
   )
+  context.provide(EDITOR_UI_CONTROL_COMMAND, runEditorUiControl)
 
   for (const [name, handler] of Object.entries(commandHandlers(uiContext))) {
     context.provide(`command:quirky.editor/${name}`, handler)
@@ -390,11 +453,14 @@ export function activate(context: UiPluginContext): void {
   })
 
   deactivateCurrent = () => {
+    active = false
     unsubscribe()
     clearOverlayRequests()
     clearSaveAsRequest()
+    clearEditorUiControls()
   }
 }
+
 
 export function deactivate(): void {
   deactivateCurrent?.()

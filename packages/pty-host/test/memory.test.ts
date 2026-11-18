@@ -80,8 +80,8 @@ test(
     const gatePath = join(home, 'flood-start')
     const floodStartedPath = join(home, 'flood-started')
     const readerReadyPath = join(home, 'stalled-reader-ready')
-    const readerClosedPath = join(home, 'stalled-reader-closed')
-
+    const readerLaggedPath = join(home, 'stalled-reader-lagged')
+    const readerUsablePath = join(home, 'stalled-reader-usable')
     const floodProgram = `
 while (!(await Bun.file(${JSON.stringify(gatePath)}).exists())) await Bun.sleep(20)
 const block = Buffer.alloc(${FLOOD_BLOCK_BYTES})
@@ -108,13 +108,25 @@ import { writeFileSync } from 'node:fs'
 import { PtyClient } from ${JSON.stringify(clientModule)}
 const client = await PtyClient.connect(${JSON.stringify(join(home, 'pty.sock'))})
 await client.hello(${JSON.stringify(token)})
+const { promise: lagged, resolve: resolveLagged } = Promise.withResolvers()
+let laggedCount = 0
+client.onEvent(event => {
+  if (event.type !== 'lagged' || event.sessionId !== ${JSON.stringify(FLOOD_SESSION)}) return
+  laggedCount++
+  writeFileSync(${JSON.stringify(readerLaggedPath)}, String(laggedCount))
+  resolveLagged()
+})
 await client.request('subscribe', { sessionId: ${JSON.stringify(FLOOD_SESSION)}, mode: 'raw' })
 writeFileSync(${JSON.stringify(readerReadyPath)}, 'ready')
-setInterval(() => {
-  if (!client.closed) return
-  writeFileSync(${JSON.stringify(readerClosedPath)}, 'closed')
-  process.exit(0)
-}, 10)
+await lagged
+if (client.closed) throw new Error('reader connection closed after session lag')
+const sessions = await client.request('list', {})
+if (!sessions.some(session => session.sessionId === ${JSON.stringify(FLOOD_SESSION)})) {
+  throw new Error('reader connection did not answer a request after session lag')
+}
+if (laggedCount !== 1) throw new Error(\`expected one lag event, got \${laggedCount}\`)
+writeFileSync(${JSON.stringify(readerUsablePath)}, 'usable')
+process.exit(0)
 `
     const reader = scopeForHome(home).spawn([process.execPath, '-e', readerCode], {
       stdout: 'ignore',
@@ -171,10 +183,12 @@ setInterval(() => {
       )
       await Bun.sleep(Math.max(0, killedAt + 1500 - Date.now()))
       const afterKillGrowth = (await residentMiB(host.pid, home)) - baseline
-
       process.kill(reader.pid, 'SIGCONT')
       readerStopped = false
-      await waitFor(() => existsSync(readerClosedPath), 5000, 'stalled reader to observe the severed socket')
+      await waitFor(() => existsSync(readerUsablePath), 5000, 'stalled reader to observe lag and use the connection')
+      await reader.exited
+      expect(existsSync(readerLaggedPath)).toBe(true)
+      expect(reader.exitCode).toBe(0)
 
       expect(reachedBytes).toBeGreaterThanOrEqual(FLOOD_BYTES)
       expect(reachedDuration).toBeGreaterThanOrEqual(10000)

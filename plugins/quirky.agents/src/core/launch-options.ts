@@ -82,7 +82,7 @@ function unique(seen: Set<string>, id: string, path: string): void {
 }
 
 function option(value: unknown, path: string, composeModel: boolean, seen: Set<string>): OptionDecl {
-  const data = dict(value, path, ['id', 'label', 'type', 'choices', 'flag', 'conflicts', 'composed', 'structured'])
+  const data = dict(value, path, ['id', 'label', 'type', 'choices', 'flag', 'conflicts', 'composed', 'structured', 'default'])
   const id = text(data.id, `${path}.id`)
   if (RESERVED_OPTION_IDS.has(id)) fail(`${path}.id`, `can't be ${id}, which is reserved`)
   if (id.length > MAX_OPTION_ID_LENGTH) fail(`${path}.id`, `must be at most ${MAX_OPTION_ID_LENGTH} characters`)
@@ -111,8 +111,20 @@ function option(value: unknown, path: string, composeModel: boolean, seen: Set<s
   if (composed && !composeModel) fail(`${path}.composed`, 'needs composeModel')
   const structured = optionalText(data, 'structured', path)
   if (flag === null && !composed && structured === null) fail(path, 'needs a flag, composed or structured')
+  const fallback = optionalText(data, 'default', path)
+  if (fallback !== null && !choices?.some((choice) => choice.value === fallback)) fail(`${path}.default`, `names ${fallback}, which is not in choices`)
 
-  return { id, label, type, choices, flag, conflicts: conflicts(data.conflicts, `${path}.conflicts`), composed, structured }
+  return {
+    id,
+    label,
+    type,
+    choices,
+    flag,
+    conflicts: conflicts(data.conflicts, `${path}.conflicts`),
+    composed,
+    structured,
+    ...(fallback === null ? {} : { default: fallback })
+  }
 }
 
 function optionUses(value: unknown, path: string, declared: Map<string, OptionDecl>): OptionUse[] {
@@ -170,7 +182,7 @@ function extraArgs(value: unknown, path: string): NonNullable<LaunchCatalog['ext
  * the first problem; the entry parser rewraps it so the agent is reported invalid.
  */
 export function parseLaunchOptions(value: unknown): LaunchCatalog {
-  const data = dict(value, ROOT, ['model', 'options', 'models', 'unlisted', 'unlistedOptions', 'composeModel', 'valueFlags', 'extraArgs'])
+  const data = dict(value, ROOT, ['model', 'options', 'models', 'unlisted', 'unlistedOptions', 'defaultModel', 'composeModel', 'valueFlags', 'extraArgs'])
 
   const modelData = dict(data.model, `${ROOT}.model`, ['flag', 'conflicts', 'structured'])
   const modelPath = `${ROOT}.model`
@@ -201,6 +213,8 @@ export function parseLaunchOptions(value: unknown): LaunchCatalog {
       : oneOf(data.unlisted, `${ROOT}.unlisted`, ['accept', 'refuse'] as const)
   const unlistedOptions = data.unlistedOptions === undefined ? [] : optionUses(data.unlistedOptions, `${ROOT}.unlistedOptions`, declared)
   if (data.unlistedOptions !== undefined && unlisted === 'refuse') fail(`${ROOT}.unlistedOptions`, 'need unlisted "accept"')
+  const defaultModel = optionalText(data, 'defaultModel', ROOT)
+  if (defaultModel !== null && !modelIds.has(defaultModel)) fail(`${ROOT}.defaultModel`, `names ${defaultModel}, which is not in models`)
 
   return {
     model: modelDecl,
@@ -208,6 +222,7 @@ export function parseLaunchOptions(value: unknown): LaunchCatalog {
     models,
     unlisted,
     unlistedOptions,
+    ...(defaultModel === null ? {} : { defaultModel }),
     composeModel,
     valueFlags: data.valueFlags === undefined ? [] : textList(data.valueFlags, `${ROOT}.valueFlags`, true),
     extraArgs: data.extraArgs === undefined ? null : extraArgs(data.extraArgs, `${ROOT}.extraArgs`)

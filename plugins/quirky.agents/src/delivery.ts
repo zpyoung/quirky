@@ -6,6 +6,9 @@ import type { AgentEntry, DeliveryOutcome } from './core/types'
 /** How long a liveness check may go unanswered before the delivery gives up on it. */
 const LIVENESS_TIMEOUT_MS = 2000
 
+const RECOVERY_RETRY_MS = 500
+const MAX_EARLY_OUTPUT_BYTES = 4_194_304
+
 /** Per-delivery switches. */
 export type DeliverOptions = {
   /** The agent already shows its input: skip the ready wait and paste once the session is known alive. */
@@ -22,6 +25,12 @@ type DeliveryRunnerOptions = {
   now?: () => number
 }
 
+type SessionSubscriptionHold = {
+  owners: Set<object>
+  held: boolean
+  cleanup: Promise<void> | null
+}
+
 /**
  * Pastes a prompt into an agent's input once the agent shows it can take one, and settles with how
  * far it got. Each delivery writes at most one paste, never retries it, and writes nothing once
@@ -33,6 +42,7 @@ export class DeliveryRunner {
   private readonly timeScale: number
   private readonly log: (message: string) => void
   private readonly now: () => number
+  private readonly sessionHolds = new Map<string, SessionSubscriptionHold>()
 
   constructor(options: DeliveryRunnerOptions) {
     this.pty = options.pty
@@ -40,6 +50,56 @@ export class DeliveryRunner {
     this.timeScale = options.timeScale ?? 1
     this.log = options.log ?? (() => {})
     this.now = options.now ?? Date.now
+  }
+
+  private acquireSessionHold(sessionId: string, owner: object): SessionSubscriptionHold {
+    let hold = this.sessionHolds.get(sessionId)
+    if (hold === undefined) {
+      hold = { owners: new Set(), held: false, cleanup: null }
+      this.sessionHolds.set(sessionId, hold)
+    }
+    hold.owners.add(owner)
+    return hold
+  }
+
+  private invalidateSessionHold(sessionId: string) {
+    const hold = this.sessionHolds.get(sessionId)
+    if (hold === undefined) return
+    hold.held = false
+    this.forgetSessionHold(sessionId, hold)
+  }
+
+  private releaseSessionHold(sessionId: string, hold: SessionSubscriptionHold, owner: object) {
+    if (!hold.owners.delete(owner)) return
+    if (hold.owners.size > 0 || !hold.held) {
+      this.forgetSessionHold(sessionId, hold)
+      return
+    }
+
+    hold.held = false
+    let cleanup: Promise<void>
+    try {
+      cleanup = this.pty.unsubscribe(sessionId).catch(() => {})
+    } catch {
+      cleanup = Promise.resolve()
+    }
+    hold.cleanup = cleanup
+    void cleanup.then(() => {
+      if (hold.cleanup !== cleanup) return
+      hold.cleanup = null
+      this.forgetSessionHold(sessionId, hold)
+    })
+  }
+
+  private forgetSessionHold(sessionId: string, hold: SessionSubscriptionHold) {
+    if (
+      hold.owners.size === 0 &&
+      !hold.held &&
+      hold.cleanup === null &&
+      this.sessionHolds.get(sessionId) === hold
+    ) {
+      this.sessionHolds.delete(sessionId)
+    }
   }
 
   /**
@@ -60,18 +120,30 @@ export class DeliveryRunner {
       const clock = () => this.now() / this.timeScale
       const startedAt = clock()
       const deadline = startedAt + entry.readyTimeoutMs
-      const scanner = createReadyScanner(submit ? entry.submitSignal : entry.readySignal)
+      const signal = submit ? entry.submitSignal : entry.readySignal
+      let scanner = createReadyScanner(signal)
 
       let settled = false
-      let subscribed = false
-      let subscribing = true
+      const holdOwner = {}
+      let sessionHold: SessionSubscriptionHold | null = null
+      let subscribeStartPending = false
+      let subscribing = options.ready !== true
+      let acceptingOutput = options.ready !== true
       let pasting = false
-      let deadlineHandled = false
+      let pasteCommitted = false
       let pasteWritten = false
+      let deadlineHandled = false
       let pasteOutcome: DeliveryOutcome = 'pasted'
       let timer: ReturnType<typeof setTimeout> | null = null
       let deadlineTimer: ReturnType<typeof setTimeout> | null = null
       let livenessTimer: ReturnType<typeof setTimeout> | null = null
+      let recoveryTimer: ReturnType<typeof setTimeout> | null = null
+      let retryDue = false
+      let gapObserved = false
+      let earlyBytes = 0
+      let pasteGeneration = 0
+      let subscriptionGeneration = 0
+      let subscribeInFlight: { generation: number } | null = null
       const early: Uint8Array[] = []
       const removers: Array<() => void> = []
 
@@ -92,6 +164,10 @@ export class DeliveryRunner {
           clearTimeout(deadlineTimer)
           deadlineTimer = null
         }
+        if (recoveryTimer !== null) {
+          clearTimeout(recoveryTimer)
+          recoveryTimer = null
+        }
       }
 
       const settle = (outcome: DeliveryOutcome) => {
@@ -100,11 +176,15 @@ export class DeliveryRunner {
         }
         settled = true
         clearTimer()
+        acceptingOutput = false
+        early.length = 0
+        earlyBytes = 0
         for (const remove of removers) {
           remove()
         }
-        if (subscribed) {
-          this.pty.unsubscribe(sessionId).catch(() => {})
+        if (sessionHold !== null) {
+          this.releaseSessionHold(sessionId, sessionHold, holdOwner)
+          sessionHold = null
         }
         if (outcome !== 'pasted') {
           this.log(`prompt for session ${sessionId} (${entry.id}) ${outcome}`)
@@ -179,16 +259,19 @@ export class DeliveryRunner {
 
       const paste = (outcome: DeliveryOutcome) => {
         pasting = true
+        const generation = ++pasteGeneration
         livenessTimer = setTimeout(() => {
           livenessTimer = null
           settle('not-delivered')
         }, Math.max(0, LIVENESS_TIMEOUT_MS * this.timeScale))
         isAlive().then((alive) => {
-          if (settled) {
+          if (settled || generation !== pasteGeneration || !pasting) {
             return
           }
           clearLivenessTimer()
+          pasting = false
           if (alive) {
+            pasteCommitted = true
             writePaste(outcome)
           } else {
             settle('not-delivered')
@@ -197,7 +280,15 @@ export class DeliveryRunner {
       }
 
       const onDeadline = () => {
-        if (settled || pasteWritten || deadlineHandled) {
+        if (settled || pasteWritten) {
+          return
+        }
+        if (gapObserved) {
+          deadlineHandled = true
+          settle('not-delivered')
+          return
+        }
+        if (deadlineHandled) {
           return
         }
         deadlineHandled = true
@@ -209,7 +300,7 @@ export class DeliveryRunner {
       }
 
       const check = () => {
-        if (settled || pasteWritten || pasting || subscribing) {
+        if (settled || pasteCommitted || pasteWritten || pasting || subscribing) {
           return
         }
         const at = clock()
@@ -227,6 +318,140 @@ export class DeliveryRunner {
         }
       }
 
+      let startSubscribe: () => void
+      const maybeStartRetry = () => {
+        if (settled || !retryDue || subscribeInFlight !== null || subscribeStartPending) {
+          return
+        }
+        if (clock() >= deadline) {
+          onDeadline()
+          return
+        }
+        retryDue = false
+        startSubscribe()
+      }
+
+      startSubscribe = () => {
+        if (settled || subscribeInFlight !== null || subscribeStartPending) {
+          return
+        }
+        if (gapObserved && clock() >= deadline) {
+          onDeadline()
+          return
+        }
+        if (sessionHold === null) {
+          sessionHold = this.acquireSessionHold(sessionId, holdOwner)
+        }
+        const hold = sessionHold
+        const generation = subscriptionGeneration
+        subscribeStartPending = true
+        subscribing = true
+        acceptingOutput = false
+        early.length = 0
+        earlyBytes = 0
+
+        const beginSubscribe = () => {
+          if (settled || generation !== subscriptionGeneration) {
+            subscribeStartPending = false
+            maybeStartRetry()
+            return
+          }
+          if (gapObserved && clock() >= deadline) {
+            subscribeStartPending = false
+            onDeadline()
+            return
+          }
+          if (hold.cleanup !== null) {
+            void hold.cleanup.then(beginSubscribe)
+            return
+          }
+
+          subscribeStartPending = false
+          acceptingOutput = true
+          const attempt = { generation }
+          subscribeInFlight = attempt
+          hold.held = true
+          try {
+            this.pty.subscribe(sessionId).then(
+              ({ replay }) => {
+                if (subscribeInFlight === attempt) {
+                  subscribeInFlight = null
+                }
+                if (attempt.generation !== subscriptionGeneration) {
+                  maybeStartRetry()
+                  return
+                }
+                if (settled) {
+                  return
+                }
+                subscribing = false
+                const at = clock()
+                scanner.push(Buffer.from(replay, 'base64'), at)
+                for (const bytes of early) {
+                  scanner.push(bytes, at)
+                }
+                early.length = 0
+                earlyBytes = 0
+                check()
+              },
+              () => {
+                if (subscribeInFlight === attempt) {
+                  subscribeInFlight = null
+                }
+                if (attempt.generation !== subscriptionGeneration) {
+                  maybeStartRetry()
+                  return
+                }
+                if (settled) {
+                  return
+                }
+                subscribing = false
+                settle('not-delivered')
+              }
+            )
+          } catch {
+            if (subscribeInFlight === attempt) {
+              subscribeInFlight = null
+            }
+            settle('not-delivered')
+          }
+        }
+        beginSubscribe()
+      }
+
+      const recover = () => {
+        if (settled || pasteCommitted || pasteWritten || options.ready === true) {
+          return
+        }
+        gapObserved = true
+        subscriptionGeneration++
+        subscribing = true
+        acceptingOutput = false
+        scanner = createReadyScanner(signal)
+        early.length = 0
+        earlyBytes = 0
+        if (timer !== null) {
+          clearTimeout(timer)
+          timer = null
+        }
+        if (pasting) {
+          pasting = false
+          pasteGeneration++
+          clearLivenessTimer()
+        }
+        if (clock() >= deadline) {
+          onDeadline()
+          return
+        }
+        if (recoveryTimer === null && !retryDue) {
+          recoveryTimer = setTimeout(() => {
+            recoveryTimer = null
+            retryDue = true
+            maybeStartRetry()
+          }, Math.max(0, RECOVERY_RETRY_MS * this.timeScale))
+        }
+      }
+
       const sessionEnded = () => {
         if (pasteWritten) {
           settle(pasteOutcome)
@@ -237,15 +462,26 @@ export class DeliveryRunner {
 
       removers.push(
         this.pty.onData((id, bytes) => {
-          if (id !== sessionId || settled || pasteWritten || pasting) {
+          if (id !== sessionId || settled || pasteCommitted || pasteWritten || pasting || !acceptingOutput) {
             return
           }
           if (subscribing) {
+            if (earlyBytes + bytes.byteLength > MAX_EARLY_OUTPUT_BYTES) {
+              recover()
+              return
+            }
             early.push(bytes)
+            earlyBytes += bytes.byteLength
             return
           }
           scanner.push(bytes, clock())
           check()
+        }),
+        this.pty.onLagged((id) => {
+          if (id === sessionId) {
+            this.invalidateSessionHold(sessionId)
+            recover()
+          }
         }),
         this.pty.onExit((id) => {
           if (id === sessionId) {
@@ -265,7 +501,6 @@ export class DeliveryRunner {
       )
 
       if (options.ready === true) {
-        subscribing = false
         paste('pasted')
         return
       }
@@ -274,29 +509,7 @@ export class DeliveryRunner {
         deadlineTimer = null
         onDeadline()
       }, Math.max(0, entry.readyTimeoutMs * this.timeScale))
-
-      this.pty.subscribe(sessionId).then(
-        ({ replay }) => {
-          subscribing = false
-          subscribed = true
-          if (settled) {
-            // settled while subscribing, so the settle skipped the unsubscribe
-            this.pty.unsubscribe(sessionId).catch(() => {})
-            return
-          }
-          const at = clock()
-          scanner.push(Buffer.from(replay, 'base64'), at)
-          for (const bytes of early) {
-            scanner.push(bytes, at)
-          }
-          early.length = 0
-          check()
-        },
-        () => {
-          subscribing = false
-          settle('not-delivered')
-        }
-      )
+      startSubscribe()
     })
   }
 }

@@ -199,6 +199,19 @@ describe('InlineError', () => {
     await click(action)
     expect(acted).toBe(1)
   })
+
+  test('offers only its retry action when dismissal is not provided', async () => {
+    let retried = 0
+    await render(h(InlineError, { message: 'Push failed', action: { label: 'Retry', onAction: () => { retried += 1 } } }))
+    const alert = container.querySelector('[role="alert"]')!
+    expect(alert.textContent).toContain('Push failed')
+    const buttons = alert.querySelectorAll('button')
+    expect(buttons.length).toBe(1)
+    expect(buttons[0]!.textContent).toBe('Retry')
+    expect(container.querySelector('button[aria-label="Dismiss"]')).toBeNull()
+    await click(buttons[0]!)
+    expect(retried).toBe(1)
+  })
 })
 
 describe('ScopeChip', () => {

@@ -1,5 +1,6 @@
 import type {
   ClientRole,
+  DiagnosticsMemoryReport,
   PluginNotification,
   QuirkyEvent,
   ToolGateDecision,
@@ -9,6 +10,8 @@ import type {
 import { sendNotification, type Notifier } from './notify'
 import type { PtyClient } from './pty-client'
 import type { ClientConn } from './types'
+import { collectMemorySnapshot, readMemoryProcessTable } from './memory'
+import { kernelProcess } from './kernel-process'
 
 export type CoreOptions = {
   home: string
@@ -18,6 +21,10 @@ export type CoreOptions = {
   startedAt: number
   hookToken: string
   hookUrl: () => string
+  /** Authenticated loopback browser entry URL, late-bound to the port actually selected by Bun. */
+  browserUiUrl?: () => string
+  /** Resolved built UI index path; handlers check it at request time. */
+  browserUiIndexPath?: string
   /** True when the daemon runs in safe mode; reported by `status`. */
   safeMode?: boolean
   /** The unix socket path the daemon listens on, or null; reported by `status`. */
@@ -49,6 +56,13 @@ export class Core {
   /** The loopback URL agents post hooks to, as the daemon is listening now. */
   get hookUrl(): string {
     return this.options.hookUrl()
+  }
+  get browserUiUrl(): string | undefined {
+    return this.options.browserUiUrl?.()
+  }
+
+  get browserUiIndexPath(): string | undefined {
+    return this.options.browserUiIndexPath
   }
 
   get pty(): PtyClient {
@@ -154,6 +168,28 @@ export class Core {
       safeMode: this.options.safeMode ?? false,
       socket: this.options.socketPath ?? null
     }
+  }
+
+  memory(): Promise<DiagnosticsMemoryReport> {
+    const pty = this.options.pty
+    return collectMemorySnapshot({
+      daemonPid: process.pid,
+      memoryUsage: () => {
+        const { heapUsed, heapTotal, external } = process.memoryUsage()
+        return { heapUsed, heapTotal, external }
+      },
+      pty: {
+        get hostPid() {
+          return pty.hostPid
+        },
+        get connected() {
+          return pty.connected
+        },
+        list: () => pty.request('list', {}, { timeoutMs: 2000 })
+      },
+      readProcessTable: () => readMemoryProcessTable(kernelProcess),
+      now: Date.now
+    })
   }
 
   /**

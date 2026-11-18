@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { errorMessage, object, type ListItem } from './model'
 
@@ -19,23 +19,15 @@ export function usePrDescription(context: UiPluginContext, item: ListItem | null
   const number = pullRequest?.number ?? 0
   const url = pullRequest?.url ?? ''
   const itemBody = pullRequest?.body ?? ''
-  const [attempt, setAttempt] = useState(0)
   const [read, setRead] = useState<DescriptionRead | null>(null)
   const generation = useRef(0)
   const currentTarget = useRef<DescriptionTarget | null>(null)
   const target = isPullRequest ? { worktree, number, url } : null
   currentTarget.current = target
-  const retry = useCallback(() => {
-    const current = currentTarget.current
-    if (!isPullRequest || itemBody !== '' || !sameTarget(current, { worktree, number, url })) return
-    setAttempt((value) => value + 1)
-  }, [isPullRequest, itemBody, number, url, worktree])
-
-  useEffect(() => {
-    if (!isPullRequest || itemBody !== '') return
+  const readDescription = () => {
     const request = ++generation.current
-    let active = true
     const requestTarget = { worktree, number, url }
+    const current = () => generation.current === request && sameTarget(currentTarget.current, requestTarget)
     setRead({ ...requestTarget, body: '', loading: true, error: null })
     void context.call('quirky.hosting/workItem', {
       worktree,
@@ -43,19 +35,26 @@ export function usePrDescription(context: UiPluginContext, item: ListItem | null
       kind: 'pullRequest',
       reference: url
     }).then((value) => {
-      if (!active || generation.current !== request || !sameTarget(currentTarget.current, requestTarget)) return
+      if (!current()) return
       const result = object(value)
       if (!result || typeof result.body !== 'string') throw new Error('The pull request description is unavailable.')
       setRead({ ...requestTarget, body: result.body, loading: false, error: null })
     }).catch((error: unknown) => {
-      if (!active || generation.current !== request || !sameTarget(currentTarget.current, requestTarget)) return
-      setRead({ ...requestTarget, body: '', loading: false, error: errorMessage(error) })
+      if (current()) setRead({ ...requestTarget, body: '', loading: false, error: errorMessage(error) })
     })
-    return () => {
-      active = false
-      if (generation.current === request) generation.current += 1
-    }
-  }, [attempt, context, isPullRequest, itemBody, number, url, worktree])
+  }
+  const readRef = useRef(readDescription)
+  readRef.current = readDescription
+  const retry = () => {
+    if (!isPullRequest || itemBody !== '' || !sameTarget(currentTarget.current, { worktree, number, url })) return
+    readDescription()
+  }
+
+  useEffect(() => {
+    if (!isPullRequest || itemBody !== '') return
+    readRef.current()
+    return () => { generation.current += 1 }
+  }, [context, isPullRequest, itemBody, number, url, worktree])
 
   if (!target) return { body: '', loading: false, error: null, retry }
   if (itemBody !== '') return { body: itemBody, loading: false, error: null, retry }
