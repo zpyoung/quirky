@@ -26,6 +26,8 @@ import {
   ReviewMark,
   ScopeChip,
   SectionHeader,
+  ReachMeter,
+  SegmentedControl,
   SplitButton,
   StatusDot,
   SwatchGroup,
@@ -50,6 +52,8 @@ type CategoryName =
   | 'Tabs'
   | 'Badge'
   | 'StatusDot'
+  | 'ReachMeter'
+  | 'SegmentedControl'
   | 'Menu'
   | 'Toast'
   | 'Dialog'
@@ -208,6 +212,33 @@ function BadgeDemo({ theme }: { theme: Theme }) {
         <Badge tone="needs-you" label="One task needs attention">1</Badge>
         <Badge tone="failing" label="Two failed tasks">2</Badge>
       </div>
+    </Category>
+  )
+}
+
+const REACH_OPTIONS = [
+  { value: 'shadow', label: 'Shadow', title: 'Shadow: logs what it would do, acts on nothing' },
+  { value: 'local', label: 'Local', title: 'Local: nothing leaves this Mac' },
+  { value: 'own-branch', label: 'Own branch', title: 'Own branch: can push and open draft PRs' },
+  { value: 'full', label: 'Full', title: 'Full: anything the mandate allows, merge included', caution: true }
+]
+
+function ReachMeterDemo({ theme }: { theme: Theme }) {
+  const [value, setValue] = useState('local')
+  return (
+    <Category name="ReachMeter" theme={theme}>
+      <ReachMeter label="Level for demo" options={REACH_OPTIONS} value={value} onChange={setValue} />
+      <Status name="reach-meter">{`Level: ${value}`}</Status>
+    </Category>
+  )
+}
+
+function SegmentedControlDemo({ theme }: { theme: Theme }) {
+  const [value, setValue] = useState<string | null>(null)
+  return (
+    <Category name="SegmentedControl" theme={theme}>
+      <SegmentedControl label="Set level for demo" options={REACH_OPTIONS} value={value} onChange={setValue} />
+      <Status name="segmented-control">{`Chosen: ${value ?? 'none'}`}</Status>
     </Category>
   )
 }
@@ -549,15 +580,23 @@ const galleryTags = [
   { id: 'infra', name: 'Infra', color: 'teal' as const }
 ]
 
+const activityMarkSamples = [
+  { state: 'running', label: 'Agent running' },
+  { state: 'waiting', label: 'Agent waiting for you' },
+  { state: 'error', label: 'Agent errored' },
+  { state: 'idle', label: 'Agent idle' },
+  { state: 'asleep', label: 'Worktree asleep' }
+] as const
+
 function ActivityMarkDemo({ theme }: { theme: Theme }) {
   return (
     <Category name="ActivityMark" theme={theme}>
       <div className="ui-cluster">
-        <ActivityMark state="running" label="Agent running" />
-        <ActivityMark state="waiting" label="Agent waiting for you" />
-        <ActivityMark state="error" label="Agent errored" />
-        <ActivityMark state="idle" label="Agent idle" />
-        <ActivityMark state="asleep" label="Worktree asleep" />
+        {activityMarkSamples.flatMap(({ state, label }) => [
+          <ActivityMark key={`${state}-plain`} state={state} label={label} />,
+          <ActivityMark key={`${state}-accent`} state={state} label={`${label}, accent ring`} ring="accent" />,
+          <ActivityMark key={`${state}-needs-you`} state={state} label={`${label}, needs-you ring`} ring="needs-you" />
+        ])}
       </div>
     </Category>
   )
@@ -585,6 +624,7 @@ function TagChipsDemo({ theme }: { theme: Theme }) {
 
 function CheckboxDemo({ theme }: { theme: Theme }) {
   const [selected, setSelected] = useState([true, false])
+  const [allowDeploys, setAllowDeploys] = useState(true)
   const count = selected.filter(Boolean).length
   return (
     <Category name="Checkbox" theme={theme}>
@@ -596,6 +636,7 @@ function CheckboxDemo({ theme }: { theme: Theme }) {
       />
       <Checkbox label="Select feat/login" checked={selected[0] ?? false} onChange={(checked) => setSelected([checked, selected[1] ?? false])} />
       <Checkbox label="Select fix/cache" hideLabel checked={selected[1] ?? false} onChange={(checked) => setSelected([selected[0] ?? false, checked])} />
+      <Checkbox label="Let the avatar deploy" checked={allowDeploys} tone="needs-you" onChange={setAllowDeploys} />
       <Status name="checkbox">Selected worktrees: {count}</Status>
     </Category>
   )
@@ -672,6 +713,8 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <TabsDemo theme={theme} />
         <BadgeDemo theme={theme} />
         <StatusDotDemo theme={theme} />
+        <ReachMeterDemo theme={theme} />
+        <SegmentedControlDemo theme={theme} />
         <MenuDemo theme={theme} />
         <ToastDemo theme={theme} />
         <DialogDemo theme={theme} />

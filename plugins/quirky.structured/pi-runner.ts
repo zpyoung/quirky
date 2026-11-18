@@ -31,13 +31,16 @@ import {
   type PiTransportFactory,
   type PiVariant
 } from './pi-rpc'
-import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions, TurnUsage } from './runner'
 
 export type PiRunnerDeps = {
   /** Replaces the child process; tests inject a scripted fake. */
   transport?: PiTransportFactory
   /** The base child environment before the launch patch; production inherits the daemon's. */
   env?: NodeJS.ProcessEnv
+  /** How long a session without tools waits for the no-tools check and for an abort. A test may lower it. */
+  checkTimeoutMs?: number
+  abortTimeoutMs?: number
 }
 
 const STARTUP_TIMEOUT_MS = 60_000
@@ -45,6 +48,9 @@ const SEND_TIMEOUT_MS = 45_000
 const COMMANDS_TIMEOUT_MS = 10_000
 const ABORT_TIMEOUT_MS = 2_000
 const QUESTION_LIMIT = 300
+const TOOLS_DISABLED = 'tools are disabled for this session'
+const CHECK_TIMEOUT_MS = 30_000
+const DENY_ALL_ABORT_TIMEOUT_MS = 10_000
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -79,8 +85,23 @@ type AskTracker = (askId: string) => void
 
 const DENY_LABEL = /^(deny|no|block|reject|decline|cancel|abort|stop|don't|do not)\b/i
 
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function contextTokensOf(message: Record<string, unknown>): number | null {
+  const usage = record(message.usage)
+  if (usage === null) return null
+  return (count(usage.totalTokens) || count(usage.input) + count(usage.output) + count(usage.cacheRead) + count(usage.cacheWrite)) || null
+}
+
 type Running = {
   sessionId: string
+  /** A `deny-all` session runs with no tools, is checked before each message, and never raises an ask. */
+  denyAll: boolean
+  contextWindow: number | null
+  lastContextTokens: number | null
+  abortTimer: ReturnType<typeof setTimeout> | null
   rpc: PiRpc
   ready: boolean
   ended: boolean
@@ -212,13 +233,15 @@ class PiRunner implements StructuredRunner {
         }
         run.providerSessionId = sessionId
         run.sessionFile = text(state?.sessionFile)
+        const window = record(state?.model)?.contextWindow
+        if (typeof window === 'number' && Number.isFinite(window) && window > 0) run.contextWindow = window
         await this.context.setProviderSession(session.id, {
           id: sessionId,
           transcriptPath: run.sessionFile || null
         })
         if (startup.stopped) return
         this.requireLive(run)
-        if (this.variant === 'omp') await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+        if (this.variant === 'omp' && !run.denyAll) await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
         if (startup.stopped) return
         this.requireLive(run)
         await this.loadCommands(run)
@@ -294,6 +317,7 @@ class PiRunner implements StructuredRunner {
       await run.rpc.request('set_thinking_level', { level: settings.effort }, SEND_TIMEOUT_MS)
       run.settings = { ...run.settings, effort: settings.effort }
     }
+    if (settings.permissionMode !== undefined && run.denyAll) throw new Error('a session without tools has no permission modes')
     if (settings.permissionMode !== undefined && settings.permissionMode !== run.settings.permissionMode) {
       if (this.variant !== 'omp') throw new Error(`${this.variant} has no permission modes`)
       return { ...(await this.relaunch(run, settings.permissionMode)).settings }
@@ -398,6 +422,7 @@ class PiRunner implements StructuredRunner {
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
+    this.clearAbort(run)
     this.running.delete(sessionId)
     this.closeTurn(run, 'stopped')
     try {
@@ -410,8 +435,13 @@ class PiRunner implements StructuredRunner {
   }
 
   private createRun(session: Session, executable: string, options: StructuredStartOptions, resume: string | undefined): Running {
+    const denyAll = options.toolPolicy === 'deny-all'
     const run: Running = {
       sessionId: session.id,
+      denyAll,
+      contextWindow: null,
+      lastContextTokens: null,
+      abortTimer: null,
       rpc: undefined as unknown as PiRpc,
       ready: false,
       ended: false,
@@ -429,7 +459,7 @@ class PiRunner implements StructuredRunner {
       settings: {
         ...(typeof options.model === 'string' ? { model: options.model } : {}),
         ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
-        ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { permissionMode: options.permissionMode } : {})
+        ...(!denyAll && this.variant === 'omp' && typeof options.permissionMode === 'string' ? { permissionMode: options.permissionMode } : {})
       },
       launch: { session, executable, options },
       providerSessionId: '',
@@ -441,7 +471,8 @@ class PiRunner implements StructuredRunner {
         args: piLaunchArgs(this.variant, {
           ...(typeof options.model === 'string' ? { model: options.model } : {}),
           ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
-          ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
+          ...(!denyAll && this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
+          ...(denyAll ? { denyAll } : {}),
           ...(resume === undefined ? {} : { resume })
         }),
         cwd: session.cwd,
@@ -479,10 +510,15 @@ class PiRunner implements StructuredRunner {
   private closeTurn(run: Running, state: 'done' | 'stopped' | 'failed'): void {
     if (!run.working) return
     for (const entry of closingEntries(run.calls, state)) this.append(run, entry)
+    const usage: TurnUsage | null =
+      state === 'done' && run.lastContextTokens !== null ? { contextTokens: run.lastContextTokens, contextWindow: run.contextWindow } : null
+    run.lastContextTokens = null
+    this.clearAbort(run)
     this.context.appendMessage({
       sessionId: run.sessionId,
       role: 'result',
       text: state === 'done' ? 'Turn finished' : state === 'stopped' ? 'Turn stopped' : 'Turn failed',
+      ...(usage === null ? {} : { data: { contextUsage: usage } }),
       item: turnEndItem(state, run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
     })
     run.working = false
@@ -508,6 +544,7 @@ class PiRunner implements StructuredRunner {
       item: userItem(message, options.images, options.queuedId)
     })
     const steering = run.working
+    if (run.denyAll) await this.requireNoTools(run)
     if (!steering) this.beginTurn(run)
     const params = { message: hoistCommand(message, run.commands), ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
     try {
@@ -528,6 +565,58 @@ class PiRunner implements StructuredRunner {
       }
       throw error
     }
+  }
+
+  private clearAbort(run: Running): void {
+    if (run.abortTimer !== null) clearTimeout(run.abortTimer)
+    run.abortTimer = null
+  }
+
+  /** Ends a `deny-all` session that cannot prove it has no tools; the reason is journaled first. */
+  private failNoTools(run: Running, reason: string): never {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+    void this.stop(run.sessionId)
+    throw new Error(reason)
+  }
+
+  /** pi lists its extension commands and omp lists its tools; either list must be empty before a message goes out. */
+  private async requireNoTools(run: Running): Promise<void> {
+    const timeoutMs = this.deps.checkTimeoutMs ?? CHECK_TIMEOUT_MS
+    let data: Record<string, unknown> | null
+    try {
+      data = record(await run.rpc.request(this.variant === 'pi' ? 'get_commands' : 'get_state', {}, timeoutMs))
+    } catch (error) {
+      if (run.stopped || run.ended) throw new Error('session is not running', { cause: error })
+      const reason = error instanceof Error ? error.message : String(error)
+      return this.failNoTools(run, `${this.variant} could not confirm it has no tools: ${reason}`)
+    }
+    const list = this.variant === 'pi' ? data?.commands : data?.dumpTools
+    if (!Array.isArray(list)) {
+      return this.failNoTools(run, `${this.variant} could not confirm it has no tools: the reply lists no ${this.variant === 'pi' ? 'commands' : 'tools'}`)
+    }
+    const offered = this.variant === 'pi' ? list.filter((entry) => record(entry)?.source === 'extension') : list
+    if (offered.length === 0) return
+    const names = offered.slice(0, 8).map((entry) => (text(record(entry)?.name) !== '' ? oneLine(text(record(entry)?.name), 80) : 'unnamed')).join(', ')
+    const remaining = offered.length > 8 ? ` and ${offered.length - 8} more` : ''
+    return this.failNoTools(
+      run,
+      this.variant === 'pi'
+        ? `pi loaded extensions in a session that must have no tools: ${names}${remaining}`
+        : `omp offers tools to a session that must have none: ${names}${remaining}`
+    )
+  }
+
+  private refuseTool(run: Running, frame: PiFrame): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: frame, item: statusItem(TOOLS_DISABLED) })
+    if (run.abortTimer !== null) return
+    const timeoutMs = this.deps.abortTimeoutMs ?? DENY_ALL_ABORT_TIMEOUT_MS
+    run.abortTimer = setTimeout(() => this.endForTool(run, `${this.variant} did not stop after a tool started`), timeoutMs)
+    void run.rpc.request('abort', {}, timeoutMs).catch(() => undefined)
+  }
+
+  private endForTool(run: Running, reason: string): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+    void this.stop(run.sessionId)
   }
 
   private onFrame(run: Running, frame: PiFrame): void {
@@ -560,6 +649,7 @@ class PiRunner implements StructuredRunner {
       case 'message_end': {
         const message = record(frame.message)
         if (message?.role !== 'assistant') return
+        if (run.working) run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
         run.stream.reset()
         const content = Array.isArray(message.content) ? message.content : []
         const body = content
@@ -575,6 +665,20 @@ class PiRunner implements StructuredRunner {
       }
       case 'tool_execution_start':
       case 'tool_execution_end':
+        if (run.denyAll) {
+          if (frame.type === 'tool_execution_start') {
+            this.refuseTool(run, frame)
+            return
+          }
+          const toolName = text(frame.toolName) || 'tool'
+          const result = record(frame.result)
+          const output = Array.isArray(result?.content)
+            ? result.content.map((part) => (record(part)?.type === 'text' ? text(record(part)?.text) : '')).join('')
+            : ''
+          if (frame.isError === true && output === `Tool ${toolName} not found`) return
+          this.endForTool(run, `${this.variant} ran ${toolName} in a session that must have no tools`)
+          return
+        }
         for (const entry of piEntries(frame, run.calls)) this.append(run, entry)
         return
       case 'agent_settled':
@@ -639,6 +743,10 @@ class PiRunner implements StructuredRunner {
 
   private onUiRequest(run: Running, frame: PiFrame): void {
     const id = text(frame.id)
+    if (run.denyAll && ['select', 'confirm', 'input', 'editor', 'ask'].includes(text(frame.method))) {
+      if (id !== '') run.rpc.send({ type: 'extension_ui_response', id, cancelled: true })
+      return
+    }
     switch (frame.method) {
       case 'select':
       case 'confirm':

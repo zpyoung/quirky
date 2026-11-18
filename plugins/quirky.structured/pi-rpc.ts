@@ -47,9 +47,16 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const STDIN_GRACE_MS = 500
 const TERM_GRACE_MS = 2_000
 
+// omp rejects --no-mcp, so its offered tools are checked before each message instead
+const DENY_ALL_ARGS: Record<PiVariant, string[]> = { pi: ['--no-tools', '--no-extensions', '--no-mcp'], omp: ['--no-tools', '--no-extensions'] }
+
 /** The command-line arguments that start a pi or omp RPC child, resuming `resume` when given; only omp takes an approval mode. */
-export function piLaunchArgs(variant: PiVariant, options: { model?: string; effort?: string; resume?: string; approvalMode?: string }): string[] {
+export function piLaunchArgs(
+  variant: PiVariant,
+  options: { model?: string; effort?: string; resume?: string; approvalMode?: string; denyAll?: boolean }
+): string[] {
   const args = ['--mode', 'rpc']
+  if (options.denyAll === true) args.push(...DENY_ALL_ARGS[variant])
   if (options.resume !== undefined) args.push(variant === 'pi' ? '--session' : '--resume', options.resume)
   if (options.model !== undefined) args.push('--model', options.model)
   if (options.effort !== undefined) args.push('--thinking', options.effort)

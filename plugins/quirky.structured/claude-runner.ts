@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
 import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner } from './runner'
+import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
 import {
   CallTracker,
   ProseStream,
@@ -22,6 +22,33 @@ import { MAX_IMAGE_BYTES } from './queue'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 import { planDecision, planSpec, planText } from './plan'
 import { hoistCommand } from './slash-commands'
+
+const TOOLS_DISABLED = 'tools are disabled for this session'
+const denyEveryTool: CanUseTool = async () => ({ behavior: 'deny', message: TOOLS_DISABLED })
+
+function numberOr0(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+/** The context footprint of a result message, or null when the SDK reported no usage. */
+function resultUsage(msg: any): TurnUsage | null {
+  const usage = msg?.usage
+  if (typeof usage !== 'object' || usage === null) return null
+  const windows =
+    typeof msg.modelUsage === 'object' && msg.modelUsage !== null
+      ? Object.values<any>(msg.modelUsage)
+          .map((entry) => entry?.contextWindow)
+          .filter((value): value is number => typeof value === 'number' && value > 0)
+      : []
+  return {
+    contextTokens:
+      numberOr0(usage.input_tokens) +
+      numberOr0(usage.cache_read_input_tokens) +
+      numberOr0(usage.cache_creation_input_tokens) +
+      numberOr0(usage.output_tokens),
+    contextWindow: windows.length > 0 ? Math.max(...windows) : null
+  }
+}
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -167,6 +194,8 @@ function createInputStream(): InputStream {
 }
 
 type Running = {
+  /** A `deny-all` session refuses every tool and cannot leave that by changing its permission mode. */
+  denyAll: boolean
   query: ClaudeQuery
   input: InputStream
   providerSessionId: string | undefined
@@ -334,8 +363,10 @@ class ClaudeRunner implements StructuredRunner {
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: userMessage(prompt, providerSessionId), item: userItem(prompt) })
     }
     this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
-    const mode = isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
+    const denyAll = launchOptions.toolPolicy === 'deny-all'
+    const mode = !denyAll && isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
     const run: Running = {
+      denyAll,
       input,
       providerSessionId,
       providerSessionKnown: launchOptions.providerSession !== undefined,
@@ -377,9 +408,10 @@ class ClaudeRunner implements StructuredRunner {
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
           permissionMode: mode as PermissionMode,
           // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
-          allowDangerouslySkipPermissions: true,
+          allowDangerouslySkipPermissions: !denyAll,
           includePartialMessages: true,
-          canUseTool: this.canUseTool(session.id),
+          canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
+          ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
@@ -472,6 +504,7 @@ class ClaudeRunner implements StructuredRunner {
       await run.query.applyFlagSettings({ effortLevel: settings.effort as Options['effort'] })
       current.effort = settings.effort
     }
+    if (settings.permissionMode !== undefined && run.denyAll) throw new Error('a session without tools has no permission modes')
     if (settings.permissionMode !== undefined) await this.switchMode(sessionId, run, settings.permissionMode)
     return { ...current, permissionMode: run.mode }
   }
@@ -922,7 +955,10 @@ class ClaudeRunner implements StructuredRunner {
       run.openTurns = Math.max(0, run.openTurns - 1)
       run.turnStartedAt = run.openTurns > 0 ? Date.now() : null
     }
-    for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) this.append(sessionId, entry)
+    const usage = msg?.type === 'result' ? resultUsage(msg) : null
+    for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) {
+      this.append(sessionId, usage !== null && entry.role === 'result' ? { ...entry, data: { ...(entry.data as object), contextUsage: usage } } : entry)
+    }
     if (run && msg?.type === 'system' && (msg.subtype === 'init' || msg.subtype === 'status')) {
       await this.reportMode(sessionId, run, msg.permissionMode)
     }

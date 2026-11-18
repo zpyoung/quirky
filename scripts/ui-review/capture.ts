@@ -1165,6 +1165,16 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
           'Handoff dialog',
           trigger
         )
+      } else if (target.id === 'overlay:quirky.avatar/sheet') {
+        const trigger = namedOverlayTrigger('command:quirky.avatar/handoff', rpc(runtime.client, 'ui.command.run', {
+          id: 'command:quirky.avatar/handoff'
+        }, runtime.options.timeoutMs, runtime.options.signal))
+        await waitForOverlay(
+          runtime,
+          runtime.page.locator('[data-plugin-overlay="overlay:quirky.avatar/sheet"] [role="dialog"]'),
+          'Avatar hand-off sheet',
+          trigger
+        )
       } else if (target.id === 'overlay:quirky.loops/dialogs') {
         const trigger = namedOverlayTrigger('command:quirky.loops/new', rpc(runtime.client, 'ui.command.run', {
           id: 'command:quirky.loops/new',

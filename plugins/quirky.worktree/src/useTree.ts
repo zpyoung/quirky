@@ -21,6 +21,11 @@ export type HeimdallWorktreeStatus = {
   detail?: string
   consecutiveErrors?: number
 }
+export type AvatarWorktreeStatus = {
+  state: string
+  level: 'shadow' | 'local' | 'own-branch' | 'full'
+  needsYou: number
+}
 
 type HeimdallFleetRow = {
   enrollment: { worktreeId?: string | null }
@@ -35,6 +40,19 @@ type HeimdallFleetSnapshot = { generatedAtMs: number; rows: HeimdallFleetRow[] }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+export function isAvatarWorktreeStatus(value: unknown): value is AvatarWorktreeStatus {
+  const status = objectRecord(value)
+  return status !== null && typeof status.state === 'string' &&
+    (status.level === 'shadow' || status.level === 'local' || status.level === 'own-branch' || status.level === 'full') &&
+    typeof status.needsYou === 'number' && Number.isFinite(status.needsYou)
+}
+
+function avatarStatusesByWorktree(value: unknown): Record<string, AvatarWorktreeStatus> {
+  const incoming = objectRecord(value)
+  if (!incoming) return {}
+  return Object.fromEntries(Object.entries(incoming).filter((entry): entry is [string, AvatarWorktreeStatus] => isAvatarWorktreeStatus(entry[1])))
 }
 function otherClientProjection(value: unknown): Map<string, WorkspaceOriginView['otherClient']> {
   const result = new Map<string, WorkspaceOriginView['otherClient']>()
@@ -108,7 +126,10 @@ function statusByWorktree(rows: readonly HeimdallFleetRow[]): Record<string, Hei
   return Object.fromEntries(statuses)
 }
 
-export type HeimdallAwareWorktree = WorktreeControl & { heimdallStatus: HeimdallWorktreeStatus | null }
+export type HeimdallAwareWorktree = WorktreeControl & {
+  heimdallStatus: HeimdallWorktreeStatus | null
+  avatarStatus: AvatarWorktreeStatus | null
+}
 
 export type TreeData = {
   repos: Repo[]
@@ -139,10 +160,12 @@ export function useTree(context: UiPluginContext): TreeData {
   const [tags, setTags] = useState<Tag[]>([])
   const latestTags = useRef(0)
   const [heimdallByWorktree, setHeimdallByWorktree] = useState<Record<string, HeimdallWorktreeStatus>>({})
+  const [avatarByWorktree, setAvatarByWorktree] = useState<Record<string, AvatarWorktreeStatus>>({})
   const [loaded, setLoaded] = useState(false)
   const latestTree = useRef(0)
   const latestSessions = useRef(0)
   const latestHeimdall = useRef(Number.NEGATIVE_INFINITY)
+  const latestAvatar = useRef(0)
   const [otherClientByWorktree, setOtherClientByWorktree] = useState<ReadonlyMap<string, WorkspaceOriginView['otherClient']>>(() => new Map())
   const [hasAuthenticatedDesktopClient, setHasAuthenticatedDesktopClient] = useState(false)
   const latestOrigins = useRef(0)
@@ -224,11 +247,23 @@ export function useTree(context: UiPluginContext): TreeData {
     }
   }, [context])
 
+  const loadAvatar = useCallback(async () => {
+    const ticket = ++latestAvatar.current
+    try {
+      const statuses = avatarStatusesByWorktree(await context.call('quirky.avatar/sidebarStatus', {}))
+      if (ticket !== latestAvatar.current) return
+      setAvatarByWorktree(statuses)
+    } catch {
+      if (ticket === latestAvatar.current) setAvatarByWorktree({})
+    }
+  }, [context])
+
   useEffect(() => {
     void treeRefresh.request()
     void originsRefresh.request()
     void loadSessions()
     void loadHeimdall()
+    void loadAvatar()
     void loadTags()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       const data = (event as { data?: unknown }).data
@@ -253,10 +288,14 @@ export function useTree(context: UiPluginContext): TreeData {
           setSessions((previous) => (previous ? previous.filter((session) => session.id !== sessionData?.sessionId) : previous))
           break
         }
+        case 'quirky.avatar/changed':
+          void loadAvatar()
+          break
         case 'plugin.changed':
           void treeRefresh.request()
           void loadSessions()
           void loadHeimdall()
+          void loadAvatar()
           void loadTags()
           break
         case 'quirky.heimdall/fleetChanged': {
@@ -276,6 +315,7 @@ export function useTree(context: UiPluginContext): TreeData {
       void originsRefresh.request()
       void loadSessions()
       void loadHeimdall()
+      void loadAvatar()
       void loadTags()
     })
     return () => {
@@ -284,12 +324,16 @@ export function useTree(context: UiPluginContext): TreeData {
       unsubscribe()
       stopConnection()
     }
-  }, [context, treeRefresh, originsRefresh, loadSessions, loadHeimdall, loadTags])
+  }, [context, treeRefresh, originsRefresh, loadSessions, loadHeimdall, loadAvatar, loadTags])
 
-  const worktreesWithHeimdall = useMemo<HeimdallAwareWorktree[]>(
-    () => worktrees.map((worktree) => ({ ...worktree, heimdallStatus: heimdallByWorktree[worktree.id] ?? null })),
-    [heimdallByWorktree, worktrees]
+  const worktreesWithStatuses = useMemo<HeimdallAwareWorktree[]>(
+    () => worktrees.map((worktree) => ({
+      ...worktree,
+      heimdallStatus: heimdallByWorktree[worktree.id] ?? null,
+      avatarStatus: avatarByWorktree[worktree.id] ?? null
+    })),
+    [avatarByWorktree, heimdallByWorktree, worktrees]
   )
 
-  return { repos, groups, worktrees: worktreesWithHeimdall, sessions, sessionsSettled, tags, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded }
+  return { repos, groups, worktrees: worktreesWithStatuses, sessions, sessionsSettled, tags, otherClientByWorktree, hasAuthenticatedDesktopClient, loaded }
 }

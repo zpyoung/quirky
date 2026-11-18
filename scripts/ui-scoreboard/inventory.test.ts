@@ -433,17 +433,7 @@ describe('collectInventory', () => {
     expect(after.dirty).toBe(true)
   })
 
-  test('records the exact avatar exclusion only when its manifest is absent', () => {
-    const inventory = collect(createRepository())
-
-    expect(inventory.exclusions).toEqual([{
-      plugin: 'quirky.avatar', reason: 'paused-unmerged', branch: 'zpyoung/avatar-plugin', pr: 305, steerDate: '2026-11-13'
-    }])
-    expect(inventory.plugins.some(({ id }) => id === 'quirky.avatar')).toBe(false)
-    expect(inventory.failures).toEqual([])
-  })
-
-  test('fails inventory rather than excluding an avatar manifest present in the scanned tree', () => {
+  test('inventories the avatar plugin like any other plugin', () => {
     const root = createRepository({ plugins: false })
     addPlugin(root, 'quirky.avatar', 'quirky.avatar', { ui: 'src/ui.ts', sources: { 'src/ui.ts': 'export const Avatar = () => null\n' } })
     git(root, 'add', '--all')
@@ -451,7 +441,8 @@ describe('collectInventory', () => {
     const inventory = collect(root)
 
     expect(inventory.plugins.some(({ id }) => id === 'quirky.avatar')).toBe(true)
-    expect(inventory.failures).toContainEqual(expect.objectContaining({ code: 'paused-plugin-present' }))
+    expect(inventory.exclusions).toEqual([])
+    expect(inventory.failures).toEqual([])
   })
 
   test('reports malformed manifests and retains their immediate plugin rows', () => {

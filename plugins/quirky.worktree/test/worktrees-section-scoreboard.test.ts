@@ -9,7 +9,7 @@ import type { CoverageFile, Evidence, Inventory, PluginInventory } from '../../.
 
 const FRAGMENT = 'plugins/quirky.worktree/ui-scoreboard/worktrees-section.json'
 const FILES = ['WorktreesSection', 'FilterMenu', 'ViewTabs', 'DisplayMenu', 'SaveViewDialog'].map((name) => `plugins/quirky.worktree/src/${name}.tsx`)
-const owned: Record<string, true> = Object.fromEntries(FILES.map((file) => [file, true]))
+const owned: Record<string, true> = Object.fromEntries([...FILES, 'plugins/quirky.worktree/src/useAvatarHandoff.ts'].map((file) => [file, true]))
 const PASS: Record<string, true> = { 'state-covered': true, 'state-not-applicable': true, 'not-state': true, 'action-routed': true, 'action-transient': true, 'action-not-user': true }
 let inventory: Inventory
 let plugin: PluginInventory

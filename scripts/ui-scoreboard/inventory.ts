@@ -6,13 +6,12 @@ import type { UiModel, UiSlotEntry } from '@quirky/protocol'
 import { discoverCaptureTargets, projectCaptureInventory } from '../ui-review/contribution-inventory'
 import { projectTools } from '../../packages/daemon/src/plugins/tool-layout'
 import type { CaptureTarget, ContributionInventory } from '../ui-review/contracts'
-import type { CliCommandDeclaration, Evidence, Exclusion, Inventory, PluginContributions, PluginInventory, SourceFile } from './contracts'
+import type { CliCommandDeclaration, Evidence, Inventory, PluginContributions, PluginInventory, SourceFile } from './contracts'
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs', '.html', '.htm', '.svg', '.css', '.scss', '.sass', '.less'])
 const EXCLUDED_DIRECTORIES = new Set(['node_modules', 'vendor', 'dist', 'build', 'coverage', '.git', 'test', 'tests', '__tests__', '__test__', '_test', '_tests', 'fixture', 'fixtures', '__fixtures__', '_fixtures'])
-const SLOT_KINDS: readonly UiSlotEntry['kind'][] = ['view', 'panel', 'sidebar-section', 'activity-item', 'status-bar', 'overlay', 'settings-section']
+const SLOT_KINDS: readonly UiSlotEntry['kind'][] = ['view', 'panel', 'sidebar-section', 'activity-item', 'status-bar', 'window-bar-item', 'overlay', 'settings-section']
 const LEGACY_COMPATIBILITY_DEFINITION = 'packages/ui/src/design-system/compatibility-tokens.css'
-const AVATAR_EXCLUSION: Exclusion = { plugin: 'quirky.avatar', reason: 'paused-unmerged', branch: 'zpyoung/avatar-plugin', pr: 305, steerDate: '2026-11-13' }
 const PLUGIN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const COVERAGE_FRAGMENT_NAME = /^[a-z0-9][a-z0-9-]*\.json$/
 
@@ -369,8 +368,9 @@ function collectDirty(repoRoot: string, failures: Evidence[]): boolean {
 }
 
 function makeUiModel(): { model: UiModel; slots: Record<UiSlotEntry['kind'], UiSlotEntry[]> } {
+  const windowBarItems: UiSlotEntry[] = []
   const model: UiModel = {
-    sidebarSections: [], statusBars: [], activityItems: [], panels: [], settingsSections: [], views: [], overlays: [],
+    sidebarSections: [], statusBars: [], activityItems: [], panels: [], settingsSections: [], windowBarItems, views: [], overlays: [],
     commands: [], keybindings: [], settings: [], menuItems: [], themes: [],
     theme: { chosen: 'default', active: 'default' }, modules: {}
   }
@@ -382,6 +382,7 @@ function makeUiModel(): { model: UiModel; slots: Record<UiSlotEntry['kind'], UiS
       'sidebar-section': model.sidebarSections,
       'activity-item': model.activityItems,
       'status-bar': model.statusBars,
+      'window-bar-item': windowBarItems,
       overlay: model.overlays,
       'settings-section': model.settingsSections
     }
@@ -490,7 +491,7 @@ function discoverPlugins(
   repoRoot: string,
   snapshots: Map<string, string>,
   failures: Evidence[]
-): { plugins: PluginInventory[]; targetIds: Map<string, string[]>; model: UiModel; discoveryComplete: boolean; avatarPresent: boolean } {
+): { plugins: PluginInventory[]; targetIds: Map<string, string[]>; model: UiModel; discoveryComplete: boolean } {
   const pluginsRoot = join(repoRoot, 'plugins')
   const { model, slots } = makeUiModel()
   const plugins: PluginInventory[] = []
@@ -501,31 +502,19 @@ function discoverPlugins(
     const rootStat = lstatSync(pluginsRoot)
     if (rootStat.isSymbolicLink()) {
       failures.push(evidence('source-symlink', 'Immediate plugin root is a symlink: plugins'))
-      return { plugins, targetIds, model, discoveryComplete: false, avatarPresent: false }
+      return { plugins, targetIds, model, discoveryComplete: false }
     }
     if (!rootStat.isDirectory()) throw new Error('Immediate plugin root is not a directory')
     entries = readdirSync(pluginsRoot, { withFileTypes: true }).sort((left, right) => compareText(left.name, right.name))
   } catch (error) {
     failures.push(evidence('plugin-discovery-failed', `Cannot read immediate plugin directory plugins: ${errorMessage(error)}`))
-    return { plugins, targetIds, model, discoveryComplete: false, avatarPresent: false }
+    return { plugins, targetIds, model, discoveryComplete: false }
   }
 
-  let avatarPresent = false
   for (const entry of entries) {
-    if (entry.name === 'quirky.avatar' && (entry.isDirectory() || entry.isSymbolicLink())) {
-      const avatarManifest = join(pluginsRoot, entry.name, 'quirky-plugin.json')
-      try {
-        lstatSync(avatarManifest)
-        avatarPresent = true
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') avatarPresent = true
-      }
-    }
     if (entry.isSymbolicLink()) {
       failures.push(evidence('source-symlink', `Immediate plugin directory is a symlink: plugins/${entry.name}`))
-      if (entry.name !== 'quirky.avatar' || avatarPresent) {
-        plugins.push({ id: entry.name, directory: `plugins/${entry.name}`, hasUi: false, targets: [], sources: [] })
-      }
+      plugins.push({ id: entry.name, directory: `plugins/${entry.name}`, hasUi: false, targets: [], sources: [] })
       continue
     }
     if (!entry.isDirectory()) continue
@@ -541,7 +530,6 @@ function discoverPlugins(
       plugins.push({ id: entry.name, directory: `plugins/${entry.name}`, hasUi: false, targets: [], sources: [] })
       continue
     }
-    if (entry.name === 'quirky.avatar') avatarPresent = true
     if (manifestStat.isSymbolicLink()) {
       const file = `plugins/${entry.name}/quirky-plugin.json`
       failures.push(evidence('source-symlink', `Plugin manifest is a symlink: ${file}`))
@@ -571,7 +559,7 @@ function discoverPlugins(
   for (const kind of SLOT_KINDS) {
     slots[kind].sort((left, right) => left.order - right.order || compareText(left.id, right.id))
   }
-  return { plugins, targetIds, model, discoveryComplete: true, avatarPresent }
+  return { plugins, targetIds, model, discoveryComplete: true }
 }
 
 function scanWorkspaceSources(repoRoot: string, snapshots: Map<string, string>, failures: Evidence[]): void {
@@ -655,7 +643,6 @@ export function collectInventory(repoRoot: string): Inventory {
     targets = discoverTargets(discovered.model, failures)
     contributionInventory = { declaredTargets: targets, toolAliases: [] }
   }
-  if (discovered.avatarPresent) failures.push(evidence('paused-plugin-present', 'Paused plugin quirky.avatar is present in the scanned repository'))
 
   if (discovered.plugins.length === 0) failures.push(evidence('empty-plugin-inventory', 'No immediate plugin manifests were discovered'))
   const ids = new Set<string>()
@@ -687,7 +674,7 @@ export function collectInventory(repoRoot: string): Inventory {
     targets,
     contributionInventory,
     sharedSources,
-    exclusions: discovered.discoveryComplete && !discovered.avatarPresent ? [AVATAR_EXCLUSION] : [],
+    exclusions: [],
     failures
   }
 }

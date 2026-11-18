@@ -54,6 +54,12 @@ export type StructuredContext = {
   resolvePiPath(variant: 'pi' | 'omp'): Promise<string>
 }
 
+/** `deny-all` runs a session with no tools: every tool or approval request is refused without an ask. */
+export type ToolPolicy = 'default' | 'deny-all'
+
+/** The context footprint a runner records as `data.contextUsage` on the `result` message that ends a turn. */
+export type TurnUsage = { contextTokens: number; contextWindow: number | null }
+
 /** The per-session launch inputs: agent picks plus the resolved provider environment patch. */
 export type StructuredLaunchOptions = { model?: string; effort?: string; env?: Record<string, string | null> }
 
@@ -64,6 +70,7 @@ export type StructuredLaunchOptions = { model?: string; effort?: string; env?: R
 export type StructuredStartOptions = StructuredLaunchOptions & {
   providerSession?: SessionProviderSession
   permissionMode?: string
+  toolPolicy?: ToolPolicy
   /** Highest plan version already journaled, so numbering continues across a resume. */
   planVersion?: number
   /** Text of the newest plan version, so an unchanged re-presentation is recognised after a resume. */

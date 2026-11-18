@@ -48,9 +48,10 @@ export class CodexConnection {
     executable: string,
     cwd: string,
     env: NodeJS.ProcessEnv,
-    private readonly handlers: CodexConnectionHandlers
+    private readonly handlers: CodexConnectionHandlers,
+    serverArgs: readonly string[] = []
   ) {
-    this.handle = process.spawn([executable, 'app-server'], {
+    this.handle = process.spawn([executable, 'app-server', ...serverArgs], {
       timeoutMs: null,
       cwd,
       env,

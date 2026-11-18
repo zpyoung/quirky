@@ -20,27 +20,65 @@ import type {
   StructuredRunner,
   StructuredSendOptions,
   StructuredSettings,
-  StructuredStartOptions
+  StructuredStartOptions,
+  ToolPolicy,
+  TurnUsage
 } from './runner'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
+const TOOLS_DISABLED = 'tools are disabled for this session'
+const MCP_CONFIG_FAILURE = "could not read Codex's MCP servers, so a session without tools can't start"
+const TOOL_STOP_FAILURE = 'could not stop a tool in a session without tools'
+const DENY_ALL_SERVER_ARGS = [
+  ...[
+    'shell_tool',
+    'unified_exec',
+    'view_image',
+    'sleep_tool',
+    'apps',
+    'plugins',
+    'browser_use',
+    'computer_use',
+    'in_app_browser',
+    'image_generation',
+    'multi_agent',
+    'multi_agent_v2',
+    'goals'
+  ].flatMap((feature) => ['--disable', feature]),
+  '-c',
+  'web_search="disabled"'
+]
+const NON_TOOL_ITEM_TYPES: Record<string, true> = {
+  userMessage: true,
+  agentMessage: true,
+  reasoning: true,
+  plan: true,
+  hookPrompt: true,
+  contextCompaction: true,
+  enteredReviewMode: true,
+  exitedReviewMode: true
+}
 const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
 
 type CodexPermissions = {
-  approvalPolicy: 'on-request' | 'never'
+  approvalPolicy: 'on-request' | 'never' | 'untrusted'
   sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'
   approvalsReviewer: 'user' | 'auto_review'
 }
+
+/** Internal mode of a `deny-all` session; no catalog capability offers it. */
+const DENY_ALL_MODE = 'deny-all'
 
 /** What each permission mode in the Codex capabilities asks of app-server, matching Codex's `/permissions` presets. */
 const PERMISSIONS: Record<string, CodexPermissions> = {
   default: { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'user' },
   'read-only': { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' },
   'auto-review': { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' },
-  'full-access': { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' }
+  'full-access': { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' },
+  [DENY_ALL_MODE]: { approvalPolicy: 'untrusted', sandbox: 'read-only', approvalsReviewer: 'user' }
 }
 const DEFAULT_PERMISSION_MODE = 'default'
 
@@ -101,6 +139,47 @@ function tokenCounts(value: unknown): TokenCounts | null {
   return Object.keys(counts).length === 0 ? null : counts
 }
 
+function turnContextUsage(update: Record<string, unknown>, last: TokenCounts | null, delta: TokenCounts | null): TurnUsage | null {
+  const counts = last ?? delta
+  if (counts === null) return null
+  const window = update.modelContextWindow ?? update.model_context_window
+  return {
+    contextTokens: (counts.inputTokens ?? 0) + (counts.outputTokens ?? 0),
+    contextWindow: typeof window === 'number' && Number.isFinite(window) && window > 0 ? window : null
+  }
+}
+
+function isPlainMap(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+type DisabledMcpServers = { mcp_servers: Record<string, { enabled: false }> }
+
+async function readDisabledMcpServers(
+  connection: CodexConnection,
+  cwd: string,
+  timeoutMs?: number
+): Promise<DisabledMcpServers | undefined> {
+  try {
+    const response = await connection.request('config/read', { cwd }, timeoutMs)
+    if (!isPlainMap(response) || !Object.hasOwn(response, 'config')) throw new Error()
+    const config = response.config
+    if (!isPlainMap(config)) throw new Error()
+    const servers = Object.hasOwn(config, 'mcp_servers') ? config.mcp_servers : undefined
+    if (servers === undefined || servers === null) return undefined
+    if (!isPlainMap(servers)) throw new Error()
+    const names = Object.keys(servers)
+    if (names.length === 0) return undefined
+    return {
+      mcp_servers: Object.fromEntries(names.map((name) => [name, { enabled: false }] as const))
+    }
+  } catch {
+    throw new Error(MCP_CONFIG_FAILURE)
+  }
+}
+
 function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): TokenCounts | null {
   if (baseline === null) return null
   const delta: TokenCounts = {}
@@ -134,6 +213,11 @@ export function codexSkills(response: unknown): Map<string, { command: AgentComm
 
 type Running = {
   sessionId: string
+  toolPolicy: ToolPolicy
+  turnUsage: TurnUsage | null
+  refusedTurnId: string | null
+  readingMcpConfig: boolean
+  pendingToolInterrupts: number
   threadId: string
   cwd: string
   /** The enabled skills `skills/list` reported, by name, with the path a `skill` input item needs. */
@@ -177,6 +261,8 @@ const SKILLS_TIMEOUT_MS = 5_000
 export type CodexRunnerDeps = {
   /** A per-run child environment for isolated process tests. Production inherits the daemon environment. */
   env?: NodeJS.ProcessEnv
+  /** How long a session without tools waits for Codex's `config/read` reply. A test may lower it. Default: 15 seconds. */
+  configReadTimeoutMs?: number
 }
 
 /** Runs Codex as a native JSONL app-server conversation without allocating a terminal. */
@@ -208,9 +294,10 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.model === 'string' ? { model: startOptions.model } : {}),
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
-      const permissionMode = startOptions.permissionMode ?? DEFAULT_PERMISSION_MODE
+      const toolPolicy = startOptions.toolPolicy ?? 'default'
+      const permissionMode = toolPolicy === 'deny-all' ? DENY_ALL_MODE : (startOptions.permissionMode ?? DEFAULT_PERMISSION_MODE)
       const permissions = threadPermissions(permissionMode)
-      const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env)
+      const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env, toolPolicy)
       run.permissionMode = permissionMode
       run.appliedPermissionMode = permissionMode
       startup.run = run
@@ -219,6 +306,16 @@ class CodexRunner implements StructuredRunner {
       await connection.request('initialize', { clientInfo: CLIENT_INFO })
       if (startup.stopped) return
       connection.notify('initialized', {})
+      let threadConfig: DisabledMcpServers | undefined
+      if (toolPolicy === 'deny-all') {
+        run.readingMcpConfig = true
+        try {
+          threadConfig = await readDisabledMcpServers(connection, session.cwd, this.deps.configReadTimeoutMs)
+        } finally {
+          run.readingMcpConfig = false
+        }
+      }
+      if (startup.stopped) return
 
       if (providerSession) {
         run.threadId = providerSession.id
@@ -226,6 +323,7 @@ class CodexRunner implements StructuredRunner {
           threadId: providerSession.id,
           cwd: session.cwd,
           ...permissions,
+          ...(threadConfig === undefined ? {} : { config: threadConfig }),
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -241,6 +339,7 @@ class CodexRunner implements StructuredRunner {
         const response = await connection.request('thread/start', {
           cwd: session.cwd,
           ...permissions,
+          ...(threadConfig === undefined ? {} : { config: threadConfig }),
           ...(options.model === undefined ? {} : { model: options.model })
         })
         run.threadId = this.threadIdFromResponse(response, 'thread/start')
@@ -282,6 +381,8 @@ class CodexRunner implements StructuredRunner {
     if (settings.model !== undefined) run.options = { ...run.options, model: settings.model }
     if (settings.effort !== undefined) run.options = { ...run.options, effort: settings.effort }
     if (settings.permissionMode !== undefined) {
+      if (run.toolPolicy === 'deny-all') throw new Error('a session without tools has no permission modes')
+      if (settings.permissionMode === DENY_ALL_MODE) throw new Error(`Codex has no permission mode ${settings.permissionMode}`)
       permissionsFor(settings.permissionMode)
       run.permissionMode = settings.permissionMode
     }
@@ -396,7 +497,8 @@ class CodexRunner implements StructuredRunner {
     executable: string,
     threadId: string,
     options: StructuredLaunchOptions,
-    envPatch?: Record<string, string | null>
+    envPatch?: Record<string, string | null>,
+    toolPolicy: ToolPolicy = 'default'
   ): Running {
     let run!: Running
     const connection = new CodexConnection(
@@ -408,10 +510,16 @@ class CodexRunner implements StructuredRunner {
         notification: (message) => this.onNotification(run, message),
         serverRequest: (request) => this.onServerRequest(run, request),
         failure: (error) => this.onFailure(run, error)
-      }
+      },
+      toolPolicy === 'deny-all' ? DENY_ALL_SERVER_ARGS : []
     )
     run = {
       sessionId: session.id,
+      toolPolicy,
+      turnUsage: null,
+      refusedTurnId: null,
+      readingMcpConfig: false,
+      pendingToolInterrupts: 0,
       threadId,
       cwd: session.cwd,
       skills: new Map(),
@@ -599,7 +707,21 @@ class CodexRunner implements StructuredRunner {
     const rawParams = message.params
     if (typeof method !== 'string' || typeof rawParams !== 'object' || rawParams === null || Array.isArray(rawParams)) return
     const params = rawParams as Record<string, unknown>
-    if (typeof params.threadId === 'string' && params.threadId !== run.threadId) return
+    const foreignThread = typeof params.threadId === 'string' && params.threadId !== run.threadId
+    if (run.toolPolicy === 'deny-all') {
+      if (foreignThread && (method === 'item/started' || method === 'item/completed' || method === 'turn/started')) {
+        this.refuseSecondAgent(run, params)
+        return
+      }
+      if (method === 'item/started' || method === 'item/completed') {
+        const item = params.item
+        if (isPlainMap(item) && (item.type === 'collabAgentToolCall' || item.type === 'subAgentActivity')) {
+          this.refuseSecondAgent(run, item)
+          return
+        }
+      }
+    }
+    if (foreignThread) return
 
     switch (method) {
       case 'skills/changed':
@@ -615,6 +737,7 @@ class CodexRunner implements StructuredRunner {
         const last = tokenCounts(usage.last)
         if (total) run.totalTokenUsage = total
         const turnUsage = last ?? (total ? tokenUsageDelta(total, run.turnUsageBaseline) : null)
+        run.turnUsage = turnContextUsage(usage, last, turnUsage) ?? run.turnUsage
         this.context.appendMessage({
           sessionId: run.sessionId,
           role: 'system',
@@ -677,6 +800,13 @@ class CodexRunner implements StructuredRunner {
       case 'item/started': {
         const item = params.item
         if (typeof item !== 'object' || item === null || Array.isArray(item)) return
+        if (run.toolPolicy === 'deny-all' && isPlainMap(item)) {
+          const type = item.type
+          if (typeof type !== 'string' || !Object.hasOwn(NON_TOOL_ITEM_TYPES, type)) {
+            this.refuseToolItem(run, params, item)
+            return
+          }
+        }
         this.journalStarted(run, item as Record<string, unknown>)
         return
       }
@@ -687,8 +817,13 @@ class CodexRunner implements StructuredRunner {
       }
       case 'item/completed': {
         const item = params.item
-        if (typeof item !== 'object' || item === null || Array.isArray(item)) return
-        this.journalItem(run, item as Record<string, unknown>)
+        if (!isPlainMap(item)) return
+        const type = item.type
+        if (run.toolPolicy === 'deny-all' && (typeof type !== 'string' || !Object.hasOwn(NON_TOOL_ITEM_TYPES, type))) {
+          this.refuseToolItem(run, params, item)
+        }
+        if (run.toolPolicy === 'deny-all' && typeof type !== 'string') return
+        this.journalItem(run, item)
         return
       }
       case 'error': {
@@ -722,6 +857,11 @@ class CodexRunner implements StructuredRunner {
       }
     }
     const status = turn.status
+    if (status === 'interrupted' && run.refusedTurnId === turnId) {
+      run.activeTurnId = null
+      this.finishCompletedTurn(run, turn)
+      return
+    }
     if (status === 'completed') {
       run.activeTurnId = null
       if (run.pendingApprovalCount > 0) {
@@ -744,11 +884,14 @@ class CodexRunner implements StructuredRunner {
     this.flushAssistantDeltas(run)
     run.pendingCompletion = null
     for (const entry of closingEntries(run.calls, 'done')) this.append(run, entry)
+    run.refusedTurnId = null
+    const usage = run.turnUsage
+    run.turnUsage = null
     this.context.appendMessage({
       sessionId: run.sessionId,
       role: 'result',
       text: 'Codex turn completed',
-      data: turn,
+      data: usage ? { ...turn, contextUsage: usage } : turn,
       item: turnEndItem('done', run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
     })
     run.turnStartedAt = null
@@ -796,6 +939,31 @@ class CodexRunner implements StructuredRunner {
     for (const entry of codexEntries(item, 'started', run.calls)) this.append(run, entry)
   }
 
+  /**
+   * Ends a deny-all turn that started a tool anyway. The refusal is journaled once and the turn is
+   * interrupted; its interrupted completion then settles the session as done, not failed.
+   */
+  private refuseToolItem(run: Running, params: Record<string, unknown>, item: object): void {
+    const turnId = typeof params.turnId === 'string' ? params.turnId : run.activeTurnId
+    if (turnId === null) {
+      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item, item: statusItem(TOOLS_DISABLED) })
+      this.failRun(run, new Error(TOOL_STOP_FAILURE))
+      return
+    }
+    if (run.refusedTurnId === turnId) return
+    run.refusedTurnId = turnId
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data: item, item: statusItem(TOOLS_DISABLED) })
+    run.pendingToolInterrupts++
+    void run.connection
+      .request('turn/interrupt', { threadId: run.threadId, turnId }, INTERRUPT_TIMEOUT_MS)
+      .catch(() => this.failRun(run, new Error(TOOL_STOP_FAILURE)))
+      .finally(() => { run.pendingToolInterrupts-- })
+  }
+
+  private refuseSecondAgent(run: Running, data: unknown): void {
+    this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data, item: statusItem(TOOLS_DISABLED) })
+    this.failRun(run, new Error('Codex started a second agent in a session without tools'))
+  }
   private journalItem(run: Running, item: Record<string, unknown>): void {
     const type = item.type
     const id = typeof item.id === 'string' ? item.id : undefined
@@ -867,6 +1035,33 @@ class CodexRunner implements StructuredRunner {
     run: Running,
     request: { id: CodexRpcId; method: string; params: unknown }
   ): Promise<void> {
+    if (run.toolPolicy === 'deny-all') {
+      switch (request.method) {
+        case 'item/commandExecution/requestApproval':
+        case 'item/fileChange/requestApproval':
+          run.connection.respond(request.id, { decision: 'decline' })
+          return
+        case 'execCommandApproval':
+        case 'applyPatchApproval':
+          run.connection.respond(request.id, { decision: 'denied' })
+          return
+        case 'mcpServer/elicitation/request':
+          run.connection.respond(request.id, { action: 'decline' })
+          return
+        case 'item/tool/requestUserInput':
+          run.connection.respond(request.id, { answers: {} })
+          return
+        case 'item/tool/call':
+          run.connection.respond(request.id, {
+            success: false,
+            contentItems: [{ type: 'inputText', text: TOOLS_DISABLED }]
+          })
+          return
+        default:
+          run.connection.respondError(request.id, -32601, `Method not found: ${request.method}`)
+          return
+      }
+    }
     if (request.method === 'item/tool/requestUserInput') return this.handleNativeQuestion(run, request)
     if (request.method !== 'item/commandExecution/requestApproval' && request.method !== 'item/fileChange/requestApproval') {
       run.connection.respondError(request.id, -32601, `Method not found: ${request.method}`)
@@ -943,6 +1138,9 @@ class CodexRunner implements StructuredRunner {
   }
 
   private onFailure(run: Running, error: Error): void {
-    this.failRun(run, error)
+    const failure = run.readingMcpConfig
+      ? new Error(MCP_CONFIG_FAILURE)
+      : run.pendingToolInterrupts > 0 ? new Error(TOOL_STOP_FAILURE) : error
+    this.failRun(run, failure)
   }
 }

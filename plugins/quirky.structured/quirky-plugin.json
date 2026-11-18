@@ -31,7 +31,14 @@
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
+              "properties": {
+                "toolPolicy": {
+                  "type": "string",
+                  "enum": ["default", "deny-all"],
+                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. A pi or omp session is checked before each prompt and ends if the agent has a tool to offer, which omp does whenever an MCP server is configured for it. Omit for the provider's normal approval flow."
+                }
+              },
+              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean. `toolPolicy` is handled by this plugin and is not an agent catalog option."
             },
             "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." },
             "permissionMode": { "type": "string", "description": "A permission mode from the agent's capabilities to open in. Omitted, the session opens in the mode matching the agent's terminal permission preset, else the agent's first mode." }
@@ -96,7 +103,7 @@
       },
       {
         "id": "resume",
-        "description": "Resumes the persisted native Claude, Codex, pi or omp conversation into a new structured session; the optional prompt starts its first turn.",
+        "description": "Resumes the persisted native Claude, Codex, pi or omp conversation into a new structured session; the optional prompt starts its first turn. A session created with toolPolicy: deny-all resumes with it.",
         "params": {
           "type": "object",
           "properties": {

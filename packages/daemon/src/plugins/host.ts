@@ -78,7 +78,7 @@ export type PluginHostOptions = {
   }) => Map<string, PluginDiagnostic[]>
 }
 
-const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook'])
+const FUNCTION_KINDS = new Set(['method', 'job', 'launch-hook', 'tool-gate'])
 
 const DEFAULT_TIMEOUT_MS = 10_000
 export const ACTIVATION_BACKOFF_BASE_MS = 1_000
@@ -495,12 +495,12 @@ export class PluginHost {
       this.assertEnabled(id)
     } catch (error) {
       disabledMidway = !this.isEnabled(id)
+      if (imported.module) await this.callDeactivate(id, imported.module, runtime)
       attempt.revoked = true
       attempt.implementations.clear()
       runtime.attempt = undefined
       runtime.module = undefined
       if (disabledMidway) {
-        if (imported.module) await this.callDeactivate(id, imported.module, runtime)
         await this.disposeActivation(id, attempt, runtime)
         await this.revokeExtension(id, attempt)
         runtime.failure = undefined
@@ -508,7 +508,6 @@ export class PluginHost {
         this.setState(runtime, 'inactive')
         throw conflict(`${id} was disabled during activation`)
       }
-      if (imported.module) await this.callDeactivate(id, imported.module, runtime)
       await this.disposeActivation(id, attempt, runtime)
       await this.revokeExtension(id, attempt)
       runtime.error = messageOf(error)
