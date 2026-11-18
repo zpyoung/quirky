@@ -5,8 +5,9 @@ import { loadStartingPicks } from './startingPicks'
 /**
  * Creates a structured chat session for `agent` in `worktree` without starting its first turn,
  * applying the composer `picks` and filling an unpicked model and effort from the agent's own settings
- * or the catalog default, so the session's launch settings name what it really runs on. Shared by
- * every surface that starts a chat.
+ * or the catalog default, so the session's launch settings name what it really runs on. A picked mode,
+ * Plan included, goes as `permissionMode` so the first turn already runs in it. Shared by every
+ * surface that starts a chat.
  */
 export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {
   const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks
@@ -16,7 +17,6 @@ export async function createChat(context: UiPluginContext, agent: string, worktr
     deferStart: true,
     ...(model === null ? {} : { model }),
     ...(effort === null ? {} : { options: { effort } }),
-    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),
-    ...(picks.plan ? { planMode: true } : {})
+    ...(picks.mode === null ? {} : { permissionMode: picks.mode })
   })) as Session
 }

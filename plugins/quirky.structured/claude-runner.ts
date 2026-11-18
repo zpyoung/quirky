@@ -1,8 +1,9 @@
-import type { CanUseTool, ModelInfo, Options, PermissionMode, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool, ModelInfo, Options, PermissionMode, PermissionResult, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
-import { extname } from 'node:path'
-import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
+import { homedir } from 'node:os'
+import { extname, join } from 'node:path'
+import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner } from './runner'
 import {
   CallTracker,
@@ -19,6 +20,7 @@ import {
 } from './items'
 import { MAX_IMAGE_BYTES } from './queue'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
+import { planDecision, planSpec, planText } from './plan'
 import { hoistCommand } from './slash-commands'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
@@ -30,6 +32,7 @@ export type ClaudeQuery = AsyncIterable<any> & {
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
   applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
+  initializationResult?(): Promise<{ models?: { value: string; supportsAutoMode?: boolean }[] }>
   supportedModels?(): Promise<ModelInfo[]>
   supportedCommands?(): Promise<ClaudeSlashCommand[]>
 }
@@ -40,10 +43,47 @@ export type ClaudeSlashCommand = { name: string; description?: string; argumentH
 export type ClaudeRunnerDeps = {
   /** Replaces the SDK's `query`; tests inject a fake. The SDK is imported on first use otherwise. */
   query?: (params: ClaudeQueryParams) => ClaudeQuery
+  /** Where Claude keeps plan files; defaults to `plans` under the session's Claude config directory. */
+  plansDir?: string
 }
 
 const DENIED = 'Denied from Quirky'
 const INTERRUPT_TIMEOUT_MS = 2000
+const KEEP_PLANNING = 'Keep planning.'
+const EMPTY_PLAN = 'The plan was empty. Present the plan again.'
+const SUPERSEDED_PLAN = 'A newer plan replaced this one. This plan was not approved.'
+const STOPPED_PLAN = 'The user stopped before answering. The plan was not approved; stay in plan mode.'
+const AUTO_REFUSED_SWITCH_FAILED = "Auto mode isn't available and switching to Accept edits failed."
+const AUTO_REFUSED = "Auto mode isn't available. Using Accept edits."
+
+const MODES: readonly PermissionModeName[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
+const MODE_LABELS: Record<PermissionModeName, string> = {
+  default: 'Default',
+  acceptEdits: 'Accept edits',
+  plan: 'Plan',
+  auto: 'Auto',
+  dontAsk: "Don't ask",
+  bypassPermissions: 'Bypass permissions'
+}
+
+function isModeName(value: unknown): value is PermissionModeName {
+  return typeof value === 'string' && (MODES as readonly string[]).includes(value)
+}
+
+/** What ends the wait on a plan before the user answers its ask. */
+type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' } | { kind: 'superseded' }
+
+type PendingPlan = {
+  askId: string | null
+  /** Set by whoever claims the plan first: an answer, feedback, a mode switch or a stop. */
+  settled: boolean
+  interrupt: PromiseWithResolvers<PlanInterrupt>
+  /** Resolves once the plan's final item is journaled. */
+  done: PromiseWithResolvers<void>
+}
+
+type ModelAvailability = { value: string; supportsAutoMode?: boolean }
+
 const COMMANDS_TIMEOUT_MS = 10_000
 const MCP_PROMPT = /^(.+):(\S+) \(MCP\)$/
 const SOURCE_SUFFIX = / \((user|project)\)$/
@@ -140,7 +180,28 @@ type Running = {
   turnStartedAt: number | null
   /** Prompts sent whose result has not arrived yet; a result closes one turn, not all of them. */
   openTurns: number
-  settings: { model?: string; effort?: string; permissionMode: string; planMode: boolean }
+  settings: { model?: string; effort?: string }
+  /** The mode Claude is in as far as Quirky knows; the newest `mode` item mirrors it. */
+  mode: PermissionModeName
+  autoAvailable: boolean
+  initModel: string | undefined
+  models: ModelAvailability[] | null
+  initialized: boolean
+  plansDir: string
+  planVersion: number
+  lastPlanText: string | null
+  /** The newest journaled item of each plan version, so a status change can journal a full copy. */
+  plans: Map<number, PlanItem>
+  pendingPlan: PendingPlan | null
+  /** Tail of the ExitPlanMode calls queued on this run; each call runs after the one before it. */
+  planQueue: Promise<void>
+  /** Count of ExitPlanMode calls received, so a queued call can tell a newer one has arrived. */
+  planArrivals: number
+  /** ExitPlanMode calls received and not yet finished. */
+  planInFlight: number
+  /** The mode an approval asked Claude to switch to, until the turn's result confirms it. */
+  pendingApprovalTarget: 'auto' | 'acceptEdits' | 'default' | null
+  approvedVersion: number | null
   /** The SDK's command list, or null until `supportedCommands()` answers. */
   slashCommands: ClaudeSlashCommand[] | null
   /** The skill names from `system/init`, or null until the first turn starts. */
@@ -195,6 +256,11 @@ function userMessage(text: string, providerSessionId?: string, images: EncodedIm
     parent_tool_use_id: null,
     ...(providerSessionId === undefined ? {} : { session_id: providerSessionId })
   }
+}
+
+function configDirOf(env: Record<string, string | null> | undefined): string {
+  const configured = env?.CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR
+  return typeof configured === 'string' && configured !== '' ? configured : join(homedir(), '.claude')
 }
 
 function environmentOf(patch: Record<string, string | null>): Record<string, string> {
@@ -268,8 +334,7 @@ class ClaudeRunner implements StructuredRunner {
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: userMessage(prompt, providerSessionId), item: userItem(prompt) })
     }
     this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
-    const permissionMode = launchOptions.permissionMode ?? 'default'
-    const planMode = launchOptions.planMode === true
+    const mode = isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
     const run: Running = {
       input,
       providerSessionId,
@@ -281,13 +346,26 @@ class ClaudeRunner implements StructuredRunner {
       stream: new ProseStream(),
       turnStartedAt: hasPrompt ? Date.now() : null,
       openTurns: hasPrompt ? 1 : 0,
+      mode,
+      autoAvailable: false,
+      initModel: undefined,
+      models: null,
+      initialized: false,
+      plansDir: this.deps.plansDir ?? join(configDirOf(launchOptions.env), 'plans'),
+      planVersion: launchOptions.planVersion ?? 0,
+      lastPlanText: launchOptions.lastPlanText ?? null,
+      plans: new Map(launchOptions.lastPlan === undefined ? [] : [[launchOptions.lastPlan.version, launchOptions.lastPlan]]),
+      pendingPlan: null,
+      planQueue: Promise.resolve(),
+      planArrivals: 0,
+      planInFlight: 0,
+      pendingApprovalTarget: null,
+      approvedVersion: null,
       slashCommands: null,
       skills: null,
       commands: [],
       commandsLoaded: Promise.resolve(),
       settings: {
-        permissionMode,
-        planMode,
         ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
         ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort } : {})
       },
@@ -297,7 +375,7 @@ class ClaudeRunner implements StructuredRunner {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
-          permissionMode: (planMode ? 'plan' : permissionMode) as PermissionMode,
+          permissionMode: mode as PermissionMode,
           // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
           allowDangerouslySkipPermissions: true,
           includePartialMessages: true,
@@ -309,6 +387,7 @@ class ClaudeRunner implements StructuredRunner {
       })
     }
     this.running.set(session.id, run)
+    this.appendMode(session.id, run)
     run.commandsLoaded = this.loadCommands(session.id, run)
     if (hasPrompt) this.write(run, prompt)
     void this.pump(session.id, run)
@@ -387,20 +466,48 @@ class ClaudeRunner implements StructuredRunner {
     if (settings.model !== undefined) {
       await run.query.setModel(settings.model)
       current.model = settings.model
+      this.refreshAutoAvailable(sessionId, run)
     }
     if (settings.effort !== undefined) {
       await run.query.applyFlagSettings({ effortLevel: settings.effort as Options['effort'] })
       current.effort = settings.effort
     }
-    if (settings.permissionMode !== undefined || settings.planMode !== undefined) {
-      const permissionMode = settings.permissionMode ?? current.permissionMode
-      const planMode = settings.planMode ?? current.planMode
-      if (!planMode && permissionMode === 'auto' && current.permissionMode !== 'auto') await this.requireAutoModeModel(run)
-      await run.query.setPermissionMode((planMode ? 'plan' : permissionMode) as PermissionMode)
-      current.permissionMode = permissionMode
-      current.planMode = planMode
+    if (settings.permissionMode !== undefined) await this.switchMode(sessionId, run, settings.permissionMode)
+    return { ...current, permissionMode: run.mode }
+  }
+
+  /** Moves Claude to `target`, first telling a waiting plan it was not approved so it never outlives the switch. */
+  private async switchMode(sessionId: string, run: Running, target: string): Promise<void> {
+    if (!isModeName(target)) throw new Error(`unsupported permission mode ${target}`)
+    if (target === 'auto' && run.mode !== 'auto') await this.requireAutoModeModel(run)
+    const pending = run.pendingPlan
+    if (pending && target !== run.mode && !pending.settled) {
+      pending.settled = true
+      pending.interrupt.resolve({ kind: 'mode-switch', mode: target })
+      await pending.done.promise
     }
-    return { ...current }
+    await run.query.setPermissionMode(target)
+    run.pendingApprovalTarget = null
+    if (target === run.mode) return
+    run.mode = target
+    this.appendMode(sessionId, run)
+  }
+
+  autoAvailable(sessionId: string): boolean {
+    return this.running.get(sessionId)?.autoAvailable ?? false
+  }
+
+  planWaiting(sessionId: string): boolean {
+    const pending = this.running.get(sessionId)?.pendingPlan
+    return pending !== undefined && pending !== null && pending.askId !== null && !pending.settled
+  }
+
+  planFeedback(sessionId: string, text: string): boolean {
+    if (!this.planWaiting(sessionId)) return false
+    const pending = this.running.get(sessionId)!.pendingPlan!
+    pending.settled = true
+    pending.interrupt.resolve({ kind: 'feedback', text })
+    return true
   }
 
   /** Refuses auto mode when Claude reports that the session's model cannot use it; an unknown answer lets Claude decide. */
@@ -419,6 +526,7 @@ class ClaudeRunner implements StructuredRunner {
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended || run.turnStartedAt === null) return
+    this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
     run.interrupted = true
     const honoured = await Promise.race([
@@ -441,6 +549,7 @@ class ClaudeRunner implements StructuredRunner {
     if (!run || run.stopped) return
     run.stopped = true
     this.running.delete(sessionId)
+    this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
     run.input.end()
     await Promise.race([
@@ -454,8 +563,24 @@ class ClaudeRunner implements StructuredRunner {
   private canUseTool(sessionId: string): CanUseTool {
     let pending = 0
     return async (toolName, input) => {
+      const run = this.running.get(sessionId)
+      if (toolName === 'EnterPlanMode' && run) {
+        this.recordMode(sessionId, run, 'plan')
+        return { behavior: 'allow', updatedInput: input }
+      }
       pending++
       this.context.setStatus(sessionId, 'waiting')
+      const settle = (): void => {
+        pending--
+        if (pending === 0 && this.running.get(sessionId)?.turnStartedAt != null) this.context.setStatus(sessionId, 'working')
+      }
+      if (toolName === 'ExitPlanMode' && run) {
+        try {
+          return await this.exitPlanMode(sessionId, run, input)
+        } finally {
+          settle()
+        }
+      }
       let envelope: AskEnvelope | null = null
       try {
         if (toolName === 'AskUserQuestion') {
@@ -475,8 +600,7 @@ class ClaudeRunner implements StructuredRunner {
       } catch {
         envelope = null
       } finally {
-        pending--
-        if (pending === 0 && this.running.get(sessionId)?.turnStartedAt != null) this.context.setStatus(sessionId, 'working')
+        settle()
       }
       const outcome = approvalOutcome(envelope, true)
       if (outcome.decision === 'allow') return { behavior: 'allow', updatedInput: input }
@@ -493,6 +617,200 @@ class ClaudeRunner implements StructuredRunner {
     }
   }
 
+  /**
+   * Presents Claude's plan and waits for the user. Only an answered approve exit with a non-empty plan
+   * allows the tool; every other ending denies it and leaves Claude in plan mode.
+   */
+  private async exitPlanMode(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
+    const arrival = ++run.planArrivals
+    const previous = run.planInFlight === 0 ? null : run.planQueue
+    run.planInFlight++
+    const turn = Promise.withResolvers<void>()
+    run.planQueue = turn.promise
+    // supersede synchronously so the waiting plan stops being answerable before this call queues
+    this.settlePlan(run, { kind: 'superseded' })
+    try {
+      if (previous) await previous
+      // only the newest call may install a live ask; a call overtaken while queued is denied unseen
+      if (arrival !== run.planArrivals) return { behavior: 'deny', message: SUPERSEDED_PLAN }
+      return await this.presentPlan(sessionId, run, input)
+    } finally {
+      run.planInFlight--
+      turn.resolve()
+    }
+  }
+
+  private async presentPlan(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
+    const found = planText(input, run.lastPlanText, run.plansDir)
+    for (const earlier of [...run.plans.values()]) {
+      if (earlier.status === 'waiting' || earlier.status === 'not-answered') {
+        this.appendPlan(sessionId, run, { ...withoutAsk(earlier), status: 'revised' })
+      }
+    }
+    const version = ++run.planVersion
+    const unchanged = !found.empty && found.text === run.lastPlanText
+    if (!found.empty) run.lastPlanText = found.text
+    const base: PlanItem = {
+      kind: 'plan',
+      version,
+      status: 'waiting',
+      text: found.text,
+      ...(found.filePath === undefined ? {} : { filePath: found.filePath }),
+      ...(found.empty ? { empty: true } : {}),
+      ...(unchanged ? { unchanged: true } : {})
+    }
+    const pending: PendingPlan = {
+      askId: null,
+      settled: false,
+      interrupt: Promise.withResolvers<PlanInterrupt>(),
+      done: Promise.withResolvers<void>()
+    }
+    run.pendingPlan = pending
+    const notAnswered = (reason: NonNullable<PlanItem['reason']>): void =>
+      this.appendPlan(sessionId, run, { ...base, status: 'not-answered', reason })
+    const keepPlanning = (message: string): PermissionResult => {
+      notAnswered('feedback')
+      return { behavior: 'deny', message }
+    }
+    try {
+      const answered = (async (): Promise<{ kind: 'answer'; envelope: AskEnvelope | null }> => {
+        try {
+          const envelope = await this.context.createAsk(planSpec(), sessionId, {
+            silent: true,
+            onAsk: (askId) => {
+              if (pending.settled) {
+                void this.context.cancelAsk(askId).catch(() => {})
+                return
+              }
+              pending.askId = askId
+              this.appendPlan(sessionId, run, { ...base, askId })
+            }
+          })
+          pending.settled = true
+          return { kind: 'answer', envelope }
+        } catch {
+          pending.settled = true
+          return { kind: 'answer', envelope: null }
+        }
+      })()
+      const outcome = await Promise.race([answered, pending.interrupt.promise])
+      if (outcome.kind !== 'answer' && pending.askId !== null) await this.context.cancelAsk(pending.askId).catch(() => {})
+      if (outcome.kind === 'superseded') return { behavior: 'deny', message: SUPERSEDED_PLAN }
+      if (outcome.kind === 'feedback') return keepPlanning(outcome.text.trim() === '' ? KEEP_PLANNING : outcome.text)
+      if (outcome.kind === 'mode-switch') {
+        notAnswered('mode-switch')
+        return { behavior: 'deny', message: `The user switched to ${MODE_LABELS[outcome.mode]} mode. The plan was not approved.` }
+      }
+      if (outcome.kind === 'stopped') {
+        notAnswered('stopped')
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
+      const decision = planDecision(outcome.envelope)
+      if (decision.decision === 'keep') return keepPlanning(decision.message === '' ? KEEP_PLANNING : decision.message)
+      if (decision.decision === 'stopped') {
+        notAnswered('stopped')
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
+      if (found.empty) return keepPlanning(EMPTY_PLAN)
+      const target = decision.decision === 'approve-auto' ? (run.autoAvailable ? 'auto' : 'acceptEdits') : 'default'
+      this.appendPlan(sessionId, run, { ...base, status: 'approved', approvedMode: target })
+      run.pendingApprovalTarget = target
+      run.approvedVersion = version
+      this.recordMode(sessionId, run, target)
+      return {
+        behavior: 'allow',
+        updatedInput: input,
+        updatedPermissions: [{ type: 'setMode', mode: target, destination: 'session' }]
+      }
+    } finally {
+      if (run.pendingPlan === pending) run.pendingPlan = null
+      pending.settled = true
+      pending.done.resolve()
+    }
+  }
+
+  /** Ends the wait on a plan that has not been answered or claimed yet. */
+  private settlePlan(run: Running, interrupt: PlanInterrupt): void {
+    const pending = run.pendingPlan
+    if (!pending || pending.settled) return
+    pending.settled = true
+    pending.interrupt.resolve(interrupt)
+  }
+
+  private appendPlan(sessionId: string, run: Running, item: PlanItem): void {
+    run.plans.set(item.version, item)
+    this.context.appendMessage({ sessionId, role: 'system', text: `Plan v${item.version}: ${item.status}`, item })
+  }
+
+  private appendMode(sessionId: string, run: Running): void {
+    this.context.appendMessage({
+      sessionId,
+      role: 'system',
+      text: `Mode: ${MODE_LABELS[run.mode]}`,
+      item: { kind: 'mode', mode: run.mode, autoAvailable: run.autoAvailable }
+    })
+  }
+
+  /** Journals a mode change; a mode Claude already holds is not repeated. */
+  private recordMode(sessionId: string, run: Running, mode: PermissionModeName): void {
+    if (run.mode === mode) return
+    run.mode = mode
+    this.appendMode(sessionId, run)
+  }
+
+  private refreshAutoAvailable(sessionId: string, run: Running): void {
+    if (run.models === null) return
+    const current = run.settings.model ?? run.initModel
+    const info = run.models.find((model) => model.value === current) ?? (run.settings.model === undefined ? run.models.find((model) => model.value === 'default') : undefined)
+    const available = info?.supportsAutoMode === true
+    if (available === run.autoAvailable) return
+    run.autoAvailable = available
+    this.appendMode(sessionId, run)
+  }
+
+  /** Learns which models offer Auto; best effort, so a failure leaves Auto unavailable. */
+  private async loadModels(sessionId: string, run: Running): Promise<void> {
+    if (!run.query.initializationResult) return
+    try {
+      const result = await run.query.initializationResult()
+      if (run.stopped || run.ended) return
+      run.models = result.models ?? []
+      this.refreshAutoAvailable(sessionId, run)
+    } catch {
+      // without the model list Auto stays unavailable
+    }
+  }
+
+  /** Follows the mode Claude reports, and corrects an approval into Auto that Claude did not honour. */
+  private async reportMode(sessionId: string, run: Running, reported: unknown): Promise<void> {
+    if (!isModeName(reported)) return
+    if (run.pendingApprovalTarget === 'auto') {
+      run.pendingApprovalTarget = null
+      if (reported !== 'auto') {
+        await this.correctRefusedAuto(sessionId, run, reported)
+        return
+      }
+    }
+    this.recordMode(sessionId, run, reported)
+  }
+
+  private async correctRefusedAuto(sessionId: string, run: Running, reported: PermissionModeName): Promise<void> {
+    run.autoAvailable = false
+    try {
+      await run.query.setPermissionMode('acceptEdits')
+    } catch {
+      this.recordMode(sessionId, run, reported)
+      const notice = `${AUTO_REFUSED_SWITCH_FAILED} Claude is in ${MODE_LABELS[reported]} mode.`
+      this.context.appendMessage({ sessionId, role: 'system', text: notice, item: { kind: 'prose', text: notice } })
+      return
+    }
+    run.mode = 'acceptEdits'
+    const approved = run.approvedVersion === null ? undefined : run.plans.get(run.approvedVersion)
+    if (approved) this.appendPlan(sessionId, run, { ...approved, status: 'approved', approvedMode: 'acceptEdits' })
+    this.appendMode(sessionId, run)
+    this.context.appendMessage({ sessionId, role: 'system', text: AUTO_REFUSED, item: { kind: 'prose', text: AUTO_REFUSED } })
+  }
+
   private async pump(sessionId: string, run: Running): Promise<void> {
     let failure: Error | null = null
     try {
@@ -504,6 +822,7 @@ class ClaudeRunner implements StructuredRunner {
       failure = error instanceof Error ? error : new Error(String(error))
     }
     run.ended = true
+    this.settlePlan(run, { kind: 'stopped' })
     if (run.stopped || this.running.get(sessionId) !== run) return
     this.running.delete(sessionId)
     const wasWorking = run.turnStartedAt !== null
@@ -578,12 +897,18 @@ class ClaudeRunner implements StructuredRunner {
         run.commands = initCommands(names(msg.slash_commands), run.skills)
         this.context.reportCommands?.(sessionId, run.commands)
       }
+      if (!run.initialized) {
+        run.initialized = true
+        run.initModel = typeof msg.model === 'string' ? msg.model : undefined
+        void this.loadModels(sessionId, run)
+      }
     }
     if (msg?.type === 'system' && msg.subtype === 'commands_changed' && run && Array.isArray(msg.commands)) {
       run.slashCommands = msg.commands
       this.reportCommands(sessionId, run)
       return
     }
+    if (msg?.type === 'result' && run) run.pendingApprovalTarget = null
     if (msg?.type === 'result' && run?.interrupted) {
       run.interrupted = false
       // the result of the turn that was interrupted is already journaled as stopped
@@ -598,6 +923,9 @@ class ClaudeRunner implements StructuredRunner {
       run.turnStartedAt = run.openTurns > 0 ? Date.now() : null
     }
     for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) this.append(sessionId, entry)
+    if (run && msg?.type === 'system' && (msg.subtype === 'init' || msg.subtype === 'status')) {
+      await this.reportMode(sessionId, run, msg.permissionMode)
+    }
     if (msg?.type !== 'result') return
     if (failed) {
       if (run) {
@@ -611,4 +939,9 @@ class ClaudeRunner implements StructuredRunner {
       this.context.setStatus(sessionId, 'done')
     }
   }
+}
+
+function withoutAsk(item: PlanItem): PlanItem {
+  const { askId: _askId, ...rest } = item
+  return rest
 }

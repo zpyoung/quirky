@@ -288,6 +288,8 @@ export function claudeEntries(msg: any, calls: CallTracker): ItemEntry[] {
   }
 }
 
+/** Plan-mode tools reach the transcript as `plan` and `mode` items, never as tool activity. */
+const PLAN_MODE_TOOLS = new Set(['ExitPlanMode', 'EnterPlanMode'])
 /** The agent a Claude message belongs to: the main agent, or the subagent spawned by its parent tool call. */
 const agentKeyOf = (msg: any): string => (typeof msg?.parent_tool_use_id === 'string' ? msg.parent_tool_use_id : '')
 
@@ -319,6 +321,10 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
         const callId = String(block.id ?? '')
         const name = String(block.name ?? 'tool')
         const text = `${name}: ${summarizeInput(input)}`
+        if (PLAN_MODE_TOOLS.has(name)) {
+          calls.remember(callId, name, input)
+          continue
+        }
         if (name === 'TodoWrite') {
           const todos = Array.isArray(input.todos) ? input.todos : []
           const steps = todos.flatMap((todo) => {
@@ -342,7 +348,12 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
       const content = msg.message?.content
       if (Array.isArray(content) && content.some((block: any) => block?.type === 'tool_result')) {
         return content
-          .filter((block: any) => block?.type === 'tool_result' && !calls.isClosed(String(block.tool_use_id ?? '')))
+          .filter(
+            (block: any) =>
+              block?.type === 'tool_result' &&
+              !calls.isClosed(String(block.tool_use_id ?? '')) &&
+              !PLAN_MODE_TOOLS.has(calls.recall(String(block.tool_use_id ?? ''))?.name ?? '')
+          )
           .map((block: any): ItemEntry => {
             const callId = String(block.tool_use_id ?? '')
             const output = blockText(block.content)
@@ -364,6 +375,7 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
       return [{ role: 'user', text, data: msg, item: userItem(text) }]
     }
     case 'system': {
+      if (msg.subtype === 'status' && typeof msg.permissionMode === 'string' && msg.status == null && msg.compact_result == null) return []
       const text = msg.subtype === 'init' ? `session started${msg.model ? ` (${msg.model})` : ''}` : `system: ${msg.subtype ?? 'event'}`
       return [{ role: 'system', text, data: msg, item: statusItem(text) }]
     }

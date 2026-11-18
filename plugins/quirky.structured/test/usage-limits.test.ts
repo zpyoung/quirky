@@ -146,7 +146,7 @@ describe('provider usage-limit journal evidence', () => {
     try {
       await runner.start(claudeSession, '')
       expect(statuses.at(-1)).toBe('running')
-      expect(messages).toEqual([])
+      expect(messages.map((message) => message.text)).toEqual(['Mode: Default'])
       query.value!.emit(rawEvent)
       const update = await waitFor(() => messages.find((message) => {
         const data = message.data

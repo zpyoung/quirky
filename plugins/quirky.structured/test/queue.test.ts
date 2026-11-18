@@ -560,16 +560,16 @@ describe('configure', () => {
   test('hands the picks to the runner and reports the settings in force', async () => {
     chat = await bootChat()
     const session = await working(chat)
-    const result = await chat.call('quirky.structured/configure', { session: session.id, planMode: true, permissionMode: 'acceptEdits' })
-    expect(result).toEqual({ ok: true, settings: { planMode: true, permissionMode: 'acceptEdits' } })
-    expect(chat.runner.configured).toEqual([{ sessionId: session.id, settings: { planMode: true, permissionMode: 'acceptEdits' } }])
+    const result = await chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'plan' })
+    expect(result).toEqual({ ok: true, settings: { permissionMode: 'plan' } })
+    expect(chat.runner.configured).toEqual([{ sessionId: session.id, settings: { permissionMode: 'plan' } }])
   })
 
   test('a pick the agent cannot take fails with the capability reason', async () => {
     chat = await bootChat()
     const session = await chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'go' })
-    const error = await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: true }))
-    expect(error.message).toContain('Codex has no plan mode in Quirky')
+    const error = await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'plan' }))
+    expect(error.message).toContain('permissionMode must be one of default, read-only, auto-review, full-access')
     expect(chat.runner.configured).toEqual([])
   })
 
@@ -593,7 +593,7 @@ describe('configure', () => {
   test('rejects unknown keys and bad types', async () => {
     chat = await bootChat()
     const session = await working(chat)
-    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: 'yes' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 5 }))).code).toBe(RpcErrorCode.InvalidParams)
     expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, bogus: 1 }))).code).toBe(RpcErrorCode.InvalidParams)
   })
 })
@@ -640,10 +640,10 @@ describe('opening permission mode', () => {
 
   test('plan mode opens only for an agent that has it', async () => {
     chat = await bootChat()
-    expect(await opened({ agent: 'claude', planMode: true })).toMatchObject({ permissionMode: 'default', planMode: true })
-    const error = await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'go', planMode: true }))
-    expect(error.code).toBe(RpcErrorCode.Conflict)
-    expect(error.message).toContain('Codex has no plan mode in Quirky')
+    expect(await opened({ agent: 'claude', permissionMode: 'plan' })).toMatchObject({ permissionMode: 'plan' })
+    const error = await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'go', permissionMode: 'plan' }))
+    expect(error.code).toBe(RpcErrorCode.InvalidParams)
+    expect(error.message).toContain('permissionMode must be one of default, read-only, auto-review, full-access')
   })
 
   test('a mode the agent does not offer, or any mode for pi, is refused before a session exists', async () => {

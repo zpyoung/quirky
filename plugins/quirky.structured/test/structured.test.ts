@@ -613,15 +613,17 @@ describe('the Claude runner inside the plugin', () => {
     const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
     expect(messages.map((m) => [m.role, m.text.split('\n')[0]])).toEqual([
       ['user', 'fix it'],
+      ['system', 'Mode: Default'],
       ['system', 'session started (m)'],
       ['system', 'Approval needed'],
       ['assistant', 'done'],
       ['result', 'All good'],
       ['user', 'and tests']
     ])
-    expect(messages[2]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
+    expect(messages[1]!.item).toMatchObject({ kind: 'mode', mode: 'default' })
+    expect(messages[3]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
     await waitFor(() => structuredEvents().length === messages.length)
-    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6, 7])
   })
 
   test('reports the Claude init commands and skills, and resume moves the queue in order', async () => {

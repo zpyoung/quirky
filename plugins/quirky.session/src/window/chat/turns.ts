@@ -7,6 +7,7 @@ export type ActivityItem = Of<'activity'>
 export type FileChangeItem = Of<'file-change'>
 export type TestsItem = Of<'tests'>
 export type StepsItem = Of<'steps'>
+export type PlanItem = Of<'plan'>
 
 /** What a turn's steps card shows: its steps are not calls, so the state comes from the steps and the turn's end. */
 export type StepsState = CallState
@@ -21,6 +22,7 @@ export type Block =
   | { kind: 'file-change'; seq: number; item: FileChangeItem }
   | { kind: 'tests'; seq: number; item: TestsItem }
   | { kind: 'steps'; seq: number; item: StepsItem; state: StepsState }
+  | { kind: 'plan'; seq: number; item: PlanItem }
   | { kind: 'ask'; seq: number; item: Of<'ask'> }
   | { kind: 'view'; seq: number; item: Of<'view'> }
   | { kind: 'view-error'; seq: number; item: Of<'view-error'> }
@@ -44,8 +46,10 @@ type CallEntry = { kind: 'call'; seq: number; item: ActivityItem | FileChangeIte
 
 type Entry =
   | CallEntry
-  | { kind: 'plain'; seq: number; item: ChatItem }
+  | PlainEntry
   | { kind: 'legacy'; seq: number; message: StructuredMessage }
+
+type PlainEntry = { kind: 'plain'; seq: number; item: ChatItem }
 
 type Draft = { turn: Turn; entries: Entry[] }
 
@@ -61,11 +65,27 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
 /**
  * `messages` (in journal order) as turns. A `user` item starts a turn, and a message before the
  * first one goes in a turn with no user message; a `user` item the agent injected itself is
- * dropped. Of the items sharing a `callId` only the last
- * counts, shown where the first appeared. Messages with no `item` stay as `legacy` blocks, and
- * `status` items and diagnostics are left out unless `showAll`.
+ * dropped. Of the items sharing a `callId` only the last counts, shown where the first appeared, and
+ * the same holds for the `plan` items of one version across turns. `mode` items only feed the
+ * composer and never render. Messages with no `item` stay as `legacy` blocks, and `status` items and
+ * diagnostics are left out unless `showAll`.
  */
-export function groupTurns(messages: StructuredMessage[], { showAll = false }: { showAll?: boolean } = {}): Turn[] {
+export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean } = {}): Turn[] {
+  return groupChatTurns([messages], options)[0] ?? []
+}
+
+/**
+ * `chats` (each in journal order, oldest session first) as one list of turns per chat. Plan items
+ * of one version are deduplicated across all the chats: the version shows once, in the turn where
+ * it first appeared, in its latest state, so a resumed chat's copy overrides the earlier one.
+ */
+export function groupChatTurns(chats: StructuredMessage[][], { showAll = false }: { showAll?: boolean } = {}): Turn[][] {
+  const plans = new Map<number, PlainEntry>()
+  const grouped = chats.map((messages) => groupOne(messages, showAll, plans))
+  return grouped.map((drafts) => drafts.map(({ turn, entries }) => ({ ...turn, blocks: toBlocks(entries, turn.end) })))
+}
+
+function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<number, PlainEntry>): Draft[] {
   const drafts: Draft[] = []
   const calls = new Map<string, CallEntry>()
   const open = (message: StructuredMessage, user: Turn['user']): Draft => {
@@ -88,6 +108,7 @@ export function groupTurns(messages: StructuredMessage[], { showAll = false }: {
       continue
     }
     if (item.kind === 'status' && !showAll) continue
+    if (item.kind === 'mode') continue
     const draft = drafts[drafts.length - 1] ?? open(message, null)
     if (item.kind === 'turn-end') {
       draft.turn.end = { state: item.state, ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }) }
@@ -105,10 +126,21 @@ export function groupTurns(messages: StructuredMessage[], { showAll = false }: {
       draft.entries.push(entry)
       continue
     }
+    if (item.kind === 'plan') {
+      const existing = plans.get(item.version)
+      if (existing) {
+        existing.item = item
+        continue
+      }
+      const entry: PlainEntry = { kind: 'plain', seq: message.seq, item }
+      plans.set(item.version, entry)
+      draft.entries.push(entry)
+      continue
+    }
     draft.entries.push({ kind: 'plain', seq: message.seq, item })
   }
 
-  return drafts.map(({ turn, entries }) => ({ ...turn, blocks: toBlocks(entries, turn.end) }))
+  return drafts
 }
 
 const settle = <T extends { state: CallState }>(item: T, stopped: boolean): T =>
@@ -168,6 +200,9 @@ function toBlocks(allEntries: Entry[], end: TurnEnd | null): Block[] {
         break
       case 'status':
         blocks.push({ kind: 'status', seq: entry.seq, text: item.text })
+        break
+      case 'plan':
+        blocks.push({ kind: 'plan', seq: entry.seq, item })
         break
       case 'ask':
       case 'view':
