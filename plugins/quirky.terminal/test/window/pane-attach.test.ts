@@ -45,6 +45,16 @@ async function flushWithClock(pane: MountedPane): Promise<void> {
   let flushed = false
   const pending = pane.flush().then(() => { flushed = true })
   for (let attempt = 0; attempt < 100 && !flushed; attempt += 1) await drainClock()
+  if (!flushed) {
+    // a loaded runner leaves xterm waiting on its 500 ms idle timer; run it, then put the virtual time back
+    const before = Date.now()
+    await act(async () => {
+      mock.timers.tick(500)
+      for (let index = 0; index < 8; index += 1) await Promise.resolve()
+    })
+    mock.timers.setTime(before)
+    for (let attempt = 0; attempt < 100 && !flushed; attempt += 1) await drainClock()
+  }
   if (!flushed) throw new Error('xterm write callback did not settle under mock timers')
   await pending
 }
