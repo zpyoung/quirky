@@ -327,6 +327,7 @@ describe('Codex app-server runner', () => {
 
   test('starts a native thread without an initial turn until the caller is attached', async () => {
     await setup.runner.start(setup.session, undefined)
+    await until(() => setup.fixture.requests().some((request) => request.method === 'skills/list'))
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
@@ -428,6 +429,7 @@ describe('Codex app-server runner', () => {
   test('resumes an existing thread without a prompt and sends a later turn on it', async () => {
     const resumed = { ...setup.session, providerSession: { id: 'persisted-thread', transcriptPath: null } }
     await setup.runner.start(resumed, undefined, { providerSession: { id: 'persisted-thread', transcriptPath: null } })
+    await until(() => setup.fixture.requests().some((request) => request.method === 'skills/list'))
     expect(setup.fixture.requests().map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/resume', 'skills/list'])
     expect(setup.statuses).toEqual(['running'])
     await setup.runner.send(resumed.id, 'continue later')
@@ -659,6 +661,7 @@ describe('Codex skills', () => {
 
   test('reports enabled skills from skills/list before the first message, plugin skills as plugin entries', async () => {
     await setup.runner.start(setup.session, undefined)
+    await until(() => setup.reported.length === 1)
     expect(setup.fixture.requests().find((request) => request.method === 'skills/list')?.params).toEqual({ cwds: [setup.home] })
     expect(setup.reported).toEqual([
       [
@@ -666,6 +669,18 @@ describe('Codex skills', () => {
         { name: 'pdf:pdf', kind: 'plugin', description: 'Work with PDFs' }
       ]
     ])
+  })
+
+  test('an app-server that never answers skills/list still starts and runs a plain message at once', async () => {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup({ skills: 'silent' })
+    const started = Date.now()
+    await setup.runner.start(setup.session, 'plain message')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: plain message'))
+    expect(Date.now() - started).toBeLessThan(3_000)
+    expect(setup.reported).toEqual([])
   })
 
   test('a skill named anywhere in the message is attached as a skill input item; unknown names and paths are not', async () => {

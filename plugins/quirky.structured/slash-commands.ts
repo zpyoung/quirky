@@ -12,6 +12,11 @@ function commandTokens(text: string): Token[] {
   })
 }
 
+/** Whether the text holds any `/name` token, known or not. */
+export function mentionsCommand(text: string): boolean {
+  return commandTokens(text).length > 0
+}
+
 /** The names of the known commands the text references with a `/name` token anywhere, in order and without repeats. */
 export function referencedCommands(text: string, commands: readonly AgentCommand[]): string[] {
   const known = new Set(commands.map((command) => command.name))

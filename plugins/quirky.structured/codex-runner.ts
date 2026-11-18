@@ -13,7 +13,7 @@ import {
   userItem,
   type ItemEntry
 } from './items'
-import { referencedCommands } from './slash-commands'
+import { mentionsCommand, referencedCommands } from './slash-commands'
 import type {
   StructuredContext,
   StructuredLaunchOptions,
@@ -138,6 +138,8 @@ type Running = {
   cwd: string
   /** The enabled skills `skills/list` reported, by name, with the path a `skill` input item needs. */
   skills: Map<string, { command: AgentCommand; path: string }>
+  /** Settles once the first `skills/list` has answered or failed; only a message naming a command waits on it. */
+  skillsLoaded: Promise<void>
   connection: CodexConnection
   options: StructuredLaunchOptions
   /** The permission mode the next turn runs in. */
@@ -246,8 +248,7 @@ class CodexRunner implements StructuredRunner {
       }
       if (startup.stopped) return
       if (run.startupFailure) throw run.startupFailure
-      await this.loadSkills(run)
-      if (startup.stopped) return
+      run.skillsLoaded = this.loadSkills(run)
       this.running.set(session.id, run)
 
       if (prompt === undefined || prompt === '') {
@@ -414,6 +415,7 @@ class CodexRunner implements StructuredRunner {
       threadId,
       cwd: session.cwd,
       skills: new Map(),
+      skillsLoaded: Promise.resolve(),
       connection,
       options,
       permissionMode: DEFAULT_PERMISSION_MODE,
@@ -449,7 +451,7 @@ class CodexRunner implements StructuredRunner {
    */
   private async loadSkills(run: Running): Promise<void> {
     try {
-      const response = await run.connection.request('skills/list', { cwds: [run.cwd] }, SKILLS_TIMEOUT_MS)
+      const response = await run.connection.request('skills/list', { cwds: [run.cwd] }, SKILLS_TIMEOUT_MS, { optional: true })
       if (run.stopped || run.failed) return
       run.skills = codexSkills(response)
       this.context.reportCommands?.(run.sessionId, [...run.skills.values()].map((skill) => skill.command))
@@ -477,6 +479,7 @@ class CodexRunner implements StructuredRunner {
     deferEventsUntilReady = false,
     options: StructuredSendOptions = {}
   ): Promise<void> {
+    if (mentionsCommand(text)) await run.skillsLoaded
     if (run.stopped || run.failed || !run.ready && !this.starting.has(run.sessionId)) {
       throw new Error('session is not running')
     }
