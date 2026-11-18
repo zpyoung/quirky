@@ -17,6 +17,8 @@ export type ComposerEditorProps = {
   /** Called on Escape when `onKeyNav` did not consume it. */
   onEscape?(): void
   onUpInEmpty?(): void
+  /** Called on Shift+Tab; the key is consumed only when this is provided. */
+  onCycleMode?(): void
   onPasteFiles(files: File[]): void
   onDropFiles(files: File[]): void
   onLongPaste(text: string): void

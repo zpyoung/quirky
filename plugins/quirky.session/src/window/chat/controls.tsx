@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@quirky/protocol'
+import type { AgentCapabilities, Capability, PermissionModeName, Session, UiPluginContext } from '@quirky/protocol'
 import { AgentIcon, Badge } from '@quirky/ui'
 
 export type Choice = { value: string; label: string }
@@ -10,9 +10,14 @@ export type AgentModel = { id: string; label: string; options: ModelOption[] }
 export type AgentOptions = { supported: boolean; models: AgentModel[]; unlistedOptions: ModelOption[] }
 
 /** What the user has picked in the composer; null means the agent's own default. */
-export type Picks = { model: string | null; effort: string | null; mode: string | null; plan: boolean }
+export type Picks = { model: string | null; effort: string | null; mode: string | null }
 
-export const NO_PICKS: Picks = { model: null, effort: null, mode: null, plan: false }
+export const NO_PICKS: Picks = { model: null, effort: null, mode: null }
+
+/** The permission modes the Mode list always shows, in the order it lists them and Shift+Tab cycles them. */
+export const MODE_ORDER: readonly PermissionModeName[] = ['default', 'acceptEdits', 'auto', 'plan']
+
+const AUTO_UNAVAILABLE = "Auto mode isn't available for this model"
 
 const LOADING = 'Loading capabilities'
 
@@ -125,23 +130,38 @@ export type TurnSettings = {
   unlisted: boolean
   choices: Choice[]
   effort: string
-  modes: string[]
+  /** The Mode list's rows; every row shows, and `modeReasons` says why one cannot be picked. */
+  modes: readonly PermissionModeName[]
   mode: string
-  defaultMode: string | null
+  defaultMode: PermissionModeName
   modelReason: string | undefined
   effortReason: string | undefined
-  modeReason: string | undefined
-  planReason: string | undefined
+  modeReasons: Record<PermissionModeName, string | undefined>
   imagesReason: string | undefined
 }
 
-/** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
+/** Why each Mode row is off: the agent's own reasons, or for Claude only Auto when the model lacks it. */
+function modeReasonsOf(capabilities: AgentCapabilities | null, autoAvailable: boolean | undefined): TurnSettings['modeReasons'] {
+  const permissionModes = capabilities?.permissionModes
+  if (!permissionModes?.ok) {
+    const reason = reasonOf(permissionModes)
+    return { default: reason, acceptEdits: reason, auto: reason, plan: reasonOf(capabilities?.planMode) ?? reason }
+  }
+  return { default: undefined, acceptEdits: undefined, auto: autoAvailable === false ? AUTO_UNAVAILABLE : undefined, plan: reasonOf(capabilities?.planMode) }
+}
+
+/**
+ * Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's
+ * lists. `autoAvailable` is whether Claude offers Auto; leave it undefined before the chat has
+ * reported, when Auto is not ruled out.
+ */
 export function useTurnSettings(
   context: UiPluginContext,
   session: Session,
   capabilities: AgentCapabilities | null,
   options: AgentOptions | null,
-  picks: Picks
+  picks: Picks,
+  autoAvailable?: boolean
 ): TurnSettings {
   const launched = launchPicks(session)
   const live = useLiveModels(context, session, capabilities, options)
@@ -151,10 +171,7 @@ export function useTurnSettings(
   const model = picks.model ?? launched.model ?? liveCurrent ?? modelList[0]?.value ?? null
   const choices = options ? effortChoices(options, model) : []
   const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
-  const permissionModes = capabilities?.permissionModes
-  const modes = permissionModes?.ok ? permissionModes.modes : []
-  const defaultMode = modes[0] ?? null
-  const mode = picks.mode ?? defaultMode ?? ''
+  const mode = capabilities?.permissionModes.ok ? (picks.mode ?? 'default') : ''
 
   const noModels =
     live === null ? (options !== null && modelList.length === 0 && capabilities?.model.ok ? 'Loading models' : undefined)
@@ -167,19 +184,21 @@ export function useTurnSettings(
     unlisted: model !== null && !modelList.some((entry) => entry.value === model),
     choices,
     effort,
-    modes,
+    modes: MODE_ORDER,
     mode,
-    defaultMode,
+    defaultMode: 'default',
     modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
     effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
-    modeReason: reasonOf(permissionModes),
-    planReason: reasonOf(capabilities?.planMode),
+    modeReasons: modeReasonsOf(capabilities, autoAvailable),
     imagesReason: reasonOf(capabilities?.images)
   }
 }
 
-/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits". */
+const MODE_LABELS: Record<string, string> = { default: 'Ask', acceptEdits: 'Accept edits', auto: 'Auto', plan: 'Plan' }
+
+/** A permission mode as the label the Mode list shows: "default" as "Ask", "acceptEdits" as "Accept edits". */
 export function modeLabel(mode: string): string {
+  if (Object.hasOwn(MODE_LABELS, mode)) return MODE_LABELS[mode]!
   const words = mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase()
   return words.charAt(0).toUpperCase() + words.slice(1)
 }

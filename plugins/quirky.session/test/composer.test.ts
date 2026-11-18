@@ -3,10 +3,19 @@ import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { EditorView } from '@codemirror/view'
-import { RpcError, RpcErrorCode, type AgentCapabilities, type QueuedMessage } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type AgentCapabilities, type PermissionModeName, type QueuedMessage } from '@quirky/protocol'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
-type Props = { capabilities?: AgentCapabilities | null; working?: boolean; agent?: string; status?: 'starting' | 'running' | 'exited'; settings?: Record<string, unknown> }
+type Props = {
+  capabilities?: AgentCapabilities | null
+  working?: boolean
+  agent?: string
+  status?: 'starting' | 'running' | 'exited'
+  settings?: Record<string, unknown>
+  reportedMode?: PermissionModeName
+  autoAvailable?: boolean
+  previousMode?: PermissionModeName
+}
 type Handler = (params: Record<string, any>) => unknown
 
 const OK = { ok: true } as const
@@ -15,7 +24,7 @@ const CLAUDE: AgentCapabilities = {
   steer: OK,
   model: OK,
   planMode: OK,
-  permissionModes: { ok: true, modes: ['default', 'acceptEdits'] },
+  permissionModes: { ok: true, modes: ['default', 'acceptEdits', 'auto', 'plan'] },
   images: OK,
   effort: OK,
   approveForSession: OK,
@@ -49,7 +58,7 @@ const OPTIONS = {
 }
 
 const queued = (id: string, text: string, images?: string[]): QueuedMessage => ({ id, text, at: '2026-11-16T10:00:00.000Z', ...(images ? { images } : {}) })
-const EMPTY_DRAFT = { text: '', images: [], pastes: [], picks: { model: null, effort: null, mode: null, plan: false } }
+const EMPTY_DRAFT = { text: '', images: [], pastes: [], picks: { model: null, effort: null, mode: null } }
 const SEARCH = {
   results: [{ path: 'README.md', name: 'README.md', score: 1 }, { path: 'hello.txt', name: 'hello.txt', score: 0.5 }],
   truncated: false,
@@ -92,7 +101,17 @@ const render = (props: Props) =>
   act(async () => {
     const chat = session({ id: 's1', kind: 'structured', agent: props.agent ?? 'claude', status: props.status ?? 'running' })
     const capabilities = props.capabilities === undefined ? CLAUDE : props.capabilities
-    root!.render(createElement(Composer, { context: fake.context, session: chat, capabilities, working: props.working ?? false }))
+    root!.render(
+      createElement(Composer, {
+        context: fake.context,
+        session: chat,
+        capabilities,
+        working: props.working ?? false,
+        reportedMode: props.reportedMode,
+        autoAvailable: props.autoAvailable,
+        previousMode: props.previousMode
+      })
+    )
   })
 
 async function mount(handlers: Record<string, Handler> = {}, props: Props = {}) {
@@ -539,15 +558,41 @@ describe('screens: suggestions (SC-5, SC-6)', () => {
     expect(sent()).toHaveLength(0)
   })
 
-  test('picking /plan acts at once, removes the typed query and toggles plan mode', async () => {
+  test('picking /plan acts at once, removes the typed query and switches to Plan', async () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     await typeText('/plan')
     await settle()
     await click(options()[0])
     await settle()
     expect(doc()).toBe('')
-    expect(fake.callsTo('quirky.structured/configure')[0]!.params).toEqual({ session: 's1', planMode: true })
-    expect(host!.textContent).toContain('Plan')
+    expect(fake.callsTo('quirky.structured/configure')[0]!.params).toEqual({ session: 's1', permissionMode: 'plan' })
+    expect(byLabel('Turn off Plan mode')).not.toBeNull()
+  })
+
+  test('/plan from Plan returns to the mode before it, or Ask when there was none', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'plan', previousMode: 'acceptEdits' })
+    await typeText('/plan')
+    await settle()
+    await click(options()[0])
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([{ session: 's1', permissionMode: 'acceptEdits' }])
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'plan' })
+    await typeText('/plan')
+    await settle()
+    await click(options()[0])
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([{ session: 's1', permissionMode: 'default' }])
+  })
+
+  test('/plan from Plan falls back to Ask when the previous mode is no longer on offer', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'plan', previousMode: 'auto', autoAvailable: false })
+    await typeText('/plan')
+    await settle()
+    await click(options()[0])
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([{ session: 's1', permissionMode: 'default' }])
   })
 
   test('picking /model opens the settings popover; /stop interrupts; /new creates a chat with the same agent', async () => {
@@ -571,15 +616,48 @@ describe('screens: suggestions (SC-5, SC-6)', () => {
 })
 
 describe('screens: settings (SC-15, SC-16)', () => {
-  test('popover: model list, effort segments, permission list and a Plan switch; the chip reads model and effort', async () => {
+  test('popover: model list, effort segments and one Mode list with Plan as a row; the chip reads model and effort', async () => {
     await mount({}, { capabilities: { ...CLAUDE, planMode: OK } })
     expect(settingsChip().textContent).toContain('Opus · Low')
     await click(settingsChip())
     const pane = popover()!
-    expect([...pane.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Opus', 'Sonnet', 'Default', 'Accept edits'])
+    expect([...pane.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Opus', 'Sonnet', 'Ask', 'Accept edits', 'Auto', 'Plan'])
     expect([...pane.querySelectorAll('[role="radio"]')].map((entry) => entry.textContent)).toEqual(['Low', 'Medium', 'High'])
-    expect(pane.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false')
-    expect(pane.querySelector('[role="switch"]')!.closest('div')!.textContent).toContain('Off')
+    expect(pane.querySelector('[role="switch"]')).toBeNull()
+    expect(pane.textContent).toContain('Shift+Tab in the composer cycles these')
+  })
+
+  test('Auto is disabled with a reason when Claude does not offer it, and the hint says approval uses Accept edits', async () => {
+    await mount({}, { autoAvailable: false })
+    await click(settingsChip())
+    const auto = row('Auto') as HTMLButtonElement
+    expect(auto.disabled).toBe(true)
+    expect(auto.title).toBe("Auto mode isn't available for this model")
+    expect((row('Plan') as HTMLButtonElement).disabled).toBe(false)
+    expect(popover()!.textContent).toContain('Approving a plan uses Accept edits instead of Auto')
+  })
+
+  test('Auto is on offer when Claude says so, and in a chat that has no session state yet', async () => {
+    await mount({}, { autoAvailable: true })
+    await click(settingsChip())
+    expect((row('Auto') as HTMLButtonElement).disabled).toBe(false)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mount({})
+    await click(settingsChip())
+    expect((row('Auto') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  test('picking a Mode row applies it at once through configure', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { autoAvailable: true })
+    await click(settingsChip())
+    await click(row('Plan'))
+    await click(row('Auto'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([
+      { session: 's1', permissionMode: 'plan' },
+      { session: 's1', permissionMode: 'auto' }
+    ])
   })
 
   test('choosing a model and an effort applies each at once, updates the chip and Esc closes the popover', async () => {
@@ -606,24 +684,51 @@ describe('screens: settings (SC-15, SC-16)', () => {
     expect(host!.querySelector('[role="alert"]')!.textContent).toContain('Could not change the setting: not now')
   })
 
-  test('badges: Plan and Accept edits appear with an X each; the Plan switch shows on; X returns each to its default', async () => {
+  test('one badge shows a mode other than Ask, with an X that returns to Ask', async () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     expect(byLabel('Turn off Plan mode')).toBeNull()
+    expect(buttonNamed('Return permissions to Ask')).toBeUndefined()
     await click(settingsChip())
-    await click(popover()!.querySelector('[role="switch"]'))
+    await click(row('Plan'))
+    await settle()
+    expect(byLabel('Turn off Plan mode')!.textContent).toContain('Plan')
     await click(row('Accept edits'))
     await settle()
-    expect(popover()!.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true')
-    expect(byLabel('Turn off Plan mode')!.textContent).toContain('Plan')
-    expect(buttonNamed('Return permissions to Default')!.textContent).toContain('Accept edits')
+    expect(byLabel('Turn off Plan mode')).toBeNull()
+    expect(buttonNamed('Return permissions to Ask')!.textContent).toContain('Accept edits')
+    await click(buttonNamed('Return permissions to Ask'))
+    await settle()
+    expect(buttonNamed('Return permissions to Ask')).toBeUndefined()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params).at(-1)).toEqual({ session: 's1', permissionMode: 'default' })
+  })
+
+  test('the Plan badge X leaves Plan for Ask', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'plan' })
     await click(byLabel('Turn off Plan mode'))
     await settle()
-    expect(byLabel('Turn off Plan mode')).toBeNull()
-    expect(buttonNamed('Return permissions to Default')).toBeDefined()
-    await click(buttonNamed('Return permissions to Default'))
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([{ session: 's1', permissionMode: 'default' }])
+  })
+
+  test('the picked mode follows the mode Claude reports, without calling configure', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'plan' })
+    expect(byLabel('Turn off Plan mode')).not.toBeNull()
+    await render({ reportedMode: 'acceptEdits' })
     await settle()
-    expect(buttonNamed('Return permissions to Default')).toBeUndefined()
-    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params).at(-1)).toEqual({ session: 's1', permissionMode: 'default' })
+    expect(byLabel('Turn off Plan mode')).toBeNull()
+    expect(buttonNamed('Return permissions to Ask')!.textContent).toContain('Accept edits')
+    await render({ reportedMode: 'default' })
+    await settle()
+    expect(buttonNamed('Return permissions to Ask')).toBeUndefined()
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+  })
+
+  test('a rejected mode change reverts to the mode before it', async () => {
+    await mount({ 'quirky.structured/configure': () => { throw new Error('auto mode is not available') } }, { reportedMode: 'default' })
+    await click(settingsChip())
+    await click(row('Plan'))
+    await settle()
+    expect(byLabel('Turn off Plan mode')).toBeNull()
+    expect(host!.querySelector('[role="alert"]')!.textContent).toContain('auto mode is not available')
   })
 
   test('unsupported controls stay visible, disabled, with the reason on hover; the chip shows the model alone without effort', async () => {
@@ -631,13 +736,43 @@ describe('screens: settings (SC-15, SC-16)', () => {
     expect(settingsChip().textContent).toBe('Pi model')
     await click(settingsChip())
     const pane = popover()!
-    const plan = pane.querySelector<HTMLButtonElement>('[role="switch"]')!
-    expect(plan.disabled).toBe(true)
-    expect(plan.closest<HTMLElement>('[title]')!.title).toBe('pi has no plan mode')
+    const rows = ['Ask', 'Accept edits', 'Auto', 'Plan'].map((name) => row(name) as HTMLButtonElement)
+    expect(rows.every((entry) => entry.disabled)).toBe(true)
+    expect(rows.map((entry) => entry.title)).toEqual(['pi has no permission modes', 'pi has no permission modes', 'pi has no permission modes', 'pi has no plan mode'])
     const effortButton = pane.querySelector<HTMLButtonElement>('[role="radio"]')!
     expect(effortButton.disabled).toBe(true)
     expect(effortButton.title).toBe('pi takes no effort setting')
-    expect(pane.querySelector<HTMLElement>('.ui-list-row--disabled')!.querySelector<HTMLElement>('[title]')!.title).toBe('pi has no permission modes')
+  })
+
+  test('Shift+Tab moves to the next mode in list order and wraps, one configure per step', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'default', autoAvailable: true })
+    for (let step = 0; step < 4; step++) await press({ key: 'Tab', shiftKey: true })
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params.permissionMode)).toEqual(['acceptEdits', 'auto', 'plan', 'default'])
+  })
+
+  test('Shift+Tab skips Auto while it is unavailable and never sends anything', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { reportedMode: 'acceptEdits', autoAvailable: false })
+    await typeText('typing')
+    await press({ key: 'Tab', shiftKey: true })
+    await press({ key: 'Tab', shiftKey: true })
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params.permissionMode)).toEqual(['plan', 'default'])
+    expect(sent()).toEqual([])
+    expect(doc()).toBe('typing')
+  })
+
+  test('on an agent without plan mode, Shift+Tab and /plan do nothing and show the Plan reason', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { capabilities: PI, agent: 'pi' })
+    await press({ key: 'Tab', shiftKey: true })
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+    expect(host!.querySelector('[role="alert"]')!.textContent).toContain('pi has no plan mode')
+    await typeText('/plan')
+    await settle()
+    await click(options()[0])
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
   })
 
   test('the model list gets a search field once it passes 8 entries', async () => {
@@ -650,7 +785,7 @@ describe('screens: settings (SC-15, SC-16)', () => {
       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'Model 7')
       search.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    expect([...popover()!.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Model 7', 'Default', 'Accept edits'])
+    expect([...popover()!.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Model 7', 'Ask', 'Accept edits', 'Auto', 'Plan'])
   })
 
   test('fills the model list from the live session when the agents catalog is empty', async () => {
@@ -737,13 +872,35 @@ describe('attachments (SC-7, SC-8, SC-9)', () => {
 describe('drafts (SC-10)', () => {
   test('loads the stored draft for the session, picks included', async () => {
     await mount(
-      { 'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half written', images: ['/tmp/a.png'], picks: { model: 'sonnet', effort: null, mode: null, plan: false } }), 'quirky.structured/configure': () => ({ ok: true }) },
+      { 'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half written', images: ['/tmp/a.png'], picks: { model: 'sonnet', effort: null, mode: null } }), 'quirky.structured/configure': () => ({ ok: true }) },
     )
     expect(fake.callsTo('quirky.session/draft')[0]!.params).toEqual({ session: 's1' })
     expect(doc()).toBe('half written')
     expect(byLabel('Attachments')!.textContent).toContain('a.png')
     expect(settingsChip().textContent).toContain('Sonnet')
     expect(fake.callsTo('quirky.structured/configure')[0]!.params).toEqual({ session: 's1', model: 'sonnet' })
+  })
+
+  test('a stored draft with legacy plan picks restores as the Plan mode', async () => {
+    await mount({
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half', picks: { model: null, effort: null, mode: 'acceptEdits', plan: true } }),
+      'quirky.structured/configure': () => ({ ok: true })
+    })
+    expect(doc()).toBe('half')
+    expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([{ session: 's1', permissionMode: 'plan' }])
+    expect(byLabel('Turn off Plan mode')).not.toBeNull()
+  })
+
+  test('a stored mode never overrides the mode Claude already reports', async () => {
+    await mount(
+      {
+        'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half', picks: { model: null, effort: null, mode: 'plan' } }),
+        'quirky.structured/configure': () => ({ ok: true })
+      },
+      { reportedMode: 'acceptEdits' }
+    )
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+    expect(buttonNamed('Return permissions to Ask')!.textContent).toContain('Accept edits')
   })
 
   test('saves after a pause, and again when the composer unmounts', async () => {

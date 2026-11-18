@@ -14,9 +14,13 @@ export const EMPTY_DRAFT: Draft = { text: '', images: [], pastes: [], picks: NO_
 const keyOf = (draft: Draft) => JSON.stringify(draft)
 const isEmpty = (draft: Draft) => keyOf(draft) === keyOf(EMPTY_DRAFT)
 
-const isDraft = (value: unknown): value is Draft => {
+/** A stored draft, with picks saved before Plan became a mode (a `plan` flag) folded into `mode`. */
+const asDraft = (value: unknown): Draft | null => {
   const draft = value as Partial<Draft> | null
-  return typeof draft === 'object' && draft !== null && typeof draft.text === 'string' && Array.isArray(draft.images) && Array.isArray(draft.pastes) && typeof draft.picks === 'object' && draft.picks !== null
+  if (typeof draft !== 'object' || draft === null || typeof draft.text !== 'string' || !Array.isArray(draft.images) || !Array.isArray(draft.pastes)) return null
+  if (typeof draft.picks !== 'object' || draft.picks === null) return null
+  const { plan, ...picks } = draft.picks as Draft['picks'] & { plan?: boolean }
+  return { ...(draft as Draft), picks: plan === true ? { ...picks, mode: 'plan' } : picks }
 }
 
 export const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1)
@@ -107,7 +111,7 @@ export function useDraftSync(context: UiPluginContext, session: string, draft: D
       .call('quirky.session/draft', { session })
       .then((loaded) => {
         if (cancelled) return
-        const found = isDraft(loaded) ? loaded : null
+        const found = asDraft(loaded)
         saved.current = keyOf(found ?? EMPTY_DRAFT)
         ready.current = true
         if (edited.current) persist(session, latest.current)

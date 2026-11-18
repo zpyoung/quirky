@@ -9,31 +9,19 @@ const SEARCH_THRESHOLD = 8
 const chipButton = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)', borderRadius: 'var(--ui-radius-window)' } satisfies CSSProperties
 const panel = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', padding: 'var(--ui-space-8)', minWidth: 'calc(var(--ui-length-unit) * 240)' } satisfies CSSProperties
 const segments = { display: 'flex', gap: 'var(--ui-space-2)', flexWrap: 'wrap' } satisfies CSSProperties
-const switchRow = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--ui-space-8)', padding: 'var(--ui-space-4) var(--ui-space-8)' } satisfies CSSProperties
-const switchGroup = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-6)' } satisfies CSSProperties
 const badgeButton = { display: 'inline-flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' } satisfies CSSProperties
 const badgeInner = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-2)' } satisfies CSSProperties
+const hint = { margin: 'var(--ui-space-4) var(--ui-space-8) 0', color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
+const modeNote = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 
-const track = (on: boolean, disabled: boolean): CSSProperties => ({
-  display: 'inline-flex',
-  alignItems: 'center',
-  width: 'calc(var(--ui-space-16) * 2)',
-  height: 'var(--ui-space-16)',
-  padding: 0,
-  border: 'none',
-  borderRadius: 'var(--ui-radius-window)',
-  background: on ? 'var(--ui-accent)' : 'var(--ui-border)',
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  opacity: disabled ? 0.5 : undefined
-})
-const knob = (on: boolean): CSSProperties => ({
-  width: 'var(--ui-space-12)',
-  height: 'var(--ui-space-12)',
-  marginInlineStart: 'var(--ui-space-2)',
-  borderRadius: '50%',
-  background: 'var(--ui-surface)',
-  transform: on ? 'translateX(var(--ui-space-16))' : undefined
-})
+const MODE_NOTES: Record<string, string> = {
+  default: 'asks before edits',
+  acceptEdits: 'edits without asking',
+  auto: "Claude decides what's safe",
+  plan: 'read-only, plan first'
+}
+const CYCLE_HINT = 'Shift+Tab in the composer cycles these'
+const AUTO_HINT = 'Shift+Tab skips unavailable modes. Approving a plan uses Accept edits instead of Auto.'
 
 /** The closed chip's text: model and effort, or the model alone when the agent has no effort. */
 export function chipLabel(settings: TurnSettings): string {
@@ -44,7 +32,7 @@ export function chipLabel(settings: TurnSettings): string {
 
 /**
  * The toolbar chip naming the next turn's model and effort. It opens one popover with the model list,
- * effort, permission mode and Plan; every choice applies at once through `onPicks`, and unsupported
+ * effort and the mode list (Ask, Accept edits, Auto, Plan); every choice applies at once through `onPicks`, and unsupported
  * ones stay visible, disabled, with the reason on hover. `open` and `section` let a `/` command open
  * it at a given section.
  */
@@ -126,34 +114,22 @@ export function SettingsChip({
             </div>
           </div>
           <div data-section="mode">
-            <SectionHeader title="Permissions" />
+            <SectionHeader title="Mode" />
             {settings.modes.map((name) => (
               <ListRow
                 key={name}
                 compact
                 selected={name === settings.mode}
+                disabled={settings.modeReasons[name] !== undefined}
+                mainTitle={settings.modeReasons[name]}
                 title={modeLabel(name)}
+                trailing={<span style={modeNote}>{MODE_NOTES[name]}</span>}
                 onClick={() => onPicks({ ...picks, mode: name })}
               />
             ))}
-            {settings.modes.length === 0 && <ListRow compact disabled mainTitle={settings.modeReason} title="Permission mode" />}
-          </div>
-          <div style={switchRow} title={settings.planReason}>
-            <span id="plan-switch-label">Plan mode</span>
-            <span style={switchGroup}>
-              <span>{picks.plan ? 'On' : 'Off'}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={picks.plan}
-                aria-labelledby="plan-switch-label"
-                disabled={settings.planReason !== undefined}
-                style={track(picks.plan, settings.planReason !== undefined)}
-                onClick={() => onPicks({ ...picks, plan: !picks.plan })}
-              >
-                <span style={knob(picks.plan)} />
-              </button>
-            </span>
+            {settings.modeReasons.default === undefined && (
+              <p style={hint}>{settings.modeReasons.auto === undefined ? CYCLE_HINT : AUTO_HINT}</p>
+            )}
           </div>
         </div>
       </Popover>
@@ -161,32 +137,22 @@ export function SettingsChip({
   )
 }
 
-/** The badges for a permission mode or Plan that is not the default; each ✕ returns it to the default. */
+/** The badge for a mode other than Ask: Plan in the accent tone, the rest as a warning; its ✕ returns to Ask. */
 export function ModeBadges({ settings, picks, onPicks }: { settings: TurnSettings; picks: Picks; onPicks: (picks: Picks) => void }) {
-  const mode = settings.mode
-  const defaultMode = settings.defaultMode
+  const { mode, defaultMode } = settings
+  if (mode === '' || mode === defaultMode) return null
+  const plan = mode === 'plan'
   return (
-    <>
-      {picks.plan && (
-        <button type="button" style={badgeButton} aria-label="Turn off Plan mode" title="Click to turn off plan mode" onClick={() => onPicks({ ...picks, plan: false })}>
-          <Badge tone="accent">
-            <span style={badgeInner}>Plan <ControlIcon name="x" /></span>
-          </Badge>
-        </button>
-      )}
-      {defaultMode !== null && mode !== '' && mode !== defaultMode && (
-        <button
-          type="button"
-          style={badgeButton}
-          aria-label={`Return permissions to ${modeLabel(defaultMode)}`}
-          title={`Click to go back to ${modeLabel(defaultMode)}`}
-          onClick={() => onPicks({ ...picks, mode: defaultMode })}
-        >
-          <Badge tone="needs-you">
-            <span style={badgeInner}>{modeLabel(mode)} <ControlIcon name="x" /></span>
-          </Badge>
-        </button>
-      )}
-    </>
+    <button
+      type="button"
+      style={badgeButton}
+      aria-label={plan ? 'Turn off Plan mode' : `Return permissions to ${modeLabel(defaultMode)}`}
+      title={plan ? `Click to leave plan mode for ${modeLabel(defaultMode)}` : `Click to go back to ${modeLabel(defaultMode)}`}
+      onClick={() => onPicks({ ...picks, mode: defaultMode })}
+    >
+      <Badge tone={plan ? 'accent' : 'needs-you'}>
+        <span style={badgeInner}>{modeLabel(mode)} <ControlIcon name="x" /></span>
+      </Badge>
+    </button>
   )
 }
