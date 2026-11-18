@@ -15,7 +15,7 @@ const CLAUDE: AgentCapabilities = {
   steer: OK,
   model: OK,
   planMode: OK,
-  permissionModes: { ok: true, modes: ['default'] },
+  permissionModes: { ok: true, modes: ['default', 'acceptEdits', 'plan', 'auto'] },
   images: OK,
   effort: OK,
   approveForSession: OK,
@@ -167,6 +167,15 @@ describe('turn grouping', () => {
     const items = [user(1, 'go'), msg(2, { kind: 'status', text: 'rate limit' }), msg(3, undefined, { role: 'system', text: 'hook_started: x' })]
     expect(groupTurns(items)[0]!.blocks).toEqual([])
     expect(groupTurns(items, { showAll: true })[0]!.blocks.map((block) => block.kind)).toEqual(['status', 'legacy'])
+  })
+
+  test('a user item journaled from content the agent added itself neither shows nor starts a turn', () => {
+    // older journals stored the SKILL.md the Claude CLI injects after a Skill call as a user item
+    const injected = msg(3, { kind: 'user', text: 'Base directory for this skill: /s' }, { role: 'user', data: { type: 'user', isSynthetic: true } })
+    const turns = groupTurns([user(1, 'go'), act1(2, 's1', 'Skill', 'probe'), injected, prose(4, 'done')])
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.user?.text).toBe('go')
+    expect(turns[0]!.blocks.map((block) => block.kind)).toEqual(['activity', 'prose'])
   })
 
   test('a message with no item becomes a legacy block', () => {
@@ -379,6 +388,44 @@ describe('the chat view', () => {
     await act(async () => editor.dispatch({ changes: { from: 0, insert: 'next' } }))
     await click(host!.querySelector('button[aria-label="Send"]'))
     expect(fake.callsTo('quirky.structured/send')[0]!.params).toMatchObject({ text: 'next', when: 'idle' })
+  })
+
+  test('a resumed chat shows the conversation from every session it was resumed from, oldest first', async () => {
+    // journals are per Quirky session, so both chains start at seq 1 and must not collide
+    const journals: Record<string, StructuredMessage[]> = {
+      first: [{ ...user(1, 'side panel?'), sessionId: 'first' }, { ...prose(2, 'Yes, there is one.'), sessionId: 'first' }],
+      second: [{ ...user(1, 'something simple'), sessionId: 'second' }, { ...prose(2, 'Done.'), sessionId: 'second' }],
+      chat: [user(1, 'what does resume do?'), prose(2, 'It picks the chat back up.')]
+    }
+    const records: Record<string, Session> = {
+      first: session({ id: 'first', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null }),
+      second: session({ id: 'second', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: 'first' })
+    }
+    await mountChat({
+      session: { resumedFrom: 'second' },
+      handlers: {
+        'quirky.structured/messages': ({ session: id }) => journals[id] ?? [],
+        'quirky.session/get': ({ session: id }) => records[id]
+      }
+    })
+    const said = [...host!.querySelectorAll('[aria-label="Your message"]')].map((element) => element.textContent)
+    expect(said).toEqual(['side panel?', 'something simple', 'what does resume do?'])
+    expect(text()).toContain('Yes, there is one.')
+    expect(text()).toContain('It picks the chat back up.')
+    expect([...host!.querySelectorAll('section[aria-label^="Turn "]')].map((element) => element.getAttribute('aria-label'))).toEqual([
+      'Turn 1',
+      'Turn 2',
+      'Turn 3'
+    ])
+  })
+
+  test('a resumed chat still shows its own messages when an earlier session cannot be read', async () => {
+    await mountChat({
+      messages: [user(1, 'still here')],
+      session: { resumedFrom: 'gone' },
+      handlers: { 'quirky.session/get': () => { throw new RpcError(RpcErrorCode.InvalidParams, 'no such session') } }
+    })
+    expect(byLabel('Your message')!.textContent).toBe('still here')
   })
 
   test('Stop interrupts the turn instead of stopping the session', async () => {
@@ -840,7 +887,7 @@ describe('the plan panel', () => {
     expect(within(panel(), 'Approve')).toBeUndefined()
     expect(within(panel(), 'Keep')).toBeUndefined()
     expect(chip()!.textContent).toBe('Plan')
-    expect(byLabel('Return permissions to Ask')!.textContent).toContain('Auto')
+    expect(byLabel('Return permissions to Default')!.textContent).toContain('Auto')
   })
 
   test('Approve, auto mode and Approve, review edits answer the plan ask with the matching option', async () => {
@@ -980,32 +1027,37 @@ describe('the plan panel', () => {
 })
 
 describe('the composer in a chat with modes', () => {
-  const popoverRows = () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"][aria-label="Turn settings"] .ui-list-row__main')]
   const settingsButton = () => host!.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!
+  const popup = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="Turn settings"]')!
+  const modeRows = () => [...popup().querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+  const autoRow = () => modeRows().find((row) => row.querySelector('.qt-menu-label')?.childNodes[0]?.textContent === 'Auto')!
+  const openModes = async () => {
+    await click(settingsButton())
+    await click(popup().querySelector<HTMLElement>('[data-settings-row="mode"]'))
+  }
 
   test('the badge and Mode list follow the mode items, and Auto follows autoAvailable', async () => {
     await mountChat({ messages: [user(1, 'go'), modeMsg(2, 'plan', false)] })
     expect(byLabel('Turn off Plan mode')).not.toBeNull()
-    await click(settingsButton())
-    const auto = popoverRows().find((row) => row.textContent?.trim() === 'Auto')!
-    expect(auto.disabled).toBe(true)
-    expect(auto.title).toBe("Auto mode isn't available for this model")
+    await openModes()
+    expect(autoRow().getAttribute('aria-disabled')).toBe('true')
+    expect(autoRow().title).toBe("Auto mode isn't available for this model")
     await push(modeMsg(3, 'plan', true))
-    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(false)
+    expect(autoRow().getAttribute('aria-disabled')).toBeNull()
     await push(modeMsg(4, 'acceptEdits', true))
     expect(byLabel('Turn off Plan mode')).toBeNull()
-    expect(byLabel('Return permissions to Ask')!.textContent).toContain('Accept edits')
+    expect(byLabel('Return permissions to Default')!.textContent).toContain('Accept edits')
   })
 
   test('Auto is on offer in a chat that has not started, and off once it has without ever reporting it', async () => {
     await mountChat({ messages: [] })
-    await click(settingsButton())
-    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(false)
+    await openModes()
+    expect(autoRow().getAttribute('aria-disabled')).toBeNull()
     await act(async () => root!.unmount())
     document.body.innerHTML = ''
     await mountChat({ messages: [user(1, 'go')] })
-    await click(settingsButton())
-    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(true)
+    await openModes()
+    expect(autoRow().getAttribute('aria-disabled')).toBe('true')
   })
 
   test('/plan from Plan goes back to the mode before it', async () => {
@@ -1080,7 +1132,15 @@ describe('the agent picker', () => {
     agentInfo('pi', 'pi', { installed: false }),
     agentInfo('omp', 'omp')
   ])
-  const options = (agent: string) => ({ models: agent === 'omp' ? [{ id: 'sonnet-5.5', label: 'sonnet-5.5' }] : [{ id: 'opus', label: 'Opus 5.5' }] })
+  const effort = { id: 'effort', label: 'Effort', type: 'select', choices: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }], default: 'high' }
+  // claude declares a default; omp lists a model but declares none, so it must not read as its default
+  const options = (agent: string) =>
+    agent === 'omp'
+      ? { models: [{ id: 'sonnet-5.5', label: 'sonnet-5.5', options: [] }], defaultModel: null }
+      : {
+          models: [{ id: 'fable', label: 'Fable', options: [effort] }, { id: 'opus', label: 'Opus 5.5', options: [effort] }, { id: 'haiku', label: 'Haiku', options: [] }],
+          defaultModel: 'opus'
+        }
 
   async function mountPicker(handlers: Record<string, Handler> = {}, props: Partial<Parameters<typeof AgentPicker>[0]> = {}) {
     const created: Session[] = []
@@ -1120,7 +1180,7 @@ describe('the agent picker', () => {
     expect(card('Codex').disabled).toBe(true)
     expect(card('pi').textContent).toContain('not installed')
     expect(card('pi').disabled).toBe(true)
-    expect(card('omp').textContent).toContain('sonnet-5.5 · ready')
+    expect(card('omp').textContent).toContain('Default model · ready')
   })
 
   test('reads ready with the default model when the model list cannot be read', async () => {
@@ -1134,33 +1194,89 @@ describe('the agent picker', () => {
     expect(card('omp').textContent).toContain('not installed')
   })
 
-  test('picking an agent creates the chat in the worktree and reports the session', async () => {
+  test('picking an agent creates the chat in the worktree on its declared default model and effort', async () => {
     const created = await mountPicker()
     await click(card('Claude Code'))
     await settle()
-    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
+      agent: 'claude',
+      worktree: 'wt-main',
+      deferStart: true,
+      model: 'opus',
+      options: { effort: 'high' }
+    })
     expect(created.map((entry) => entry.id)).toEqual(['new'])
   })
 
-  test('the composer picks reach the create call', async () => {
-    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: 'plan' } })
+  test('the agent settings in the worktree name the card and the create call ahead of the catalog default', async () => {
+    await mountPicker({ 'quirky.structured/defaults': (params) => (params.agent === 'claude' ? { model: 'fable', effort: 'low' } : { model: null, effort: null }) })
+    expect(fake.callsTo('quirky.structured/defaults').map((call) => call.params)).toContainEqual({ agent: 'claude', worktree: 'wt-main' })
+    expect(card('Claude Code').textContent).toContain('Fable · ready')
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
+      agent: 'claude',
+      worktree: 'wt-main',
+      deferStart: true,
+      model: 'fable',
+      options: { effort: 'low' }
+    })
+  })
+
+  test('an agent with no declared default launches on its own choice', async () => {
+    await mountPicker()
     await click(card('omp'))
     await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'omp', worktree: 'wt-main', deferStart: true })
+  })
+
+  test('a picked model without effort gets no default effort, and a picked effort applies to the default model', async () => {
+    await mountPicker({}, { picks: { model: 'haiku', effort: null, mode: null } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true, model: 'haiku' })
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountPicker({}, { picks: { model: null, effort: 'low', mode: null } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toMatchObject({ model: 'opus', options: { effort: 'low' } })
+  })
+
+  test('creates with the picks alone when the model list cannot be read', async () => {
+    await mountPicker({ 'quirky.agents/options': () => { throw new RpcError(RpcErrorCode.MethodNotFound, 'x') } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
+  })
+
+  test('the composer picks reach the create call', async () => {
+    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: 'yolo' } })
+    await click(card('omp'))
+    await settle()
+    // the permission pick is a structured create param, not a catalog launch option
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
       agent: 'omp',
       worktree: 'wt-main',
       deferStart: true,
       model: 'opus',
-      permissionMode: 'plan',
-      options: { effort: 'high' }
+      options: { effort: 'high' },
+      permissionMode: 'yolo'
     })
   })
 
-  test('an Ask pick sends no permission mode at creation', async () => {
+  test('a Plan pick reaches the create call as the permission mode', async () => {
+    await mountPicker({}, { picks: { model: null, effort: null, mode: 'plan' } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true, model: 'opus', options: { effort: 'high' }, permissionMode: 'plan' })
+  })
+
+  test('a Default pick is sent, so it beats the terminal preset', async () => {
     await mountPicker({}, { picks: { model: null, effort: null, mode: 'default' } })
     await click(card('Claude Code'))
     await settle()
-    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true, model: 'opus', options: { effort: 'high' }, permissionMode: 'default' })
   })
 
   test('a failed create shows a toast and reports nothing', async () => {

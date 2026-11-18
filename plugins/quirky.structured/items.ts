@@ -77,6 +77,7 @@ export class CallTracker {
   private readonly open = new Map<string, CallItem>()
   private readonly tools = new Map<string, ToolEntry>()
   private readonly closed = new Set<string>()
+  private readonly skills = new Map<string, CallItem>()
 
   get size(): number {
     return this.open.size
@@ -94,6 +95,18 @@ export class CallTracker {
 
   recall(callId: string): ToolEntry | undefined {
     return this.tools.get(callId)
+  }
+
+  /** Remembers a finished Skill call of the agent `agentKey`, so the skill content injected after it can fold into its row. */
+  rememberSkill(agentKey: string, item: CallItem): void {
+    this.skills.set(agentKey, item)
+  }
+
+  /** Takes the finished Skill call of the agent `agentKey` still waiting for its content, if any. */
+  takeSkill(agentKey: string): CallItem | undefined {
+    const item = this.skills.get(agentKey)
+    this.skills.delete(agentKey)
+    return item
   }
 
   /** Records an item: a running call stays open, anything else closes it. */
@@ -115,6 +128,7 @@ export class CallTracker {
     for (const item of closing) this.closed.add(item.callId)
     this.open.clear()
     this.tools.clear()
+    this.skills.clear()
     return closing
   }
 }
@@ -276,10 +290,24 @@ export function claudeEntries(msg: any, calls: CallTracker): ItemEntry[] {
 
 /** Plan-mode tools reach the transcript as `plan` and `mode` items, never as tool activity. */
 const PLAN_MODE_TOOLS = new Set(['ExitPlanMode', 'EnterPlanMode'])
+/** The agent a Claude message belongs to: the main agent, or the subagent spawned by its parent tool call. */
+const agentKeyOf = (msg: any): string => (typeof msg?.parent_tool_use_id === 'string' ? msg.parent_tool_use_id : '')
+
+/**
+ * Content the CLI adds to the conversation itself (`isSynthetic`), never something the user typed.
+ * After a Skill call it is the skill's SKILL.md, shown as that call's output; otherwise a status item.
+ */
+function syntheticEntry(msg: any, calls: CallTracker): ItemEntry {
+  const text = blockText(msg.message?.content)
+  const skill = calls.takeSkill(agentKeyOf(msg))
+  if (skill?.kind === 'activity') return { role: 'tool', text, data: msg, item: { ...skill, detail: capped(text) } }
+  return { role: 'system', text, data: msg, item: statusItem('Claude added context') }
+}
 
 function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
   switch (msg?.type) {
     case 'assistant': {
+      calls.takeSkill(agentKeyOf(msg))
       const content: any[] = Array.isArray(msg.message?.content) ? msg.message.content : []
       const toolUses = content.filter((block) => block?.type === 'tool_use')
       const text = content
@@ -337,9 +365,11 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
             }
             const item = claudeToolItem(callId, known?.name ?? 'tool', known?.input ?? {}, state, output)
             calls.track(item)
+            if (known?.name === 'Skill' && state === 'done' && item.kind === 'activity') calls.rememberSkill(agentKeyOf(msg), item)
             return { role: 'tool', text: output, data: msg, item }
           })
       }
+      if (msg.isSynthetic === true) return [syntheticEntry(msg, calls)]
       const text = blockText(content)
       if (text.startsWith('[Request interrupted by user')) return []
       return [{ role: 'user', text, data: msg, item: userItem(text) }]

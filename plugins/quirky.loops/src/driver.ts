@@ -564,6 +564,8 @@ export class LoopDriver {
         worktree: `id:${loop.worktreeId}`,
         agent: loop.agent,
         prompt: '',
+        // the hosted loop tab shows this session; a chat tab would own it and closing that would stop the loop
+        background: true,
         ...(loop.model === undefined ? {} : { model: loop.model }),
         ...(loop.options === undefined ? {} : { options: loop.options })
       }

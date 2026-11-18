@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
 import { createCodexRunner } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { createCodexAppServerFixture, isolatedProviderEnvironment, type CodexAppServerFixture } from './fakes/codex-app-server'
@@ -33,13 +33,14 @@ type Setup = {
   context: StructuredContext
   processRunner: OwnedProcessRunner
   spawnCalls: { argv: readonly string[]; options: SpawnOptions }[]
+  reported: AgentCommand[][]
 }
 
 let setup: Setup
 
-function makeSetup(): Setup {
+function makeSetup(fixtureOptions?: Parameters<typeof createCodexAppServerFixture>[1]): Setup {
   const home = mkdtempSync(join(tmpdir(), 'codex-runner-'))
-  const fixture = createCodexAppServerFixture(home)
+  const fixture = createCodexAppServerFixture(home, fixtureOptions)
   const processRunner = createProcessRunner({ owner: 'codex-runner-test' })
   const spawnCalls: Setup['spawnCalls'] = []
   const process: ProcessSpawner = {
@@ -52,8 +53,12 @@ function makeSetup(): Setup {
   const statuses: SessionStatus[] = []
   const asks: AskWaiter[] = []
   const storedProviderSessions: Setup['storedProviderSessions'] = []
+  const reported: AgentCommand[][] = []
   const context: StructuredContext = {
     process,
+    reportCommands(_sessionId, commands) {
+      reported.push(commands)
+    },
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -103,7 +108,7 @@ function makeSetup(): Setup {
     restorable: false
   }
   const runner = createCodexRunner(context, { env: isolatedProviderEnvironment(home) })
-  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls }
+  return { home, fixture, messages, statuses, asks, storedProviderSessions, runner, session, context, processRunner, spawnCalls, reported }
 }
 
 beforeEach(() => {
@@ -239,12 +244,12 @@ describe('Codex app-server runner', () => {
     await until(() => setup.statuses.includes('done'))
 
     const calls = setup.fixture.requests()
-    expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'turn/start'])
+    expect(calls.map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/start', 'skills/list', 'turn/start'])
     expect(calls[2].params).toMatchObject({
       cwd: setup.home,
       model: 'gpt-5.5'
     })
-    expect(calls[3].params).toEqual({
+    expect(calls[4].params).toEqual({
       threadId: 'scripted-thread',
       input: [{ type: 'text', text: 'summarize' }],
       model: 'gpt-5.5',
@@ -275,19 +280,59 @@ describe('Codex app-server runner', () => {
     await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'low' })
     await until(() => setup.statuses.includes('done'))
     const result = await setup.runner.configure!(setup.session.id, { model: 'gpt-5.6', effort: 'high' })
-    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high' })
+    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high', permissionMode: 'default' })
     await setup.runner.send(setup.session.id, 'second')
     await until(() => setup.fixture.requests().filter((request) => request.method === 'turn/start').length === 2)
     const second = setup.fixture.requests().filter((request) => request.method === 'turn/start')[1]!
     expect(second.params).toMatchObject({ model: 'gpt-5.6', effort: 'high' })
   })
 
+  test('the opening permission mode sets the thread approval policy, sandbox and reviewer', async () => {
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'full-access' })
+    const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access' })
+    expect(threadStart?.params).not.toHaveProperty('approvalsReviewer')
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'full-access' })
+  })
+
+  test('a permission mode picked mid-session goes out once, with the next turn/start', async () => {
+    await setup.runner.start(setup.session, 'first')
+    await until(() => setup.statuses.includes('done'))
+    expect(await setup.runner.configure!(setup.session.id, { permissionMode: 'read-only' })).toEqual({ permissionMode: 'read-only' })
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: second'))
+    await setup.runner.configure!(setup.session.id, { permissionMode: 'auto-review' })
+    await setup.runner.send(setup.session.id, 'third')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: third'))
+    await setup.runner.send(setup.session.id, 'fourth')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: fourth'))
+    const turns = setup.fixture.requests().filter((request) => request.method === 'turn/start').map((request) => request.params as Record<string, unknown>)
+    expect(turns[0]).not.toHaveProperty('approvalPolicy')
+    expect(turns[1]).toMatchObject({ approvalPolicy: 'on-request', sandboxPolicy: { type: 'readOnly' }, approvalsReviewer: 'user' })
+    expect(turns[2]).toMatchObject({ approvalPolicy: 'on-request', sandboxPolicy: { type: 'workspaceWrite' }, approvalsReviewer: 'auto_review' })
+    // app-server keeps turn overrides for later turns, so an unchanged mode sends none
+    expect(turns[3]).not.toHaveProperty('approvalPolicy')
+  })
+
+  test('opening in auto-review asks app-server for the auto reviewer', async () => {
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'auto-review' })
+    const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' })
+  })
+
+  test('a permission mode Codex does not offer is refused', async () => {
+    await setup.runner.start(setup.session, undefined)
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('Codex has no permission mode yolo')
+  })
+
   test('starts a native thread without an initial turn until the caller is attached', async () => {
     await setup.runner.start(setup.session, undefined)
+    await until(() => setup.fixture.requests().some((request) => request.method === 'skills/list'))
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
-      'thread/start'
+      'thread/start',
+      'skills/list'
     ])
     expect(setup.statuses).toEqual(['running'])
     expect(setup.messages).toEqual([])
@@ -384,7 +429,8 @@ describe('Codex app-server runner', () => {
   test('resumes an existing thread without a prompt and sends a later turn on it', async () => {
     const resumed = { ...setup.session, providerSession: { id: 'persisted-thread', transcriptPath: null } }
     await setup.runner.start(resumed, undefined, { providerSession: { id: 'persisted-thread', transcriptPath: null } })
-    expect(setup.fixture.requests().map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/resume'])
+    await until(() => setup.fixture.requests().some((request) => request.method === 'skills/list'))
+    expect(setup.fixture.requests().map((request) => request.method)).toEqual(['initialize', 'initialized', 'thread/resume', 'skills/list'])
     expect(setup.statuses).toEqual(['running'])
     await setup.runner.send(resumed.id, 'continue later')
     await until(() => setup.statuses.includes('done'))
@@ -540,6 +586,15 @@ describe('Codex app-server runner', () => {
     expect(setup.messages.find((message) => message.role === 'user')?.item).toEqual({ kind: 'user', text: 'look at this', images: [image], queuedId: 'q1' })
   })
 
+  test('an image sent with no text goes to the app-server as the localImage input alone', async () => {
+    await setup.runner.start(setup.session, undefined)
+    const image = join(setup.home, 'shot.png')
+    writeFileSync(image, 'PNG')
+    await setup.runner.send(setup.session.id, '', { images: [image] })
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().find((request) => request.method === 'turn/start')?.params).toMatchObject({ input: [{ type: 'localImage', path: image }] })
+  })
+
   test('stopping mid-turn closes the running call as stopped, then ends the turn as stopped', async () => {
     await setup.runner.start(setup.session, '[approve] run it')
     await until(() => setup.asks.length === 1)
@@ -587,5 +642,55 @@ describe('Codex app-server runner', () => {
     const items = setup.messages.map((message) => message.item) as any[]
     expect(items.at(-2)).toMatchObject({ kind: 'turn-end', state: 'failed' })
     expect(items.at(-1)).toMatchObject({ kind: 'error', reason: 'exited', resumable: true })
+  })
+})
+
+describe('Codex skills', () => {
+  const SKILLS = [
+    { name: 'imagegen', description: 'Generate or edit raster images', path: '/codex/skills/imagegen/SKILL.md', scope: 'system', enabled: true, pluginId: null },
+    { name: 'pdf:pdf', description: 'Long PDF description', shortDescription: 'Work with PDFs', path: '/codex/plugins/pdf/SKILL.md', scope: 'user', enabled: true, pluginId: 'pdf@openai' },
+    { name: 'off', description: 'Disabled', path: '/codex/skills/off/SKILL.md', scope: 'user', enabled: false, pluginId: null }
+  ]
+
+  beforeEach(async () => {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup({ skills: SKILLS })
+  })
+
+  test('reports enabled skills from skills/list before the first message, plugin skills as plugin entries', async () => {
+    await setup.runner.start(setup.session, undefined)
+    await until(() => setup.reported.length === 1)
+    expect(setup.fixture.requests().find((request) => request.method === 'skills/list')?.params).toEqual({ cwds: [setup.home] })
+    expect(setup.reported).toEqual([
+      [
+        { name: 'imagegen', kind: 'skill', description: 'Generate or edit raster images' },
+        { name: 'pdf:pdf', kind: 'plugin', description: 'Work with PDFs' }
+      ]
+    ])
+  })
+
+  test('an app-server that never answers skills/list still starts and runs a plain message at once', async () => {
+    await setup.runner.stop(setup.session.id)
+    await setup.processRunner.dispose()
+    rmSync(setup.home, { recursive: true, force: true })
+    setup = makeSetup({ skills: 'silent' })
+    const started = Date.now()
+    await setup.runner.start(setup.session, 'plain message')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: plain message'))
+    expect(Date.now() - started).toBeLessThan(3_000)
+    expect(setup.reported).toEqual([])
+  })
+
+  test('a skill named anywhere in the message is attached as a skill input item; unknown names and paths are not', async () => {
+    await setup.runner.start(setup.session, undefined)
+    await setup.runner.send(setup.session.id, 'read /tmp/x and use /pdf:pdf then /off and /imagegen')
+    await until(() => setup.statuses.includes('done'))
+    expect(setup.fixture.requests().find((request) => request.method === 'turn/start')?.params?.input).toEqual([
+      { type: 'text', text: 'read /tmp/x and use /pdf:pdf then /off and /imagegen' },
+      { type: 'skill', name: 'pdf:pdf', path: '/codex/plugins/pdf/SKILL.md' },
+      { type: 'skill', name: 'imagegen', path: '/codex/skills/imagegen/SKILL.md' }
+    ])
   })
 })

@@ -2,12 +2,12 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, ChatItem, ProcessSpawner, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, ChatItem, ProcessSpawner, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
 import { createProcessRunner } from '../../../packages/process/src/api'
 import { PiRpc, piLaunchArgs, spawnPiTransport, type PiVariant } from '../pi-rpc'
 import { createPiRunner } from '../pi-runner'
 import type { NewStructuredMessage, StructuredContext } from '../runner'
-import { fakePiTransports, type FakePiTransport } from './fakes/pi-transport'
+import { fakePiTransports, type FakePiTransport, type Reply } from './fakes/pi-transport'
 
 async function until(check: () => boolean) {
   for (let i = 0; i < 400 && !check(); i++) await Bun.sleep(5)
@@ -22,15 +22,17 @@ const noSpawn: ProcessSpawner = {
   }
 }
 
-function makeSetup(variant: PiVariant) {
+function makeSetup(variant: PiVariant, replies?: Record<string, () => Reply>) {
   const messages: StructuredMessage[] = []
   const statuses: SessionStatus[] = []
   const asks: AskWaiter[] = []
   const providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[] = []
   const resolved: PiVariant[] = []
   const cancelledAsks: string[] = []
+  const reported: AgentCommand[][] = []
   const context: StructuredContext = {
     process: noSpawn,
+    reportCommands: (_id, commands) => void reported.push(commands),
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -78,14 +80,14 @@ function makeSetup(variant: PiVariant) {
     exitCause: null,
     restorable: false
   }
-  const fake = fakePiTransports()
+  const fake = fakePiTransports(replies === undefined ? {} : { replies })
   const runner = createPiRunner(context, variant, { transport: fake.factory, env: { BASE: 'kept', DROP: 'gone' } })
   const items = (): ChatItem[] => messages.flatMap((message) => (message.item ? [message.item] : []))
   const ofKind = <K extends ChatItem['kind']>(kind: K) => items().filter((item): item is Extract<ChatItem, { kind: K }> => item.kind === kind)
   const settle = (transport: FakePiTransport) =>
     variant === 'pi' ? transport.emit({ type: 'agent_settled' }) : transport.emit({ type: 'agent_end', messages: [], isTerminal: true, yielded: true })
   const answered = (askId: string, answers: AskEnvelope['answers']): AskEnvelope => ({ status: 'answered', askId, answers, skipped: [], summary: '' })
-  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, context, session, fake, runner, items, ofKind, settle, answered }
+  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, reported, context, session, fake, runner, items, ofKind, settle, answered }
 }
 
 type Setup = ReturnType<typeof makeSetup>
@@ -566,7 +568,87 @@ for (const variant of ['pi', 'omp'] as const) {
   })
 }
 
+describe('omp approval modes', () => {
+  let setup: Setup
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+  })
+
+  test('the opening approval mode reaches the command line and the reported settings', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'write' })
+    expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--approval-mode', 'write'])
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'write' })
+  })
+
+  test('switching mode relaunches omp on the same conversation and keeps the chat running', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask', model: 'a/m', env: { TOKEN: 't' } })
+    const first = setup.fake.last()
+    expect(await setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).toEqual({ model: 'a/m', permissionMode: 'yolo' })
+    const second = setup.fake.last()
+    expect(second).not.toBe(first)
+    // the fake's session file does not exist on disk, so the relaunch resumes by id
+    expect(second.spec.args).toEqual(['--mode', 'rpc', '--resume', 'pi-sess-1', '--model', 'a/m', '--approval-mode', 'yolo'])
+    expect(second.spec.env).toMatchObject({ TOKEN: 't' })
+    expect(second.commands('set_ask_dialog')).toHaveLength(1)
+    expect(first.closed).toBe(true)
+    expect(setup.statuses).not.toContain('exited')
+    await setup.runner.send(setup.session.id, 'next')
+    expect(second.commands('prompt')).toMatchObject([{ message: 'next' }])
+    expect(first.commands('prompt')).toEqual([])
+  })
+
+  test('the relaunch resumes from the session file when it exists', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omp-mode-'))
+    try {
+      const file = join(dir, 'session.jsonl')
+      writeFileSync(file, '')
+      setup = makeSetup('omp')
+      setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'pi-sess-1', sessionFile: file } }))
+      await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+      await setup.runner.configure!(setup.session.id, { permissionMode: 'write' })
+      expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--resume', file, '--approval-mode', 'write'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('a turn in progress refuses the switch and leaves the process alone', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, 'busy', { permissionMode: 'always-ask' })
+    setup.fake.last().emit({ type: 'agent_start' })
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow("wait for the turn to end before changing omp's approval mode")
+    expect(setup.fake.started).toHaveLength(1)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
+  })
+
+  test('a relaunch that fails keeps the old process serving the chat', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+    const first = setup.fake.last()
+    setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'another' } }))
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('expected pi-sess-1')
+    expect(setup.fake.last().closed).toBe(true)
+    expect(first.closed).toBe(false)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
+    await setup.runner.send(setup.session.id, 'still here')
+    expect(first.commands('prompt')).toMatchObject([{ message: 'still here' }])
+  })
+
+  test('pi refuses a permission mode', async () => {
+    setup = makeSetup('pi')
+    await setup.runner.start(setup.session, undefined, {})
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('pi has no permission modes')
+  })
+})
+
 describe('pi launch arguments', () => {
+  test('only omp takes an approval mode', () => {
+    expect(piLaunchArgs('omp', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc', '--approval-mode', 'yolo'])
+    expect(piLaunchArgs('pi', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc'])
+  })
+
   test('pi resumes with --session and omp with --resume', () => {
     expect(piLaunchArgs('pi', { resume: 'abc' })).toEqual(['--mode', 'rpc', '--session', 'abc'])
     expect(piLaunchArgs('omp', { resume: 'abc', model: 'm', effort: 'low' })).toEqual(['--mode', 'rpc', '--resume', 'abc', '--model', 'm', '--thinking', 'low'])
@@ -653,5 +735,67 @@ describe('pi stdio transport', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('pi and omp commands', () => {
+  let setup: Setup | undefined
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+    setup = undefined
+  })
+
+  const PI_COMMANDS = [
+    { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt', sourceInfo: { scope: 'project', origin: 'top-level' } },
+    { name: 'skill:review', description: 'Review a diff', source: 'skill', sourceInfo: { scope: 'user', origin: 'top-level' } },
+    { name: 'skill:deploy', description: 'Deploy', source: 'skill', sourceInfo: { scope: 'user', origin: 'package' } },
+    { name: 'todos', source: 'extension', sourceInfo: { scope: 'user', origin: 'top-level' } }
+  ]
+
+  test('pi reports get_commands at start, with package entries as plugin entries', async () => {
+    setup = makeSetup('pi', { get_commands: () => ({ success: true, data: { commands: PI_COMMANDS } }) })
+    await setup.runner.start(setup.session, undefined)
+    expect(setup.fake.last().commands('get_commands')).toHaveLength(1)
+    expect(setup.reported).toEqual([
+      [
+        { name: 'fix-tests', kind: 'command', description: 'Fix failing tests' },
+        { name: 'skill:review', kind: 'skill', description: 'Review a diff' },
+        { name: 'skill:deploy', kind: 'plugin', description: 'Deploy' },
+        { name: 'todos', kind: 'command' }
+      ]
+    ])
+  })
+
+  test('pi moves a skill picked mid-message to the front, where pi expands it, but journals what was typed', async () => {
+    setup = makeSetup('pi', { get_commands: () => ({ success: true, data: { commands: PI_COMMANDS } }) })
+    await setup.runner.start(setup.session, 'fix the login /skill:review focus on auth')
+    expect(setup.fake.last().commands('prompt')).toMatchObject([{ message: '/skill:review fix the login focus on auth' }])
+    expect(setup.ofKind('user')).toEqual([{ kind: 'user', text: 'fix the login /skill:review focus on auth' }])
+  })
+
+  test('omp reports get_available_commands with built-ins start-only, follows available_commands_update, and never moves a built-in', async () => {
+    setup = makeSetup('omp', {
+      get_available_commands: () => ({
+        success: true,
+        data: {
+          commands: [
+            { name: 'compact', description: 'Compact the session', input: { hint: '[focus]' }, source: 'builtin' },
+            { name: 'skill:review', description: 'Review a diff', input: { hint: 'arguments' }, source: 'skill' },
+            { name: 'docs', description: 'From MCP', source: 'mcp_prompt' },
+            { name: 'odd', source: 'unknown' }
+          ]
+        }
+      })
+    })
+    await setup.runner.start(setup.session, 'please /compact now')
+    const transport = setup.fake.last()
+    expect(setup.reported[0]).toEqual([
+      { name: 'compact', kind: 'builtin', description: 'Compact the session', argumentHint: '[focus]', startOnly: true },
+      { name: 'skill:review', kind: 'skill', description: 'Review a diff' },
+      { name: 'docs', kind: 'mcp', description: 'From MCP' }
+    ])
+    expect(transport.commands('prompt')).toMatchObject([{ message: 'please /compact now' }])
+    transport.emit({ type: 'available_commands_update', commands: [{ name: 'skill:new', source: 'skill' }] })
+    expect(setup.reported.at(-1)).toEqual([{ name: 'skill:new', kind: 'skill' }])
   })
 })

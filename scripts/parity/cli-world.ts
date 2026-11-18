@@ -12,6 +12,7 @@ import type { WindowRecord } from '../soak/contracts'
 import { createCliFixtures, installCliFixtureTools, type CliFixturePaths, type CliFixtureTools, type FixtureCommandResult } from './cli-fixtures'
 import { buildCliActorCommand } from './cli-actor'
 import { daemonStatus } from './daemon-status'
+import { CLI_FILES_LIMITS } from './cli-files-limits'
 
 const MAX_STDOUT_BYTES = 16 * 1024 * 1024
 const MAX_STDERR_BYTES = 8 * 1024
@@ -1200,7 +1201,6 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
   }
 }
 
-const CLI_FILES_WORK_TIMEOUT_MS = 330_000
 const CLI_FILES_RENDERER_TIMEOUT_MS = 5_000
 
 function canonicalCliFilesPath(path: string): string | undefined {
@@ -1505,11 +1505,11 @@ export async function createCliFilesWorld(
   dependencies: CliFilesWorldDependencies = {}
 ): Promise<CliFilesWorld> {
   const startedAt = Date.now()
-  const requestedDeadline = options.deadline ?? startedAt + CLI_FILES_WORK_TIMEOUT_MS
+  const requestedDeadline = options.deadline ?? startedAt + CLI_FILES_LIMITS.workMs
   if (!Number.isFinite(requestedDeadline) || requestedDeadline <= startedAt) {
     throw new CliWorldError('deadline', 'CLI files work deadline is invalid or expired')
   }
-  const deadline = Math.min(requestedDeadline, startedAt + CLI_FILES_WORK_TIMEOUT_MS)
+  const deadline = Math.min(requestedDeadline, startedAt + CLI_FILES_LIMITS.workMs)
   checkInterrupted(options.signal)
   const repoRoot = realpathSync(resolve(import.meta.dir, '../..'))
   const cliEntry = join(repoRoot, 'packages/cli/src/main.ts')

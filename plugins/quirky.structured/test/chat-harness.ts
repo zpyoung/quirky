@@ -23,9 +23,11 @@ export class ChatRunner implements StructuredRunner {
   sent: { sessionId: string; text: string; options?: StructuredSendOptions }[] = []
   sendError: Error | null = null
   startOptions: StructuredStartOptions[] = []
+  started: { sessionId: string; options: StructuredStartOptions }[] = []
   constructor(readonly context: StructuredContext) {}
-  async start(session: Session, prompt?: string, options?: StructuredStartOptions) {
-    this.startOptions.push(options ?? {})
+  async start(session: Session, prompt?: string, options: StructuredStartOptions = {}) {
+    this.startOptions.push(options)
+    this.started.push({ sessionId: session.id, options })
     if (prompt !== undefined && prompt !== '') {
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
       this.context.setStatus(session.id, 'working')

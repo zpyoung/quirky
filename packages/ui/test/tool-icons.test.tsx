@@ -174,6 +174,13 @@ describe('ControlIcon', () => {
     expect(svg.getAttribute('style')).toBeNull()
   })
 
+  test('a re-render keeps the same drawn nodes, so a click pressed on the glyph still lands', async () => {
+    await render(h('button', { title: 'a' }, h(ControlIcon, { name: 'arrow-up' })))
+    const path = container.querySelector('svg')!.firstElementChild
+    await render(h('button', { title: 'b' }, h(ControlIcon, { name: 'arrow-up' })))
+    expect(container.querySelector('svg')!.firstElementChild).toBe(path)
+  })
+
   test('an unknown name draws its first letter', async () => {
     await render(h(ControlIcon, { name: 'nope' }))
     expect(container.querySelector('.ui-icon-fallback')!.textContent).toBe('n')

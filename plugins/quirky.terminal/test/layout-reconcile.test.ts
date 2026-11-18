@@ -83,12 +83,42 @@ describe('adopting sessions', () => {
     const result = reconcile(ws, {
       sessions: [
         session('interactive', { agent: 'claude', title: 'Interactive Claude' }),
-        session('background', { kind: 'structured', agent: 'codex', title: 'Background loop', createdAt: 2 })
+        session('background', { kind: 'structured', agent: 'codex', title: 'Background loop', createdAt: 2, background: true })
       ]
     })
     expect(result.workspace).toEqual(ws)
     expect(sessionsOf(result.workspace)).toEqual(['interactive'])
     expect(result.closeSessions).toEqual([])
+  })
+
+  test('a structured session started outside the UI gets an active tab titled after the session', () => {
+    const ws = withTabs('a')
+    const result = reconcile(ws, {
+      sessions: [session('a'), session('chat', { kind: 'structured', agent: 'claude', title: 'Claude 2', status: 'working', createdAt: 2 })]
+    })
+    expect(sessionsOf(result.workspace)).toEqual(['a', 'chat'])
+    expect(workspaceTabs(result.workspace).at(-1)!.defaultTitle).toBe('Claude 2')
+    const [group] = groupsInOrder(result.workspace.root)
+    expect(group!.activeTab).toBe(workspaceTabs(result.workspace).at(-1)!.id)
+    expect(result.closeSessions).toEqual([])
+  })
+
+  test('an exited structured session no pane holds is not adopted, while an exited terminal still is', () => {
+    const result = reconcile(emptyWorkspace('wt', new CounterIds(0)), {
+      sessions: [
+        session('old-chat', { kind: 'structured', agent: 'claude', title: 'Claude', status: 'exited', exitCause: 'exited' }),
+        ended('old-shell', 1, { createdAt: 2 })
+      ]
+    })
+    expect(sessionsOf(result.workspace)).toEqual(['old-shell'])
+  })
+
+  test('a structured session already bound here or in another workspace is not adopted again', () => {
+    const chat = session('chat', { kind: 'structured', agent: 'claude', title: 'Claude', createdAt: 2 })
+    const here = withTabs('chat')
+    expect(reconcile(here, { sessions: [chat] }).workspace).toEqual(here)
+    const elsewhere = reconcile(emptyWorkspace('wt', new CounterIds(0)), { sessions: [chat], boundElsewhere: ['chat'] })
+    expect(sessionsOf(elsewhere.workspace)).toEqual([])
   })
 
   test('shell tabs take the lowest free number and other terminal agents keep their session title', () => {

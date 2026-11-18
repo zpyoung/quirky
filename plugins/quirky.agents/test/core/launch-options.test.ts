@@ -124,6 +124,17 @@ describe('parseLaunchOptions full block', () => {
     expect(catalog.unlistedOptions).toEqual([{ id: 'effort', choices: ['low'] }])
   })
 
+  test('a declared default model and option default are kept; undeclared ones stay absent', () => {
+    const catalog = parseLaunchOptions(
+      withOptions({ options: [{ ...effort, default: 'high' }], models: [{ id: 'a', label: 'A', options: [{ id: 'effort' }] }, { id: 'b', label: 'B' }], defaultModel: 'b' })
+    )
+    expect(catalog.defaultModel).toBe('b')
+    expect(catalog.options[0]!.default).toBe('high')
+    const plain = parseLaunchOptions(withOptions({ options: [effort], models: [{ id: 'a', label: 'A' }] }))
+    expect('defaultModel' in plain).toBe(false)
+    expect('default' in plain.options[0]!).toBe(false)
+  })
+
   test('a composed option needs no flag when composeModel is set', () => {
     const catalog = parseLaunchOptions(
       withOptions({ composeModel: 'cursor', options: [{ id: 'thinking', label: 'Thinking', type: 'boolean', composed: true }] })
@@ -255,6 +266,16 @@ describe('parseLaunchOptions rejections', () => {
     ).toStartWith('launchOptions.unlistedOptions')
     expect(problem(withOptions({ options: [effort], unlistedOptions: [{ id: 'nope' }] }))).toStartWith('launchOptions.unlistedOptions[0].id')
     expect(problem(withOptions({ unlisted: 'maybe' }))).toStartWith('launchOptions.unlisted')
+  })
+
+  test('defaults must name a listed model and a declared choice', () => {
+    expect(problem(withOptions({ models: [{ id: 'a', label: 'A' }], defaultModel: 'z' }))).toBe('launchOptions.defaultModel names z, which is not in models')
+    expect(problem(withOptions({ defaultModel: 'z' }))).toBe('launchOptions.defaultModel names z, which is not in models')
+    expect(problem(withOptions({ models: [{ id: 'a', label: 'A' }], defaultModel: '' }))).toStartWith('launchOptions.defaultModel')
+    expect(problem(withOptions({ options: [{ ...effort, default: 'max' }] }))).toBe('launchOptions.options[0].default names max, which is not in choices')
+    expect(problem(withOptions({ options: [{ id: 'fast', label: 'Fast', type: 'boolean', structured: 'fast', default: 'true' }] }))).toBe(
+      'launchOptions.options[0].default names true, which is not in choices'
+    )
   })
 
   test('valueFlags is a list of non-empty strings', () => {

@@ -1,9 +1,9 @@
-import type { CanUseTool, Options, PermissionMode, PermissionResult, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool, ModelInfo, Options, PermissionMode, PermissionResult, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
-import type { AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner } from './runner'
 import {
   CallTracker,
@@ -22,6 +22,7 @@ import {
 import { MAX_IMAGE_BYTES } from './queue'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 import { planDecision, planSpec, planText } from './plan'
+import { hoistCommand } from './slash-commands'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -33,7 +34,12 @@ export type ClaudeQuery = AsyncIterable<any> & {
   setModel(model?: string): Promise<void>
   applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
   initializationResult?(): Promise<{ models?: { value: string; supportsAutoMode?: boolean }[] }>
+  supportedModels?(): Promise<ModelInfo[]>
+  supportedCommands?(): Promise<ClaudeSlashCommand[]>
 }
+
+/** One entry of the SDK's `supportedCommands()` list or `commands_changed` push. */
+export type ClaudeSlashCommand = { name: string; description?: string; argumentHint?: string; builtin?: boolean }
 
 export type ClaudeRunnerDeps = {
   /** Replaces the SDK's `query`; tests inject a fake. The SDK is imported on first use otherwise. */
@@ -49,8 +55,15 @@ const EMPTY_PLAN = 'The plan was empty. Present the plan again.'
 const STOPPED_PLAN = 'The user stopped before answering. The plan was not approved; stay in plan mode.'
 const AUTO_REFUSED = "Auto mode isn't available. Using Accept edits."
 
-const MODES: readonly PermissionModeName[] = ['default', 'acceptEdits', 'auto', 'plan']
-const MODE_LABELS: Record<PermissionModeName, string> = { default: 'Ask', acceptEdits: 'Accept edits', auto: 'Auto', plan: 'Plan' }
+const MODES: readonly PermissionModeName[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
+const MODE_LABELS: Record<PermissionModeName, string> = {
+  default: 'Default',
+  acceptEdits: 'Accept edits',
+  plan: 'Plan',
+  auto: 'Auto',
+  dontAsk: "Don't ask",
+  bypassPermissions: 'Bypass permissions'
+}
 
 function isModeName(value: unknown): value is PermissionModeName {
   return typeof value === 'string' && (MODES as readonly string[]).includes(value)
@@ -69,6 +82,48 @@ type PendingPlan = {
 }
 
 type ModelAvailability = { value: string; supportsAutoMode?: boolean }
+
+const COMMANDS_TIMEOUT_MS = 10_000
+const MCP_PROMPT = /^(.+):(\S+) \(MCP\)$/
+const SOURCE_SUFFIX = / \((user|project)\)$/
+
+/**
+ * Sorts the SDK's command list into the kinds Quirky shows. `skills` are the names `system/init`
+ * reports as skills; until the first turn starts it is null and a `(user)` or `(project)` suffix,
+ * which the CLI adds to `.claude/commands` entries, tells a command from a skill. Built-ins stay
+ * start-only unless init names them as skills, since `/clear` or `/compact` mid-message must not run.
+ */
+export function claudeCommands(list: readonly ClaudeSlashCommand[], skills: ReadonlySet<string> | null): AgentCommand[] {
+  return list.flatMap((entry): AgentCommand[] => {
+    if (typeof entry?.name !== 'string' || entry.name === '' || entry.name.startsWith('__')) return []
+    const hint = typeof entry.argumentHint === 'string' ? entry.argumentHint.trim() : ''
+    const raw = typeof entry.description === 'string' ? entry.description.trim() : ''
+    const details = (description: string) => ({ ...(description === '' ? {} : { description }), ...(hint === '' ? {} : { argumentHint: hint }) })
+    const mcp = MCP_PROMPT.exec(entry.name)
+    // the CLI lists an MCP prompt by its display name but runs it as /mcp__<server>__<prompt>
+    if (mcp) return [{ name: `mcp__${mcp[1]!.replace(/[^\w-]/g, '_')}__${mcp[2]}`, kind: 'mcp', ...details(raw) }]
+    if (entry.builtin === true) {
+      return skills?.has(entry.name) ? [{ name: entry.name, kind: 'skill', ...details(raw) }] : [{ name: entry.name, kind: 'builtin', startOnly: true, ...details(raw) }]
+    }
+    const colon = entry.name.indexOf(':')
+    if (colon > 0) {
+      const prefix = `(${entry.name.slice(0, colon)}) `
+      return [{ name: entry.name, kind: 'plugin', ...details(raw.startsWith(prefix) ? raw.slice(prefix.length) : raw) }]
+    }
+    const isSkill = skills ? skills.has(entry.name) : !SOURCE_SUFFIX.test(raw)
+    return [{ name: entry.name, kind: isSkill ? 'skill' : 'command', ...details(raw.replace(SOURCE_SUFFIX, '')) }]
+  })
+}
+
+/** The list built from `system/init` names alone, for a CLI whose SDK has no `supportedCommands()`. */
+function initCommands(slashCommands: readonly string[], skills: ReadonlySet<string>): AgentCommand[] {
+  return [
+    ...slashCommands
+      .filter((name) => !skills.has(name))
+      .map((name): AgentCommand => ({ name, kind: name.startsWith('mcp__') ? 'mcp' : name.includes(':') ? 'plugin' : 'command' })),
+    ...[...skills].map((name): AgentCommand => ({ name, kind: name.includes(':') ? 'plugin' : 'skill' }))
+  ]
+}
 
 type InputStream = {
   messages: AsyncIterable<SDKUserMessage>
@@ -140,6 +195,14 @@ type Running = {
   /** The mode an approval asked Claude to switch to, until the turn's result confirms it. */
   pendingApprovalTarget: 'auto' | 'acceptEdits' | 'default' | null
   approvedVersion: number | null
+  /** The SDK's command list, or null until `supportedCommands()` answers. */
+  slashCommands: ClaudeSlashCommand[] | null
+  /** The skill names from `system/init`, or null until the first turn starts. */
+  skills: Set<string> | null
+  /** The list last reported, which decides how an outgoing message is rewritten. */
+  commands: AgentCommand[]
+  /** Settles once the command list has loaded or failed; messages are written to the CLI after it. */
+  commandsLoaded: Promise<void>
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -178,7 +241,8 @@ async function encodeImage(path: string): Promise<EncodedImage> {
 }
 
 function userMessage(text: string, providerSessionId?: string, images: EncodedImage[] = []): SDKUserMessage {
-  const content = images.length === 0 ? text : [{ type: 'text', text }, ...images]
+  // the api rejects an empty text block, so an image-only message carries the images alone
+  const content = images.length === 0 ? text : [...(text === '' ? [] : [{ type: 'text', text }]), ...images]
   return {
     type: 'user',
     message: { role: 'user', content } as SDKUserMessage['message'],
@@ -260,9 +324,7 @@ class ClaudeRunner implements StructuredRunner {
     const input = createInputStream()
     const hasPrompt = prompt !== undefined && prompt !== ''
     if (hasPrompt) {
-      const first = userMessage(prompt, providerSessionId)
-      this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first, item: userItem(prompt) })
-      input.push(first)
+      this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: userMessage(prompt, providerSessionId), item: userItem(prompt) })
     }
     this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
     const mode = isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
@@ -289,6 +351,10 @@ class ClaudeRunner implements StructuredRunner {
       pendingPlan: null,
       pendingApprovalTarget: null,
       approvedVersion: null,
+      slashCommands: null,
+      skills: null,
+      commands: [],
+      commandsLoaded: Promise.resolve(),
       settings: {
         ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
         ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort } : {})
@@ -299,7 +365,9 @@ class ClaudeRunner implements StructuredRunner {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
-          permissionMode: mode,
+          permissionMode: mode as PermissionMode,
+          // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
+          allowDangerouslySkipPermissions: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -310,7 +378,43 @@ class ClaudeRunner implements StructuredRunner {
     }
     this.running.set(session.id, run)
     this.appendMode(session.id, run)
+    run.commandsLoaded = this.loadCommands(session.id, run)
+    if (hasPrompt) this.write(run, prompt)
     void this.pump(session.id, run)
+  }
+
+  /** Asks the CLI for its commands as soon as it starts, so the list is there before the first message. */
+  private async loadCommands(sessionId: string, run: Running): Promise<void> {
+    if (typeof run.query.supportedCommands !== 'function') return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const list = await Promise.race([
+        run.query.supportedCommands(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), COMMANDS_TIMEOUT_MS)
+        })
+      ])
+      if (!Array.isArray(list) || run.stopped || run.slashCommands !== null) return
+      run.slashCommands = list
+      this.reportCommands(sessionId, run)
+    } catch {
+      // a CLI that cannot list commands still reports names in system/init
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private reportCommands(sessionId: string, run: Running): void {
+    run.commands = claudeCommands(run.slashCommands ?? [], run.skills)
+    this.context.reportCommands?.(sessionId, run.commands)
+  }
+
+  /** Writes a user message to the CLI once the command list is known, so a mid-message command can open it. */
+  private write(run: Running, text: string, images: EncodedImage[] = []): void {
+    void run.commandsLoaded.then(() => {
+      if (run.stopped || run.ended) return
+      run.input.push(userMessage(hoistCommand(text, run.commands), run.providerSessionId, images))
+    })
   }
 
   async send(sessionId: string, text: string, options: StructuredSendOptions = {}): Promise<void> {
@@ -318,18 +422,17 @@ class ClaudeRunner implements StructuredRunner {
     if (!run || run.stopped || run.ended) throw new Error('session is not running')
     const images = options.images !== undefined && options.images.length > 0 ? await Promise.all(options.images.map(encodeImage)) : []
     if (run.stopped || run.ended) throw new Error('session is not running')
-    const message = userMessage(text, run.providerSessionId, images)
     this.context.appendMessage({
       sessionId,
       role: 'user',
       text,
-      data: message,
+      data: userMessage(text, run.providerSessionId, images),
       item: userItem(text, options.images, options.queuedId)
     })
     run.openTurns++
     run.turnStartedAt ??= Date.now()
     this.context.setStatus(sessionId, 'working')
-    run.input.push(message)
+    this.write(run, text, images)
   }
 
   private configureChains = new Map<string, Promise<unknown>>()
@@ -366,6 +469,7 @@ class ClaudeRunner implements StructuredRunner {
   /** Moves Claude to `target`, first telling a waiting plan it was not approved so it never outlives the switch. */
   private async switchMode(sessionId: string, run: Running, target: string): Promise<void> {
     if (!isModeName(target)) throw new Error(`unsupported permission mode ${target}`)
+    if (target === 'auto' && run.mode !== 'auto') await this.requireAutoModeModel(run)
     const pending = run.pendingPlan
     if (pending && target !== run.mode && !pending.settled) {
       pending.settled = true
@@ -394,6 +498,19 @@ class ClaudeRunner implements StructuredRunner {
     pending.settled = true
     pending.interrupt.resolve({ kind: 'feedback', text })
     return true
+  }
+
+  /** Refuses auto mode when Claude reports that the session's model cannot use it; an unknown answer lets Claude decide. */
+  private async requireAutoModeModel(run: Running): Promise<void> {
+    let models: ModelInfo[]
+    try {
+      models = (await run.query.supportedModels?.()) ?? []
+    } catch {
+      return
+    }
+    const model = run.settings.model ?? 'default'
+    const found = models.find((entry) => entry.value === model || entry.resolvedModel === model)
+    if (found?.supportsAutoMode === false) throw new Error(`${found.displayName || model} does not support auto mode`)
   }
 
   async interrupt(sessionId: string): Promise<void> {
@@ -733,17 +850,24 @@ class ClaudeRunner implements StructuredRunner {
         }
       }
     }
-    if (msg?.type === 'system' && msg.subtype === 'init') {
+    if (msg?.type === 'system' && msg.subtype === 'init' && run) {
       const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [])
-      this.context.reportCommands?.(sessionId, [
-        ...names(msg.slash_commands).map((name) => ({ name, kind: 'command' as const })),
-        ...names(msg.skills).map((name) => ({ name, kind: 'skill' as const }))
-      ])
-      if (run && !run.initialized) {
+      run.skills = new Set(names(msg.skills))
+      if (run.slashCommands) this.reportCommands(sessionId, run)
+      else {
+        run.commands = initCommands(names(msg.slash_commands), run.skills)
+        this.context.reportCommands?.(sessionId, run.commands)
+      }
+      if (!run.initialized) {
         run.initialized = true
         run.initModel = typeof msg.model === 'string' ? msg.model : undefined
         void this.loadModels(sessionId, run)
       }
+    }
+    if (msg?.type === 'system' && msg.subtype === 'commands_changed' && run && Array.isArray(msg.commands)) {
+      run.slashCommands = msg.commands
+      this.reportCommands(sessionId, run)
+      return
     }
     if (msg?.type === 'result' && run) run.pendingApprovalTarget = null
     if (msg?.type === 'result' && run?.interrupted) {

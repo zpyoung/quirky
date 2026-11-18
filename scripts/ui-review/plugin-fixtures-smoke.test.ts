@@ -7,6 +7,8 @@ import { captureApplication } from './capture'
 import { captureBrowserExecutable } from './browser'
 
 const FIXED_TARGETS = [
+  'view:quirky.git/diff',
+  'view:quirky.session/worktree',
   'view:quirky.reviews/create',
   'view:quirky.reviews/settings',
   'view:quirky.session-info/transcript',

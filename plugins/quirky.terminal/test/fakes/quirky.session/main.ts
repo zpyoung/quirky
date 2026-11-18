@@ -95,6 +95,7 @@ export function activate(context: PluginContext): void {
   })
   context.provide('method:quirky.session/register', async (params: Record<string, unknown>) => {
     const session = await record(params, 'structured', params.title as string)
+    if (params.background === true) session.background = true
     sessions.push(session)
     save()
     announce(session)
@@ -120,6 +121,8 @@ export function activate(context: PluginContext): void {
   })
   context.provide('method:quirky.session/close', async (params: Record<string, unknown>) => {
     const session = find(params.session as string)
+    // mirrors the real plugin answering a structured stop it could not confirm without removing the record
+    if (session.title === 'Refuses close') return { ok: false, reason: 'recipient_gone' }
     if (session.kind === 'terminal') await context.pty.forget(session.id).catch(() => {})
     sessions = sessions.filter((s) => s.id !== session.id)
     save()

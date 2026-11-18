@@ -33,6 +33,8 @@ export class CodexConnection {
   private readonly handle: SpawnedProcess
   private readonly decoder = new TextDecoder('utf-8', { fatal: true })
   private readonly pending = new Map<CodexRpcId, PendingRequest>()
+  /** Optional requests that timed out; a late answer to one is dropped instead of failing the connection. */
+  private readonly abandoned = new Set<CodexRpcId>()
   private readonly exited: Promise<SpawnExit>
   private frameBuffer = ''
   private nextId = 1
@@ -71,7 +73,11 @@ export class CodexConnection {
     return tail.length > STDERR_TAIL_CHARS ? tail.slice(-STDERR_TAIL_CHARS) : tail
   }
 
-  request(method: string, params: unknown, timeoutMs = DEFAULT_CONTROL_TIMEOUT_MS): Promise<unknown> {
+  /**
+   * Sends a request and resolves with its result. A timeout fails the whole connection, unless the
+   * request is `optional`, which only rejects: for a lookup the session can run without.
+   */
+  request(method: string, params: unknown, timeoutMs = DEFAULT_CONTROL_TIMEOUT_MS, options: { optional?: boolean } = {}): Promise<unknown> {
     if (this.failure) return Promise.reject(this.failure)
     if (this.closing || this.exitResult) return Promise.reject(new Error('Codex app-server connection is closed'))
 
@@ -83,7 +89,8 @@ export class CodexConnection {
       this.pending.delete(id)
       const error = new Error(`Codex app-server ${method} timed out after ${timeoutMs}ms`)
       reject(error)
-      this.fail(error)
+      if (options.optional) this.abandoned.add(id)
+      else this.fail(error)
     }, timeoutMs)
     this.pending.set(id, { method, resolve, reject, timer })
     try {
@@ -238,6 +245,7 @@ export class CodexConnection {
     const hasError = Object.hasOwn(message, 'error')
     if (hasResult === hasError) throw new Error('Codex app-server response must contain exactly one of result or error')
     const pending = this.pending.get(message.id)
+    if (!pending && this.abandoned.delete(message.id)) return
     if (!pending) throw new Error(`Codex app-server sent a response for unknown ID ${String(message.id)}`)
     if (hasError) {
       const rawError = message.error

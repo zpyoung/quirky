@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { RpcErrorCode } from '@quirky/protocol'
-import { capabilitiesFor } from '../capabilities'
+import { capabilitiesFor, startingPermissionMode } from '../capabilities'
 import { bootChat, teardownChat, type ChatBoot } from './chat-harness'
 
 describe('capabilities values', () => {
@@ -16,23 +16,49 @@ describe('capabilities values', () => {
       approveForSession: { ok: true },
       resume: { ok: true }
     })
-    expect(claude.permissionModes).toMatchObject({ ok: true })
-    expect(claude.permissionModes).toEqual({ ok: true, modes: ['default', 'acceptEdits', 'auto', 'plan'] })
+    expect(claude.permissionModes).toEqual({
+      ok: true,
+      modes: ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'],
+      labels: { default: 'Default', acceptEdits: 'Accept edits', plan: 'Plan', auto: 'Auto', dontAsk: "Don't ask", bypassPermissions: 'Bypass permissions' },
+      dangerous: ['bypassPermissions']
+    })
   })
 
-  test('codex has no plan mode or permission modes, and says why', () => {
+  test("codex offers its /permissions presets but no plan mode", () => {
     const codex = capabilitiesFor('codex')!
-    expect(codex.planMode).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
-    expect(codex.permissionModes).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
-    expect(codex.planMode.ok).toBe(false)
+    expect(codex.planMode).toEqual({ ok: false, reason: 'Codex has no plan mode in Quirky' })
+    expect(codex.permissionModes).toEqual({
+      ok: true,
+      modes: ['default', 'read-only', 'auto-review', 'full-access'],
+      labels: { default: 'Default', 'read-only': 'Read only', 'auto-review': 'Auto-review', 'full-access': 'Full access' },
+      dangerous: ['full-access']
+    })
     expect([codex.steer, codex.model, codex.images, codex.effort, codex.approveForSession, codex.resume].every((c) => c.ok)).toBe(true)
   })
 
-  test('pi and omp change model and effort live but lack plan mode, permission modes and session approval', () => {
+  test('omp offers its approval modes; pi has none', () => {
+    expect(capabilitiesFor('omp')!.permissionModes).toEqual({
+      ok: true,
+      modes: ['always-ask', 'always-ask-cached', 'write', 'yolo'],
+      labels: { 'always-ask': 'Always ask', 'always-ask-cached': 'Ask and remember', write: 'Write', yolo: 'Yolo' },
+      dangerous: ['yolo']
+    })
+    expect(capabilitiesFor('pi')!.permissionModes).toEqual({ ok: false, reason: 'pi has no permission modes; it runs tools without asking unless an extension asks' })
+  })
+
+  test('every dangerous mode and label names an offered mode', () => {
+    for (const agent of ['claude', 'codex', 'pi', 'omp']) {
+      const modes = capabilitiesFor(agent)!.permissionModes
+      if (!modes.ok) continue
+      for (const name of [...(modes.dangerous ?? []), ...Object.keys(modes.labels ?? {})]) expect(modes.modes).toContain(name)
+    }
+  })
+
+  test('pi and omp change model and effort live but lack plan mode and session approval', () => {
     for (const agent of ['pi', 'omp'] as const) {
       const found = capabilitiesFor(agent)!
       expect(found.agent).toBe(agent)
-      for (const capability of [found.planMode, found.permissionModes, found.approveForSession]) {
+      for (const capability of [found.planMode, found.approveForSession]) {
         expect(capability.ok).toBe(false)
         expect((capability as { reason: string }).reason).toContain(agent)
       }
@@ -44,6 +70,33 @@ describe('capabilities values', () => {
   test('an unknown agent has no capabilities', () => {
     expect(capabilitiesFor('gemini')).toBeNull()
     expect(capabilitiesFor('constructor')).toBeNull()
+  })
+})
+
+describe('starting permission mode', () => {
+  test('an offered pick wins over the terminal preset', () => {
+    expect(startingPermissionMode('claude', 'acceptEdits', 'yolo')).toBe('acceptEdits')
+    expect(startingPermissionMode('codex', 'read-only', 'auto')).toBe('read-only')
+  })
+
+  test("without a pick, the terminal preset picks the matching chat mode", () => {
+    expect(startingPermissionMode('claude', undefined, 'manual')).toBe('default')
+    expect(startingPermissionMode('claude', undefined, 'auto')).toBe('auto')
+    expect(startingPermissionMode('claude', undefined, 'yolo')).toBe('bypassPermissions')
+    expect(startingPermissionMode('codex', undefined, 'auto')).toBe('auto-review')
+    expect(startingPermissionMode('codex', undefined, 'yolo')).toBe('full-access')
+  })
+
+  test('a custom, missing or unmatched preset falls back to the first mode', () => {
+    expect(startingPermissionMode('claude', undefined, 'custom')).toBe('default')
+    expect(startingPermissionMode('codex', undefined, null)).toBe('default')
+    expect(startingPermissionMode('omp', undefined, 'yolo')).toBe('always-ask')
+    expect(startingPermissionMode('claude', 'nonsense', undefined)).toBe('default')
+  })
+
+  test('an agent without permission modes has no starting mode', () => {
+    expect(startingPermissionMode('pi', 'default', 'yolo')).toBeUndefined()
+    expect(startingPermissionMode('gemini', undefined, undefined)).toBeUndefined()
   })
 })
 

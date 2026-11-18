@@ -1229,30 +1229,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
-      },
-      "anchor": "searchable &&",
-      "reason": "Shows the model search field once the list passes 8 entries."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.unlisted && settings.model !== null && <ListRow compact selected title={settings.model} />}"
-      },
-      "anchor": "settings.unlisted && settings.model !== null &&",
-      "reason": "Adds the session's current model to the list when the catalog lacks it."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.choices.length === 0 && ("
-      },
-      "anchor": "settings.choices.length === 0 &&",
-      "reason": "Keeps a disabled Effort control visible, with its reason, when the model lists no effort levels."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
         "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
       },
@@ -1270,7 +1246,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
-        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
       },
       "anchor": "item.tag ?",
       "reason": "Shows the acts-now or sent mark when the row has one."
@@ -1278,10 +1254,18 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
-        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
       },
-      "anchor": "item.detail ?",
-      "reason": "Prefixes the mark with the command's description when it has one."
+      "anchor": "item.source !== 'agent' && item.detail ?",
+      "reason": "Prefixes the mark with a Quirky command's description; agent rows show theirs on a second line."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "description={item.source === 'agent' && item.detail ? <span style={oneLine}>{item.detail}</span> : undefined}"
+      },
+      "anchor": "item.source === 'agent' && item.detail ?",
+      "reason": "Shows an agent command's description on a second line when it has one."
     },
     {
       "site": {
@@ -1290,6 +1274,86 @@
       },
       "anchor": "if (this.pill.kind === 'file')",
       "reason": "Chooses the pill glyph by whether it names a file or a command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "image.preview ? ("
+      },
+      "anchor": "image.preview ?",
+      "reason": "Shows a thumbnail for an image the composer holds the bytes of, and the name chip otherwise."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason !== undefined && <span className=\"ui-help-text\">{reason}</span>}"
+      },
+      "anchor": "reason !== undefined &&",
+      "reason": "Shows why a setting is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}"
+      },
+      "anchor": "reason === undefined &&",
+      "reason": "Shows a setting's current value only while it can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{effortOff && <span className=\"ui-help-text\">{settings.effortReason}</span>}"
+      },
+      "anchor": "effortOff &&",
+      "reason": "Shows why Effort is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && ("
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Shows the effort stepper only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && <span>←→ effort</span>}"
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Mentions the effort keys only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searchable && settings.modelReason === undefined && <span>type to find a model</span>}"
+      },
+      "anchor": "searchable && settings.modelReason === undefined &&",
+      "reason": "Mentions type-to-search only when the model list has a search field."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searching && <span style={rowValue}>{settings.modelList.length}</span>}"
+      },
+      "anchor": "searching &&",
+      "reason": "Counts the models beside the title when the list is long enough to search."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{view === 'model' && modelItems.length === 0 && <div className=\"ui-help-text\" style={empty}>No models match</div>}"
+      },
+      "anchor": "view === 'model' && modelItems.length === 0 &&",
+      "reason": "Says no model matches the typed search; a local filter, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div ref={body}>{view === 'summary' ? summary : list}</div>"
+      },
+      "anchor": "view === 'summary' ?",
+      "reason": "Swaps between the settings summary and one setting's list."
     },
     {
       "site": {
@@ -1330,30 +1394,6 @@
       },
       "anchor": "planPanel !== null && !fits &&",
       "reason": "Places the open plan panel in a sheet when the body is too narrow for a side panel; width selects layout, not a read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.modeReasons.default === undefined && ("
-      },
-      "anchor": "settings.modeReasons.default === undefined &&",
-      "reason": "Shows the Shift+Tab hint only for agents whose permission modes can be chosen."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "settings.modeReasons.auto === undefined ? CYCLE_HINT : AUTO_HINT"
-      },
-      "anchor": "settings.modeReasons.auto === undefined ?",
-      "reason": "Words the hint by whether Auto is on offer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "if (mode === '' || mode === defaultMode) return null"
-      },
-      "anchor": "if (mode === '' || mode === defaultMode)",
-      "reason": "Shows the mode badge only while the mode is not Ask."
     },
     {
       "site": {
@@ -1418,6 +1458,14 @@
       },
       "anchor": "version.empty !== true &&",
       "reason": "Offers the approve exits only when the plan has text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "if (defaultMode === null || mode === '' || mode === defaultMode) return null"
+      },
+      "anchor": "if (defaultMode === null || mode === '' || mode === defaultMode)",
+      "reason": "Shows the permission badge only while the mode is not the default."
     }
   ],
   "actions": [
@@ -1773,7 +1821,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.mode === null || picks.mode === 'default' ? {} : { permissionMode: picks.mode }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -1783,7 +1831,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = picks.effort === null ? {} : { effort: picks.effort }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.mode === null || picks.mode === 'default' ? {} : { permissionMode: picks.mode }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })) as Session\n}"
           }
         ]
       }
@@ -2006,7 +2054,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.mode === null || picks.mode === 'default' ? {} : { permissionMode: picks.mode }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -2016,7 +2064,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = picks.effort === null ? {} : { effort: picks.effort }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(picks.mode === null || picks.mode === 'default' ? {} : { permissionMode: picks.mode }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })) as Session\n}"
           }
         ]
       }
@@ -2045,7 +2093,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -2099,11 +2147,29 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onRemove={() => setImages((current) => current.filter((existing) => existing !== image))}"
+        "quote": "<ImageChip key={image.path} name={image.name} preview={image.preview} onRemove={() => removeImage(image)} />"
       },
       "anchor": "onRemove",
       "transient": "draft",
       "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ScopeChip key={image.path} label={image.name} removeLabel={`Remove ${image.name}`} onRemove={() => removeImage(image)} />"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ImageChip.tsx",
+        "quote": "<IconButton label={`Remove ${name}`} style={remove} onClick={onRemove}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onRemove, which the composer routes."
     },
     {
       "site": {
@@ -2138,7 +2204,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
@@ -2239,7 +2305,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -2259,7 +2325,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -2366,7 +2432,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
@@ -2522,42 +2588,6 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Filters the model list by the typed search text."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, model: entry.value, effort: null })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, effort: choice.value })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, mode: name })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
         "quote": "onClick={() => onPicks({ ...picks, mode: defaultMode })}"
       },
       "anchor": "onClick",
@@ -2581,6 +2611,123 @@
       "anchor": "onClick",
       "notAction": "forwarded",
       "reason": "Forwards the click to onPick, which the composer routes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "data-opens={name} disabled={reason !== undefined} title={reason} onClick={onOpen}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpen, which only opens that setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChange={(event) => setQuery(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Filters the model list by the typed search text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div style={panel} onKeyDown={onSummaryKeyDown}>"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onSummaryKeyDown, which moves focus or opens a setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('model')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the model list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('mode')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the permission list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onKeyDown={onEffortKeyDown}"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onEffortKeyDown, which steps effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"Less effort\" disabled={effortIndex <= 0} onClick={() => onStepEffort(-1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the lower effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"More effort\" disabled={effortIndex >= settings.choices.length - 1} onClick={() => onStepEffort(1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the higher effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label={`${title}, back to all settings`} onClick={onShowSummary}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowSummary, which only returns to the settings summary."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onBack={searching ? undefined : onShowSummary}"
+      },
+      "anchor": "onBack",
+      "transient": "draft",
+      "reason": "Steps back to the settings summary; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChoose={onPickRow}"
+      },
+      "anchor": "onChoose",
+      "notAction": "forwarded",
+      "reason": "Forwards the chosen row to onPickRow, which applies it through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClose={() => onOpenChange(false)}\n"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onOpenChange, which only hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "window.addEventListener('keydown', escape, true)"
+      },
+      "anchor": "window.addEventListener('keydown'",
+      "transient": "draft",
+      "reason": "Escape steps back to the settings summary; only local view state changes."
     },
     {
       "site": {
@@ -2796,7 +2943,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const cycleMode = () => {\n    if (!MODE_ORDER.some(modeOn)) {\n      fail(settings.modeReasons.plan ?? settings.modeReasons.default ?? 'Permission modes are unavailable')\n      return\n    }\n    const from = MODE_ORDER.indexOf(settings.mode as PermissionModeName)\n    const next = MODE_ORDER.map((_, step) => MODE_ORDER[(from + 1 + step) % MODE_ORDER.length]!).find(modeOn)\n    if (next !== undefined && next !== settings.mode) void pick({ ...picks, mode: next })\n  }"
+            "quote": "const cycleMode = () => {\n    const cycle = settings.modes.filter((name) => modeOn(name) && !settings.isDangerous(name))\n    if (cycle.length === 0) {\n      fail(unavailable())\n      return\n    }\n    const from = settings.modes.indexOf(settings.mode)\n    const next = settings.modes.map((_, step) => settings.modes[(from + 1 + step) % settings.modes.length]!).find((name) => cycle.includes(name))\n    if (next !== undefined && next !== settings.mode) void pick({ ...picks, mode: next })\n  }"
           },
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",

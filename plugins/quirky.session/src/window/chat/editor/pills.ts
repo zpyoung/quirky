@@ -46,17 +46,14 @@ class PillWidget extends WidgetType {
 
 const decorate = (pill: Pill, from: number, to: number) => Decoration.replace({ widget: new PillWidget(pill) }).range(from, to)
 
-/** Pills found in plain text: `@<path> ` at the start or after whitespace, and a leading `/<name> `. */
+/** Pills found in plain text: `@<path> ` and `/<name> ` at the start or after whitespace; a command name never holds a `/`. */
 export function parsePills(text: string): { from: number; to: number; pill: Pill }[] {
-  const found: { from: number; to: number; pill: Pill }[] = []
-  const command = /^\/(\S+) /.exec(text)
-  if (command) found.push({ from: 0, to: command[0].length, pill: { kind: 'command', name: command[1]! } })
-  for (const match of text.matchAll(/(?<=^|\s)@(\S+) /g)) {
+  return [...text.matchAll(/(?<=^|\s)(?:\/([^\s/]+)|@(\S+)) /g)].map((match) => {
     const from = match.index!
-    if (from < (found[0]?.to ?? 0)) continue
-    found.push({ from, to: from + match[0].length, pill: { kind: 'file', path: match[1]! } })
-  }
-  return found
+    const to = from + match[0].length
+    const pill: Pill = match[1] !== undefined ? { kind: 'command', name: match[1] } : { kind: 'file', path: match[2]! }
+    return { from, to, pill }
+  })
 }
 
 const reparse = StateEffect.define<null>()

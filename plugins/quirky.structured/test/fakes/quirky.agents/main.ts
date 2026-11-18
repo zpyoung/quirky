@@ -8,4 +8,5 @@ export function activate(context: PluginContext) {
   if (!world) throw new Error('the structured test world is not installed')
   context.provide('method:quirky.agents/resolveLaunch', (params: Record<string, unknown>) => world.agents.resolveLaunch(params, context))
   context.provide('method:quirky.agents/plan', (params: Record<string, unknown>) => world.agents.plan(params))
+  context.provide('method:quirky.agents/get', (params: Record<string, unknown>) => world.agents.get(params))
 }

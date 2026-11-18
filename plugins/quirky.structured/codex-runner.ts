@@ -1,4 +1,4 @@
-import type { AskEnvelope, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import {
   CallTracker,
@@ -13,6 +13,7 @@ import {
   userItem,
   type ItemEntry
 } from './items'
+import { mentionsCommand, referencedCommands } from './slash-commands'
 import type {
   StructuredContext,
   StructuredLaunchOptions,
@@ -24,11 +25,48 @@ import type {
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
-const APPROVAL_POLICY = 'on-request'
-const SANDBOX = 'workspace-write'
 const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
+
+type CodexPermissions = {
+  approvalPolicy: 'on-request' | 'never'
+  sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'
+  approvalsReviewer: 'user' | 'auto_review'
+}
+
+/** What each permission mode in the Codex capabilities asks of app-server, matching Codex's `/permissions` presets. */
+const PERMISSIONS: Record<string, CodexPermissions> = {
+  default: { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'user' },
+  'read-only': { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' },
+  'auto-review': { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' },
+  'full-access': { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' }
+}
+const DEFAULT_PERMISSION_MODE = 'default'
+
+const SANDBOX_POLICY_TYPES: Record<CodexPermissions['sandbox'], string> = {
+  'read-only': 'readOnly',
+  'workspace-write': 'workspaceWrite',
+  'danger-full-access': 'dangerFullAccess'
+}
+
+function permissionsFor(mode: string): CodexPermissions {
+  const found = PERMISSIONS[mode]
+  if (!found) throw new Error(`Codex has no permission mode ${mode}`)
+  return found
+}
+
+/** The thread-level fields for `thread/start` and `thread/resume`; the default reviewer is left to app-server. */
+function threadPermissions(mode: string): Record<string, string> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandbox, ...(approvalsReviewer === 'user' ? {} : { approvalsReviewer }) }
+}
+
+/** The `turn/start` overrides, which app-server keeps for later turns too. */
+function turnPermissions(mode: string): Record<string, unknown> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandboxPolicy: { type: SANDBOX_POLICY_TYPES[sandbox] }, approvalsReviewer }
+}
 
 function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
   if (patch === undefined) return base
@@ -74,11 +112,40 @@ function tokenUsageDelta(total: TokenCounts, baseline: TokenCounts | null): Toke
   return Object.keys(delta).length === 0 ? null : delta
 }
 
+/** The enabled skills in a `skills/list` response; plugin skills (named `plugin:skill`) are marked as plugin entries. */
+export function codexSkills(response: unknown): Map<string, { command: AgentCommand; path: string }> {
+  const skills = new Map<string, { command: AgentCommand; path: string }>()
+  const data = typeof response === 'object' && response !== null ? (response as { data?: unknown }).data : undefined
+  for (const entry of Array.isArray(data) ? data : []) {
+    const list = typeof entry === 'object' && entry !== null ? (entry as { skills?: unknown }).skills : undefined
+    for (const skill of Array.isArray(list) ? list : []) {
+      if (typeof skill !== 'object' || skill === null) continue
+      const { name, description, shortDescription, path, enabled, pluginId } = skill as Record<string, unknown>
+      if (typeof name !== 'string' || name === '' || typeof path !== 'string' || enabled === false || skills.has(name)) continue
+      const summary = typeof shortDescription === 'string' && shortDescription !== '' ? shortDescription : typeof description === 'string' ? description : ''
+      skills.set(name, {
+        path,
+        command: { name, kind: typeof pluginId === 'string' && pluginId !== '' ? 'plugin' : 'skill', ...(summary === '' ? {} : { description: summary }) }
+      })
+    }
+  }
+  return skills
+}
+
 type Running = {
   sessionId: string
   threadId: string
+  cwd: string
+  /** The enabled skills `skills/list` reported, by name, with the path a `skill` input item needs. */
+  skills: Map<string, { command: AgentCommand; path: string }>
+  /** Settles once the first `skills/list` has answered or failed; only a message naming a command waits on it. */
+  skillsLoaded: Promise<void>
   connection: CodexConnection
   options: StructuredLaunchOptions
+  /** The permission mode the next turn runs in. */
+  permissionMode: string
+  /** The permission mode app-server last applied; a differing `permissionMode` goes out with the next `turn/start`. */
+  appliedPermissionMode: string
   totalTokenUsage: TokenCounts | null
   turnUsageBaseline: TokenCounts | null
   activeTurnId: string | null
@@ -104,6 +171,8 @@ type Running = {
 }
 
 type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running }
+
+const SKILLS_TIMEOUT_MS = 5_000
 
 export type CodexRunnerDeps = {
   /** A per-run child environment for isolated process tests. Production inherits the daemon environment. */
@@ -139,7 +208,11 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.model === 'string' ? { model: startOptions.model } : {}),
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
+      const permissionMode = startOptions.permissionMode ?? DEFAULT_PERMISSION_MODE
+      const permissions = threadPermissions(permissionMode)
       const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env)
+      run.permissionMode = permissionMode
+      run.appliedPermissionMode = permissionMode
       startup.run = run
       startup.connection = run.connection
       const connection = run.connection
@@ -152,8 +225,7 @@ class CodexRunner implements StructuredRunner {
         const response = await connection.request('thread/resume', {
           threadId: providerSession.id,
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          ...permissions,
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -168,8 +240,7 @@ class CodexRunner implements StructuredRunner {
       } else {
         const response = await connection.request('thread/start', {
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          ...permissions,
           ...(options.model === undefined ? {} : { model: options.model })
         })
         run.threadId = this.threadIdFromResponse(response, 'thread/start')
@@ -177,6 +248,7 @@ class CodexRunner implements StructuredRunner {
       }
       if (startup.stopped) return
       if (run.startupFailure) throw run.startupFailure
+      run.skillsLoaded = this.loadSkills(run)
       this.running.set(session.id, run)
 
       if (prompt === undefined || prompt === '') {
@@ -209,9 +281,14 @@ class CodexRunner implements StructuredRunner {
     if (!run || run.stopped || run.failed) throw new Error('session is not running')
     if (settings.model !== undefined) run.options = { ...run.options, model: settings.model }
     if (settings.effort !== undefined) run.options = { ...run.options, effort: settings.effort }
+    if (settings.permissionMode !== undefined) {
+      permissionsFor(settings.permissionMode)
+      run.permissionMode = settings.permissionMode
+    }
     return {
       ...(run.options.model === undefined ? {} : { model: run.options.model }),
-      ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
+      ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+      permissionMode: run.permissionMode
     }
   }
 
@@ -336,8 +413,13 @@ class CodexRunner implements StructuredRunner {
     run = {
       sessionId: session.id,
       threadId,
+      cwd: session.cwd,
+      skills: new Map(),
+      skillsLoaded: Promise.resolve(),
       connection,
       options,
+      permissionMode: DEFAULT_PERMISSION_MODE,
+      appliedPermissionMode: DEFAULT_PERMISSION_MODE,
       totalTokenUsage: null,
       turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
@@ -363,6 +445,21 @@ class CodexRunner implements StructuredRunner {
     return run
   }
 
+  /**
+   * Reports the skills Codex offers for the session's folder; Codex has no listing for its TUI
+   * slash commands or custom prompts, so skills are the whole list. A failure leaves the list as it was.
+   */
+  private async loadSkills(run: Running): Promise<void> {
+    try {
+      const response = await run.connection.request('skills/list', { cwds: [run.cwd] }, SKILLS_TIMEOUT_MS, { optional: true })
+      if (run.stopped || run.failed) return
+      run.skills = codexSkills(response)
+      this.context.reportCommands?.(run.sessionId, [...run.skills.values()].map((skill) => skill.command))
+    } catch {
+      // an app-server without skills/list offers no commands
+    }
+  }
+
   private threadIdFromResponse(response: unknown, method: string): string {
     if (typeof response !== 'object' || response === null || Array.isArray(response)) {
       throw new Error(`Codex app-server ${method} returned an invalid response`)
@@ -382,23 +479,28 @@ class CodexRunner implements StructuredRunner {
     deferEventsUntilReady = false,
     options: StructuredSendOptions = {}
   ): Promise<void> {
+    if (mentionsCommand(text)) await run.skillsLoaded
     if (run.stopped || run.failed || !run.ready && !this.starting.has(run.sessionId)) {
       throw new Error('session is not running')
     }
     if (run.pendingApprovalCount > 0 || run.pendingCompletion) throw new Error('session is waiting for approval')
     const expectedTurnId = run.activeTurnId
     const method = expectedTurnId === null ? 'turn/start' : 'turn/steer'
+    const commands = [...run.skills.values()].map((skill) => skill.command)
     const input = [
-      { type: 'text', text },
-      ...(options.images ?? []).map((path) => ({ type: 'localImage', path }))
+      ...(text === '' ? [] : [{ type: 'text', text }]),
+      ...(options.images ?? []).map((path) => ({ type: 'localImage', path })),
+      ...referencedCommands(text, commands).map((name) => ({ type: 'skill', name, path: run.skills.get(name)!.path }))
     ]
+    const sentPermissionMode = run.permissionMode
     const params =
       method === 'turn/start'
         ? {
             threadId: run.threadId,
             input,
             ...(run.options.model === undefined ? {} : { model: run.options.model }),
-            ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
+            ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+            ...(sentPermissionMode === run.appliedPermissionMode ? {} : turnPermissions(sentPermissionMode))
           }
         : {
             threadId: run.threadId,
@@ -422,6 +524,7 @@ class CodexRunner implements StructuredRunner {
         if (typeof turnId !== 'string' || turnId.length === 0) throw new Error('Codex app-server turn/start returned an invalid turn ID')
         run.activeTurnId = turnId
         run.turnStartedAt ??= Date.now()
+        run.appliedPermissionMode = sentPermissionMode
       } else {
         if (typeof response !== 'object' || response === null || Array.isArray(response)) {
           throw new Error('Codex app-server turn/steer returned an invalid response')
@@ -499,6 +602,9 @@ class CodexRunner implements StructuredRunner {
     if (typeof params.threadId === 'string' && params.threadId !== run.threadId) return
 
     switch (method) {
+      case 'skills/changed':
+        void this.loadSkills(run)
+        return
       case 'thread/tokenUsage/updated': {
         const rawUsage = rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
           ? (rawParams as Record<string, unknown>).tokenUsage

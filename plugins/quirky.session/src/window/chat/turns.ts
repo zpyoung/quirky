@@ -58,12 +58,17 @@ const isCall = (item: ChatItem): item is ActivityItem | FileChangeItem | TestsIt
 
 const callIdOf = (item: ActivityItem | FileChangeItem | TestsItem | StepsItem): string => item.callId
 
+/** Whether a journaled message is content the Claude CLI added to the conversation itself, such as a skill's SKILL.md. */
+const isAgentInjected = (message: StructuredMessage): boolean =>
+  typeof message.data === 'object' && message.data !== null && (message.data as { isSynthetic?: unknown }).isSynthetic === true
+
 /**
  * `messages` (in journal order) as turns. A `user` item starts a turn, and a message before the
- * first one goes in a turn with no user message. Of the items sharing a `callId` only the last
- * counts, shown where the first appeared, and the same holds for the `plan` items of one version
- * across turns. `mode` items only feed the composer and never render. Messages with no `item` stay as
- * `legacy` blocks, and `status` items and diagnostics are left out unless `showAll`.
+ * first one goes in a turn with no user message; a `user` item the agent injected itself is
+ * dropped. Of the items sharing a `callId` only the last counts, shown where the first appeared, and
+ * the same holds for the `plan` items of one version across turns. `mode` items only feed the
+ * composer and never render. Messages with no `item` stay as `legacy` blocks, and `status` items and
+ * diagnostics are left out unless `showAll`.
  */
 export function groupTurns(messages: StructuredMessage[], { showAll = false }: { showAll?: boolean } = {}): Turn[] {
   const drafts: Draft[] = []
@@ -84,6 +89,7 @@ export function groupTurns(messages: StructuredMessage[], { showAll = false }: {
       continue
     }
     if (item.kind === 'user') {
+      if (isAgentInjected(message)) continue
       open(message, { seq: message.seq, text: item.text, images: item.images ?? [] })
       continue
     }

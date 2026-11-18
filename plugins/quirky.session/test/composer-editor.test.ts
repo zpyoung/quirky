@@ -127,6 +127,20 @@ describe('pills', () => {
     expect(view.contentDOM.querySelectorAll('.cm-composer-pill').length).toBe(2)
   })
 
+  test('a /name mid-text renders a command pill; a path or a mid-word slash does not', async () => {
+    const { view } = await mount({ value: 'fix this /quirk:tdd then a/b and /usr/bin and\n/review ' })
+    expect(pillRanges(view.state).map((p) => p.text)).toEqual(['/quirk:tdd ', '/review '])
+    expect([...view.contentDOM.querySelectorAll('.cm-composer-pill-command')].map((el) => el.textContent)).toEqual(['/quirk:tdd', '/review'])
+  })
+
+  test('insertPill mid-text replaces the / trigger with a command pill', async () => {
+    const { ref, view } = await mount()
+    await act(async () => set(view, 'please /qui'))
+    await act(async () => ref.current!.insertPill({ kind: 'command', name: 'quirk:tdd' }))
+    expect(view.state.doc.toString()).toBe('please /quirk:tdd ')
+    expect(pillRanges(view.state)).toEqual([{ from: 7, to: 18, text: '/quirk:tdd ' }])
+  })
+
   test('adjacent file pills all render', async () => {
     const { view } = await mount({ value: '@one.ts @two.ts @three.ts ' })
     expect(pillRanges(view.state).map((p) => p.text)).toEqual(['@one.ts ', '@two.ts ', '@three.ts '])
@@ -204,14 +218,30 @@ describe('triggers', () => {
     expect(spy.triggers.at(-1)).toBeNull()
   })
 
-  test('/ only at the very start of the document is a command trigger', async () => {
+  test('/ at the start or after whitespace or a line break is a command trigger', async () => {
     const { view, spy } = await mount()
     await act(async () => set(view, '/rev'))
     expect(spy.triggers.at(-1)).toEqual({ kind: '/', query: 'rev', from: 0, to: 4 })
     await act(async () => set(view, 'run /rev'))
-    expect(spy.triggers.at(-1)).toBeNull()
-    await act(async () => set(view, ' /rev'))
-    expect(spy.triggers.at(-1)).toBeNull()
+    expect(spy.triggers.at(-1)).toEqual({ kind: '/', query: 'rev', from: 4, to: 8 })
+    await act(async () => set(view, ' /'))
+    expect(spy.triggers.at(-1)).toEqual({ kind: '/', query: '', from: 1, to: 2 })
+    await act(async () => set(view, 'first line\n/quirk:tdd'))
+    expect(spy.triggers.at(-1)).toEqual({ kind: '/', query: 'quirk:tdd', from: 11, to: 21 })
+  })
+
+  test('/ inside a word, in a path or in a URL is not a trigger', async () => {
+    const { view, spy } = await mount()
+    for (const text of ['a/b', 'see /usr/lo', 'open https://x.dev/do', '/rev done']) {
+      await act(async () => set(view, text))
+      expect(spy.triggers.at(-1)).toBeNull()
+    }
+  })
+
+  test('the @ file trigger still works after a command pill', async () => {
+    const { view, spy } = await mount({ value: '/review ' })
+    await act(async () => view.dispatch({ changes: { from: 8, insert: '@REA' }, selection: { anchor: 12 } }))
+    expect(spy.triggers.at(-1)).toEqual({ kind: '@', query: 'REA', from: 8, to: 12 })
   })
 
   test('moving the selection re-reports the trigger', async () => {

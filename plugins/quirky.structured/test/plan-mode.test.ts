@@ -28,21 +28,21 @@ describe('create with a permission mode', () => {
     expect(chat.world.registerCalls[0]).not.toHaveProperty('launchSettings')
   })
 
-  test('no mode starts the runner without one', async () => {
+  test('no pick opens in the agent default mode', async () => {
     chat = await bootChat()
     await chat.create('go')
     await waitFor(() => chat!.runner?.startOptions.length === 1)
-    expect(chat.runner.startOptions[0]).not.toHaveProperty('permissionMode')
+    expect(chat.runner.startOptions[0]).toMatchObject({ permissionMode: 'default' })
   })
 
   test('a mode the agent does not offer is refused before anything is registered', async () => {
     chat = await bootChat()
-    const unknown = await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', permissionMode: 'bypassPermissions' }))
+    const unknown = await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', permissionMode: 'not-a-mode' }))
     expect(unknown.code).toBe(RpcErrorCode.InvalidParams)
-    expect(unknown.message).toContain('permissionMode must be one of default, acceptEdits, auto, plan')
+    expect(unknown.message).toContain('permissionMode must be one of default, acceptEdits, plan, auto, dontAsk, bypassPermissions')
     const codex = await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'x', permissionMode: 'plan' }))
     expect(codex.code).toBe(RpcErrorCode.InvalidParams)
-    expect(codex.message).toContain('Codex runs with on-request approval in Quirky')
+    expect(codex.message).toContain('permissionMode must be one of default, read-only, auto-review, full-access')
     expect((await chat.failure(chat.call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt: 'x', permissionMode: 3 }))).code).toBe(RpcErrorCode.InvalidParams)
     expect(chat.world.registerCalls).toEqual([])
   })
@@ -80,7 +80,7 @@ describe('configure', () => {
   test('a mode outside the capability list is invalid', async () => {
     chat = await bootChat()
     const session = await working(chat)
-    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'bypassPermissions' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'not-a-mode' }))).code).toBe(RpcErrorCode.InvalidParams)
   })
 })
 

@@ -3,7 +3,8 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { Draft } from '../../drafts'
 import { NO_PICKS } from './controls'
 
-export type Attachment = { name: string; path: string }
+/** An attached image; `preview` is an object URL for a thumbnail when the composer holds the image's bytes. */
+export type Attachment = { name: string; path: string; preview?: string }
 export type PasteChip = { id: string; text: string }
 
 const SAVE_DELAY_MS = 400

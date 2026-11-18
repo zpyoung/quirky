@@ -1,5 +1,7 @@
 # g3-68 plugin baseline
 
+> Latest: [g3-84 post-repair measurement](#g3-84-post-repair-measurement) is `not-run`: no authorized isolated reviewer route was supplied. All 146 current plugin/theme cells remain unmeasured; the historical baseline below is unchanged.
+
 Plugin 85 gate NOT met at `dd2e692c9263f31f9419a72f7f25764eed854ad3`; command exit 2. This PR supplies the repeated measurement instrument and its one authorized baseline. Plugin repairs and the original bring-every-cell-to-85 objective remain open.
 
 Reader: the follow-up planner and reviewer. Decision: separate measured repair candidates from missing or invalid evidence.
@@ -2078,3 +2080,397 @@ The local executable reviewer's synthetic 85s verify protocol plumbing only. The
 ## Post-measurement source integration
 
 Main advanced only in the soak tooling/docs after capture. The required merge of `7eb893dae9e682f2b6298287d53d071611830b1e` produced integration commit `aa42c1cc669a72541ed06cc7047800e81891d552`. No screenshot or reviewer evidence was relabeled as that later commit, and no additional campaign ran. Root typecheck passed after integration. All six incoming test files passed individually: soak arguments 97, faults 48, feedback 11, verdict 110, fault end-to-end 5, and feedback end-to-end 15. Injected-fault verdict failures are expected by those passing tests; they are not a product soak acceptance claim.
+
+
+## g3-84 post-repair measurement
+
+Outcome: `not-run` at capture-source HEAD `8329e064f4ca5c5752374e23ed5054b3c447a8df`; no authorized isolated reviewer route was supplied. Zero campaign captures, zero reviewer preflights and zero image-review calls ran. The plugin 85 clause remains unverified, not failed by a measured score and not established by the historical baseline.
+
+Reader: the goal-3 reviewer and orchestrator. Decision: distinguish missing reviewer access from reproduced product defects, with the complete current denominator retained.
+
+### Clean post-g3-83 source, before the evidence edit
+
+Combined g3-83/g3-82 landed in [PR #672](https://github.com/zpyoung/quirky/pull/672), merge `8329e064f4ca5c5752374e23ed5054b3c447a8df`, at `2026-11-18T01:08:18.235Z`. `items.ts show g3-83` reported `merged`. `git fetch origin && git merge origin/main` returned `Already up to date.`
+
+Both `baseline_main` and `capture_head` are `8329e064f4ca5c5752374e23ed5054b3c447a8df`. Here `capture_head` identifies the source checkout available for capture, not an acquired image. The source-only disclosure was collected at `2026-11-18T01:10:15.309Z`; source digest: `366d049a8eee9ca960775250d39e50d388bb0c2bab56588781015a491bf38dbf`. `collectInventory` reported `dirty:false` and no discovery failures.
+
+Tree identities, each equal in recorded main and capture-source HEAD:
+
+| Tree | Recorded main | Capture-source HEAD |
+| --- | --- | --- |
+| packages | `5f0cde3263b40f75e4810585f6fceb1f483be937` | `5f0cde3263b40f75e4810585f6fceb1f483be937` |
+| plugins | `ce3e3d4063b46f6dc0beed5bf48c59758fca5beb` | `ce3e3d4063b46f6dc0beed5bf48c59758fca5beb` |
+| apps | `2fe3ddbc9e4eb0626149293e1e97306bc7432eea` | `2fe3ddbc9e4eb0626149293e1e97306bc7432eea` |
+| scripts | `980ec2d86049159b8086b48748a983dfc8e8753c` | `980ec2d86049159b8086b48748a983dfc8e8753c` |
+
+Before and after the source disclosure, before editing this document, `git status --porcelain` printed nothing and `git diff --exit-code "$baseline_main" HEAD -- packages plugins apps scripts` exited 0. The paired `git rev-parse` tree check was repeated and matched. There was no acquisition interval to check. The historical document's SHA-256 before inserting the pointer and appending this section was `9f5da682712f6cf793a8fcd6b865af8ecb34dd8cbc56271db3c3dbbb0313d46e`.
+
+The landed gate preflights before capture (`scripts/ui-review/plugin-gate.ts:482–505`, g3-85 / [#682](https://github.com/zpyoung/quirky/pull/682)); its old ordering in the planning snapshot is not the current source. The predecessor's fixture isolation, dialog recovery and blocked-cell propagation remain in `scripts/ui-review/capture.ts:1723–1786,1830–1900,2240–2330`; the full-order fixture expectation remains in `scripts/ui-review/plugin-fixtures-smoke.test.ts:27–49`. These are landed source checks, not a new successful capture claim.
+
+### Acquisition was not authorized or launched
+
+`command -v bun pi pi-watch` resolved executable locations only:
+
+| Executable | Location |
+| --- | --- |
+| bun | `/Users/zpyoung/.bun/bin/bun` |
+| pi | `/Users/zpyoung/Library/pnpm/pi` |
+| pi-watch | `/Users/zpyoung/.local/bin/pi-watch` |
+| Installed browser, executable-file check only | `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` |
+
+Worker: `openai-codex/gpt-6.1-sol`, actual author family `openai`. Reviewer alias, provider, model, family and preflight identity are all `null` (not attempted). Neither executable availability nor the old `gemini` alias establishes isolated account authorization. No isolated reviewer route was supplied, so `pi-watch --check` was not run. Authentication availability and quota were not probed; no auth failure, usage limit or `pi ENOENT` is claimed for this run.
+
+Campaign command: not invoked. Gate exit: not applicable, no gate process. Supervisor exit: not applicable, no supervisor process. No `plugin-gate.json`, `plugin-gate.md`, capture manifest, capture progress, review response or review log was fabricated. The `--help` invocation is an instrument check only, not acquisition. No installed browser was launched.
+
+The actual worker item-start Unix timestamp was not reliably established, so `item_started_epoch` remains unknown rather than being reset to acquisition/setup time. This is an additional budget prerequisite blocker (`item-budget-blocked`), not evidence that a launch allowance expired. Item assignment `2026-11-18T01:08:30.540Z` is not relabeled as actual worker start. No acquisition deadline, elapsed duration, signal delivery or cleanup duration is invented. No owned gate, reviewer, browser or daemon process was started or needs campaign cleanup.
+
+The source disclosure and local instrument checks use fresh temporary HOME and QUIRKY_HOME with `env -i`; the allowlist contains only HOME, QUIRKY_HOME, PATH, TMPDIR and LANG. No provider credentials, owner HOME/configuration, login, reviewer/browser installation, alias change or harness change was used. [Maintained screenshot operating documentation](../../../apps/desktop/README.md#desktop-screenshot-review) describes the instrument; its install/login instructions do not authorize those actions here.
+
+### Current plugins, aliases and no-target disclosure
+
+The current source projects 35 plugins, 27 with screenshot targets and eight without; 83 declared targets include five navigation aliases. The rendered denominator is 78 targets: five host targets excluded from plugin scoring and 73 plugin targets, giving 146 required plugin/theme cells. This is collected source inventory, not a captured campaign or runtime-inventory reconciliation.
+
+Every discovered plugin and its required rendered targets follows. `not-applicable` means no plugin screenshot target, not a visual pass.
+
+| Plugin | Required targets | Disclosure status |
+| --- | --- | --- |
+| quirky.accounts | `view:quirky.accounts/session-accessory`, `view:quirky.accounts/settings`, `status-bar:quirky.accounts/usage`, `overlay:quirky.accounts/switch-dialog` | unmeasured |
+| quirky.agent-status | `view:quirky.agent-status/activity`, `view:quirky.agent-status/dashboard`, `sidebar-section:quirky.agent-status/activity`, `sidebar-section:quirky.agent-status/dashboard` | unmeasured |
+| quirky.agents | `view:quirky.agents/settings` | unmeasured |
+| quirky.ask | `view:quirky.ask/card`, `panel:quirky.ask/questions` | unmeasured |
+| quirky.automations | `view:quirky.automations/automations`, `view:quirky.automations/settings` | unmeasured |
+| quirky.browser | `view:quirky.browser/browser-settings`, `view:quirky.browser/page`, `settings-section:quirky.browser/browser-preferences` | unmeasured |
+| quirky.checks | none | not-applicable |
+| quirky.cli | `view:quirky.cli/settings` | unmeasured |
+| quirky.editor | `view:quirky.editor/document`, `panel:quirky.editor/explorer`, `overlay:quirky.editor/close`, `overlay:quirky.editor/quick-open` | unmeasured |
+| quirky.feedback | `overlay:quirky.feedback/mode` | unmeasured |
+| quirky.git | `view:quirky.git/ai-settings`, `view:quirky.git/diff`, `view:quirky.git/turn-changes`, `panel:quirky.git/source-control`, `status-bar:quirky.git/ahead-behind` | unmeasured |
+| quirky.handoff | `view:quirky.handoff/settings`, `overlay:quirky.handoff/dialog` | unmeasured |
+| quirky.heimdall | `view:quirky.heimdall/fleet` | unmeasured |
+| quirky.hosting | none | not-applicable |
+| quirky.ledger | `view:quirky.ledger/ledger`, `view:quirky.ledger/settings`, `panel:quirky.ledger/ledger` | unmeasured |
+| quirky.loops | `view:quirky.loops/loop`, `overlay:quirky.loops/dialogs` | unmeasured |
+| quirky.mobile | `view:quirky.mobile/page`, `view:quirky.mobile/settings` | unmeasured |
+| quirky.navigation | none | not-applicable |
+| quirky.notifications | `view:quirky.notifications/settings` | unmeasured |
+| quirky.objective | none | not-applicable |
+| quirky.orchestration | `view:quirky.orchestration/remote-worker-output`, `view:quirky.orchestration/settings`, `overlay:quirky.orchestration/floating-setup` | unmeasured |
+| quirky.palette | none | not-applicable |
+| quirky.repo | none | not-applicable |
+| quirky.reviews | `view:quirky.reviews/create`, `view:quirky.reviews/review`, `view:quirky.reviews/settings`, `panel:quirky.reviews/checks`, `status-bar:quirky.reviews/checks` | unmeasured |
+| quirky.session | `view:quirky.session/structured`, `view:quirky.session/worktree`, `overlay:quirky.session/chat-dialogs` | unmeasured |
+| quirky.session-info | `view:quirky.session-info/history`, `view:quirky.session-info/transcript`, `panel:quirky.session-info/info` | unmeasured |
+| quirky.sidebar-extras | `activity-item:quirky.sidebar-extras/source-control` | unmeasured |
+| quirky.sitter | none | not-applicable |
+| quirky.structured | none | not-applicable |
+| quirky.tasks | `view:quirky.tasks/settings`, `view:quirky.tasks/tasks`, `sidebar-section:quirky.tasks/tasks`, `overlay:quirky.tasks/workspace-composer` | unmeasured |
+| quirky.terminal | `view:quirky.terminal/emulator`, `panel:quirky.terminal/quick-commands`, `panel:quirky.terminal/sessions`, `overlay:quirky.terminal/floating`, `settings-section:quirky.terminal/shortcuts` | unmeasured |
+| quirky.terminal-dock | `view:quirky.terminal-dock/composer`, `view:quirky.terminal-dock/settings` | unmeasured |
+| quirky.vault | `view:quirky.vault/search-settings`, `panel:quirky.vault/history`, `settings-section:quirky.vault/search` | unmeasured |
+| quirky.view | `view:quirky.view/pane`, `view:quirky.view/render` | unmeasured |
+| quirky.worktree | `view:quirky.worktree/environments`, `view:quirky.worktree/remote`, `sidebar-section:quirky.worktree/worktrees`, `sidebar-section:quirky.worktree/remote-workspaces` | unmeasured |
+
+Navigation aliases are declarations whose bodies are already counted at the rendered target. They receive no separate image or score.
+
+| Declaration | Tool ID | Rendered target | Reason |
+| --- | --- | --- | --- |
+| `sidebar-section:quirky.automations/automations` | `sidebar-section:quirky.automations/automations` | `view:quirky.automations/automations` | tool-navigation-alias |
+| `sidebar-section:quirky.editor/explorer` | `panel:quirky.editor/explorer` | `panel:quirky.editor/explorer` | tool-navigation-alias |
+| `sidebar-section:quirky.heimdall/navigation` | `sidebar-section:quirky.heimdall/navigation` | `view:quirky.heimdall/fleet` | tool-navigation-alias |
+| `sidebar-section:quirky.ledger/ledger` | `panel:quirky.ledger/ledger` | `panel:quirky.ledger/ledger` | tool-navigation-alias |
+| `sidebar-section:quirky.mobile/mobile` | `sidebar-section:quirky.mobile/mobile` | `view:quirky.mobile/page` | tool-navigation-alias |
+
+Excluded host targets: `host:shell`, `host:scoped`, `host:popups`, `host:settings`, `host:palette`. They have no plugin score.
+
+Separate discovery exclusion: `quirky.avatar`, absent paused/unmerged branch `zpyoung/avatar-plugin`, PR #305, steer date `2026-11-13`; not one of the 35 discovered plugins. No target or plugin with a discovery failure was silently removed: the discovery failure list is empty.
+
+### All current cells are unmeasured, with null medians
+
+This is a missing-cell disclosure, not a machine campaign report. Each row contains slots 1/2/3 in order; each `skipped/null` means no attempt and no score. The unchanged reducer, given this inventory with `manifest:null`, `reviewer:null`, no attempts and no input failures, marks all slots `skipped`, cells `invalid`, and medians/ranges `null`. Its `capture-missing` absence diagnostic is not an observed capture failure. No numerical samples, replacements, retries, rejected responses or extra attempts exist.
+
+| Target | Theme | Slot 1 | Slot 2 | Slot 3 | Median | Range | Absence status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| view:quirky.accounts/session-accessory | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.accounts/session-accessory | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.accounts/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.accounts/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agent-status/activity | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agent-status/activity | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agent-status/dashboard | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agent-status/dashboard | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agents/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.agents/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ask/card | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ask/card | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.automations/automations | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.automations/automations | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.automations/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.automations/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.browser/browser-settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.browser/browser-settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.browser/page | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.browser/page | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.cli/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.cli/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.editor/document | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.editor/document | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/ai-settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/ai-settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/diff | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/diff | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/turn-changes | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.git/turn-changes | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.handoff/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.handoff/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.heimdall/fleet | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.heimdall/fleet | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ledger/ledger | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ledger/ledger | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ledger/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.ledger/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.loops/loop | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.loops/loop | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.mobile/page | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.mobile/page | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.mobile/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.mobile/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.notifications/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.notifications/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.orchestration/remote-worker-output | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.orchestration/remote-worker-output | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.orchestration/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.orchestration/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/create | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/create | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/review | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/review | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.reviews/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session-info/history | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session-info/history | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session-info/transcript | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session-info/transcript | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session/structured | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session/structured | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session/worktree | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.session/worktree | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.tasks/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.tasks/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.tasks/tasks | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.tasks/tasks | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal-dock/composer | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal-dock/composer | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal-dock/settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal-dock/settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal/emulator | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.terminal/emulator | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.vault/search-settings | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.vault/search-settings | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.view/pane | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.view/pane | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.view/render | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.view/render | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.worktree/environments | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.worktree/environments | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.worktree/remote | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| view:quirky.worktree/remote | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.editor/explorer | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.editor/explorer | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.vault/history | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.vault/history | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.reviews/checks | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.reviews/checks | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.ask/questions | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.ask/questions | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.git/source-control | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.git/source-control | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.ledger/ledger | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.ledger/ledger | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.session-info/info | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.session-info/info | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.terminal/quick-commands | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.terminal/quick-commands | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.terminal/sessions | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| panel:quirky.terminal/sessions | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.worktree/worktrees | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.worktree/worktrees | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.worktree/remote-workspaces | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.worktree/remote-workspaces | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.agent-status/activity | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.agent-status/activity | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.agent-status/dashboard | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.agent-status/dashboard | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.tasks/tasks | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| sidebar-section:quirky.tasks/tasks | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| activity-item:quirky.sidebar-extras/source-control | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| activity-item:quirky.sidebar-extras/source-control | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.git/ahead-behind | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.git/ahead-behind | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.reviews/checks | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.reviews/checks | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.accounts/usage | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| status-bar:quirky.accounts/usage | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.tasks/workspace-composer | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.tasks/workspace-composer | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.accounts/switch-dialog | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.accounts/switch-dialog | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.editor/close | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.editor/close | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.editor/quick-open | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.editor/quick-open | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.feedback/mode | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.feedback/mode | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.handoff/dialog | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.handoff/dialog | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.loops/dialogs | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.loops/dialogs | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.orchestration/floating-setup | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.orchestration/floating-setup | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.session/chat-dialogs | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.session/chat-dialogs | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.terminal/floating | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| overlay:quirky.terminal/floating | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.terminal/shortcuts | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.terminal/shortcuts | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.browser/browser-preferences | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.browser/browser-preferences | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.vault/search | dark | skipped/null | skipped/null | skipped/null | null | null | invalid |
+| settings-section:quirky.vault/search | light | skipped/null | skipped/null | skipped/null | null | null | invalid |
+
+### Retained artifacts identify disclosure, not acquisition
+
+Private root: `/tmp/quirky-g3-84.sXDEnn/evidence`. Paths below are relative to that root. The JSON is a source-only inventory disclosure; it is not `PluginCampaignReport`, an archival replacement, or a synthetic scored campaign. The committed tables retain the complete denominator even if private temporary paths later disappear.
+
+| Artifact | SHA-256 | Role |
+| --- | --- | --- |
+| `inventory-disclosure.json` | `b825fc47f0654ec685db5ec3f5f45c2a8d72ed3dc0cfb34e05bf4949a7505ee0` | Original source inventory and absence projection |
+| `source-ground.txt` | `de19faa4e01a341557f4b55ca0dd19e51ae8f8a8dc2c40bd4be55758a0c47bd9` | Pre-edit clean-tree and main/HEAD tree identities |
+| `measurement-source-sha256.txt` | `1338496a388d30a0c9e4e7885c07ad1e99716e14c002765723bc7ffec6b89d75` | Current measurement source hashes |
+| `plugin-gate-help.txt` | `b988bf83f9055577eae2861cfc38d2225f93d5efbf5c9933175aa922d3980a0c` | Help output only; exit 0 |
+| `queue.txt` | `22a0289f3ddfaf385b8347c434d2ae9faf59940bc073b1dc0ab863e9620a8381` | Read-only items.ts list; exit 0 |
+
+Campaign report/manifest/progress, per-cell images/references/frozen contexts and per-attempt reports/responses/logs/timestamps/retry links are all absent because acquisition did not start. They have no campaign path or hash. Approved PNGs, rubric, context generator and acquisition code were not changed. Source hashes in the retained source index identify the inspected implementations, not frozen image-review inputs.
+
+
+### Admission audit cannot turn missing samples into acceptance
+
+There are no attempted campaign responses, logs, scored reasons, replacements or rejected outputs to audit. Reason-level semantic findings and admitted slots are both empty; no historical score is promoted under the current context. The only machine values below are the unchanged reducer's source-only absence projection, not results of a gate invocation. The independent audited classification fails closed for the same missing slots.
+
+| Classification basis | Required cells | Complete valid cells | Pass | Below 85 | Invalid/unmeasured |
+| --- | --- | --- | --- | --- | --- |
+| Machine absence projection, not a campaign | 146 | 0 | 0 | 0 | 146 |
+| Independent admission audit | 146 | 0 | 0 | 0 | 146 |
+
+Every cell's audited median and audited range are `null`; none has three semantically admitted slots. There are 438 required slots, zero scores and zero admitted slots. Threshold 85, the five-dimension arithmetic mean, exact three-slot median, per-theme requirement and retry rules are unchanged. `goalPassed` remains `false`; neither this blocker record nor instrument-fixture scores establish the plugin clause, the host gate, static clauses or goal completion.
+
+### No reproduced follow-up defects
+
+No current image, invalid capture or reviewer complaint exists from this acquisition, so no visual allegation can be independently reproduced from it. No diagnostic capture-only command ran, and no blank/error/spinner was admitted as a named surface. The old allegations remain historical evidence, not new CSS repair instructions.
+
+| Candidate | Classification | Evidence and ownership | Disposition |
+| --- | --- | --- | --- |
+| No supplied authorized isolated reviewer route | access-blocked | Executable locations exist; no route supplied, no preflight attempted. Acquisition prerequisite belongs to the orchestrator's authorization boundary, not a plugin stylesheet. | Preserve blocker; no product repair proposal. |
+| Reliable actual worker item-start timestamp unavailable | access-blocked | Required supervisor input unknown; no allowance computed or supervisor launched. Operational budget prerequisite, labeled `item-budget-blocked` above. | No campaign launch, fabricated timestamp or product repair. |
+| Judge's historical `pi ENOENT` / late prerequisite detection | access-blocked | Not reproduced here; current executable lookup succeeds. g3-85 is already merged in #682 and preflights before capture. | No duplicate PATH/configuration or ordering repair proposal. |
+| Historical failed Ask/chat/readiness/Editor cells | unconfirmed | g3-83, including folded g3-82, is merged in #672. No fresh campaign images or same-tree diagnostic reproduction here. | No remaining defect asserted or duplicate capture-repair proposal. |
+
+Read-only ownership check: `bun /Users/zpyoung/PycharmProjects/PERSONAL/quirky/.git/goal-loop/harness/items.ts list` exited 0; retained `queue.txt` names g3-83 and g3-85 as merged, g3-84 as building, and g3-80 as closed without a qualifying reproduced repair. There is no independently reproduced remaining cause to assign, consolidate or propose. Zero follow-up proposals; the orchestrator/reviewer decides any later acquisition authorization or registration.
+
+
+### Instrument checks passed; no visual acceptance was measured
+
+Each test file ran in its own process with a fresh temporary HOME and QUIRKY_HOME and an allowlisted `env -i` environment. Successful final checks used installed Bun `1.4.0`; the local reviewer fixture also needed installed Node `v24.19.0`, and desktop preparation needed the installed Hutch launcher. No provider credentials or real reviewer were used. Test stand-ins' synthetic scores and calls are excluded from every campaign count above.
+
+The corrected allowlisted PATH was:
+
+`/Users/zpyoung/.bun/bin:/Users/zpyoung/.nvm/versions/node/v24.19.0/bin:/Users/zpyoung/.hutch/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+
+The only other environment entries were `HOME=<fresh temporary directory>`, `QUIRKY_HOME=<fresh temporary directory>`, `TMPDIR=/tmp` and `LANG=en_US.UTF-8`. Directories were created under `/tmp/quirky-g3-84.sXDEnn`; no owner home was inherited.
+
+| Command | Observed result |
+| --- | --- |
+| `bun test scripts/ui-review/plugin-campaign.test.ts` | 32 pass, 0 fail; 176 assertions; exit 0 |
+| `bun test scripts/ui-review/plugin-gate.test.ts`, corrected Node PATH | 35 pass, 0 fail; 848 assertions; exit 0 |
+| `bun test scripts/ui-review/host-contracts.test.ts` | 38 pass, 0 fail; 290 assertions; exit 0 |
+| `bun scripts/ui-review/plugin-gate.ts --help` | Exit 0; no acquisition |
+| `bun run typecheck`, corrected Hutch PATH | Exit 0; UI lint, static ratchet, spawn lint, root/mobile/desktop typechecks passed |
+| Source-disclosure reconciliation, read-only Python 3 probe | 146 unique theme cells, 35 plugin rows, five alias rows, both count rows and five artifact hashes matched retained inputs; historical bytes preserved |
+
+Two setup failures are retained, not erased. The first plugin-gate test run had 34 pass/1 fail (830 assertions): the local executable stand-in at `scripts/ui-review/plugin-gate.test.ts:1668` uses `#!/usr/bin/env node`, and the original allowlisted PATH omitted Node. Its diagnostic was `Reviewer preflight exited unsuccessfully (127). env: node: No such file or directory`, with `LOCAL_CALLS=0`. `command -v node` resolved the installed Node directory above; adding only that directory to the isolated PATH made the same unchanged test file pass. This was a stand-in test prerequisite failure, not reviewer access or a product defect.
+
+The first root typecheck reached desktop preparation, then exited 1 because Hutch was absent from the isolated PATH and fresh HOME: `hutch was not found on PATH or in ~/.hutch/bin`. `command -v hutch` resolved `/Users/zpyoung/.hutch/bin/hutch`; adding that existing launcher directory made the unchanged full command pass. Preparation downloaded Hutch/cottontail/Bun toolchains into the fresh isolated environment and prepared this worktree's ignored `apps/desktop/.hutch/devkit`. No native window or product daemon launched, and no reviewer/browser was installed.
+
+Verification logs, relative to the same private evidence root:
+
+| Artifact | SHA-256 | Outcome |
+| --- | --- | --- |
+| `plugin-campaign-test.log` | `661c12a6c9f0d4336fbe3a0c4d472da032b6fd63748bbf3305442a2ee1752762` | 32 pass |
+| `plugin-gate-test.log` | `3df90cd4799aaed8e167a5fc07293bbfbafb8b71079f6fe82d556a7160ec49a5` | Initial 34 pass / 1 fail; missing Node |
+| `plugin-gate-node-test.log` | `10e173549d3867624de316534cff709e0b92b30d6deb9641973e2a4724e23573` | 35 pass after Node PATH correction |
+| `host-contracts-test.log` | `4cbc542268769b3949d78eb4bb83c8417c8d659be18368339edba0ab3e4b1f5c` | 38 pass |
+| `typecheck.log` | `6b09c711a96283415466e6dcc7980b14d3c599550d813e6578377e69cb90606f` | Initial exit 1; missing Hutch |
+| `typecheck-hutch.log` | `1672a940e78c127d98fe0fc883df35b0f681389cafe8bfa297e4ddc41aa741dd` | Exit 0 after Hutch PATH correction |
+
+No product UI changed. Neither headless product screenshots nor native menus/window chrome, embedded native content, focus, notifications, owner profiles or provider-backed product flows were exercised. Every current product cell remains unmeasured despite the passing instrument checks.
+
+
+### Later base integration is not screenshot-measured
+
+Before the draft push, `git fetch origin && git merge origin/main` incorporated base `86af0af96ff8dc13878f8d99c5efaa987d80e432` (g11-16) as merge `3a1383ff1753b60f741f5acde39f54673fff7c60`. This brought in CLI rehearsal/test-baseline infrastructure and Git review tests, not new screenshot evidence. The original disclosure remains tied to `8329e064f4ca5c5752374e23ed5054b3c447a8df`; the later source was not numerically or screenshot-measured, and the campaign was not restarted.
+
+The later base keeps packages `5f0cde3263b40f75e4810585f6fceb1f483be937` and apps `2fe3ddbc9e4eb0626149293e1e97306bc7432eea`; its plugin tree is `66be6564afa5a7b9b828d6c214f81a9caee674af` and scripts tree `d17786391fde709f8137f05834596d2998bb8b89`. The five measurement-source files in `measurement-source-sha256.txt` still match their original hashes. `git diff --name-only origin/main HEAD` lists only this evidence document; `git diff --check` exited 0 after integration.
+
+Required integration checks run each test file in a separate isolated process. Git review tests start disposable local daemons, and the two-window CLI rehearsal uses local stand-ins and an owned headless browser; these are integration verification, not plugin acquisition, image review or new campaign artifacts.
+
+
+All post-integration checks below completed successfully. Injected startup failures in the startup test file are expected assertions, not product-capture failures. The real CLI rehearsal observed two headless windows and verified owned-process cleanup (1 test, 3,527 assertions); it did not supply an image, sample or score to this record.
+
+| Command | Observed result | Private log | SHA-256 |
+| --- | --- | --- | --- |
+| `bun test plugins/quirky.git/test/scenarios/review.test.ts` | 32 pass, 0 fail | `integration-git-review.log` | `c888555a25638024f72463fa78e6f9a515c64f14bfa374e74b42c189c1b27a65` |
+| `bun test scripts/parity/cli-files-startup.test.ts` | 37 pass, 0 fail | `integration-cli-startup.log` | `f96bb6ca3d197173f07111b33631129de819207220aa11ef2767b93d6d0edd89` |
+| `bun test scripts/parity/cli-files.test.ts` | 1 pass, 0 fail; owned cleanup verified | `integration-cli-files.log` | `9c541ff669a0ca543e4f45f513924a22948a61e890d59cdd5ff7c5afd180e8c0` |
+| `bun test scripts/test-baseline/cli.test.ts` | 127 pass, 0 fail | `integration-baseline-cli.log` | `304a0fef225c33b61483641bd6b80e2382b193921ebc78609dc4613ea9cdbb0f` |
+| `bun test scripts/test-baseline/runner.test.ts` | 24 pass, 0 fail | `integration-baseline-runner.log` | `473ee9ee6397d4ae57154ed8b229d8818d0029963774ce3d4b2155ca55333c63` |
+| `bun test scripts/test-baseline/workflow.test.ts` | 61 pass, 1 skip, 0 fail | `integration-baseline-workflow.log` | `09c76b58c2518dcc83d76c7ecbdbf933dccccfd179aaf0f4d042c55f3b1f1380` |
+| `bun run typecheck` | Exit 0 after base integration | `integration-typecheck.log` | `ba7d8fd30ec044295e3edad14e40229b83f784e637e15cefdb28582bc21a7f0c` |
+
+## g3-87 Git readiness measurement
+
+All four Git captures passed admission in two fresh runtimes (both themes); the historical readiness timeout did not reproduce. This single measurement does not identify a cause or establish a visual score.
+
+Reader: the goal-3 reviewer and judge. Decision: use the recorded phase timings to choose the next investigation, without treating a late re-check or missing observation as admission.
+
+Cause: unknown
+
+Capture commit: `e9be5ec2b074d81472d16f6fa67cfda6812ade09`. Started at `2026-11-18T03:53:41.642Z`. Retained evidence: `/tmp/g387-evidence.o7c0Jb`. Probe exit: `0`. SHA-256 of `SHA256SUMS`: `bb2b66953d211aedebfd5d2fa1b922a724169d7ed0ef526ec0b885c9025b537f`.
+
+Command: `bun scripts/ui-review/readiness-probe.ts --output "$R/probe" --runs 2`, where `R=/tmp/g387-evidence.o7c0Jb`, run from this worktree. The prescribed wrapper used `env -i`, a fresh temporary `HOME` and `QUIRKY_HOME`, `TMPDIR` under that home, and `PATH=/Users/zpyoung/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin`. It recorded owned-process checks before and after, then removed the temporary home. No repeat was retried.
+
+| Run | Output | Load before (1/5/15 min) | Load after (1/5/15 min) | Stopped |
+| --- | --- | --- | --- | --- |
+| 1 | `/tmp/g387-evidence.o7c0Jb/probe/run-1` | `[10.6220703125,8.9560546875,8.40185546875]` | `[10.5810546875,9.02392578125,8.43505859375]` | `null` |
+| 2 | `/tmp/g387-evidence.o7c0Jb/probe/run-2` | `[10.5810546875,9.02392578125,8.43505859375]` | `[10.03515625,9.01708984375,8.44677734375]` | `null` |
+
+| Run / target / theme | Status | Cell ms | Isolation ready | Timing source | ReadinessTiming (all fields, ms unless noted) | Image path / SHA-256 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 / `view:quirky.git/diff` / dark | captured | 1619 | true | `lastReadiness` | <code>{"sequence":1,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1197,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":3,"polls":57,"firstPollMs":33,"lastPollMs":1196,"maxGapMs":197,"maxPollMs":1.600000023841858,"totalPollMs":11.699999928474426,"longTaskObserver":true,"longTaskCoverageFromMs":33,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"git-code","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-1/captures/dark/view%3Aquirky.git%2Fdiff.png` / `63b706b9847b58c81ba9378e79c9835c25d13e1719b76fa7f1f7e12f6730308a` |
+| 1 / `view:quirky.git/diff` / light | captured | 1173 | true | `lastReadiness` | <code>{"sequence":2,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":992,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":5,"polls":61,"firstPollMs":2,"lastPollMs":991,"maxGapMs":18,"maxPollMs":0.699999988079071,"totalPollMs":9.899999737739563,"longTaskObserver":true,"longTaskCoverageFromMs":2,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"loading-leaf","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-1/captures/light/view%3Aquirky.git%2Fdiff.png` / `d2594223fd1ac8339835af222a15608c287002c308412cdd635cb8a1b2e1e573` |
+| 2 / `view:quirky.git/diff` / dark | captured | 1381 | true | `lastReadiness` | <code>{"sequence":3,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1145,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":5,"polls":69,"firstPollMs":21,"lastPollMs":1145,"maxGapMs":23,"maxPollMs":1.199999988079071,"totalPollMs":12.399999976158142,"longTaskObserver":true,"longTaskCoverageFromMs":21,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"git-code","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-2/captures/dark/view%3Aquirky.git%2Fdiff.png` / `63b706b9847b58c81ba9378e79c9835c25d13e1719b76fa7f1f7e12f6730308a` |
+| 2 / `view:quirky.git/diff` / light | captured | 1312 | true | `lastReadiness` | <code>{"sequence":4,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1134,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":3,"polls":69,"firstPollMs":5,"lastPollMs":1134,"maxGapMs":24,"maxPollMs":0.699999988079071,"totalPollMs":10.900000154972076,"longTaskObserver":true,"longTaskCoverageFromMs":5,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"loading-leaf","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-2/captures/light/view%3Aquirky.git%2Fdiff.png` / `edd21b11042f3c09ea1e756b842a5b5cf6a03ad894a3fe51684b75a397b313e3` |
+
+Long-task coverage starts only at `firstPollMs` (`longTaskCoverageFromMs`). `longTaskObserver: false` or `null` means not observed, not idle. `maxGapMs` is the only poll-spacing evidence. `lateReady: false` rules out nothing; `true` is diagnostic only and never admits failed content. Cleanup values report page proof, not assumed disposal. These successful samples provide no timeout diagnostic-latency or late-readiness measurement; their corresponding fields are `null`.
+
+The runtime `capture-progress.json` files describe setup/runtime outcomes for a custom scenario, not a completed numerical campaign. `readiness-probe.json` owns these samples. No numerical scores or cause classifications were measured. The inspected dark run-1 and light run-2 images show code in both expanded fixtures and the reviewed `src/app.ts` collapsed; this was a headless content check, not scoring.
+
+| Artifact (relative to retained evidence root) | SHA-256 |
+| --- | --- |
+| `probe/readiness-probe.json` | `c1e1afcae44a88c67429f07e2104c0a76f1bfc651789fd4184c2600773a24852` |
+| `probe/run-1/capture-progress.json` | `6ec926d8ee110b04e76b93dbf9caf4bef87d9f75ee8f2a1313a1525ec8cb3529` |
+| `probe/run-2/capture-progress.json` | `0c48078716fb7c71dfe00d53f499e781e9f0ed364001c2b8ac5961b968187e07` |
+
+The four PNG hashes and paths are in the sample table. `SHA256SUMS` also covers every retained process listing, theme-selection record, exit record and probe log.
+
+Owned process checks: `owned-before.txt`, `owned-after-home.txt` and `owned-after-daemon.txt` are all empty (0 bytes). Global context listings are context only; no unrelated process was required to exit or killed.
+
+No deadline, admission check, target or negative test changed. Product code and polling mode are unchanged. Native menus and window chrome were not checked.

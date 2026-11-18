@@ -6,7 +6,7 @@ import { measureVisuals, notRunVisuals } from './ui-scoreboard/visual'
 import { buildReport, formatMarkdown } from './ui-scoreboard/report'
 import { checkRatchet, parseRatchetConfig } from './ui-scoreboard/ratchet'
 import { captureApplication } from './ui-review/capture'
-import { reviewManifest } from './ui-review/review'
+import { preflightReviewer, reviewManifest } from './ui-review/review'
 import { DEFAULT_REVIEWER_ALIAS } from './ui-review/arguments'
 import type { ModelFamily } from './ui-review/contracts'
 import type { VisualDependencies } from './ui-scoreboard/contracts'
@@ -16,6 +16,7 @@ export type SignalSource = { on(name: SignalName, listener: () => void): void; o
 export type ScoreboardDependencies = {
   repoRoot?: string; collectInventory?: typeof collectInventory
   captureApplication?: VisualDependencies['capture']; reviewManifest?: VisualDependencies['review']
+  preflightReviewer?: typeof preflightReviewer
   mkdir?: (path: string) => Promise<unknown>; writeFile?: (path: string, content: string) => Promise<unknown>
   readFile?: (path: string) => Promise<string>; signals?: SignalSource
   stdout?: (text: string) => void; stderr?: (text: string) => void
@@ -105,7 +106,7 @@ export async function runUiScoreboard(argv: readonly string[], dependencies: Sco
     let visuals = notRunVisuals(inventory)
     if ((args.mode === 'full' || args.mode === 'plugin') && inventory.failures.length === 0) {
       try {
-        visuals = await measureVisuals(inventory, { outputDir: args.outputDir, authorFamily: args.authorFamily, reviewerAlias: args.reviewerAlias, browserExecutable: args.browserExecutable, ...(args.mode === 'plugin' ? { plugin: args.plugin } : {}), signal: controller.signal }, { capture: dependencies.captureApplication ?? captureApplication, review: dependencies.reviewManifest ?? reviewManifest })
+        visuals = await measureVisuals(inventory, { outputDir: args.outputDir, authorFamily: args.authorFamily, reviewerAlias: args.reviewerAlias, browserExecutable: args.browserExecutable, ...(args.mode === 'plugin' ? { plugin: args.plugin } : {}), signal: controller.signal }, { preflight: dependencies.preflightReviewer ?? preflightReviewer, capture: dependencies.captureApplication ?? captureApplication, review: dependencies.reviewManifest ?? reviewManifest })
       } catch (error) {
         visuals = notRunVisuals(inventory, 'measurement-error'); visuals.operationalError = true
         visuals.failures.push({ code: 'measurement-error', message: String(error) })

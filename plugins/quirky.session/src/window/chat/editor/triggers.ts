@@ -2,8 +2,8 @@ import type { EditorState } from '@codemirror/state'
 import type { Trigger } from './types'
 
 /**
- * The `@` or `/` trigger under the cursor, or null. `@` begins a file trigger at the start of the
- * document or after whitespace; `/` begins a command trigger only at the very start of the document.
+ * The `@` or `/` trigger under the cursor, or null. Either begins a trigger at the start of the
+ * document or after whitespace, never mid-word. A `/` token holding a second `/` is a path, not a command.
  */
 export function detectTrigger(state: EditorState): Trigger | null {
   const selection = state.selection.main
@@ -15,7 +15,9 @@ export function detectTrigger(state: EditorState): Trigger | null {
   while (start > 0 && !/\s/.test(before[start - 1]!)) start--
   const token = before.slice(start)
   const from = offset + start
-  if (token.startsWith('@') && (from === 0 || start > 0 || offset === 0)) return { kind: '@', query: token.slice(1), from, to: head }
-  if (token.startsWith('/') && from === 0) return { kind: '/', query: token.slice(1), from, to: head }
+  const atWordStart = start > 0 || offset === 0
+  if (!atWordStart) return null
+  if (token.startsWith('@')) return { kind: '@', query: token.slice(1), from, to: head }
+  if (token.startsWith('/') && !token.includes('/', 1)) return { kind: '/', query: token.slice(1), from, to: head }
   return null
 }

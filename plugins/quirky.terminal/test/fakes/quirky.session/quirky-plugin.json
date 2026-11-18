@@ -51,7 +51,8 @@
             "worktree": { "type": "string" },
             "agent": { "type": "string" },
             "kind": { "type": "string", "enum": ["structured"] },
-            "title": { "type": "string" }
+            "title": { "type": "string" },
+            "background": { "type": "boolean" }
           },
           "required": ["agent", "kind", "title"]
         }

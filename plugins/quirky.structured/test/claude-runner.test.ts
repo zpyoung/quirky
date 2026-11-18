@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, PlanItem, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
-import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
+import type { AgentCommand, AskEnvelope, AskSpec, PlanItem, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import { claudeCommands, createClaudeRunner, type ClaudeQueryParams, type ClaudeSlashCommand } from '../claude-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { FakeQuery } from './fakes/fake-query'
 
@@ -164,12 +164,73 @@ describe('configure', () => {
 
   test('a mode Quirky cannot journal is refused', async () => {
     const query = await begin()
-    await expect(runner.configure!(session.id, { permissionMode: 'bypassPermissions' })).rejects.toThrow('unsupported permission mode')
+    await expect(runner.configure!(session.id, { permissionMode: 'not-a-mode' })).rejects.toThrow('unsupported permission mode')
     expect(query.permissionModes).toEqual([])
   })
 
   test('a session that is not running refuses', async () => {
     await expect(runner.configure!('s_none', { permissionMode: 'plan' })).rejects.toThrow('session is not running')
+  })
+
+  test('every Claude permission mode passes straight to the SDK', async () => {
+    const query = await begin()
+    for (const mode of ['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'default']) {
+      expect(await runner.configure!(session.id, { permissionMode: mode })).toMatchObject({ permissionMode: mode })
+    }
+    expect(query.permissionModes).toEqual(['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'default'])
+  })
+
+  test('a mode Claude refuses keeps the previous mode in force', async () => {
+    const query = await begin()
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
+    query.refusedPermissionMode = { mode: 'bypassPermissions', message: 'bypass permissions is disabled by settings' }
+    await expect(runner.configure!(session.id, { permissionMode: 'bypassPermissions' })).rejects.toThrow('bypass permissions is disabled by settings')
+    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'acceptEdits' })
+  })
+
+  test("auto mode is refused before the SDK call when Claude says the model can't use it", async () => {
+    await runner.start(session, 'hello', { model: 'haiku' })
+    const query = queries[0]
+    query.modelList = [{ value: 'haiku', displayName: 'Haiku', description: '', supportsAutoMode: false }]
+    await expect(runner.configure!(session.id, { permissionMode: 'auto' })).rejects.toThrow('Haiku does not support auto mode')
+    expect(query.permissionModes).toEqual([])
+  })
+
+  test('auto mode goes ahead when the model supports it or Claude does not say', async () => {
+    const query = await begin()
+    query.modelList = [{ value: 'default', displayName: 'Default', description: '', supportsAutoMode: true }]
+    await runner.configure!(session.id, { permissionMode: 'auto' })
+    await runner.configure!(session.id, { permissionMode: 'default' })
+    query.modelList = [{ value: 'other', displayName: 'Other', description: '', supportsAutoMode: false }]
+    await runner.configure!(session.id, { permissionMode: 'auto' })
+    expect(query.permissionModes).toEqual(['auto', 'default', 'auto'])
+  })
+
+  test('an empty configure reads the settings without calling the SDK', async () => {
+    const query = await begin()
+    expect(await runner.configure!(session.id, {})).toEqual({ permissionMode: 'default' })
+    expect(query.permissionModes).toEqual([])
+  })
+})
+
+describe('start permission mode', () => {
+  test('a session opens in default and may later switch into bypass permissions', async () => {
+    const query = await begin()
+    expect(query.params.options?.permissionMode).toBe('default')
+    expect(query.params.options?.allowDangerouslySkipPermissions).toBe(true)
+  })
+
+  test('the opening permission mode reaches the query options and the reported settings', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'bypassPermissions' })
+    expect(queries[0].params.options?.permissionMode).toBe('bypassPermissions')
+    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'bypassPermissions' })
+  })
+
+  test('opening in plan mode starts the query in plan, and leaving it switches to the picked mode', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'plan' })
+    expect(queries[0].params.options?.permissionMode).toBe('plan')
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
+    expect(queries[0].permissionModes).toEqual(['acceptEdits'])
   })
 })
 
@@ -190,7 +251,7 @@ describe('start', () => {
   })
 
   test('an unknown start mode falls back to default', async () => {
-    await runner.start(session, 'hello', { permissionMode: 'bypassPermissions' })
+    await runner.start(session, 'hello', { permissionMode: 'not-a-mode' })
     expect(queries[0].params.options?.permissionMode).toBe('default')
   })
 
@@ -824,10 +885,11 @@ describe('plan mode', () => {
       query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'acceptEdits', session_id: 'c1' })
       query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'bypassPermissions', session_id: 'c1' })
       query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
-      await until(() => modes().length === before + 2)
+      await until(() => modes().length === before + 3)
       await tick()
       expect(modes().slice(before)).toEqual([
         { kind: 'mode', mode: 'acceptEdits', autoAvailable: false },
+        { kind: 'mode', mode: 'bypassPermissions', autoAvailable: false },
         { kind: 'mode', mode: 'plan', autoAvailable: false }
       ])
     })
@@ -1006,6 +1068,19 @@ describe('chat items', () => {
     await until(() => query.written.length === 2)
     expect(query.written[1].message.content).toEqual([
       { type: 'text', text: 'look' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from('PNG').toString('base64') } }
+    ])
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test('an image sent with no text goes out as the image alone, without an empty text block', async () => {
+    const query = await begin()
+    const dir = mkdtempSync(join(tmpdir(), 'claude-img-'))
+    const image = join(dir, 'a.png')
+    writeFileSync(image, 'PNG')
+    await runner.send('s_1', '', { images: [image] })
+    await until(() => query.written.length === 2)
+    expect(query.written[1].message.content).toEqual([
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from('PNG').toString('base64') } }
     ])
     rmSync(dir, { recursive: true, force: true })
@@ -1201,5 +1276,95 @@ describe('interrupt', () => {
     asks[0]!.resolve(envelope('declined'))
     await decision
     expect(statuses.at(-1)).toBe('done')
+  })
+})
+
+describe('commands', () => {
+  const LIST: ClaudeSlashCommand[] = [
+    { name: 'compact', description: 'Free up context', argumentHint: '<instructions>', builtin: true },
+    { name: 'simplify', description: 'Review the changed code', argumentHint: '', builtin: true },
+    { name: '__remote-workflow', description: 'internal', argumentHint: '', builtin: true },
+    { name: 'graphify', description: 'Build a knowledge graph', argumentHint: '' },
+    { name: 'research', description: 'Research a repo (user)', argumentHint: '[topic]' },
+    { name: 'quirk:brainstorming', description: '(quirk) Turn an idea into a design', argumentHint: '' },
+    { name: 'claude.ai Notion:make-a-page (MCP)', description: 'Make a Notion page', argumentHint: '' }
+  ]
+
+  test('sorts the SDK list into built-in, skill, command, plugin and MCP entries before the first turn', () => {
+    expect(claudeCommands(LIST, null)).toEqual([
+      { name: 'compact', kind: 'builtin', description: 'Free up context', argumentHint: '<instructions>', startOnly: true },
+      { name: 'simplify', kind: 'builtin', description: 'Review the changed code', startOnly: true },
+      { name: 'graphify', kind: 'skill', description: 'Build a knowledge graph' },
+      { name: 'research', kind: 'command', description: 'Research a repo', argumentHint: '[topic]' },
+      { name: 'quirk:brainstorming', kind: 'plugin', description: 'Turn an idea into a design' },
+      { name: 'mcp__claude_ai_Notion__make-a-page', kind: 'mcp', description: 'Make a Notion page' }
+    ])
+  })
+
+  test('once init names the skills, a built-in skill can be used mid-message and init decides skill or command', () => {
+    const sorted = claudeCommands(LIST, new Set(['simplify', 'research']))
+    expect(sorted.find((command) => command.name === 'simplify')).toEqual({ name: 'simplify', kind: 'skill', description: 'Review the changed code' })
+    expect(sorted.find((command) => command.name === 'research')?.kind).toBe('skill')
+    expect(sorted.find((command) => command.name === 'graphify')?.kind).toBe('command')
+  })
+
+  function commandRunner(list: ClaudeSlashCommand[] | Promise<ClaudeSlashCommand[]>) {
+    const reported: AgentCommand[][] = []
+    const commandQueries: FakeQuery[] = []
+    const withCommands = createClaudeRunner(
+      { ...makeContext(), reportCommands: (_id, commands) => void reported.push(commands) },
+      {
+        query: (params: ClaudeQueryParams) => {
+          const query = new FakeQuery(params)
+          query.supportedCommands = () => Promise.resolve(list)
+          commandQueries.push(query)
+          return query
+        }
+      }
+    )
+    return { reported, commandQueries, withCommands }
+  }
+
+  test('reports the list as soon as the session opens, then refines it from init and follows commands_changed', async () => {
+    const { reported, commandQueries, withCommands } = commandRunner(LIST)
+    await withCommands.start(session, undefined)
+    await until(() => reported.length === 1)
+    expect(reported[0]!.map((command) => `${command.kind}:${command.name}`)).toContain('skill:graphify')
+    commandQueries[0]!.emit({ type: 'system', subtype: 'init', session_id: 'c1', slash_commands: [], skills: ['simplify'] })
+    await until(() => reported.length === 2)
+    expect(reported[1]!.find((command) => command.name === 'simplify')?.kind).toBe('skill')
+    expect(reported[1]!.find((command) => command.name === 'graphify')?.kind).toBe('command')
+    commandQueries[0]!.emit({ type: 'system', subtype: 'commands_changed', session_id: 'c1', commands: [{ name: 'new-skill', description: 'Added', argumentHint: '' }] })
+    await until(() => reported.length === 3)
+    expect(reported[2]).toEqual([{ name: 'new-skill', kind: 'command', description: 'Added' }])
+    await withCommands.stop(session.id)
+  })
+
+  test('a command picked mid-message opens the prompt Claude receives; the journal keeps what was typed', async () => {
+    const { commandQueries, withCommands } = commandRunner(LIST)
+    await withCommands.start(session, 'tidy this up /simplify please')
+    await until(() => commandQueries[0]!.written.length === 1)
+    expect(commandQueries[0]!.written[0]).toMatchObject({ message: { content: 'tidy this up /simplify please' } })
+    await withCommands.send(session.id, 'fix the login /quirk:brainstorming focus on auth')
+    await until(() => commandQueries[0]!.written.length === 2)
+    expect(commandQueries[0]!.written[1]).toMatchObject({ message: { content: '/quirk:brainstorming fix the login focus on auth' } })
+    expect(messages.filter((message) => message.role === 'user').map((message) => message.text)).toEqual([
+      'tidy this up /simplify please',
+      'fix the login /quirk:brainstorming focus on auth'
+    ])
+    await withCommands.stop(session.id)
+  })
+
+  test('messages wait for the command list and keep their order', async () => {
+    const { promise, resolve } = Promise.withResolvers<ClaudeSlashCommand[]>()
+    const { commandQueries, withCommands } = commandRunner(promise)
+    await withCommands.start(session, 'one /graphify')
+    await withCommands.send(session.id, 'two')
+    await tick()
+    expect(commandQueries[0]!.written).toEqual([])
+    resolve(LIST)
+    await until(() => commandQueries[0]!.written.length === 2)
+    expect(commandQueries[0]!.written.map((message) => message.message.content)).toEqual(['/graphify one', 'two'])
+    await withCommands.stop(session.id)
   })
 })
