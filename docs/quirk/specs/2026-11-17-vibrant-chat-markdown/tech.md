@@ -19,9 +19,9 @@ The shared renderer lives in `packages/ui`, because `scripts/ui-lint.ts` only li
 
 Create:
 
-- `packages/ui/src/markdown/index.ts`: public exports. These are `QuirkyMarkdown`, `MarkdownProfile`, `MarkdownAssets`, `escapeLooseDollars`, `PATH_CANDIDATE` and `parseChartSpec`.
+- `packages/ui/src/markdown/index.ts`: public exports. These are `QuirkyMarkdown`, `MarkdownProfile`, `MarkdownAssets`, `PATH_CANDIDATE` and `parseChartSpec`.
 - `packages/ui/src/markdown/QuirkyMarkdown.tsx`: the component. It wraps `Streamdown` and maps a profile to Streamdown props.
-- `packages/ui/src/markdown/math-dollars.ts`: `escapeLooseDollars(markdown: string): string`.
+- `packages/ui/src/markdown/math-dollars.ts` and `remark-loose-dollars.ts`: position-preserving loose-dollar handling (`remarkLooseDollars`, first remark plugin in both profiles).
 - `packages/ui/src/markdown/blocks/Alert.tsx`: the `blockquote` component. It detects the alert marker at render time, so it works under any sanitize schema, the editor's included.
 - `packages/ui/src/markdown/remark-path-candidates.ts`: splits text nodes outside code and links, turning `PATH_CANDIDATE` matches into `inlineCode` nodes with `data.hProperties['data-path-candidate']`. It is only added when `assets` is given.
 - `packages/ui/src/markdown/remark-html-allowlist.ts`: in the untrusted profile, keeps allowed raw tags with no attributes and turns every other `html` node into a `text` node.
@@ -103,7 +103,7 @@ Postconditions and invariants:
   - The caller's `rehypePlugins` replace the raw and sanitize step. The renderer throws `Error('file profile requires rehypePlugins')` when none are given.
   - `remark-html-allowlist` and `remark-path-candidates` are not applied, and `assets` is ignored.
   - Streamdown's `plugins.math` is not set. The renderer adds `remark-math` to the remark chain itself, because the editor's `MARKDOWN_PREVIEW_REHYPE_PLUGINS` already ends with `rehypeKatex`, and running KaTeX twice must be avoided.
-- **Text pre-pass.** `escapeLooseDollars` runs over `text` before Streamdown, in both profiles. It produces only `$…$`, `$$…$$` and `\$`, which remark-math turns into `math-inline` and `math-display` code nodes. Both class names are allowed by the untrusted schema and by the editor's schema.
+- **Dollars.** `remarkLooseDollars` is the first remark plugin in both profiles (see Math). Text is never rewritten before parsing, so positions stay exact. remark-math emits the `math-inline` and `math-display` code nodes, and both class names are allowed by the untrusted schema and by the editor's schema.
 - **Open fences.** Remend's open-fence handling is unverified. The renderer must make an open fence render as a code block with its header (SC-1). The test proves this, and if remend doesn't do it, close the fence in the pre-pass while `streaming`.
 - **Links.**
   - The `a` component renders only `http:` and `https:` hrefs as links. Every other scheme renders the link text as plain text.
@@ -150,11 +150,11 @@ Postconditions and invariants:
 - **`chart`:** parsed by `parseChartSpec`. It draws SVG bars or a line using only `--ui-*` colours, with a `Source` toggle.
 - **On a parse failure,** the block renders as an ordinary code block with a `RenderError` above it, reading `Couldn't read this <lang> block: <message>`.
 
-**Math** (SC-10). `escapeLooseDollars(md)` is pure and leaves fenced code, inline code and indented code untouched. It does three things:
+**Math** (SC-10). `remarkLooseDollars` runs first in both profiles, never inserts or removes characters, and so keeps every mdast position mapped to the original source. The editor's search-match plugin depends on that. It works on parsed code boundaries, so code at any nesting is untouched. It does three things:
 
-- Rewrites `\(x\)` to `$x$` and `\[x\]` to `$$x$$`.
+- Rewrites `\(x\)` to ` $x$ ` and `\[x\]` to `$$x$$`. Both rewrites keep the same length.
 - Leaves `$$…$$` unchanged.
-- Leaves a single `$…$` pair as math only when there's no whitespace right after the opening `$`, no whitespace right before the closing `$`, and no digit right after the closing `$`. Every other single `$` becomes `\$`.
+- Treats a single `$…$` pair as math only when there's no whitespace right after the opening `$`, no whitespace right before the closing `$`, and no digit right after the closing `$`. It masks every other single `$` with a same-length placeholder, re-parses, and then restores the `$` as literal text.
 
 `createMathPlugin({ singleDollarTextMath: true, errorColor })` then parses what's left. A KaTeX error renders `RenderError` with `Couldn't typeset: <katex message>` and the source.
 
@@ -170,7 +170,10 @@ result: { files: Record<string, { path: string; line?: number } | null>;
 errors: 'invalid-params' (bad shapes, limits) | 'not-found' (unknown session)
 ```
 
-- **Root.** It resolves against the session's `cwd` (`Session.cwd`, `packages/protocol/src/model.ts:277-283`).
+- **Root.**
+  - Candidates resolve against the session's `cwd` (`Session.cwd`, `packages/protocol/src/model.ts:277-283`).
+  - Containment is bounded by the session's worktree root, taken from `quirky.worktree/resolve` with `id:<worktreeId>`, and `path` in the result is worktree-relative, so it works with `quirky.editor/open`.
+  - A floating session (no worktree) answers `null` for files, and its images are bounded by `cwd`.
 - **Files.**
   - It strips a trailing `:<line>` or `:<line>:<col>` into `line`.
   - It rejects absolute paths that are outside the root, and any `..` that escapes it after `realpath`.
@@ -207,6 +210,7 @@ SCHEMA: `chart` fence body, parsed by `parseChartSpec(source: string): ChartSpec
 ```
 
 - Exactly one of `data` and `from` must be present.
+- Bar values must be zero or more. A negative value is a parse error: `bar values must be zero or more`.
 - A `from` that names no fence in the message is a parse error: `no csv block named <name>`.
 - `QuirkyMarkdown` pre-scans `text` for csv and tsv fences with a `title=` meta value and provides them to the chart renderer through React context.
 
@@ -253,7 +257,7 @@ Back-link: [logic: Key decisions](logic.md#key-decisions).
 **Always**
 - Use `var(--ui-*)` for every colour, size and radius. Raw colours go only in `tokens.css`.
 - Sanitize before KaTeX and Shiki output exists.
-- Keep `escapeLooseDollars` and `PATH_CANDIDATE` pure and unit-tested.
+- Keep `maskLooseDollars` and `PATH_CANDIDATE` pure and unit-tested.
 - Run each test file in its own `bun test <file>` process.
 
 **Ask (surface to the orchestrator as NEEDS_CONTEXT)**
@@ -282,7 +286,7 @@ Back-link: [logic: Key decisions, Done when](logic.md#key-decisions) and [logic:
 | Test file | What it must cover |
 |---|---|
 | `packages/ui/test/markdown-renderer.test.tsx` (happy-dom) | Every block in the showcase fixture renders, as expected element and data-attribute assertions; SC-1 partial bold and open fence; SC-2 no Shiki output while incomplete; SC-5 link click calls `onOpenLink`; SC-7 remote image is a chip and no `img[src^=http]`; SC-8 raw `<img>` shown as text and `<details>` kept with no attributes; SC-11 copy text has no numbers; SC-12 collapse label; SC-13 data fences and the parse-error note; SC-4 error notes for bad Mermaid and math (Mermaid mocked); memoized block identity survives an append; caret placement |
-| `packages/ui/test/markdown-dollars.test.ts` | SC-10 table: `$5 and $10`, `` `echo $HOME` ``, `$O(n)$`, `$$…$$`, `\(…\)`, dollars inside fences |
+| `packages/ui/test/markdown-dollars.test.ts` | Positions preserved; SC-10 table: `$5 and $10`, `` `echo $HOME` ``, `$O(n)$`, `$$…$$`, `\(…\)`, dollars inside fences |
 | `packages/ui/test/markdown-tokens-contrast.test.ts` | Parses both theme blocks of `tokens.css`. Every `--ui-syntax-*`, `--ui-diff-*-text`, alert and heading token passes 4.5:1 against `--ui-code-bg`, its diff background or `--ui-surface`, as the token is actually used (SC-14) |
 | `plugins/quirky.session/test/markdown-assets.test.ts` | Containment (absolute, `..`, symlink escape), the line suffix, the null for a missing file, the MIME filter, the limits |
 | `plugins/quirky.session/test/chat-view.test.ts` (update) | Existing link-confirm, unsafe-link and caret tests stay green. Add: path chip opens the editor at the line; Jump to latest appears when scrolled up and returns to bottom |
