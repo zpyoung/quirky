@@ -2,7 +2,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcError, RpcErrorCode, type AgentCapabilities, type ChatItem, type Session, type StructuredMessage } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type AgentCapabilities, type ChatItem, type PermissionModeName, type PlanItem, type Session, type StructuredMessage } from '@quirky/protocol'
+import { currentMode, planVersions, previousMode } from '../src/window/chat/plan'
 import { groupTurns, summarizeActivity, type ActivityCall } from '../src/window/chat/turns'
 import { agentInfo, agentListing, fakeContext, session, settle, type FakeContext } from './ui-fake'
 
@@ -48,6 +49,70 @@ const act1 = (seq: number, callId: string, tool: string, summary: string, state:
   msg(seq, { kind: 'activity', callId, tool, summary, state }, at === undefined ? {} : { at })
 const end = (seq: number, state: 'done' | 'stopped' | 'failed', durationMs?: number) =>
   msg(seq, { kind: 'turn-end', state, ...(durationMs === undefined ? {} : { durationMs }) })
+
+const planMsg = (seq: number, version: number, status: PlanItem['status'], over: Partial<PlanItem> = {}) =>
+  msg(seq, { kind: 'plan', version, status, text: `Plan text v${version}`, ...over })
+const modeMsg = (seq: number, mode: PermissionModeName, autoAvailable?: boolean) =>
+  msg(seq, { kind: 'mode', mode, ...(autoAvailable === undefined ? {} : { autoAvailable }) })
+
+describe('plan versions and mode', () => {
+  test('planVersions keeps the last item per version, ordered by version, with its first and last seq', () => {
+    const versions = planVersions([
+      user(1, 'plan it'),
+      planMsg(2, 1, 'waiting', { askId: 'a1' }),
+      planMsg(3, 1, 'revised'),
+      planMsg(4, 2, 'waiting', { askId: 'a2' }),
+      planMsg(5, 2, 'approved', { approvedMode: 'auto' })
+    ])
+    expect(versions.map((entry) => [entry.version, entry.status, entry.firstSeq, entry.lastSeq])).toEqual([
+      [1, 'revised', 2, 3],
+      [2, 'approved', 4, 5]
+    ])
+    expect(versions[1]).toMatchObject({ kind: 'plan', approvedMode: 'auto', text: 'Plan text v2' })
+    expect(versions[1]!.askId).toBeUndefined()
+  })
+
+  test('planVersions is empty without plan items', () => {
+    expect(planVersions([user(1, 'hi'), prose(2, 'hello')])).toEqual([])
+  })
+
+  test('currentMode is the newest mode item, or null', () => {
+    expect(currentMode([user(1, 'hi')])).toBeNull()
+    expect(currentMode([modeMsg(1, 'default', false), modeMsg(2, 'plan', true), prose(3, 'x')])).toMatchObject({ mode: 'plan', autoAvailable: true })
+  })
+
+  test('previousMode is the mode before the newest run of plan items, or default', () => {
+    expect(previousMode([])).toBe('default')
+    expect(previousMode([modeMsg(1, 'plan')])).toBe('default')
+    expect(previousMode([modeMsg(1, 'default'), modeMsg(2, 'acceptEdits'), modeMsg(3, 'plan'), modeMsg(4, 'plan', true)])).toBe('acceptEdits')
+    expect(previousMode([modeMsg(1, 'auto'), modeMsg(2, 'plan'), modeMsg(3, 'acceptEdits'), modeMsg(4, 'plan')])).toBe('acceptEdits')
+    expect(previousMode([modeMsg(1, 'auto'), modeMsg(2, 'plan'), modeMsg(3, 'default')])).toBe('auto')
+  })
+})
+
+describe('plan blocks', () => {
+  test('one plan block per version shows its latest state where the version first appeared, even across turns', () => {
+    const turns = groupTurns([
+      user(1, 'plan it'),
+      planMsg(2, 1, 'waiting', { askId: 'a1' }),
+      end(3, 'done'),
+      user(4, 'change it'),
+      planMsg(5, 1, 'revised'),
+      planMsg(6, 2, 'waiting', { askId: 'a2' })
+    ])
+    expect(turns).toHaveLength(2)
+    const first = turns[0]!.blocks.find((block) => block.kind === 'plan')
+    expect(first?.kind === 'plan' && [first.item.version, first.item.status]).toEqual([1, 'revised'])
+    const second = turns[1]!.blocks.filter((block) => block.kind === 'plan')
+    expect(second.map((block) => (block.kind === 'plan' ? block.item.version : 0))).toEqual([2])
+  })
+
+  test('mode items never open a turn or render', () => {
+    const turns = groupTurns([modeMsg(1, 'plan', true), user(2, 'hi'), modeMsg(3, 'acceptEdits')])
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.blocks).toEqual([])
+  })
+})
 
 describe('turn grouping', () => {
   test('a user item starts a turn and everything after it belongs to that turn', () => {
@@ -662,6 +727,352 @@ describe('auto-scroll', () => {
   })
 })
 
+const PLAN_TEXT = '# Handle ExitPlanMode\n\n1. Read the plan file\n2. Journal the plan item'
+const waiting = (seq: number, version: number, over: Partial<PlanItem> = {}) =>
+  planMsg(seq, version, 'waiting', { askId: `ask-${version}`, text: PLAN_TEXT, ...over })
+const panel = () => host!.querySelector<HTMLElement>('aside[aria-label="Plan"]')
+const chip = () => [...host!.querySelectorAll<HTMLButtonElement>('header button')].find((button) => button.textContent?.startsWith('Plan'))
+const within = (scope: ParentNode | null, name: string) =>
+  [...(scope?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((button) => button.textContent?.trim().startsWith(name))
+const answers = () => fake.callsTo('quirky.ask/answer').map((call) => call.params)
+const answerHandlers = { 'quirky.ask/answer': () => ({ ok: true }), 'quirky.structured/send': () => ({ ok: true }) }
+
+describe('the plan panel', () => {
+  test('a chat with no plan has no chip and no panel', async () => {
+    await mountChat({ messages: [user(1, 'hi'), prose(2, 'hello')] })
+    expect(chip()).toBeUndefined()
+    expect(panel()).toBeNull()
+  })
+
+  test('a waiting plan opens the panel on load with the rendered plan, the marker and the three exits', async () => {
+    await mountChat({ messages: [user(1, 'plan it'), modeMsg(2, 'plan', true), waiting(3, 1)], handlers: answerHandlers })
+    expect(chip()!.textContent).toBe('Plan · v1 waiting')
+    const open = panel()!
+    expect(open.querySelector('h1, h2, h3')!.textContent).toBe('Handle ExitPlanMode')
+    expect(open.textContent).toContain('Journal the plan item')
+    expect(open.textContent).toContain('v1 · waiting')
+    expect([...open.querySelectorAll('button')].map((button) => button.textContent?.trim()).filter((name) => /^(Approve|Keep)/.test(name!))).toEqual([
+      expect.stringMatching(/^Approve, auto mode/),
+      expect.stringMatching(/^Approve, review edits/),
+      expect.stringMatching(/^Keep planning/)
+    ])
+    expect(within(open, 'Approve, auto mode')!.className).toContain('ui-button--primary')
+    expect(byLabel('Turn off Plan mode')).not.toBeNull()
+  })
+
+  test('the transcript has one row per version showing its latest state', async () => {
+    await mountChat({
+      messages: [user(1, 'plan it'), waiting(2, 1), planMsg(3, 1, 'revised', { text: PLAN_TEXT }), user(4, 'change it'), waiting(5, 2, { unchanged: false }), planMsg(6, 2, 'approved', { text: PLAN_TEXT, approvedMode: 'auto' }), modeMsg(7, 'auto', true)]
+    })
+    const rows = [...host!.querySelectorAll<HTMLButtonElement>('section[aria-label^="Turn"] button')].map((button) => button.textContent?.trim())
+    expect(rows).toEqual(['Plan v1 · revised', 'Plan approved (v2) · auto mode'])
+  })
+
+  test('the transcript row of a waiting version reads Plan ready, and a not answered one says so', async () => {
+    await mountChat({ messages: [user(1, 'plan it'), waiting(2, 1), planMsg(3, 1, 'not-answered', { text: PLAN_TEXT, reason: 'stopped' })] })
+    expect(host!.querySelector('section[aria-label^="Turn"] button')!.textContent).toBe('Plan v1 · not answered')
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountChat({ messages: [user(1, 'plan it'), waiting(2, 1)] })
+    expect(host!.querySelector('section[aria-label^="Turn"] button')!.textContent).toBe('Plan ready (v1) · view in panel')
+  })
+
+  test('the chip text follows the newest version', async () => {
+    const chipFor = async (messages: StructuredMessage[]) => {
+      await mountChat({ messages })
+      const text = chip()!.textContent
+      await act(async () => root!.unmount())
+      document.body.innerHTML = ''
+      return text
+    }
+    expect(await chipFor([user(1, 'go'), waiting(2, 2)])).toBe('Plan · v2 waiting')
+    expect(await chipFor([user(1, 'go'), planMsg(2, 1, 'not-answered', { reason: 'feedback' })])).toBe('Plan · waiting for Claude')
+    expect(await chipFor([user(1, 'go'), planMsg(2, 1, 'not-answered', { reason: 'mode-switch' })])).toBe('Plan · not answered')
+    expect(await chipFor([user(1, 'go'), planMsg(2, 1, 'not-answered', { reason: 'restarted' })])).toBe('Plan · not answered')
+    expect(await chipFor([user(1, 'go'), planMsg(2, 1, 'approved', { approvedMode: 'auto' })])).toBe('Plan')
+    expect(await chipFor([user(1, 'go'), planMsg(2, 1, 'revised')])).toBe('Plan')
+  })
+
+  test('a plan that is not waiting does not open the panel on load; the chip opens and closes it', async () => {
+    await mountChat({ messages: [user(1, 'go'), planMsg(2, 3, 'approved', { text: PLAN_TEXT, approvedMode: 'auto' })] })
+    expect(panel()).toBeNull()
+    await click(chip())
+    expect(panel()!.textContent).toContain('v3 · approved · auto mode')
+    expect([...panel()!.querySelectorAll('button')].map((button) => button.textContent?.trim()).some((name) => /^(Approve|Keep)/.test(name!))).toBe(false)
+    await click(chip())
+    expect(panel()).toBeNull()
+  })
+
+  test('the panel has a close button, a new version always reopens it, and the chip reopens it', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)] })
+    await click(byLabel('Close plan'))
+    expect(panel()).toBeNull()
+    await click(chip())
+    expect(panel()).not.toBeNull()
+    await click(byLabel('Close plan'))
+    await push(planMsg(3, 1, 'revised', { text: PLAN_TEXT }))
+    expect(panel()).toBeNull()
+    await push(waiting(4, 2, { text: '# Second plan' }))
+    expect(panel()!.textContent).toContain('Second plan')
+    expect(panel()!.textContent).toContain('v2 · waiting · revised')
+  })
+
+  test('a live first version opens the panel in a chat that had none', async () => {
+    await mountChat({ messages: [user(1, 'plan it')] })
+    expect(panel()).toBeNull()
+    await push(waiting(2, 1))
+    expect(panel()).not.toBeNull()
+    expect(chip()!.textContent).toBe('Plan · v1 waiting')
+  })
+
+  test('a version marked unchanged says so', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 2, { unchanged: true })] })
+    expect(panel()!.textContent).toContain('v2 · waiting · unchanged')
+  })
+
+  test('after approval the panel stays open on the version without exits and shows the mode', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 3)], handlers: answerHandlers })
+    await click(within(panel(), 'Approve, auto mode'))
+    expect(answers()).toHaveLength(1)
+    await push(planMsg(3, 3, 'approved', { text: PLAN_TEXT, approvedMode: 'auto' }))
+    await push(modeMsg(4, 'auto', true))
+    expect(panel()!.textContent).toContain('v3 · approved · auto mode')
+    expect(within(panel(), 'Approve')).toBeUndefined()
+    expect(within(panel(), 'Keep')).toBeUndefined()
+    expect(chip()!.textContent).toBe('Plan')
+    expect(byLabel('Return permissions to Ask')!.textContent).toContain('Auto')
+  })
+
+  test('Approve, auto mode and Approve, review edits answer the plan ask with the matching option', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)], handlers: answerHandlers })
+    await click(within(panel(), 'Approve, auto mode'))
+    await click(within(panel(), 'Approve, review edits'))
+    expect(answers()).toEqual([
+      { askId: 'ask-1', answers: { decision: { value: 'approve-auto', label: 'Approve, auto mode', source: 'option' } }, skipped: [] },
+      { askId: 'ask-1', answers: { decision: { value: 'approve-review', label: 'Approve, review edits', source: 'option' } }, skipped: [] }
+    ])
+  })
+
+  test('the exits are disabled while an answer is in flight', async () => {
+    let finish: (value: unknown) => void = () => {}
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)], handlers: { 'quirky.ask/answer': () => new Promise((resolve) => (finish = resolve)) } })
+    await click(within(panel(), 'Approve, auto mode'))
+    expect(within(panel(), 'Approve, auto mode')!.disabled).toBe(true)
+    expect(within(panel(), 'Keep planning')!.disabled).toBe(true)
+    await act(async () => finish({ ok: true }))
+    expect(within(panel(), 'Approve, auto mode')!.disabled).toBe(false)
+  })
+
+  test('a failed answer shows the error and re-enables the exits', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)], handlers: { 'quirky.ask/answer': () => { throw new Error('ask is gone') } } })
+    await click(within(panel(), 'Approve, review edits'))
+    await settle()
+    expect(panel()!.querySelector('[role="alert"]')!.textContent).toContain('ask is gone')
+    expect(within(panel(), 'Approve, review edits')!.disabled).toBe(false)
+  })
+
+  test('Keep planning swaps the exits for a feedback box and sends the text as the reason', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 2)], handlers: answerHandlers })
+    await click(within(panel(), 'Keep planning'))
+    expect(within(panel(), 'Approve, auto mode')).toBeUndefined()
+    const box = panel()!.querySelector<HTMLTextAreaElement>('textarea')!
+    expect(panel()!.querySelector('label')!.textContent).toBe('What should Claude change?')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Split step 2')
+      box.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(within(panel(), 'Send to Claude'))
+    expect(answers()).toEqual([
+      { askId: 'ask-2', answers: { decision: { value: 'keep', label: 'Keep planning', source: 'option' }, reason: { value: 'Split step 2', source: 'input' } }, skipped: [] }
+    ])
+  })
+
+  test('Keep planning with no text sends no reason, and Cancel brings the exits back', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 2)], handlers: answerHandlers })
+    await click(within(panel(), 'Keep planning'))
+    await click(within(panel(), 'Cancel'))
+    expect(within(panel(), 'Approve, auto mode')).toBeDefined()
+    expect(answers()).toEqual([])
+    await click(within(panel(), 'Keep planning'))
+    await click(within(panel(), 'Send to Claude'))
+    expect(answers()).toEqual([{ askId: 'ask-2', answers: { decision: { value: 'keep', label: 'Keep planning', source: 'option' } }, skipped: [] }])
+  })
+
+  test('an empty plan says so and offers only Keep planning', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1, { text: '', empty: true })] })
+    expect(panel()!.textContent).toContain('Claude sent an empty plan')
+    expect(within(panel(), 'Approve')).toBeUndefined()
+    expect(within(panel(), 'Keep planning')).toBeDefined()
+  })
+
+  test('a plan not answered because Quirky restarted says so and can ask Claude to present it again', async () => {
+    await mountChat({ messages: [user(1, 'go'), planMsg(2, 2, 'not-answered', { text: PLAN_TEXT, reason: 'restarted' })], handlers: answerHandlers })
+    await click(chip())
+    expect(panel()!.textContent).toContain('Quirky restarted before you answered. Claude is no longer waiting on this plan.')
+    expect(within(panel(), 'Approve')).toBeUndefined()
+    await click(within(panel(), 'Ask Claude to present it again'))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'chat', text: 'Please present the plan again.' })
+    expect(answers()).toEqual([])
+  })
+
+  test('other not answered versions show no actions and no restart notice', async () => {
+    await mountChat({ messages: [user(1, 'go'), planMsg(2, 2, 'not-answered', { text: PLAN_TEXT, reason: 'feedback' })] })
+    await click(chip())
+    expect(panel()!.textContent).not.toContain('Quirky restarted')
+    expect(panel()!.textContent).toContain('v2 · not answered')
+    expect(within(panel(), 'Ask Claude')).toBeUndefined()
+    expect(within(panel(), 'Approve')).toBeUndefined()
+  })
+
+  test('a transcript row opens that version read-only, and the newest keeps its exits', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), waiting(2, 1, { text: '# Old plan' }), planMsg(3, 1, 'revised', { text: '# Old plan' }), waiting(4, 2, { text: '# New plan' })]
+    })
+    expect(panel()!.textContent).toContain('New plan')
+    await click(host!.querySelector('section[aria-label^="Turn"] button'))
+    expect(panel()!.textContent).toContain('Old plan')
+    expect(panel()!.textContent).toContain('v1 · revised')
+    expect(within(panel(), 'Approve')).toBeUndefined()
+    await push(waiting(5, 3, { text: '# Newest plan' }))
+    expect(panel()!.textContent).toContain('Newest plan')
+    expect(within(panel(), 'Approve, auto mode')).toBeDefined()
+  })
+
+  test('Open plan file asks first, then opens the absolute path; it is absent without a file', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), waiting(2, 1, { filePath: '/Users/me/.claude/plans/plan.md' })],
+      handlers: { 'quirky.terminal/openExternal': () => ({ ok: true }) }
+    })
+    await click(within(panel(), 'Open plan file'))
+    await settle()
+    expect(fake.confirms).toHaveLength(1)
+    expect(fake.callsTo('quirky.terminal/openExternal')[0]!.params).toEqual({ target: '/Users/me/.claude/plans/plan.md' })
+    fake.state.confirmAnswer = false
+    await click(within(panel(), 'Open plan file'))
+    await settle()
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(1)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)] })
+    expect(within(panel(), 'Open plan file')).toBeUndefined()
+  })
+
+  test('no key chooses an exit: Enter, Shift+Tab, 1, 2 and 3 in the composer answer nothing and keep the text', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)], handlers: { ...answerHandlers, 'quirky.structured/configure': () => ({ ok: true }) } })
+    const editor = CMView.findFromDOM(host!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, insert: 'thinking' } }))
+    for (const key of ['1', '2', '3', 'Tab']) {
+      await act(async () => void editor.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key, shiftKey: key === 'Tab', bubbles: true, cancelable: true })))
+    }
+    expect(answers()).toEqual([])
+    expect(editor.state.doc.toString()).toBe('thinking')
+    expect(panel()).not.toBeNull()
+  })
+
+  test('a message typed while a plan waits goes through quirky.structured/send unchanged', async () => {
+    await mountChat({ messages: [user(1, 'go'), waiting(2, 1)], session: { status: 'waiting' }, handlers: answerHandlers })
+    const editor = CMView.findFromDOM(host!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, insert: 'Does this survive a restart?' } }))
+    await click(host!.querySelector('button[aria-label="Send"]'))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'chat', text: 'Does this survive a restart?', when: 'idle' })
+    expect(answers()).toEqual([])
+  })
+})
+
+describe('the composer in a chat with modes', () => {
+  const popoverRows = () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="dialog"][aria-label="Turn settings"] .ui-list-row__main')]
+  const settingsButton = () => host!.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!
+
+  test('the badge and Mode list follow the mode items, and Auto follows autoAvailable', async () => {
+    await mountChat({ messages: [user(1, 'go'), modeMsg(2, 'plan', false)] })
+    expect(byLabel('Turn off Plan mode')).not.toBeNull()
+    await click(settingsButton())
+    const auto = popoverRows().find((row) => row.textContent?.trim() === 'Auto')!
+    expect(auto.disabled).toBe(true)
+    expect(auto.title).toBe("Auto mode isn't available for this model")
+    await push(modeMsg(3, 'plan', true))
+    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(false)
+    await push(modeMsg(4, 'acceptEdits', true))
+    expect(byLabel('Turn off Plan mode')).toBeNull()
+    expect(byLabel('Return permissions to Ask')!.textContent).toContain('Accept edits')
+  })
+
+  test('Auto is on offer in a chat that has not started, and off once it has without ever reporting it', async () => {
+    await mountChat({ messages: [] })
+    await click(settingsButton())
+    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(false)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountChat({ messages: [user(1, 'go')] })
+    await click(settingsButton())
+    expect(popoverRows().find((row) => row.textContent?.trim() === 'Auto')!.disabled).toBe(true)
+  })
+
+  test('/plan from Plan goes back to the mode before it', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), modeMsg(2, 'acceptEdits', true), modeMsg(3, 'plan', true)],
+      handlers: { 'quirky.structured/configure': () => ({ ok: true }) }
+    })
+    const editor = CMView.findFromDOM(host!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, insert: '/plan' }, selection: { anchor: 5 } }))
+    await settle()
+    await click(host!.querySelector('[role="option"]'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure')[0]!.params).toEqual({ session: 'chat', permissionMode: 'acceptEdits' })
+  })
+})
+
+describe('the plan panel in a narrow chat', () => {
+  type Observer = { callback: () => void }
+  let observers: Observer[] = []
+  const original = (globalThis as { ResizeObserver?: unknown }).ResizeObserver
+  const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!
+  const resize = async (width: number) => {
+    const element = bodyOf()
+    element.getBoundingClientRect = () => ({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) })
+    await act(async () => void observers.forEach((observer) => observer.callback()))
+  }
+
+  afterEach(() => {
+    ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = original
+    observers = []
+  })
+
+  async function mountNarrow(messages: StructuredMessage[]) {
+    ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+      constructor(callback: () => void) {
+        observers.push({ callback })
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    await mountChat({ messages, handlers: answerHandlers })
+  }
+
+  test('below the width of the transcript plus the panel the plan opens in a sheet, above it in an aside', async () => {
+    await mountNarrow([user(1, 'go'), waiting(2, 1)])
+    expect(panel()).not.toBeNull()
+    await resize(900)
+    expect(panel()).toBeNull()
+    const open = host!.querySelector<HTMLElement>('[role="dialog"]')!
+    expect(open.textContent).toContain('Handle ExitPlanMode')
+    expect(within(open, 'Approve, auto mode')).toBeDefined()
+    await resize(1100)
+    expect(host!.querySelector('[role="dialog"]')).toBeNull()
+    expect(panel()).not.toBeNull()
+  })
+
+  test('the sheet closes with its close button and the chip reopens it', async () => {
+    await mountNarrow([user(1, 'go'), waiting(2, 1)])
+    await resize(800)
+    await click(host!.querySelector('[role="dialog"] .ui-dialog__close'))
+    expect(host!.querySelector('[role="dialog"]')).toBeNull()
+    await click(chip())
+    expect(host!.querySelector('[role="dialog"]')).not.toBeNull()
+  })
+})
+
 describe('the agent picker', () => {
   const listing = agentListing([
     agentInfo('claude', 'Claude Code'),
@@ -732,7 +1143,7 @@ describe('the agent picker', () => {
   })
 
   test('the composer picks reach the create call', async () => {
-    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: null, plan: true } })
+    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: 'plan' } })
     await click(card('omp'))
     await settle()
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
@@ -740,8 +1151,16 @@ describe('the agent picker', () => {
       worktree: 'wt-main',
       deferStart: true,
       model: 'opus',
-      options: { effort: 'high', plan: true }
+      permissionMode: 'plan',
+      options: { effort: 'high' }
     })
+  })
+
+  test('an Ask pick sends no permission mode at creation', async () => {
+    await mountPicker({}, { picks: { model: null, effort: null, mode: 'default' } })
+    await click(card('Claude Code'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: 'wt-main', deferStart: true })
   })
 
   test('a failed create shows a toast and reports nothing', async () => {

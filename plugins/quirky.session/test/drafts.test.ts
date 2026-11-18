@@ -12,7 +12,7 @@ const draft: Draft = {
   text: 'hello',
   images: ['/tmp/a.png'],
   pastes: [{ id: 'p1', text: 'pasted' }],
-  picks: { model: 'opus', effort: null, mode: 'plan', plan: true }
+  picks: { model: 'opus', effort: null, mode: 'plan' }
 }
 
 const fail = (kind: PluginErrorKind, message: string) => Object.assign(new Error(message), { kind })
@@ -49,6 +49,30 @@ describe('composer drafts', () => {
     expect(drafts.draft({ session: 's_1' })).toBeNull()
   })
 
+  test('three-key picks are accepted and stored as they are', () => {
+    const drafts = make()
+    const picks = { model: null, effort: 'high', mode: 'acceptEdits' }
+    expect(drafts.saveDraft({ session: 's_1', draft: { ...draft, picks } })).toEqual({ ok: true })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual(picks)
+  })
+
+  test('legacy four-key picks are accepted and plan: true becomes mode plan', () => {
+    const drafts = make()
+    const legacy = (mode: string | null, plan: boolean) => ({ ...draft, picks: { model: 'opus', effort: null, mode, plan } })
+    expect(drafts.saveDraft({ session: 's_1', draft: legacy('acceptEdits', true) })).toEqual({ ok: true })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual({ model: 'opus', effort: null, mode: 'plan' })
+    drafts.saveDraft({ session: 's_1', draft: legacy('acceptEdits', false) })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual({ model: 'opus', effort: null, mode: 'acceptEdits' })
+  })
+
+  test('a draft stored before the change reads back with three-key picks', () => {
+    const store = memoryStore()
+    const drafts = make(store)
+    drafts.saveDraft({ session: 's_1', draft })
+    store.run('UPDATE composer_drafts SET draft = ? WHERE session_id = ?', JSON.stringify({ ...draft, picks: { model: null, effort: null, mode: null, plan: true } }), 's_1')
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual({ model: null, effort: null, mode: 'plan' })
+  })
+
   test('drafts are not checked against session records', () => {
     const drafts = make(memoryStore(), tempDir(), [])
     drafts.saveDraft({ session: 'unborn', draft })
@@ -75,6 +99,8 @@ describe('composer drafts', () => {
       { ...draft, images: [1] },
       { ...draft, pastes: [{ id: 'p' }] },
       { ...draft, picks: { ...draft.picks, plan: 'yes' } },
+      { ...draft, picks: { model: null, effort: null } },
+      { ...draft, picks: { ...draft.picks, mode: 3 } },
       { ...draft, extra: true },
       { text: 'x'.repeat(64 * 1024), images: [], pastes: [], picks: draft.picks }
     ]

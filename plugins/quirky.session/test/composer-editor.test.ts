@@ -35,6 +35,7 @@ type Spy = {
   changes: string[]
   triggers: (Trigger | null)[]
   nav: string[]
+  cycles: number
   escapes: number
   upInEmpty: number
   pasted: File[][]
@@ -43,7 +44,7 @@ type Spy = {
 }
 
 async function mount(overrides: Partial<ComposerEditorProps> & { navConsumes?: boolean } = {}) {
-  const spy: Spy = { submits: [], changes: [], triggers: [], nav: [], escapes: 0, upInEmpty: 0, pasted: [], dropped: [], longPastes: [] }
+  const spy: Spy = { submits: [], changes: [], triggers: [], nav: [], cycles: 0, escapes: 0, upInEmpty: 0, pasted: [], dropped: [], longPastes: [] }
   const ref = createRef<ComposerEditorHandle>()
   const { navConsumes, ...rest } = overrides
   const props: ComposerEditorProps = {
@@ -58,6 +59,7 @@ async function mount(overrides: Partial<ComposerEditorProps> & { navConsumes?: b
       return navConsumes === true
     },
     onEscape: () => void spy.escapes++,
+    onCycleMode: () => void spy.cycles++,
     onUpInEmpty: () => void spy.upInEmpty++,
     onPasteFiles: (f) => spy.pasted.push(f),
     onDropFiles: (f) => spy.dropped.push(f),
@@ -272,6 +274,39 @@ describe('keys', () => {
     await act(async () => void key(view, { key: 'Enter', metaKey: true }))
     await act(async () => void key(view, { key: 'Enter', metaKey: true, shiftKey: true }))
     expect(spy.submits).toEqual(['send', 'steer'])
+  })
+
+  test('Shift+Tab calls onCycleMode, is consumed and never reaches onKeyNav or submits', async () => {
+    const { view, spy } = await mount({ value: 'hi', navConsumes: true })
+    const event = key(view, { key: 'Tab', shiftKey: true })
+    expect(spy.cycles).toBe(1)
+    expect(event.defaultPrevented).toBe(true)
+    expect(spy.nav).toEqual([])
+    expect(spy.submits).toEqual([])
+    expect(view.state.doc.toString()).toBe('hi')
+  })
+
+  test('Shift+Tab does nothing without onCycleMode and while disabled; plain Tab never cycles', async () => {
+    const without = await mount({ value: 'hi', onCycleMode: undefined })
+    const event = key(without.view, { key: 'Tab', shiftKey: true })
+    expect(event.defaultPrevented).toBe(false)
+    expect(without.spy.cycles).toBe(0)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    const disabled = await mount({ value: 'hi', disabled: true })
+    key(disabled.view, { key: 'Tab', shiftKey: true })
+    expect(disabled.spy.cycles).toBe(0)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    const plain = await mount({ value: 'hi' })
+    key(plain.view, { key: 'Tab' })
+    expect(plain.spy.cycles).toBe(0)
+  })
+
+  test('Enter, 1, 2 and 3 never call onCycleMode', async () => {
+    const { view, spy } = await mount({ value: 'hi' })
+    for (const name of ['Enter', '1', '2', '3']) key(view, { key: name })
+    expect(spy.cycles).toBe(0)
   })
 
   test('onKeyNav is offered first and a consumed key does nothing else', async () => {

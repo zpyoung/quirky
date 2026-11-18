@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
-import type { AgentCapabilities, QueuedMessage, Session, StructuredMessage, UiPluginContext } from '@quirky/protocol'
+import type { AgentCapabilities, PermissionModeName, QueuedMessage, Session, StructuredMessage, UiPluginContext } from '@quirky/protocol'
 import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'
 import { WORKTREE_VIEW_ID } from '../model'
 import type { QuirkyCommandName } from './commands'
 import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
-import { absolutePathsOf, AgentChip, NO_PICKS, reasonOf, useAgentOptions, useTurnSettings, type Picks } from './controls'
+import { absolutePathsOf, AgentChip, MODE_ORDER, NO_PICKS, reasonOf, useAgentOptions, useTurnSettings, type Picks } from './controls'
 import { createChat } from './createChat'
 import { ComposerEditor } from './editor/ComposerEditor'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
@@ -13,7 +13,7 @@ import { QueuedList, useQueue, type SteeredMessage } from './QueuedList'
 import { ModeBadges, SettingsChip, type SettingsSection } from './SettingsChip'
 import { fileSuggestions, slashSuggestions, SuggestionList, useAgentCommands, type Suggestion } from './SuggestionList'
 
-type ReportedSettings = { model?: string; effort?: string; permissionMode?: string; planMode?: boolean }
+type ReportedSettings = { model?: string; effort?: string; permissionMode?: string }
 type Snapshot = { text: string; images: Attachment[]; pastes: PasteChip[] }
 type Failure = { message: string; retry?: () => void }
 
@@ -99,20 +99,28 @@ let pasteSeq = 0
  * The card under a chat transcript: the message editor with its toolbar inside the bottom edge and the
  * suggestion list or queued rows attached above it. Enter sends now, or queues for the end of the turn
  * while the agent works, and Cmd+Enter steers it into the running turn. Unsupported controls stay
- * visible with the capability's reason on hover. `onPick` reports model, effort, permission mode and
- * plan changes to whoever starts the next turn.
+ * visible with the capability's reason on hover. The Mode list, `/plan` and Shift+Tab share one
+ * permission mode that follows `reportedMode`, the mode Claude says it is in; `autoAvailable` says whether
+ * Claude offers Auto (undefined before the chat has started) and `previousMode` is where `/plan` returns
+ * to. `onPick` reports model, effort and permission mode changes to whoever starts the next turn.
  */
 export function Composer({
   context,
   session,
   capabilities,
   working,
+  reportedMode,
+  autoAvailable,
+  previousMode,
   onPick
 }: {
   context: UiPluginContext
   session: Session
   capabilities: AgentCapabilities | null
   working: boolean
+  reportedMode?: PermissionModeName
+  autoAvailable?: boolean
+  previousMode?: PermissionModeName
   onPick?: (picks: Picks) => void
 }) {
   const [text, setText] = useState('')
@@ -130,7 +138,9 @@ export function Composer({
   const editor = useRef<ComposerEditorHandle>(null)
   const lastQuery = useRef('')
   const options = useAgentOptions(context, session.agent)
-  const settings = useTurnSettings(context, session, capabilities, options, picks)
+  const settings = useTurnSettings(context, session, capabilities, options, picks, autoAvailable)
+  const reported = useRef(reportedMode)
+  reported.current = reportedMode
   const queue = useQueue(context, session.id)
   const commands = useAgentCommands(context, session.id)
   const filePicker = useFilePicker(context)
@@ -154,19 +164,17 @@ export function Composer({
     const changes = {
       ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),
       ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),
-      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),
-      ...(next.plan !== before.plan ? { planMode: next.plan } : {})
+      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})
     }
     if (Object.keys(changes).length === 0) return
     try {
       const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined
-      const reported = result?.settings
-      if (reported) {
+      const settled = result?.settings
+      if (settled) {
         setPicks((current) => ({
-          model: reported.model ?? current.model,
-          effort: reported.effort ?? current.effort,
-          mode: reported.permissionMode ?? current.mode,
-          plan: reported.planMode ?? current.plan
+          model: settled.model ?? current.model,
+          effort: settled.effort ?? current.effort,
+          mode: settled.permissionMode ?? current.mode
         }))
       }
     } catch (error) {
@@ -175,15 +183,25 @@ export function Composer({
     }
   }
 
-  const draft = useDraftSync(context, session.id, { text, images: images.map((image) => image.path), pastes, picks }, (restored) => {
+  useEffect(() => {
+    if (reportedMode !== undefined) setPicks((current) => (current.mode === reportedMode ? current : { ...current, mode: reportedMode }))
+  }, [reportedMode])
+
+  // once Claude reports its mode the pick only mirrors it, so the stored pick is dropped from the draft
+  const draftPicks: Picks = reportedMode === undefined ? picks : { ...picks, mode: null }
+  const draft = useDraftSync(context, session.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks }, (restored) => {
+    const known = reported.current
+    const stored = restored?.picks ?? NO_PICKS
     setText(restored?.text ?? '')
     setImages((restored?.images ?? []).map((path) => ({ name: basename(path), path })))
     setPastes(restored?.pastes ?? [])
-    setPicks(restored?.picks ?? NO_PICKS)
+    setPicks({ ...stored, mode: known ?? stored.mode })
     setTrigger(null)
     setFailure(null)
     if (!restored) setSteered([])
-    else if (restored.picks.model !== null || restored.picks.effort !== null || restored.picks.mode !== null || restored.picks.plan) void pick(restored.picks, NO_PICKS)
+    else if (stored.model !== null || stored.effort !== null || (known === undefined && stored.mode !== null)) {
+      void pick({ ...stored, mode: known ?? stored.mode }, { ...NO_PICKS, mode: known ?? null })
+    }
   })
 
   useEffect(() => {
@@ -272,7 +290,7 @@ export function Composer({
   const resume = async () => {
     try {
       const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session
-      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks })
+      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks })
       context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })
     } catch (error) {
       fail(`Could not resume: ${messageOf(error)}`)
@@ -293,12 +311,29 @@ export function Composer({
     setSettingsOpen(true)
   }
 
+  const modeOn = (mode: PermissionModeName) => settings.modeReasons[mode] === undefined
+
+  const togglePlan = () => {
+    const reason = settings.modeReasons.plan
+    if (reason !== undefined) fail(reason)
+    else if (settings.mode !== 'plan') void pick({ ...picks, mode: 'plan' })
+    else void pick({ ...picks, mode: previousMode !== undefined && modeOn(previousMode) ? previousMode : 'default' })
+  }
+
+  const cycleMode = () => {
+    if (!MODE_ORDER.some(modeOn)) {
+      fail(settings.modeReasons.plan ?? settings.modeReasons.default ?? 'Permission modes are unavailable')
+      return
+    }
+    const from = MODE_ORDER.indexOf(settings.mode as PermissionModeName)
+    const next = MODE_ORDER.map((_, step) => MODE_ORDER[(from + 1 + step) % MODE_ORDER.length]!).find(modeOn)
+    if (next !== undefined && next !== settings.mode) void pick({ ...picks, mode: next })
+  }
+
   const runCommand = (name: QuirkyCommandName) => {
     if (name === 'model' || name === 'effort' || name === 'mode') openSettings(name)
-    else if (name === 'plan') {
-      if (settings.planReason !== undefined) fail(settings.planReason)
-      else void pick({ ...picks, plan: !picks.plan })
-    } else if (name === 'new') void newChat()
+    else if (name === 'plan') togglePlan()
+    else if (name === 'new') void newChat()
     else if (name === 'stop') void stop()
     else if (ended) void resume()
     else fail('The session has not ended')
@@ -503,6 +538,7 @@ export function Composer({
               onEscape={() => {
                 if (working) void stop()
               }}
+              onCycleMode={cycleMode}
               onUpInEmpty={() => {
                 const last = queue[queue.length - 1]
                 if (last) void pullBack(last)
