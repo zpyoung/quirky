@@ -1318,7 +1318,7 @@ export function contentReadiness(arg: ReadinessArg): boolean {
         previous.closedBy = 'successor'
       }
 
-      if (typeof PerformanceObserver !== 'undefined') {
+      if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
         let observer: PerformanceObserver | null = null
         try {
           observer = new PerformanceObserver((list) => {
@@ -1569,6 +1569,24 @@ export function readinessTimingFromError(message: string): ReadinessTiming | nul
     }
   }
   return null
+}
+
+/** Redacts free text without letting credential patterns consume structured timing delimiters. */
+function sanitizedCaptureError(error: unknown, secrets: string[]): string {
+  const message = errorMessage(error)
+  const timing = readinessTimingFromError(message)
+  if (!timing) return sanitizedError(error, secrets)
+  const marker = '; timing='
+  const timingAt = message.indexOf(marker)
+  const originalTiming = JSON.stringify(timing)
+  const prefix = sanitizedError(message.slice(0, timingAt), secrets)
+  const suffix = sanitizedError(message.slice(timingAt + marker.length + originalTiming.length), secrets)
+  const redactedTiming = JSON.stringify(timing, (key, value: unknown) => {
+    if (typeof value !== 'string') return value
+    const redacted = sanitizedError(value, secrets)
+    return key === 'cleanup' ? redacted.slice(0, 'unproved: '.length + 160) : redacted
+  })
+  return `${prefix}${marker}${redactedTiming}${suffix}`.slice(0, 2_000)
 }
 
 function readinessTraceFrom(value: unknown, phase: ReadinessPhase, targetId: string): ReadinessTrace | null {
@@ -2151,7 +2169,7 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
         throw error
       }
     }
-    const message = sanitizedError(error, runtime.secrets)
+    const message = sanitizedCaptureError(error, runtime.secrets)
     if (!image && !existsSync(path)) {
       try {
         image = await screenshot(runtime, path, true)

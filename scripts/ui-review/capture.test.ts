@@ -1508,6 +1508,46 @@ test('long diagnostic errors are capped before formatting timing and sanitizedEr
   }
 })
 
+test('redaction preserves structured timeout timing and removes diagnostic tokens', async () => {
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    slotEvaluateError: 'token=fixture',
+    slotDetails: { busy: true, text: 'Loading fixture content' }
+  })
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    expect(result.capture.status).toBe('failed')
+    expect(result.capture.error).not.toContain('token=fixture')
+    expect(readinessTiming(result.capture.error!)?.cleanup).toBe('unproved: token=<redacted>')
+  } finally {
+    fake.cleanup()
+  }
+})
+
+test('unsupported long-task observation is distinct from measured zero tasks', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml('Ready content'))
+    await page.evaluate(() => {
+      Object.defineProperty(PerformanceObserver, 'supportedEntryTypes', { value: ['mark'] })
+    })
+    const fake = makeFakeRuntimeForPage(page)
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+      await inspectSurface(fake.runtime, fixture)
+      expect(fake.runtime.lastReadiness?.timing).toMatchObject({
+        longTaskObserver: false,
+        longTasks: null,
+        longTaskCoverageFromMs: null,
+        cleanup: 'proved'
+      })
+      expect(await observerCounts(page)).toEqual({ constructed: 0, disconnected: 0 })
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 15_000)
+
 test('fake slot evaluation hangs are bounded and preserve timeout timing', async () => {
   const fake = buildFakeCaptureRuntime({
     readinessPending: true,
