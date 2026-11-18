@@ -9,6 +9,7 @@ import { MermaidFence } from './blocks/MermaidBlock'
 import { PathChip } from './blocks/PathChip'
 import { RemoteImageChip } from './blocks/RemoteImageChip'
 import { RenderError } from './blocks/RenderError'
+import type { OpenFenceAtEnd } from './fences'
 import { explainMath, readMathFailure } from './math-errors'
 import { isPathCandidate } from './remark-path-candidates'
 import { FilesContext, ImagesContext, RuntimeContext } from './runtime'
@@ -27,7 +28,7 @@ export const RenderersContext = createContext<CustomRenderer[]>(BUILT_IN_RENDERE
 export const StreamingContext = createContext(false)
 
 /** The code block still being written at the end of a streaming message, which streamdown cannot see inside a blockquote. */
-export const OpenFenceContext = createContext<{ extent: number } | null>(null)
+export const OpenFenceContext = createContext<OpenFenceAtEnd | null>(null)
 
 export function textOf(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
@@ -197,9 +198,17 @@ function markedLines(children: ReactNode): ReactNode[] | undefined {
   return lines.map((line, index) => <Fragment key={index}>{line}</Fragment>)
 }
 
-function sourceExtent(node: ExtraProps['node']): number | undefined {
+/** True for the code node the open fence was found as: same place in its block, same length, same language and code. */
+function isOpenFence(open: OpenFenceAtEnd | null, node: ExtraProps['node'], language: string, code: string): boolean {
   const { start, end } = node?.position ?? {}
-  return start?.offset !== undefined && end?.offset !== undefined ? end.offset - start.offset : undefined
+  return (
+    open !== null &&
+    start?.offset === open.start &&
+    end?.offset !== undefined &&
+    end.offset - start.offset === open.extent &&
+    language === open.language &&
+    code === open.code
+  )
 }
 
 function FenceCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
@@ -210,7 +219,7 @@ function FenceCode({ node, className, children }: ComponentProps<'code'> & Extra
   const metaValue = node?.properties?.metastring
   const meta = typeof metaValue === 'string' ? metaValue : undefined
   const code = textOf(children).replace(/\n$/, '')
-  const isIncomplete = streamdownIncomplete || (openFence !== null && sourceExtent(node) === openFence.extent)
+  const isIncomplete = streamdownIncomplete || isOpenFence(openFence, node, language, code)
   const renderer = language === '' ? undefined : renderers.find((entry) => (Array.isArray(entry.language) ? entry.language.includes(language) : entry.language === language))
   if (renderer) {
     const Component = renderer.component
