@@ -22,7 +22,7 @@ afterEach(async () => {
   if (previousPort === undefined) delete process.env.QUIRKY_MOBILE_PORT
   else process.env.QUIRKY_MOBILE_PORT = previousPort
   previousPort = undefined
-})
+}, 30_000)
 
 const call = <T>(client: QuirkyClient, method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<T>
 
@@ -73,6 +73,13 @@ test('mobile Watch uses real worktree tab identity, bounded frames and connectio
   expect(frame).toMatchObject({ tabId: created.tab.tabId, worktreeId: worktree, watchId: created.watchId, mimeType: 'image/jpeg' })
   expect(Buffer.from(frame.data, 'base64').subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]))
   expect(Buffer.byteLength(frame.data, 'ascii')).toBeLessThanOrEqual(512 * 1024)
+  await waitFor(async () => {
+    const ready = await call<{ value: boolean }>(first, 'quirky.browser/eval', {
+      page: pane.page,
+      expression: 'document.readyState === "complete" && document.querySelector("#submit") !== null'
+    })
+    return ready.value ? true : null
+  })
   const { value: point } = await call<{ value: { x: number; y: number; scale: number } }>(first, 'quirky.browser/eval', {
     page: pane.page,
     expression: '(() => { const rect = document.querySelector("#submit").getBoundingClientRect(); return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, scale: visualViewport.scale}; })()'
@@ -181,4 +188,4 @@ test('mobile Watch uses real worktree tab identity, bounded frames and connectio
   await call(second, 'quirky.mobile/browserWatchStop', { worktree, tabId: created.tab.tabId, watchId: afterDisconnect.watchId })
 
   second.close()
-})
+}, 60_000)

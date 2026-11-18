@@ -63,6 +63,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { watch } from 'node:fs/promises'
 import { join } from 'node:path'
 const statePath = join(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', 'state.json')
+const markerPath = (name) => join(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', name + '.flag')
 const readState = () => JSON.parse(readFileSync(statePath, 'utf8'))
 const saveState = (state) => {
   const temporaryStatePath = statePath + '.' + process.pid + '.tmp'
@@ -164,11 +165,14 @@ if (command === 'auth' && args[1] === 'status') {
   state.authStatusCalls = (typeof state.authStatusCalls === 'number' ? state.authStatusCalls : 0) + 1
   saveState(state)
   if (state.pauseAuthStatusAt === state.authStatusCalls) {
+    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
     state.authStatusStarted = true
     saveState(state)
-    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
-    for await (const _ of watcher) {
-      if (readState().releaseAuthStatus === true) break
+    writeFileSync(markerPath('authStatusStarted'), '')
+    if (!existsSync(markerPath('releaseAuthStatus'))) {
+      for await (const _ of watcher) {
+        if (existsSync(markerPath('releaseAuthStatus'))) break
+      }
     }
   }
   const current = readState()
@@ -414,8 +418,11 @@ if (command === 'auth' && args[1] === 'status') {
     const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
     state.repoViewStarted = true
     saveState(state)
-    for await (const _ of watcher) {
-      if (readState().releaseRepoView === true) break
+    writeFileSync(markerPath('repoViewStarted'), '')
+    if (!existsSync(markerPath('releaseRepoView'))) {
+      for await (const _ of watcher) {
+        if (existsSync(markerPath('releaseRepoView'))) break
+      }
     }
   }
   const current = readState()
@@ -607,8 +614,7 @@ async function createDuringFinalAuthentication(
     if (reachedAuth) await changeTarget()
   } finally {
     abort.abort()
-    const current = testHost.readState()
-    if (isRecord(current)) testHost.writeState({ ...current, releaseAuthStatus: true })
+    writeFileSync(join(testHost.root, 'releaseAuthStatus.flag'), '')
   }
   return { pending: creating }
 }
@@ -644,8 +650,7 @@ async function createDuringFinalBaseLookup(
     }
   } finally {
     abort.abort()
-    const current = testHost.readState()
-    if (isRecord(current)) testHost.writeState({ ...current, releaseRepoView: true })
+    writeFileSync(join(testHost.root, 'releaseRepoView.flag'), '')
   }
   return { pending: creating, pausedState }
 }
@@ -695,6 +700,7 @@ function mergeQueueQueries(testHost: HostingTest) {
 
 async function waitForState(testHost: HostingTest, key: string, signal?: AbortSignal): Promise<void> {
   const ready = (): boolean => {
+    if (existsSync(join(testHost.root, `${key}.flag`))) return true
     const value = testHost.readState()
     return isRecord(value) && value[key] === true
   }

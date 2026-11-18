@@ -962,14 +962,14 @@ test(
       const enabledRemoteSwitch = await until(local, () => {
         const currentRow = [...document.querySelectorAll<HTMLElement>('[data-vault-host-row]')].find((row) => row.dataset.vaultHostId === healthy.id)
         const currentSwitch = currentRow?.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-        return currentSwitch?.checked ? currentSwitch : undefined
+        return currentSwitch && currentSwitch.checked && !currentSwitch.disabled ? currentSwitch : undefined
       })
       enabledRemoteSwitch.click()
       await waitFor('remote switch disabled the actual remote index', async () => (!(await local!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: healthy.id })).status.enabled ? true : undefined), 30_000)
       const disabledRemoteSwitch = await until(local, () => {
         const currentRow = [...document.querySelectorAll<HTMLElement>('[data-vault-host-row]')].find((row) => row.dataset.vaultHostId === healthy.id)
         const currentSwitch = currentRow?.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-        return currentSwitch && !currentSwitch.checked ? currentSwitch : undefined
+        return currentSwitch && !currentSwitch.checked && !currentSwitch.disabled ? currentSwitch : undefined
       })
       disabledRemoteSwitch.click()
       await waitFor('remote switch re-enabled the actual remote index', async () => ((await local!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: healthy.id })).status.enabled ? true : undefined), 30_000)
