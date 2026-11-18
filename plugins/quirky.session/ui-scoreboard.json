@@ -303,7 +303,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -323,7 +323,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -343,7 +343,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -363,7 +363,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -584,6 +584,26 @@
         "import": {
           "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
           "quote": "import { Button, ControlIcon, EmptyState, IconButton, InlineError, NoticeLine, TextArea } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.error !== null && ("
+      },
+      "anchor": "older.error !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<InlineError message={`Could not load earlier messages: ${older.error}`} action={{ label: 'Retry', onAction: showEarlier }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     }
@@ -1490,6 +1510,22 @@
       },
       "anchor": "if (defaultMode === null || mode === '' || mode === defaultMode)",
       "reason": "Shows the permission badge only while the mode is not the default."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.more && ("
+      },
+      "anchor": "older.more &&",
+      "reason": "Shows Load earlier messages only while older messages remain to page in; it is a paging control over content already shown, not loading, empty or failed content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.loading ? 'Loading earlier messages…' : 'Load earlier messages'}"
+      },
+      "anchor": "older.loading ?",
+      "reason": "Relabels the Load earlier messages button while its page is fetched; the transcript already shown stays, so this is a control label, not a loading state of the view."
     }
   ],
   "actions": [
@@ -1922,13 +1958,21 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "context\n      .call('quirky.structured/messages', { session: session.id })"
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
         },
         "target": "quirky.structured/messages",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-            "quote": "function load(): void {\n    const attempt = ++latest.current\n    if (!loadedOnce.current) setPhase({ status: 'loading' })\n    context\n      .call('quirky.structured/messages', { session: session.id })\n      .then((loaded) => {\n        if (cancelled.current || attempt !== latest.current) return\n        loadedOnce.current = true\n        setPhase({ status: 'ready' })\n        add(loaded as StructuredMessage[])\n      })\n      .catch((error: { code?: unknown }) => {\n        if (cancelled.current || attempt !== latest.current) return\n        if (error?.code === RpcErrorCode.MethodNotFound) {\n          loadedOnce.current = false\n          setPhase({ status: 'off' })\n        } else if (!loadedOnce.current) {\n          setPhase({ status: 'failed', message: messageOf(error) })\n        }\n      })\n  }"
+            "quote": "function load(): void {\n    const attempt = ++latest.current\n    const firstLoad = !loadedOnce.current\n    if (firstLoad) setPhase({ status: 'loading' })\n    ;(firstLoad ? loadNewest(attempt) : catchUp(attempt)).catch((error: { code?: unknown }) => {\n      if (cancelled.current || attempt !== latest.current) return\n      if (error?.code === RpcErrorCode.MethodNotFound) {\n        loadedOnce.current = false\n        setPhase({ status: 'off' })\n      } else if (!loadedOnce.current) {\n        setPhase({ status: 'failed', message: messageOf(error) })\n      }\n    })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadNewest(attempt: number): Promise<void> {\n    const { messages: page, limit } = await fetchPage(context, { session: session.id, tail: true }, CHAT_PAGE_SIZE)\n    if (cancelled.current || attempt !== latest.current) return\n    loadedOnce.current = true\n    setPhase({ status: 'ready' })\n    add(page)\n    const oldest = page[0]?.seq ?? 1\n    cursor.current = { record: session, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n    if (page.length < limit) await loadEarlier(CHAT_PAGE_SIZE - page.length)\n    else setOlder({ more: true, loading: false, error: null })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
           }
         ]
       }
@@ -3001,6 +3045,62 @@
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
             "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<Button type=\"button\" disabled={older.loading} onClick={showEarlier}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
+        },
+        "target": "quirky.structured/messages",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "function showEarlier(): void {\n    const element = scrollRef.current\n    keepDistanceFromEnd.current = element ? element.scrollHeight - element.scrollTop : null\n    void loadEarlier()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadEarlier(budget = CHAT_PAGE_SIZE): Promise<void> {\n    if (paging.current || cursor.current === null) return\n    paging.current = true\n    const run = generation.current\n    const stale = () => cancelled.current || run !== generation.current\n    setOlder((now) => ({ ...now, loading: true, error: null }))\n    let error: string | null = null\n    try {\n      let left = budget\n      while (left > 0 && cursor.current !== null) {\n        const at: HistoryCursor = cursor.current\n        if (at.exhausted) {\n          const next: string | null | undefined = at.record.resumedFrom\n          if (typeof next !== 'string' || seen.current.has(next)) {\n            cursor.current = null\n            break\n          }\n          seen.current.add(next)\n          try {\n            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }\n          } catch {\n            cursor.current = null\n          }\n          if (stale()) return\n          continue\n        }\n        const { messages: page, limit } = await fetchPage(\n          context,\n          { session: at.record.id, tail: true, ...(at.beforeSeq === undefined ? {} : { beforeSeq: at.beforeSeq }) },\n          left\n        )\n        if (stale()) return\n        if (at.record.id === session.id) add(page)\n        else setEarlier((chats) => prependEarlier(chats, at.record, page))\n        const oldest = page[0]?.seq ?? at.beforeSeq ?? 1\n        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n        left -= page.length\n      }\n    } catch (failure) {\n      error = messageOf(failure)\n    } finally {\n      paging.current = false\n    }\n    if (stale()) return\n    const more = cursor.current !== null && (!cursor.current.exhausted || typeof cursor.current.record.resumedFrom === 'string')\n    setOlder({ more, loading: false, error })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<InlineError message={`Could not load earlier messages: ${older.error}`} action={{ label: 'Retry', onAction: showEarlier }} />"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
+        },
+        "target": "quirky.structured/messages",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "function showEarlier(): void {\n    const element = scrollRef.current\n    keepDistanceFromEnd.current = element ? element.scrollHeight - element.scrollTop : null\n    void loadEarlier()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadEarlier(budget = CHAT_PAGE_SIZE): Promise<void> {\n    if (paging.current || cursor.current === null) return\n    paging.current = true\n    const run = generation.current\n    const stale = () => cancelled.current || run !== generation.current\n    setOlder((now) => ({ ...now, loading: true, error: null }))\n    let error: string | null = null\n    try {\n      let left = budget\n      while (left > 0 && cursor.current !== null) {\n        const at: HistoryCursor = cursor.current\n        if (at.exhausted) {\n          const next: string | null | undefined = at.record.resumedFrom\n          if (typeof next !== 'string' || seen.current.has(next)) {\n            cursor.current = null\n            break\n          }\n          seen.current.add(next)\n          try {\n            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }\n          } catch {\n            cursor.current = null\n          }\n          if (stale()) return\n          continue\n        }\n        const { messages: page, limit } = await fetchPage(\n          context,\n          { session: at.record.id, tail: true, ...(at.beforeSeq === undefined ? {} : { beforeSeq: at.beforeSeq }) },\n          left\n        )\n        if (stale()) return\n        if (at.record.id === session.id) add(page)\n        else setEarlier((chats) => prependEarlier(chats, at.record, page))\n        const oldest = page[0]?.seq ?? at.beforeSeq ?? 1\n        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n        left -= page.length\n      }\n    } catch (failure) {\n      error = messageOf(failure)\n    } finally {\n      paging.current = false\n    }\n    if (stale()) return\n    const more = cursor.current !== null && (!cursor.current.exhausted || typeof cursor.current.record.resumedFrom === 'string')\n    setOlder({ more, loading: false, error })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
           }
         ]
       }

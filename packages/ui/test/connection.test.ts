@@ -79,6 +79,42 @@ test('reports an unreachable daemon after repeated failures and reconnects when 
   expect(store.getState().epoch).toBe(2)
 })
 
+test('a daemon that drops each connection right after it opens is retried with growing delays', async () => {
+  // mirrors the daemon closing with 1013 when a reply is too large to send
+  const token = 'flaky-token'
+  const opened: number[] = []
+  const server = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch(request, webSocketServer) {
+      const url = new URL(request.url)
+      if (url.pathname === '/health') return Response.json({ ok: true })
+      return webSocketServer.upgrade(request) ? undefined : new Response('upgrade failed', { status: 400 })
+    },
+    websocket: {
+      open() {
+        opened.push(Date.now())
+      },
+      message(socket, message) {
+        const request = JSON.parse(String(message))
+        const result = request.method === 'client.hello'
+          ? { protocolVersion: PROTOCOL_VERSION, daemonVersion: 'flaky' }
+          : request.method === 'events.subscribe' ? { ok: true } : undefined
+        if (result !== undefined) socket.send(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }))
+        if (request.method === 'events.subscribe') setTimeout(() => socket.close(1013, 'WebSocket output stalled'), 1)
+      }
+    }
+  })
+  stops.push(() => server.stop(true))
+  connect(`http://127.0.0.1:${server.port}/#token=${token}`)
+  await until(() => opened.length >= 4)
+  await Bun.sleep(300)
+  // with the delay reset on every open this reconnects every ~10 ms, about 30 times in 300 ms
+  expect(opened.length).toBeLessThanOrEqual(7)
+  const gaps = opened.slice(1).map((at, index) => at - opened[index]!)
+  expect(gaps.at(-1)!).toBeGreaterThan(gaps[0]!)
+})
+
 test('keeps retrying without the unreachable banner while /health answers', async () => {
   const daemon = startMockDaemon()
   stops.push(daemon.stop)

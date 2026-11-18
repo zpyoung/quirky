@@ -71,7 +71,7 @@
       },
       {
         "id": "messages",
-        "description": "The messages of a structured session, optionally only those after `afterSeq`.",
+        "description": "The messages of a structured session, oldest first, optionally only those after `afterSeq` and before `beforeSeq`. With `limit`, `tail` keeps the newest of them, so `beforeSeq` plus `tail` pages back through a long chat.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -79,6 +79,7 @@
           "properties": {
             "session": { "type": "string" },
             "afterSeq": { "type": "integer", "minimum": 0 },
+            "beforeSeq": { "type": "integer", "minimum": 1 },
             "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
             "tail": { "type": "boolean" }
           },

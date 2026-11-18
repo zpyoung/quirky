@@ -298,6 +298,20 @@ afterEach(async () => {
 
 type Mount = { messages?: StructuredMessage[]; capabilities?: AgentCapabilities; session?: Partial<Session>; handlers?: Record<string, Handler> }
 
+/** `count` messages where only the `shown` seqs render ("line N."); the rest are status items, hidden without Show all events, so the test stays fast. */
+function longChat(count: number, shown: number[]): StructuredMessage[] {
+  return Array.from({ length: count }, (_, index) =>
+    shown.includes(index + 1) ? prose(index + 1, `line ${index + 1}.`) : msg(index + 1, { kind: 'status', text: `status ${index + 1}` })
+  )
+}
+
+/** Answers `quirky.structured/messages` like the daemon: afterSeq/beforeSeq bounds, then limit from the start or, with tail, the end. */
+function pageOf(all: StructuredMessage[], params: Record<string, any>): StructuredMessage[] {
+  const inRange = all.filter((message) => message.seq > (params.afterSeq ?? 0) && (params.beforeSeq === undefined || message.seq < params.beforeSeq))
+  if (params.limit === undefined) return inRange
+  return params.tail ? inRange.slice(-params.limit) : inRange.slice(0, params.limit)
+}
+
 async function mountChat({ messages = [], capabilities = CLAUDE, session: over = {}, handlers = {} }: Mount = {}) {
   fake = fakeContext({
     'quirky.structured/messages': () => messages,
@@ -328,7 +342,7 @@ const push = (message: StructuredMessage) => fake.emit({ type: 'quirky.structure
 describe('the chat view', () => {
   test('loads the messages, asks for the agent capabilities and shows the turn', async () => {
     await mountChat({ messages: [user(1, 'Add backoff'), prose(2, 'On it.'), end(3, 'done')] })
-    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'chat', tail: true, limit: 1000 })
     expect(fake.callsTo('quirky.structured/capabilities')[0]!.params).toEqual({ agent: 'claude' })
     expect(byLabel('Your message')!.textContent).toBe('Add backoff')
     expect(text()).toContain('On it.')
@@ -352,6 +366,7 @@ describe('the chat view', () => {
     await fake.emit({ type: 'quirky.structured/settled', data: { sessionId: 'chat', state: 'done' } })
     await settle()
     expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
+    expect(fake.callsTo('quirky.structured/messages')[1]!.params).toEqual({ session: 'chat', afterSeq: 2, limit: 1000 })
     expect(text()).toContain('caught up')
   })
 
@@ -427,6 +442,109 @@ describe('the chat view', () => {
       'Turn 2',
       'Turn 3'
     ])
+  })
+
+  test('a long chat opens on its newest page and Load earlier messages pages back to the start', async () => {
+    const all = longChat(2_200, [1, 200, 201, 1200, 1201, 2200])
+    await mountChat({ handlers: { 'quirky.structured/messages': (params) => pageOf(all, params) } })
+    expect(fake.callsTo('quirky.structured/messages').map((call) => call.params)).toEqual([{ session: 'chat', tail: true, limit: 1000 }])
+    expect(text()).toContain('line 2200.')
+    expect(text()).toContain('line 1201.')
+    expect(text()).not.toContain('line 1200.')
+
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/messages').at(-1)!.params).toEqual({ session: 'chat', tail: true, limit: 1000, beforeSeq: 1201 })
+    expect(text()).toContain('line 201.')
+    expect(text()).not.toContain('line 200.')
+
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(text()).toContain('line 1.')
+    expect(buttonNamed('Load earlier messages')).toBeUndefined()
+  })
+
+  test('a resumed chat whose own history fills a page reaches the earlier session through Load earlier messages', async () => {
+    const own = longChat(1_000, [1_000])
+    const before = [{ ...user(1, 'from before'), sessionId: 'before' }]
+    await mountChat({
+      session: { resumedFrom: 'before' },
+      handlers: {
+        'quirky.structured/messages': (params) => params.session === 'before' ? pageOf(before, params) : pageOf(own, params),
+        'quirky.session/get': () => session({ id: 'before', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null })
+      }
+    })
+    expect(fake.callsTo('quirky.session/get')).toEqual([])
+    expect(text()).not.toContain('from before')
+
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(byLabel('Your message')!.textContent).toBe('from before')
+    expect(buttonNamed('Load earlier messages')).toBeUndefined()
+  })
+
+  test('a failed earlier page offers a retry and keeps what is shown', async () => {
+    const all = longChat(1_500, [1, 1_500])
+    let refuse = true
+    await mountChat({
+      handlers: {
+        'quirky.structured/messages': (params) => {
+          if (params.beforeSeq !== undefined && refuse) throw new RpcError(RpcErrorCode.Internal, 'reply too large')
+          return pageOf(all, params)
+        }
+      }
+    })
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(text()).toContain('Could not load earlier messages: reply too large')
+    expect(text()).toContain('line 1500.')
+
+    refuse = false
+    await click(buttonNamed('Retry'))
+    await settle()
+    expect(text()).toContain('line 1.')
+    expect(text()).not.toContain('Could not load earlier messages')
+  })
+
+  test('a page the daemon says is too large to send is asked for again in halves', async () => {
+    const all = longChat(1_200, [1, 700, 701, 1_200])
+    const tooLarge = new RpcError(RpcErrorCode.Internal, 'too large', { reason: 'reply_too_large', bytes: 9e6, limit: 8e6 })
+    await mountChat({
+      handlers: {
+        'quirky.structured/messages': (params) => {
+          if (params.limit > 500) throw tooLarge
+          return pageOf(all, params)
+        }
+      }
+    })
+    expect(fake.callsTo('quirky.structured/messages').map((call) => call.params.limit)).toEqual([1000, 500])
+    expect(text()).toContain('line 1200.')
+    expect(text()).toContain('line 701.')
+    expect(text()).not.toContain('line 700.')
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(text()).toContain('line 700.')
+  })
+
+  test('a turn that settles while an earlier page loads leaves Load earlier messages usable', async () => {
+    const all = longChat(2_500, [1, 1_500, 1_501, 2_500])
+    let release: (() => void) | null = null
+    await mountChat({
+      handlers: {
+        'quirky.structured/messages': async (params) => {
+          if (params.beforeSeq !== undefined && release === null) await new Promise<void>((resolve) => { release = resolve })
+          return pageOf(all, params)
+        }
+      }
+    })
+    await click(buttonNamed('Load earlier messages'))
+    expect(buttonNamed('Loading earlier messages…')!.disabled).toBe(true)
+    await fake.emit({ type: 'quirky.structured/settled', data: { sessionId: 'chat', state: 'done' } })
+    await settle()
+    await act(async () => release!())
+    await settle()
+    expect(text()).toContain('line 1500.')
+    expect(buttonNamed('Load earlier messages')!.disabled).toBe(false)
   })
 
   test('a resumed chat still shows its own messages when an earlier session cannot be read', async () => {

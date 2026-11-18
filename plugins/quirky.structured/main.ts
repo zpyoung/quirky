@@ -1313,18 +1313,22 @@ export function activate(context: PluginContext): void {
   }
 
   const messages: MethodHandler = async (params) => {
-    const unsupported = Object.keys(params).find((key) => !['session', 'afterSeq', 'limit', 'tail'].includes(key))
+    const unsupported = Object.keys(params).find((key) => !['session', 'afterSeq', 'beforeSeq', 'limit', 'tail'].includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured messages does not support ${unsupported}`)
     const session = await requireStructured(params.session as string)
     const afterSeq = params.afterSeq ?? 0
     if (!Number.isInteger(afterSeq) || (afterSeq as number) < 0) throw context.error('invalid-params', 'afterSeq must be a non-negative integer')
+    const beforeSeq = params.beforeSeq
+    if (beforeSeq !== undefined && (!Number.isInteger(beforeSeq) || (beforeSeq as number) < 1)) {
+      throw context.error('invalid-params', 'beforeSeq must be a positive integer')
+    }
     const limit = params.limit
     if (limit !== undefined && (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > 1000)) {
       throw context.error('invalid-params', 'limit must be an integer from 1 to 1000')
     }
     const tail = params.tail
     if (tail !== undefined && typeof tail !== 'boolean') throw context.error('invalid-params', 'tail must be a boolean')
-    return journal.list(session.id, afterSeq as number, limit as number | undefined, tail === true)
+    return journal.list(session.id, afterSeq as number, limit as number | undefined, tail === true, beforeSeq as number | undefined)
   }
 
   const admitAndSend = (

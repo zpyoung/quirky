@@ -178,31 +178,36 @@ export class Journal {
     return message
   }
 
-  /** The session's messages with `seq` above `afterSeq`, oldest first unless a bounded tail is requested. */
-  list(sessionId: string, afterSeq = 0, limit?: number, tail = false): StructuredMessage[] {
+  /**
+   * The session's messages with `seq` above `afterSeq` and, when given, below `beforeSeq`, returned
+   * oldest first. A `limit` keeps the oldest of them, or the newest when `tail` is set.
+   */
+  list(sessionId: string, afterSeq = 0, limit?: number, tail = false, beforeSeq?: number): StructuredMessage[] {
+    const range = beforeSeq === undefined ? 'session_id = ? AND seq > ?' : 'session_id = ? AND seq > ? AND seq < ?'
+    const bounds: number[] = beforeSeq === undefined ? [afterSeq] : [afterSeq, beforeSeq]
     let rows: Row[]
     if (limit !== undefined && tail) {
       rows = this.store.all<Row>(
         `SELECT ${SELECT_COLUMNS} FROM (
            SELECT ${SELECT_COLUMNS} FROM structured_messages
-           WHERE session_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?
+           WHERE ${range} ORDER BY seq DESC LIMIT ?
          ) ORDER BY seq`,
         sessionId,
-        afterSeq,
+        ...bounds,
         limit
       )
     } else if (limit !== undefined) {
       rows = this.store.all<Row>(
-        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
+        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE ${range} ORDER BY seq LIMIT ?`,
         sessionId,
-        afterSeq,
+        ...bounds,
         limit
       )
     } else {
       rows = this.store.all<Row>(
-        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq`,
+        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE ${range} ORDER BY seq`,
         sessionId,
-        afterSeq
+        ...bounds
       )
     }
     return rows.map((row) => {

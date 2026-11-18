@@ -1182,7 +1182,7 @@ describe('structured sessions', () => {
       'quirky.structured/messages': () => [message(1, 'user', 'hi'), message(2, 'system', 'hook_started: x'), message(3, 'assistant', 'hello')]
     })
     const view = await open({ worktree: WORKTREE.id })
-    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
+    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg', tail: true, limit: 1000 })
     expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi', 'assistanthello'])
     await fake.emit({ type: 'quirky.structured/message', data: { message: message(4, 'assistant', 'more') } })
     expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(3)
