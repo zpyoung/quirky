@@ -990,6 +990,20 @@ describe('plan mode', () => {
       expect(states.filter(([, status]) => status === 'approved')).toHaveLength(1)
     })
 
+    test('an interrupt while a second call is queued denies it without a new plan or ask', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# B' })
+      await runner.interrupt(session.id)
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      expect(await second).toMatchObject({ behavior: 'deny', message: expect.stringContaining('stopped') })
+      await tick()
+      expect(asks).toHaveLength(1)
+      expect(plans().some((item) => item.text === '# B')).toBe(false)
+      expect(runner.planWaiting!(session.id)).toBe(false)
+    })
+
     test('an approval into auto that Claude honours is left alone', async () => {
       const query = await begin()
       await withAuto(query)
