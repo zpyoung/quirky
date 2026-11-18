@@ -249,6 +249,25 @@ describe('streaming (SC-1, SC-2)', () => {
     expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
   })
 
+  test('only the open fence is incomplete when a closed fence before it has the same length', async () => {
+    const texts = [
+      '```ts\nx\n```\n```ts\n123456',
+      '```ts\nx\n```\n\n```ts\n123456',
+      '```ts\nx\n```\n```ts\nx',
+      '> ```ts\n> x\n> ```\n\n> ```ts\n> 123456'
+    ]
+    for (const text of texts) {
+      const { container } = await mount({ text, streaming: true })
+      const blocks = all(container, '.qmd-code[data-language="ts"]')
+      expect(blocks.length).toBe(2)
+      expect(blocks[0].dataset.incomplete).toBeUndefined()
+      expect(blocks[0].querySelector('.qmd-caret')).toBeNull()
+      expect(blocks[1].dataset.incomplete).toBe('true')
+      expect(blocks[1].querySelector('.qmd-caret')).toBeTruthy()
+      expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
+    }
+  })
+
   test('the caret follows the last block when no fence is open', async () => {
     const { container } = await mount({ text: 'Now running the reload test suite', streaming: true })
     const carets = all(container, '.qmd-caret')
@@ -367,6 +386,31 @@ describe('links and images (SC-5, SC-7, SC-8)', () => {
     const { container } = await mount({ text, assets })
     await settle(() => container.querySelectorAll('figure img').length === 3, 'figures')
     expect([...resolveImages.mock.calls[0][0]].sort()).toEqual(['c.png', 'docs/shot(1).png', 'my/b.png'])
+  })
+
+  test('a definition whose destination is on the next line is collected', async () => {
+    const { assets, resolveImages } = assetsFor({}, { 'docs/shot.png': 'blob:s' })
+    const { container } = await mount({ text: '![s][s]\n\n[s]:\n  docs/shot.png', assets })
+    await settle(() => !!container.querySelector('figure img'), 'figure')
+    expect([...resolveImages.mock.calls[0][0]]).toEqual(['docs/shot.png'])
+    expect(one(container, 'figure img').getAttribute('src')).toBe('blob:s')
+  })
+
+  test('escaped characters in a destination are collected as the parser reads them', async () => {
+    const { assets, resolveImages } = assetsFor({}, { 'docs/shot(1).png': 'blob:p', 'docs/a_b.png': 'blob:u' })
+    const text = '![i](docs/shot\\(1\\).png)\n\n![r][p]\n\n![u](docs/a\\_b.png)\n\n[p]: docs/shot\\(1\\).png'
+    const { container } = await mount({ text, assets })
+    await settle(() => container.querySelectorAll('figure img').length === 3, 'figures')
+    expect([...resolveImages.mock.calls[0][0]].sort()).toEqual(['docs/a_b.png', 'docs/shot(1).png'])
+    expect(all(container, 'figcaption').map((caption) => caption.textContent)).toEqual(['docs/shot(1).png', 'docs/shot(1).png', 'docs/a_b.png'])
+  })
+
+  test('images inside code spans and fences are never collected', async () => {
+    const { assets, resolveImages } = assetsFor({}, { 'real.png': 'blob:r', 'span.png': 'blob:s', 'fenced.png': 'blob:f', 'indented.png': 'blob:i' })
+    const text = '![real](real.png) and `![span](span.png)`\n\n```md\n![fenced](fenced.png)\n```\n\n    ![indented](indented.png)'
+    const { container } = await mount({ text, assets })
+    await settle(() => !!container.querySelector('figure img'), 'figure')
+    expect([...resolveImages.mock.calls[0][0]]).toEqual(['real.png'])
   })
 
   test('a local image with no assets renders its alt text', async () => {
@@ -646,6 +690,16 @@ describe('data fences (SC-13)', () => {
     const { container } = await mount({ text })
     expect(one(container, 'polyline.qmd-chart-line').getAttribute('points')?.split(' ').length).toBe(3)
     expect(all(container, 'circle').length).toBe(3)
+  })
+
+  test('a line chart with numeric x places points on a linear scale, and string x stays evenly spaced', async () => {
+    const xsOf = (container: HTMLElement) => one(container, 'polyline.qmd-chart-line').getAttribute('points')!.split(' ').map((point) => Number(point.split(',')[0]))
+    const numeric = await mount({ text: '```chart\n{"type":"line","data":[{"x":0,"y":1},{"x":1,"y":2},{"x":100,"y":3}]}\n```' })
+    const [a, b, c] = xsOf(numeric.container)
+    expect((b - a) / (c - a)).toBeCloseTo(0.01, 5)
+    const categorical = await mount({ text: '```chart\n{"type":"line","data":[{"x":0,"y":1},{"x":"b","y":2},{"x":100,"y":3}]}\n```' })
+    const [d, e, f] = xsOf(categorical.container)
+    expect((e - d) / (f - d)).toBeCloseTo(0.5, 5)
   })
 
   test('a from naming an inherited property is a missing block, not a crash', async () => {

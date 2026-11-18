@@ -164,7 +164,8 @@ export function JsonFence({ code, isIncomplete, language, meta }: FenceProps) {
   )
 }
 
-export interface ChartPoint { label: string; value: number }
+/** `x` is set only for a point whose x was given as a number, which a line chart places on a linear scale. */
+export interface ChartPoint { label: string; value: number; x?: number }
 export interface ChartSpec {
   type: 'bar' | 'line'
   title?: string
@@ -229,7 +230,9 @@ function resolveChart(spec: ChartSpec, sources: Record<string, { language: strin
     return {
       ...base,
       points: spec.data.map((entry) => (
-        'label' in entry ? { label: entry.label, value: entry.value } : { label: String(entry.x), value: entry.y }
+        'label' in entry
+          ? { label: entry.label, value: entry.value }
+          : { label: String(entry.x), value: entry.y, ...(typeof entry.x === 'number' ? { x: entry.x } : {}) }
       ))
     }
   }
@@ -297,10 +300,17 @@ function LineChart({ points, unit }: { points: ChartPoint[]; unit?: string }) {
   const high = Math.max(...values) === low ? low + 1 : Math.max(...values)
   const plotWidth = LINE_WIDTH - LINE_LEFT - LINE_RIGHT
   const plotHeight = LINE_HEIGHT - LINE_TOP - LINE_BOTTOM
-  const at = (index: number, value: number): [number, number] => [
-    LINE_LEFT + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth),
-    LINE_TOP + (1 - (value - low) / (high - low)) * plotHeight
-  ]
+  const xs = points.map((point) => point.x)
+  const numeric = xs.every((x): x is number => x !== undefined)
+  const first = numeric ? Math.min(...xs) : 0
+  const last = numeric ? Math.max(...xs) : points.length - 1
+  const at = (index: number, value: number): [number, number] => {
+    const along = numeric ? (xs[index] as number) - first : index
+    return [
+      LINE_LEFT + (last === first ? plotWidth / 2 : (along / (last - first)) * plotWidth),
+      LINE_TOP + (1 - (value - low) / (high - low)) * plotHeight
+    ]
+  }
   const path = points.map((point, index) => at(index, point.value).join(',')).join(' ')
   return (
     <svg className="qmd-chart" width={LINE_WIDTH} height={LINE_HEIGHT} role="img" aria-label="Line chart">

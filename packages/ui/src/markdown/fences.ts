@@ -1,6 +1,20 @@
-import type { Code, Parent } from 'mdast'
+import type { Code, Definition, ImageReference, Image, Parent, Root } from 'mdast'
 import { fromMarkdown } from 'mdast-util-from-markdown'
+import remarkGfm from 'remark-gfm'
+import { parseMarkdownIntoBlocks } from 'streamdown'
 import type { ChartSources } from './runtime'
+
+type ParserData = { micromarkExtensions?: unknown[]; fromMarkdownExtensions?: unknown[] }
+
+/** The syntax extensions the renderer's remark-gfm adds, collected by letting the plugin register itself on a stand-in processor. */
+const GFM_DATA: ParserData = {}
+;(remarkGfm as unknown as (this: { data: () => ParserData }) => void).call({ data: () => GFM_DATA })
+
+const parse = (source: string): Root =>
+  fromMarkdown(source, {
+    extensions: GFM_DATA.micromarkExtensions as never,
+    mdastExtensions: GFM_DATA.fromMarkdownExtensions as never
+  })
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
 
@@ -68,7 +82,11 @@ function* fences(markdown: string): Generator<Fence> {
   if (open) yield closeFence(open, false)
 }
 
-export type OpenFenceAtEnd = { language: string; code: string; extent: number }
+/**
+ * Where an open fence sits in the block Streamdown renders it from. Streamdown parses each block on its own,
+ * so `start` and `extent` are in that block's coordinates, and the code node of the fence reports the same pair.
+ */
+export type OpenFenceAtEnd = { language: string; code: string; start: number; extent: number }
 
 function lastCode(node: Parent): Code | null {
   for (let index = node.children.length - 1; index >= 0; index--) {
@@ -81,18 +99,23 @@ function lastCode(node: Parent): Code | null {
 
 /**
  * The fenced code block the text ends inside, when it has no closing fence yet, at any blockquote or list
- * nesting. `extent` is the source length from the fence's start to the end of the text, which the rendered
- * block of that fence has too and an earlier, finished block with the same content does not.
+ * nesting. It is found in the last block Streamdown splits the text into, because that is the text its
+ * code node is parsed from. `start`, `extent`, `language` and `code` together single out that node: an
+ * earlier finished fence has the same start or the same length at most, and a closing fence makes its
+ * extent differ from an open fence with the same code.
  */
 export function openFenceAtEnd(markdown: string): OpenFenceAtEnd | null {
   if (!markdown.includes('```') && !markdown.includes('~~~')) return null
-  const block = lastCode(fromMarkdown(markdown))
-  const { start, end } = block?.position ?? {}
-  if (!block || start?.offset === undefined || end?.offset === undefined || end.offset < markdown.trimEnd().length) return null
+  const blocks = parseMarkdownIntoBlocks(markdown)
+  const block = blocks[blocks.length - 1] ?? ''
+  const node = lastCode(parse(block))
+  const { start, end } = node?.position ?? {}
+  if (!node || start?.offset === undefined || end?.offset === undefined || end.offset < block.trimEnd().length) return null
   // a closed fence spans its content plus an opening and a closing line, an open one only the opening line
-  const lines = markdown.slice(start.offset, end.offset).replace(/\n$/, '').split('\n').length
-  const contentLines = block.value === '' ? 0 : block.value.split('\n').length
-  return lines === contentLines + 1 ? { language: (block.lang ?? '').toLowerCase(), code: block.value, extent: end.offset - start.offset } : null
+  const lines = block.slice(start.offset, end.offset).replace(/\n$/, '').split('\n').length
+  const contentLines = node.value === '' ? 0 : node.value.split('\n').length
+  if (lines !== contentLines + 1) return null
+  return { language: (node.lang ?? '').toLowerCase(), code: node.value, start: start.offset, extent: end.offset - start.offset }
 }
 
 /** True when the text ends inside a fenced code block that has no closing fence yet. */
@@ -115,92 +138,33 @@ export function collectChartSources(markdown: string): ChartSources {
   return sources
 }
 
-const IMAGE_START = /!\[[^\]\n]*\]\(/g
+const NOT_LOCAL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i
 
-/** The destination of an inline link starting at `from` (just past the opening paren), CommonMark style: `<...>` or balanced parentheses, then an optional title. */
-function inlineDestination(text: string, from: number): string | null {
-  let index = from
-  while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
-  let destination: string
-  if (text[index] === '<') {
-    const end = text.indexOf('>', index)
-    const newline = text.indexOf('\n', index)
-    if (end < 0 || (newline >= 0 && newline < end)) return null
-    destination = text.slice(index + 1, end)
-    index = end + 1
-  } else {
-    const start = index
-    let depth = 0
-    while (index < text.length) {
-      const char = text[index]
-      if (char === '\\' && index + 1 < text.length) index += 2
-      else if (char === '(') { depth++; index++ }
-      else if (char === ')') { if (depth === 0) break; depth--; index++ }
-      else if (char === ' ' || char === '\t' || char === '\n') break
-      else index++
-    }
-    if (depth !== 0) return null
-    destination = text.slice(start, index)
-  }
-  while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
-  const quote = text[index]
-  if (quote === '"' || quote === "'" || quote === '(') {
-    const close = text.indexOf(quote === '(' ? ')' : quote, index + 1)
-    if (close < 0) return null
-    index = close + 1
-    while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
-  }
-  return text[index] === ')' && destination !== '' ? destination : null
-}
-
-function inlineImageSources(prose: string): string[] {
-  const sources: string[] = []
-  for (const match of prose.matchAll(IMAGE_START)) {
-    const destination = inlineDestination(prose, match.index + match[0].length)
-    if (destination !== null) sources.push(destination)
-  }
-  return sources
-}
-
-function withoutFencedCode(markdown: string): string {
-  const parts: string[] = []
-  let marker: string | null = null
-  for (const line of markdown.split('\n')) {
-    const match = FENCE.exec(line)
-    if (marker === null) {
-      if (match) marker = match[1]
-      else parts.push(line)
-    } else if (match && match[1][0] === marker[0] && match[1].length >= marker.length && match[2].trim() === '') marker = null
-  }
-  return parts.join('\n')
-}
-
-const IMAGE_REFERENCE = /!\[((?:[^\]\\\n]|\\.)*)\](?:\[((?:[^\]\\\n]|\\.)*)\])?/g
-const DEFINITION = /^ {0,3}\[((?:[^\]\\\n]|\\.)+)\]:[ \t]*(?:<([^<>\n]*)>|(\S+))/
-
-const referenceLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase()
-
-/** The destinations of link reference definitions, keyed by normalised label; the first definition wins, as in CommonMark. */
-function referenceDefinitions(prose: string): Map<string, string> {
-  const definitions = new Map<string, string>()
-  for (const line of prose.split('\n')) {
-    const match = DEFINITION.exec(line)
-    if (match && !definitions.has(referenceLabel(match[1]))) definitions.set(referenceLabel(match[1]), match[2] ?? match[3])
-  }
-  return definitions
-}
-
-/** The distinct `src` values of markdown images that are neither remote nor data URLs, as written, inline or by reference. */
+/**
+ * The distinct `src` values of markdown images that are neither remote nor data URLs, as the parser reads
+ * their destination (escapes and entities resolved, no percent-encoding), inline or through a definition.
+ * Code never holds an image because the text is read as a tree.
+ */
 export function collectLocalImageSources(markdown: string): string[] {
   if (!markdown.includes('![')) return []
-  const prose = withoutFencedCode(markdown)
-  const sources = inlineImageSources(prose)
-  const definitions = referenceDefinitions(prose)
-  if (definitions.size > 0) {
-    for (const match of prose.matchAll(IMAGE_REFERENCE)) {
-      const target = definitions.get(referenceLabel(match[2] === undefined || match[2].trim() === '' ? match[1] : match[2]))
-      if (target !== undefined) sources.push(target)
+  const sources: string[] = []
+  const references: ImageReference[] = []
+  const definitions = new Map<string, string>()
+  const walk = (node: Root | Parent) => {
+    for (const child of node.children) {
+      if (child.type === 'image') sources.push((child as Image).url)
+      else if (child.type === 'imageReference') references.push(child as ImageReference)
+      else if (child.type === 'definition') {
+        const { identifier, url } = child as Definition
+        if (!definitions.has(identifier)) definitions.set(identifier, url)
+      }
+      if ('children' in child) walk(child as Parent)
     }
   }
-  return [...new Set(sources.filter((src) => src !== '' && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)))]
+  walk(parse(markdown))
+  for (const reference of references) {
+    const target = definitions.get(reference.identifier)
+    if (target !== undefined) sources.push(target)
+  }
+  return [...new Set(sources.filter((src) => src !== '' && !NOT_LOCAL.test(src)))]
 }
