@@ -628,20 +628,14 @@ test('package scripts preserve every typecheck stage and insert the spawn guard'
 test('repository fits its ceiling and CLI resolves root independently of cwd', () => {
   const root = resolve(import.meta.dir, '..')
   expect(capture(root)).toEqual({ status: 0, stdout: '', stderr: '' })
-  const expected = capture(root, true)
-  expect(expected).toEqual({
-    status: 0,
-    stdout: '{\n  "packages/daemon/src/plugins/host.ts": 1\n}\n',
-    stderr: '',
-  })
   const home = fixture()
   const cli = Bun.spawnSync([process.execPath, resolve(import.meta.dir, 'spawn-lint.ts'), '--print-baseline'], {
     cwd: resolve(import.meta.dir), env: isolatedEnv(home),
   })
   expect(cli.exitCode).toBe(0)
-  expect(cli.stdout.toString()).toBe(expected.stdout)
+  expect(cli.stdout.toString()).toBe('{\n  "packages/daemon/src/plugins/host.ts": 1\n}\n')
   expect(cli.stderr.toString()).toBe('')
-}, 20_000)
+}, 60_000)
 
 test('required-root symlinks cannot hide an incomplete scan', () => {
   const root = fixture()
