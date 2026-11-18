@@ -74,6 +74,7 @@ function isModeName(value: unknown): value is PermissionModeName {
 type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' } | { kind: 'superseded' }
 
 type PendingPlan = {
+  version: number
   askId: string | null
   /** Set by whoever claims the plan first: an answer, feedback, a mode switch or a stop. */
   settled: boolean
@@ -637,7 +638,10 @@ class ClaudeRunner implements StructuredRunner {
     this.settlePlan(run, { kind: 'superseded' })
     try {
       if (previous) await previous
-      if (cancels !== run.planCancels || run.stopped || run.ended) return { behavior: 'deny', message: STOPPED_PLAN }
+      if (cancels !== run.planCancels || run.stopped || run.ended) {
+        this.closeSupersededPlans(sessionId, run)
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
       // only the newest call may install a live ask; a call overtaken while queued is denied unseen
       if (arrival !== run.planArrivals) return { behavior: 'deny', message: SUPERSEDED_PLAN }
       return await this.presentPlan(sessionId, run, input)
@@ -667,6 +671,7 @@ class ClaudeRunner implements StructuredRunner {
       ...(unchanged ? { unchanged: true } : {})
     }
     const pending: PendingPlan = {
+      version,
       askId: null,
       settled: false,
       interrupt: Promise.withResolvers<PlanInterrupt>(),
@@ -733,6 +738,17 @@ class ClaudeRunner implements StructuredRunner {
       if (run.pendingPlan === pending) run.pendingPlan = null
       pending.settled = true
       pending.done.resolve()
+    }
+  }
+
+  /**
+   * Journals as not answered, reason stopped, every version left waiting with no live ask: a plan
+   * superseded by a call that was then cancelled before it could present. The one place that happens.
+   */
+  private closeSupersededPlans(sessionId: string, run: Running): void {
+    for (const item of [...run.plans.values()]) {
+      if (item.status !== 'waiting' || item.version === run.pendingPlan?.version) continue
+      this.appendPlan(sessionId, run, { ...withoutAsk(item), status: 'not-answered', reason: 'stopped' })
     }
   }
 
