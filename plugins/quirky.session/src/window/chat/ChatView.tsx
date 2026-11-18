@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
+import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { Composer } from './Composer'
@@ -201,52 +201,53 @@ function useCapabilities(context: UiPluginContext, agent: string): AgentCapabili
 
 type EarlierChat = { session: Session; messages: StructuredMessage[] }
 
-/**
- * The messages of every session `session` was resumed from, oldest first. Resume starts a new
- * Quirky session with its own journal, so without these a resumed chat would open empty. A
- * session that cannot be read ends the walk and keeps what was found before it.
- */
-function useEarlierChats(context: UiPluginContext, session: Session): EarlierChat[] {
-  const [earlier, setEarlier] = useState<EarlierChat[]>([])
-  useEffect(() => {
-    let cancelled = false
-    setEarlier([])
-    const walk = async () => {
-      const found: EarlierChat[] = []
-      const seen = new Set([session.id])
-      let next = session.resumedFrom
-      while (typeof next === 'string' && !seen.has(next)) {
-        seen.add(next)
-        try {
-          const record = (await context.call('quirky.session/get', { session: next })) as Session
-          const messages = (await context.call('quirky.structured/messages', { session: record.id })) as StructuredMessage[]
-          found.unshift({ session: record, messages })
-          next = record.resumedFrom
-        } catch {
-          break
-        }
-      }
-      if (!cancelled) setEarlier(found)
+/** Messages asked for per request, so no chat ever needs a reply too large for the daemon to send. */
+export const CHAT_PAGE_SIZE = 1000
+
+type HistoryState = { more: boolean; loading: boolean; error: string | null }
+
+/** Where Load earlier messages continues: below `beforeSeq` in `record`, or its predecessor once `exhausted`. */
+type HistoryCursor = { record: Session; beforeSeq?: number; exhausted: boolean }
+
+const replyTooLarge = (error: unknown) => (error as { data?: { reason?: unknown } } | null)?.data?.reason === 'reply_too_large'
+
+/** One page of messages, halving `limit` while the daemon answers that the reply is too large to send. */
+async function fetchPage(
+  context: UiPluginContext,
+  params: Record<string, unknown>,
+  limit: number
+): Promise<{ messages: StructuredMessage[]; limit: number }> {
+  for (;;) {
+    try {
+      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }
+    } catch (error) {
+      if (limit <= 1 || !replyTooLarge(error)) throw error
+      limit = Math.ceil(limit / 2)
     }
-    void walk()
-    return () => {
-      cancelled = true
-    }
-  }, [context, session.id, session.resumedFrom])
-  return earlier
+  }
+}
+
+/** Adds `page` to `record`'s chat, which goes first when it is a session not shown yet. */
+function prependEarlier(chats: EarlierChat[], record: Session, page: StructuredMessage[]): EarlierChat[] {
+  const index = chats.findIndex((chat) => chat.session.id === record.id)
+  if (index === -1) return [{ session: record, messages: page }, ...chats]
+  return chats.map((chat, at) => (at === index ? { ...chat, messages: mergeMessages(chat.messages, page) } : chat))
 }
 
 /**
  * A structured session as a chat: turns with prose, folded activity, cards, asks and views, the
- * Views pane and the plan panel beside them and the composer below. A resumed chat shows the turns of
- * the sessions it was resumed from first. The plan panel shows the newest plan version, opens when a
- * version waits on load or any newer one arrives, and is a sheet when the chat is too narrow for it.
- * Messages without a chat item still show as plain rows, and the transcript follows new content only
- * while it is scrolled to the end.
+ * Views pane and the plan panel beside them and the composer below. It opens on the newest
+ * `CHAT_PAGE_SIZE` messages, and Load earlier messages pages back through this session, then through
+ * the sessions it was resumed from, oldest shown first. The plan panel shows the newest loaded plan
+ * version, opens when a version waits on load or any newer one arrives, and is a sheet when the chat
+ * is too narrow for it. Messages without a chat item still show as plain rows, and the transcript
+ * follows new content only while it is scrolled to the end.
  */
 export function ChatView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
+  const [earlier, setEarlier] = useState<EarlierChat[]>([])
   const [phase, setPhase] = useState<MessagePhase>({ status: 'loading' })
+  const [older, setOlder] = useState<HistoryState>({ more: false, loading: false, error: null })
   const showAll = useSyncExternalStore(
     subscribeShowAllEvents,
     () => showAllEventsFor(session),
@@ -258,10 +259,10 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const lastTop = useRef(0)
   const anchor = useRef<{ element: Element; offset: number } | null>(null)
   const [behind, setBehind] = useState(false)
+  const keepDistanceFromEnd = useRef<number | null>(null)
   const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
   const paneViews = usePaneViews(context, session.id)
-  const earlier = useEarlierChats(context, session)
   const turns = useMemo(
     () => {
       const chats = [...earlier, { session, messages: stored }]
@@ -298,31 +299,110 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const working = session.status === 'working' || session.status === 'waiting'
 
   const latest = useRef(0)
+  const generation = useRef(0)
   const cancelled = useRef(false)
   const loadedOnce = useRef(false)
-  const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
+  const newestLoaded = useRef(0)
+  const cursor = useRef<HistoryCursor | null>(null)
+  const seen = useRef(new Set<string>())
+  const paging = useRef(false)
+  const add = (incoming: StructuredMessage[]) => {
+    for (const message of incoming) newestLoaded.current = Math.max(newestLoaded.current, message.seq)
+    setStored((current) => mergeMessages(current, incoming))
+  }
+  async function catchUp(attempt: number): Promise<void> {
+    for (;;) {
+      const { messages: page, limit } = await fetchPage(context, { session: session.id, afterSeq: newestLoaded.current }, CHAT_PAGE_SIZE)
+      if (cancelled.current || attempt !== latest.current) return
+      add(page)
+      if (page.length < limit) return
+    }
+  }
+
+  /**
+   * Prepends up to `budget` older messages, moving to the session this one was resumed from once a
+   * session runs out. A session that cannot be read ends the walk and keeps what was found.
+   */
+  async function loadEarlier(budget = CHAT_PAGE_SIZE): Promise<void> {
+    if (paging.current || cursor.current === null) return
+    paging.current = true
+    const run = generation.current
+    const stale = () => cancelled.current || run !== generation.current
+    setOlder((now) => ({ ...now, loading: true, error: null }))
+    let error: string | null = null
+    try {
+      let left = budget
+      while (left > 0 && cursor.current !== null) {
+        const at: HistoryCursor = cursor.current
+        if (at.exhausted) {
+          const next: string | null | undefined = at.record.resumedFrom
+          if (typeof next !== 'string' || seen.current.has(next)) {
+            cursor.current = null
+            break
+          }
+          seen.current.add(next)
+          try {
+            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }
+          } catch {
+            cursor.current = null
+          }
+          if (stale()) return
+          continue
+        }
+        const { messages: page, limit } = await fetchPage(
+          context,
+          { session: at.record.id, tail: true, ...(at.beforeSeq === undefined ? {} : { beforeSeq: at.beforeSeq }) },
+          left
+        )
+        if (stale()) return
+        if (at.record.id === session.id) add(page)
+        else setEarlier((chats) => prependEarlier(chats, at.record, page))
+        const oldest = page[0]?.seq ?? at.beforeSeq ?? 1
+        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }
+        left -= page.length
+      }
+    } catch (failure) {
+      error = messageOf(failure)
+    } finally {
+      paging.current = false
+    }
+    if (stale()) return
+    const more = cursor.current !== null && (!cursor.current.exhausted || typeof cursor.current.record.resumedFrom === 'string')
+    setOlder({ more, loading: false, error })
+  }
+
+  async function loadNewest(attempt: number): Promise<void> {
+    const { messages: page, limit } = await fetchPage(context, { session: session.id, tail: true }, CHAT_PAGE_SIZE)
+    if (cancelled.current || attempt !== latest.current) return
+    loadedOnce.current = true
+    setPhase({ status: 'ready' })
+    add(page)
+    const oldest = page[0]?.seq ?? 1
+    cursor.current = { record: session, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }
+    if (page.length < limit) await loadEarlier(CHAT_PAGE_SIZE - page.length)
+    else setOlder({ more: true, loading: false, error: null })
+  }
 
   // the daemon answers MethodNotFound while quirky.structured is off, so each load re-derives `off`
   function load(): void {
     const attempt = ++latest.current
-    if (!loadedOnce.current) setPhase({ status: 'loading' })
-    context
-      .call('quirky.structured/messages', { session: session.id })
-      .then((loaded) => {
-        if (cancelled.current || attempt !== latest.current) return
-        loadedOnce.current = true
-        setPhase({ status: 'ready' })
-        add(loaded as StructuredMessage[])
-      })
-      .catch((error: { code?: unknown }) => {
-        if (cancelled.current || attempt !== latest.current) return
-        if (error?.code === RpcErrorCode.MethodNotFound) {
-          loadedOnce.current = false
-          setPhase({ status: 'off' })
-        } else if (!loadedOnce.current) {
-          setPhase({ status: 'failed', message: messageOf(error) })
-        }
-      })
+    const firstLoad = !loadedOnce.current
+    if (firstLoad) setPhase({ status: 'loading' })
+    ;(firstLoad ? loadNewest(attempt) : catchUp(attempt)).catch((error: { code?: unknown }) => {
+      if (cancelled.current || attempt !== latest.current) return
+      if (error?.code === RpcErrorCode.MethodNotFound) {
+        loadedOnce.current = false
+        setPhase({ status: 'off' })
+      } else if (!loadedOnce.current) {
+        setPhase({ status: 'failed', message: messageOf(error) })
+      }
+    })
+  }
+
+  function showEarlier(): void {
+    const element = scrollRef.current
+    keepDistanceFromEnd.current = element ? element.scrollHeight - element.scrollTop : null
+    void loadEarlier()
   }
 
   useEffect(() => {
@@ -330,6 +410,11 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     setPanelOpen(false)
     setViewed(null)
     cancelled.current = false
+    generation.current++
+    cursor.current = null
+    seen.current = new Set([session.id])
+    setEarlier([])
+    setOlder({ more: false, loading: false, error: null })
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'plugin.changed') {
         load()
@@ -338,11 +423,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
       if (cancelled.current) return
       if (event.type === 'quirky.structured/message') {
         const message = (event.data as { message?: StructuredMessage } | undefined)?.message
-        if (message && message.sessionId === session.id) {
-          loadedOnce.current = true
-          setPhase({ status: 'ready' })
-          add([message])
-        }
+        if (message && message.sessionId === session.id) add([message])
         return
       }
       if (event.type === 'quirky.structured/settled') {
@@ -356,6 +437,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     return () => {
       cancelled.current = true
       latest.current++
+      generation.current++
       unsubscribe()
       unsubscribeConnection()
     }
@@ -376,8 +458,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
 
   useLayoutEffect(() => {
     const element = scrollRef.current
-    if (element && following.current) element.scrollTop = element.scrollHeight
-  }, [turns])
+    if (!element) return
+    if (keepDistanceFromEnd.current !== null && !older.loading) {
+      element.scrollTop = element.scrollHeight - keepDistanceFromEnd.current
+      keepDistanceFromEnd.current = null
+    } else if (following.current) {
+      element.scrollTop = element.scrollHeight
+    }
+  }, [turns, older.loading])
 
   // WKWebView has no overflow-anchor, so a reader scrolled up is held in place by hand
   useLayoutEffect(() => {
@@ -455,6 +543,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         <div style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
             <div ref={columnRef} style={column}>
+              {older.more && (
+                <Button type="button" disabled={older.loading} onClick={showEarlier}>
+                  {older.loading ? 'Loading earlier messages…' : 'Load earlier messages'}
+                </Button>
+              )}
+              {older.error !== null && (
+                <InlineError message={`Could not load earlier messages: ${older.error}`} action={{ label: 'Retry', onAction: showEarlier }} />
+              )}
               {phase.status === 'loading' && turns.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}
               {phase.status === 'failed' && (
                 <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />

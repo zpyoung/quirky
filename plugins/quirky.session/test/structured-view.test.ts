@@ -276,7 +276,7 @@ describe('the structured session view', () => {
     start({ session: bg })
     const view = await mount({ session: 'bg' })
     expect(fake.callsTo('quirky.session/get')[0]!.params).toEqual({ session: 'bg' })
-    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
+    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg', tail: true, limit: 1000 })
     expect(rows(view)).toEqual(['userhi', 'assistanthello'])
     expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     expect(fake.callsTo('quirky.terminal/attach')).toEqual([])

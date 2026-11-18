@@ -11,6 +11,12 @@ export const UI_READ_TIMEOUT_MS = 30_000
 /** Consecutive socket failures after which the page checks whether the daemon is up at all. */
 export const FAILURES_BEFORE_PROBE = 3
 
+/**
+ * How long a connection must last before the retry delay starts over. A daemon that drops every
+ * connection soon after it opens (a reply it cannot send, say) then gets backoff, not a tight loop.
+ */
+export const STABLE_CONNECTION_MS = 5_000
+
 type ConnectionOptions = { initialDelayMs?: number }
 
 function pluginStatus(status: ConnectionStatus): 'connected' | 'reconnecting' {
@@ -102,11 +108,12 @@ export class Connection {
         const closed = new Promise<void>((resolve) => client.onClose(resolve))
         client.onEvent((event) => this.handleEvent(event))
         this.client = client
-        delay = initialDelay
         failures = 0
         this.setStatus('connected')
         this.notify(this.connectedListeners)
+        const connectedAt = Date.now()
         await closed
+        if (Date.now() - connectedAt >= STABLE_CONNECTION_MS) delay = initialDelay
       } catch {
         failures += 1
         this.client?.close()
