@@ -2,6 +2,14 @@
 
 **Status:** Draft. Logic spec: [logic.md](logic.md) (approved).
 
+**Rebase note (2026-11-18), per logic.md's 2026-11-18 amendment.** Main now has a `PermissionModes` type with `labels` and `dangerous` (`packages/protocol/src/chat.ts`), a `ModeTable` per agent in `QS/capabilities.ts` (Claude: `default, acceptEdits, plan, auto, dontAsk, bypassPermissions`), `quirky.structured/settings` for the live mode, `openingModes` and terminal presets in `QS/main.ts` `create`, a drill-in settings popover (`CHAT/SettingsChip.tsx`), and `ChatView` walking `resumedFrom` to show earlier sessions. Where this document conflicts with main, these rules win:
+- Keep main's mode tables, labels, `dangerous`, terminal presets, settings RPC and popover structure. Remove every `planMode` flag main added (create param, configure param, `StructuredStartOptions.planMode`, runner settings, the Plan switch). Plan is a row in main's Permissions list.
+- The mode set is main's Claude list, not `['default','acceptEdits','auto','plan']`. `PermissionModeName` in the `mode` item widens to `string` (or main's Claude mode union) so `dontAsk` and `bypassPermissions` are representable. `approvedMode` stays `'auto' | 'acceptEdits' | 'default'`.
+- `modeReasons` and the four-row rule become: rows come from main's `permissionModes.modes` with main's labels. Auto is disabled when `autoAvailable` is false. On agents whose `permissionModes` is ok but which lack plan (Codex, omp), show their own modes and no Plan row. Plan's reason shows where the Plan row would be for agents with `planMode` not ok and no modes (pi).
+- Shift+Tab skips modes listed in `dangerous`, plus disabled modes.
+- The UI's current mode is the newest `mode` item. With no `mode` item, use main's `quirky.structured/settings` result.
+- `planVersions` runs over the combined messages `ChatView` already loads across `resumedFrom`. The last item per version wins, so the copied `not-answered` item on the new session overrides the old `waiting` one.
+
 All paths are relative to the repo root. `QS` = `plugins/quirky.structured`, `CHAT` = `plugins/quirky.session/src/window/chat`.
 
 ## Architecture

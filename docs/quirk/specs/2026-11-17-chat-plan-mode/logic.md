@@ -255,4 +255,12 @@ Open questions from the mock's gaps (elements with no existing component):
 
 **Status:** Approved. Tech spec: authored (gate: crosses subsystems, >3 files)
 
-**Amendments:** none
+**Amendments:**
+
+- **2026-11-18: rebased onto main's chat changes (#673, #679, #680).** Approved by the user: keep this spec's single-mode model on top of main.
+  - **Mode list.** Claude's modes are main's six, in main's order and labels: Default, Accept edits, Plan, Auto, Don't ask, Bypass permissions. Dangerous modes stay set apart as main shows them. Plan is a row in that list, and the separate Plan switch is removed. This reverses #680's removal of the Plan row, because one mode removes the disagreement #680 worked around. Where this spec says "Ask", read "Default". SC-1 and the Mode picker screen follow main's drill-in popover with Plan in the Permissions list.
+  - **Shift+Tab (SC-2)** cycles the available modes in list order and skips dangerous and disabled ones: Default, Accept edits, Plan, Auto, Don't ask, then Default again.
+  - **Live mode.** The composer shows the newest mode item in the chat history. For a session with no mode items, it falls back to main's live settings read.
+  - **New chat (SC-4).** A chat with no pick still opens in the mode that matches the agent's terminal preset, as main does. A Plan pick wins.
+  - **Resume (SC-16).** Main's resumed chats show earlier sessions' history, so the waiting plan's earlier version stays visible there. The new session still records it as not answered, and the panel shows that latest state.
+  - **Codex and omp.** They keep main's own permission modes. Plan stays disabled for Codex, pi and omp (SC-24).
