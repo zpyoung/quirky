@@ -1,6 +1,6 @@
 import { Button, StatusDot } from '@quirky/ui'
 import type { AvatarUiProps } from '../contracts'
-import { useAvatarQuery, type StatusResult } from './AvatarView'
+import { useAvatarQuery, type StatusResult } from './query'
 
 const OPEN_REPORT_COMMAND = 'command:quirky.avatar/open-report'
 const HANDOFF_COMMAND = 'command:quirky.avatar/handoff'

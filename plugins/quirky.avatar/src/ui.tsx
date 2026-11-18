@@ -1,12 +1,14 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { lazy, Suspense, useEffect, useState, type ComponentType, type LazyExoticComponent } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import type { AvatarUiProps } from './contracts'
-import AvatarView from './ui/AvatarView'
-import Panel from './ui/Panel'
 import Pill from './ui/Pill'
-import SettingsSection from './ui/SettingsSection'
-import Sheet from './ui/Sheet'
+
+// the pill mounts in every window, so the heavier surfaces load only when first shown
+const AvatarView = lazy(() => import('./ui/AvatarView'))
+const Panel = lazy(() => import('./ui/Panel'))
+const SettingsSection = lazy(() => import('./ui/SettingsSection'))
+const Sheet = lazy(() => import('./ui/Sheet'))
 
 const PILL = 'window-bar-item:quirky.avatar/pill'
 const PANEL = 'panel:quirky.avatar/panel'
@@ -43,13 +45,13 @@ function SheetHost({ context }: { context: UiPluginContext }) {
     listener()
     return () => void sheetListeners.delete(listener)
   }, [])
-  return input === null ? null : <Sheet context={context} input={input} onClose={() => setSheet(null)} />
+  return input === null ? null : <Suspense fallback={null}><Sheet context={context} input={input} onClose={() => setSheet(null)} /></Suspense>
 }
 
-function mounted(context: UiPluginContext, Component: ComponentType<AvatarUiProps>): MountFunction {
+function mounted(context: UiPluginContext, Component: ComponentType<AvatarUiProps> | LazyExoticComponent<ComponentType<AvatarUiProps>>): MountFunction {
   return (element, props) => {
     const root = createRoot(element)
-    root.render(<Component context={context} input={props.input} />)
+    root.render(<Suspense fallback={null}><Component context={context} input={props.input} /></Suspense>)
     return () => root.unmount()
   }
 }
