@@ -1,0 +1,120 @@
+import { useEffect, useId, useState } from 'react'
+import DOMPurify from 'dompurify'
+import type { FenceProps } from '../types'
+import { BlockFrame, CodeBlock, CopyButton } from './CodeBlock'
+import { RenderError } from './RenderError'
+
+type Outcome = { kind: 'pending' } | { kind: 'ready'; svg: string } | { kind: 'failed'; message: string }
+
+const THEME_TOKENS: Record<string, string> = {
+  background: '--ui-surface',
+  primaryColor: '--ui-selected',
+  primaryTextColor: '--ui-text',
+  primaryBorderColor: '--ui-accent',
+  secondaryColor: '--ui-rail',
+  tertiaryColor: '--ui-surface',
+  lineColor: '--ui-muted',
+  textColor: '--ui-text',
+  noteBkgColor: '--ui-selected',
+  noteTextColor: '--ui-text'
+}
+
+/** Mermaid takes concrete colours, so the tokens are read as the page computes them right now. */
+function themeVariables(): Record<string, string> {
+  const style = getComputedStyle(document.documentElement)
+  const variables: Record<string, string> = { fontFamily: 'inherit' }
+  for (const [name, token] of Object.entries(THEME_TOKENS)) {
+    const value = style.getPropertyValue(token).trim()
+    if (value) variables[name] = value
+  }
+  return variables
+}
+
+function sanitizeSvg(svg: string): string {
+  const purify = DOMPurify.isSupported ? DOMPurify : (DOMPurify as unknown as (window: Window) => typeof DOMPurify)(window)
+  return purify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+}
+
+/** The first and last lines of a mermaid error, which carry the position and the expectation without the echoed source. */
+function summarize(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error)
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
+  const kept = lines.length > 2 ? [lines[0], lines[lines.length - 1]] : lines
+  return kept.join(': ').replace(/:\s*:/g, ':')
+}
+
+const SVG_CACHE_LIMIT = 50
+const svgCache = new Map<string, string>()
+
+const cacheKey = (code: string) => `${document.documentElement.dataset.theme ?? ''}\u0000${code}`
+
+function remember(key: string, svg: string) {
+  svgCache.delete(key)
+  svgCache.set(key, svg)
+  if (svgCache.size > SVG_CACHE_LIMIT) svgCache.delete(svgCache.keys().next().value as string)
+}
+
+/** A `mermaid` fence: plain source while open, then a diagram drawn with strict security and a Source toggle. */
+export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps) {
+  const id = `qmd-mermaid-${useId().replace(/[^\w-]/g, '')}`
+  // a remount, such as the one when streaming ends, reuses the drawing instead of flashing the source
+  const [outcome, setOutcome] = useState<Outcome>(() => {
+    const cached = isIncomplete ? undefined : svgCache.get(cacheKey(code))
+    return cached === undefined ? { kind: 'pending' } : { kind: 'ready', svg: cached }
+  })
+  const [showSource, setShowSource] = useState(false)
+
+  useEffect(() => {
+    if (isIncomplete) return
+    const key = cacheKey(code)
+    const cached = svgCache.get(key)
+    if (cached !== undefined) {
+      setOutcome({ kind: 'ready', svg: cached })
+      return
+    }
+    let live = true
+    setOutcome({ kind: 'pending' })
+    void (async () => {
+      try {
+        const { default: mermaid } = await import('mermaid')
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVariables(), suppressErrorRendering: true })
+        const { svg } = await mermaid.render(id, code)
+        const clean = sanitizeSvg(svg)
+        remember(key, clean)
+        if (live) setOutcome({ kind: 'ready', svg: clean })
+      } catch (error) {
+        if (live) setOutcome({ kind: 'failed', message: summarize(error) })
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [code, isIncomplete, id])
+
+  if (isIncomplete || outcome.kind === 'pending') return <CodeBlock code={code} language={language} meta={meta} isIncomplete={isIncomplete} />
+  if (outcome.kind === 'failed') {
+    return (
+      <>
+        <RenderError message={`Couldn't draw this diagram: ${outcome.message}. Showing the source.`} />
+        <CodeBlock code={code} language={language} meta={meta} isIncomplete={false} />
+      </>
+    )
+  }
+  return (
+    <BlockFrame
+      label="mermaid"
+      language="mermaid"
+      actions={(
+        <>
+          <button type="button" className="qmd-code-button" aria-pressed={showSource} onClick={() => setShowSource((value) => !value)}>
+            {showSource ? 'Diagram' : 'Source'}
+          </button>
+          <CopyButton code={code} />
+        </>
+      )}
+      state={{ 'data-qmd-data': 'mermaid' }}
+    >
+      {showSource ? <pre className="qmd-source">{code}</pre> : <div className="qmd-figure-body" dangerouslySetInnerHTML={{ __html: outcome.kind === 'ready' ? outcome.svg : '' }} />}
+    </BlockFrame>
+  )
+}
