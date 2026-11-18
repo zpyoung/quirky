@@ -522,6 +522,18 @@ test('Preview Find highlights matches inside fenced code without editing code te
   expect(match.closest('code')).not.toBeNull()
   expect(article.querySelector('pre code')?.textContent).toBe(originalCodeText)
 })
+test('Preview Find highlights a match in text that holds a loose dollar', async () => {
+  const content = 'Costs $5. Find needle.\n'
+  const surface = await renderSurface('preview', content)
+  const article = surface.element.querySelector<HTMLElement>('.markdown-preview-body')!
+  const originalText = article.textContent
+  await act(async () => { await surface.commands()!.find!({ query: 'needle' }) })
+
+  const match = await waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-preview-search-match'), 'loose-dollar Preview highlight')
+  expect(match.textContent).toBe('needle')
+  expect(match.closest('p')?.textContent).toBe('Costs $5. Find needle.')
+  expect(article.textContent).toBe(originalText)
+})
 test('Preview Find leaves Mermaid code for the real diagram renderer', async () => {
   const source = 'graph TD\n  A[needle] --> B[done]'
   const surface = await renderSurface('preview', `\`\`\`mermaid\n${source}\n\`\`\`\n`)

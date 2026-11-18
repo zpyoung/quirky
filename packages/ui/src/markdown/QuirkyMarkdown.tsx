@@ -11,9 +11,9 @@ import type { ControlsConfig, CustomRenderer, LinkSafetyConfig, PluginConfig } f
 import { codePlugin } from './blocks/CodeBlock'
 import { BUILT_IN_RENDERERS, QUIRKY_COMPONENTS, RenderersContext } from './components'
 import { collectChartSources, collectLocalImageSources, endsInOpenFence } from './fences'
-import { escapeLooseDollars } from './math-dollars'
 import { MATH_ERROR_COLOR } from './math-errors'
 import { remarkHtmlAllowlist } from './remark-html-allowlist'
+import { remarkLooseDollars } from './remark-loose-dollars'
 import { remarkMark } from './remark-mark'
 import { collectPathCandidates, remarkPathCandidates } from './remark-path-candidates'
 import { UNTRUSTED_SCHEMA, rehypeUndoubleClobber } from './sanitize'
@@ -142,8 +142,8 @@ export function QuirkyMarkdown({
 
   const config = useMemo(() => {
     const remark: Remark = untrusted
-      ? [CODE_META, remarkGfm, remarkBreaks, remarkMark, remarkGemoji, remarkHtmlAllowlist, ...(hasAssets ? [remarkPathCandidates] : []), ...(remarkPlugins ?? [])]
-      : [CODE_META, remarkGfm, remarkMark, remarkGemoji, [remarkMath, { singleDollarTextMath: true }], ...(remarkPlugins ?? [])]
+      ? [remarkLooseDollars, CODE_META, remarkGfm, remarkBreaks, remarkMark, remarkGemoji, remarkHtmlAllowlist, ...(hasAssets ? [remarkPathCandidates] : []), ...(remarkPlugins ?? [])]
+      : [remarkLooseDollars, CODE_META, remarkGfm, remarkMark, remarkGemoji, [remarkMath, { singleDollarTextMath: true }], ...(remarkPlugins ?? [])]
     const plugins: PluginConfig = untrusted ? { code: codePlugin, math: UNTRUSTED_MATH } : { code: codePlugin }
     return {
       remark,
@@ -154,13 +154,12 @@ export function QuirkyMarkdown({
     }
   }, [untrusted, hasAssets, remarkPlugins, rehypePlugins, components, renderers])
 
-  const prepared = useMemo(() => escapeLooseDollars(text), [text])
   const resolving = hasAssets && !streaming
   const files = useMemo(() => (resolving ? collectPathCandidates(text) : NO_STRINGS), [resolving, text])
   const images = useMemo(() => (resolving ? collectLocalImageSources(text) : NO_STRINGS), [resolving, text])
   const resolved = useAssetResolutions(resolving ? assets : undefined, files, images)
   const sources = useStableSources(useMemo(() => collectChartSources(text), [text]))
-  const caretInBlock = streaming && endsInOpenFence(prepared)
+  const caretInBlock = streaming && endsInOpenFence(text)
 
   return (
     <div className={className ? `qmd ${className}` : 'qmd'} data-profile={profile} data-streaming={streaming ? 'true' : undefined}>
@@ -183,7 +182,7 @@ export function QuirkyMarkdown({
                   components={config.components}
                   data-qmd-body=""
                 >
-                  {prepared}
+                  {text}
                 </Streamdown>
               </RenderersContext.Provider>
             </ChartSourcesContext.Provider>
