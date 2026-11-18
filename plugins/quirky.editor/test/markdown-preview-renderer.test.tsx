@@ -87,6 +87,15 @@ test('raw HTML survives cleaning while scripts, handlers and javascript links do
   expect((globalThis as { pwned?: unknown }).pwned).toBeUndefined()
 })
 
+test('a centred paragraph holding an image keeps its alignment', async () => {
+  const article = await mountPreview('<p align="center"><img src="docs/logo.svg" width="80"></p>', { 'docs/logo.svg': 'quirky-resource://logo.svg' })
+  const logo = article.querySelector('img')
+  expect(logo?.getAttribute('src')).toBe('quirky-resource://logo.svg')
+  const centred = logo?.closest('[align="center"]')
+  expect(centred).not.toBeNull()
+  expect(centred?.tagName).toBe('DIV')
+})
+
 test('images resolve through imageUrls and fall back to alt text', async () => {
   const article = await mountPreview('![known](a.png)\n\n![missing alt](b.png)\n\n![](c.png)', { 'a.png': 'quirky-resource://a.png' })
   const images = article.querySelectorAll('img')

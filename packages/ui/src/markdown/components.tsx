@@ -92,7 +92,7 @@ function Paragraph({ children, node, ...rest }: ComponentProps<'p'> & ExtraProps
   const holdsImage = node?.children?.some((child) => child.type === 'element' && child.tagName === 'img') ?? false
   if (!holdsImage) return <p {...rest}>{children}</p>
   const meaningful = Children.toArray(children).filter((child) => !(typeof child === 'string' && child.trim() === ''))
-  if (meaningful.length === 1) return <Fragment>{children}</Fragment>
+  if (meaningful.length === 1 && Object.keys(rest).length === 0) return <Fragment>{children}</Fragment>
   return <div className="qmd-p" {...(rest as ComponentProps<'div'>)}>{children}</div>
 }
 

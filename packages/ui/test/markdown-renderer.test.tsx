@@ -308,6 +308,14 @@ describe('links and images (SC-5, SC-7, SC-8)', () => {
     expect(all(container, 'figure img').map((img) => img.getAttribute('src')).sort()).toEqual(['blob:a', 'blob:b', 'blob:c'])
   })
 
+  test('image destinations keep balanced parentheses and honour angle brackets and titles', async () => {
+    const { assets, resolveImages } = assetsFor({}, { 'docs/shot(1).png': 'blob:p', 'my/b.png': 'blob:b', 'c.png': 'blob:c' })
+    const text = '![shot](docs/shot(1).png) ![b](<my/b.png> "t") ![c](c.png (title))'
+    const { container } = await mount({ text, assets })
+    await settle(() => container.querySelectorAll('figure img').length === 3, 'figures')
+    expect([...resolveImages.mock.calls[0][0]].sort()).toEqual(['c.png', 'docs/shot(1).png', 'my/b.png'])
+  })
+
   test('a local image with no assets renders its alt text', async () => {
     const { container } = await mount({ text: '![the alt](shots/a.png)' })
     expect(container.querySelector('img')).toBeNull()
@@ -546,6 +554,14 @@ describe('data fences (SC-13)', () => {
     expect(one(container, 'pre.qmd-source').textContent).toBe(spec)
     expect(container.querySelector('svg')).toBeNull()
     expect(toggle.textContent).toBe('Chart')
+  })
+
+  test('bar charts reject negative values', async () => {
+    const inline = await mount({ text: '```chart\n{"type":"bar","data":[{"label":"a","value":2},{"label":"b","value":-1}]}\n```' })
+    expect(one(inline.container, '[data-qmd-error]').textContent).toContain('bar values must be zero or more')
+    const csv = await mount({ text: '```csv title=t\na,b\nx,-3\n```\n\n```chart\n{"type":"bar","from":"t","x":"a","y":"b"}\n```' })
+    expect(one(csv.container, '[data-qmd-error]').textContent).toContain('bar values must be zero or more')
+    expect(parseChartSpec('{"type":"line","data":[{"x":"a","y":-1}]}')).not.toHaveProperty('error')
   })
 
   test('chart draws a line from a csv fence named in from', async () => {
