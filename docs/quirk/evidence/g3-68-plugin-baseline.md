@@ -2124,7 +2124,7 @@ Campaign command: not invoked. Gate exit: not applicable, no gate process. Super
 
 The actual worker item-start Unix timestamp was not reliably established, so `item_started_epoch` remains unknown rather than being reset to acquisition/setup time. This is an additional budget prerequisite blocker (`item-budget-blocked`), not evidence that a launch allowance expired. Item assignment `2026-11-18T01:08:30.540Z` is not relabeled as actual worker start. No acquisition deadline, elapsed duration, signal delivery or cleanup duration is invented. No owned gate, reviewer, browser or daemon process was started or needs campaign cleanup.
 
-The source disclosure and local instrument checks use fresh temporary HOME and QUIRKY_HOME with `env -i`; the allowlist contains only HOME, QUIRKY_HOME, PATH, TMPDIR and LANG. No provider credentials, owner HOME/configuration, login, install, alias change or harness change was used. [Maintained screenshot operating documentation](../../../apps/desktop/README.md#desktop-screenshot-review) describes the instrument; its install/login instructions do not authorize those actions here.
+The source disclosure and local instrument checks use fresh temporary HOME and QUIRKY_HOME with `env -i`; the allowlist contains only HOME, QUIRKY_HOME, PATH, TMPDIR and LANG. No provider credentials, owner HOME/configuration, login, reviewer/browser installation, alias change or harness change was used. [Maintained screenshot operating documentation](../../../apps/desktop/README.md#desktop-screenshot-review) describes the instrument; its install/login instructions do not authorize those actions here.
 
 ### Current plugins, aliases and no-target disclosure
 
@@ -2350,3 +2350,65 @@ Private root: `/tmp/quirky-g3-84.sXDEnn/evidence`. Paths below are relative to t
 | `queue.txt` | `22a0289f3ddfaf385b8347c434d2ae9faf59940bc073b1dc0ab863e9620a8381` | Read-only items.ts list; exit 0 |
 
 Campaign report/manifest/progress, per-cell images/references/frozen contexts and per-attempt reports/responses/logs/timestamps/retry links are all absent because acquisition did not start. They have no campaign path or hash. Approved PNGs, rubric, context generator and acquisition code were not changed. Source hashes in the retained source index identify the inspected implementations, not frozen image-review inputs.
+
+
+### Admission audit cannot turn missing samples into acceptance
+
+There are no attempted campaign responses, logs, scored reasons, replacements or rejected outputs to audit. Reason-level semantic findings and admitted slots are both empty; no historical score is promoted under the current context. The only machine values below are the unchanged reducer's source-only absence projection, not results of a gate invocation. The independent audited classification fails closed for the same missing slots.
+
+| Classification basis | Required cells | Complete valid cells | Pass | Below 85 | Invalid/unmeasured |
+| --- | --- | --- | --- | --- | --- |
+| Machine absence projection, not a campaign | 146 | 0 | 0 | 0 | 146 |
+| Independent admission audit | 146 | 0 | 0 | 0 | 146 |
+
+Every cell's audited median and audited range are `null`; none has three semantically admitted slots. There are 438 required slots, zero scores and zero admitted slots. Threshold 85, the five-dimension arithmetic mean, exact three-slot median, per-theme requirement and retry rules are unchanged. `goalPassed` remains `false`; neither this blocker record nor instrument-fixture scores establish the plugin clause, the host gate, static clauses or goal completion.
+
+### No reproduced follow-up defects
+
+No current image, invalid capture or reviewer complaint exists from this acquisition, so no visual allegation can be independently reproduced from it. No diagnostic capture-only command ran, and no blank/error/spinner was admitted as a named surface. The old allegations remain historical evidence, not new CSS repair instructions.
+
+| Candidate | Classification | Evidence and ownership | Disposition |
+| --- | --- | --- | --- |
+| No supplied authorized isolated reviewer route | access-blocked | Executable locations exist; no route supplied, no preflight attempted. Acquisition prerequisite belongs to the orchestrator's authorization boundary, not a plugin stylesheet. | Preserve blocker; no product repair proposal. |
+| Reliable actual worker item-start timestamp unavailable | access-blocked | Required supervisor input unknown; no allowance computed or supervisor launched. Operational budget prerequisite, labeled `item-budget-blocked` above. | No campaign launch, fabricated timestamp or product repair. |
+| Judge's historical `pi ENOENT` / late prerequisite detection | access-blocked | Not reproduced here; current executable lookup succeeds. g3-85 is already merged in #682 and preflights before capture. | No duplicate PATH/configuration or ordering repair proposal. |
+| Historical failed Ask/chat/readiness/Editor cells | unconfirmed | g3-83, including folded g3-82, is merged in #672. No fresh campaign images or same-tree diagnostic reproduction here. | No remaining defect asserted or duplicate capture-repair proposal. |
+
+Read-only ownership check: `bun /Users/zpyoung/PycharmProjects/PERSONAL/quirky/.git/goal-loop/harness/items.ts list` exited 0; retained `queue.txt` names g3-83 and g3-85 as merged, g3-84 as building, and g3-80 as closed without a qualifying reproduced repair. There is no independently reproduced remaining cause to assign, consolidate or propose. Zero follow-up proposals; the orchestrator/reviewer decides any later acquisition authorization or registration.
+
+
+### Instrument checks passed; no visual acceptance was measured
+
+Each test file ran in its own process with a fresh temporary HOME and QUIRKY_HOME and an allowlisted `env -i` environment. Successful final checks used installed Bun `1.4.0`; the local reviewer fixture also needed installed Node `v24.19.0`, and desktop preparation needed the installed Hutch launcher. No provider credentials or real reviewer were used. Test stand-ins' synthetic scores and calls are excluded from every campaign count above.
+
+The corrected allowlisted PATH was:
+
+`/Users/zpyoung/.bun/bin:/Users/zpyoung/.nvm/versions/node/v24.19.0/bin:/Users/zpyoung/.hutch/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+
+The only other environment entries were `HOME=<fresh temporary directory>`, `QUIRKY_HOME=<fresh temporary directory>`, `TMPDIR=/tmp` and `LANG=en_US.UTF-8`. Directories were created under `/tmp/quirky-g3-84.sXDEnn`; no owner home was inherited.
+
+| Command | Observed result |
+| --- | --- |
+| `bun test scripts/ui-review/plugin-campaign.test.ts` | 32 pass, 0 fail; 176 assertions; exit 0 |
+| `bun test scripts/ui-review/plugin-gate.test.ts`, corrected Node PATH | 35 pass, 0 fail; 848 assertions; exit 0 |
+| `bun test scripts/ui-review/host-contracts.test.ts` | 38 pass, 0 fail; 290 assertions; exit 0 |
+| `bun scripts/ui-review/plugin-gate.ts --help` | Exit 0; no acquisition |
+| `bun run typecheck`, corrected Hutch PATH | Exit 0; UI lint, static ratchet, spawn lint, root/mobile/desktop typechecks passed |
+| Source-disclosure reconciliation, read-only Python 3 probe | 146 unique theme cells, 35 plugin rows, five alias rows, both count rows and five artifact hashes matched retained inputs; historical bytes preserved |
+
+Two setup failures are retained, not erased. The first plugin-gate test run had 34 pass/1 fail (830 assertions): the local executable stand-in at `scripts/ui-review/plugin-gate.test.ts:1668` uses `#!/usr/bin/env node`, and the original allowlisted PATH omitted Node. Its diagnostic was `Reviewer preflight exited unsuccessfully (127). env: node: No such file or directory`, with `LOCAL_CALLS=0`. `command -v node` resolved the installed Node directory above; adding only that directory to the isolated PATH made the same unchanged test file pass. This was a stand-in test prerequisite failure, not reviewer access or a product defect.
+
+The first root typecheck reached desktop preparation, then exited 1 because Hutch was absent from the isolated PATH and fresh HOME: `hutch was not found on PATH or in ~/.hutch/bin`. `command -v hutch` resolved `/Users/zpyoung/.hutch/bin/hutch`; adding that existing launcher directory made the unchanged full command pass. Preparation downloaded Hutch/cottontail/Bun toolchains into the fresh isolated environment and prepared this worktree's ignored `apps/desktop/.hutch/devkit`. No native window or product daemon launched, and no reviewer/browser was installed.
+
+Verification logs, relative to the same private evidence root:
+
+| Artifact | SHA-256 | Outcome |
+| --- | --- | --- |
+| `plugin-campaign-test.log` | `661c12a6c9f0d4336fbe3a0c4d472da032b6fd63748bbf3305442a2ee1752762` | 32 pass |
+| `plugin-gate-test.log` | `3df90cd4799aaed8e167a5fc07293bbfbafb8b71079f6fe82d556a7160ec49a5` | Initial 34 pass / 1 fail; missing Node |
+| `plugin-gate-node-test.log` | `10e173549d3867624de316534cff709e0b92b30d6deb9641973e2a4724e23573` | 35 pass after Node PATH correction |
+| `host-contracts-test.log` | `4cbc542268769b3949d78eb4bb83c8417c8d659be18368339edba0ab3e4b1f5c` | 38 pass |
+| `typecheck.log` | `6b09c711a96283415466e6dcc7980b14d3c599550d813e6578377e69cb90606f` | Initial exit 1; missing Hutch |
+| `typecheck-hutch.log` | `1672a940e78c127d98fe0fc883df35b0f681389cafe8bfa297e4ddc41aa741dd` | Exit 0 after Hutch PATH correction |
+
+No product UI changed. Neither headless product screenshots nor native menus/window chrome, embedded native content, focus, notifications, owner profiles or provider-backed product flows were exercised. Every current product cell remains unmeasured despite the passing instrument checks.
