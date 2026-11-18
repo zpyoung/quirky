@@ -919,14 +919,56 @@ describe('plan mode', () => {
       await pending
       query.permissionModes.length = 0
       query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'default', session_id: 'c1' })
-      await until(() => items().some((item) => item?.kind === 'status' && item.text === "Auto mode isn't available. Using Accept edits."))
+      await until(() => items().some((item) => item?.kind === 'prose' && item.text === "Auto mode isn't available. Using Accept edits."))
       expect(query.permissionModes).toEqual(['acceptEdits'])
       expect(runner.autoAvailable!(session.id)).toBe(false)
       expect(items().slice(-3)).toEqual([
         { kind: 'plan', version: 1, status: 'approved', text: '# Plan\n- step', approvedMode: 'acceptEdits' },
         { kind: 'mode', mode: 'acceptEdits', autoAvailable: false },
-        { kind: 'status', text: "Auto mode isn't available. Using Accept edits." }
+        { kind: 'prose', text: "Auto mode isn't available. Using Accept edits." }
       ])
+    })
+
+    test('a failed fallback switch journals the mode Claude reported and says so', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.refusedPermissionMode = { mode: 'acceptEdits', message: 'switch failed' }
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'default', session_id: 'c1' })
+      await until(() => items().some((item) => item?.kind === 'prose' && item.text.includes('failed')))
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'default', autoAvailable: false })
+      expect(modes().some((item) => item?.kind === 'mode' && item.mode === 'acceptEdits')).toBe(false)
+    })
+
+    test('Claude re-entering plan after Auto was honoured is not treated as a refusal', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.permissionModes.length = 0
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'auto', session_id: 'c1' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
+      await until(() => modes().at(-1)?.mode === 'plan')
+      expect(query.permissionModes).toEqual([])
+    })
+
+    test('a second ExitPlanMode closes the first and leaves only the newer plan answerable', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# Revised' })
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      await until(() => asks.length === 2)
+      expect(runner.planWaiting!(session.id)).toBe(true)
+      asks[1]!.resolve(answer('approve-review'))
+      expect(await second).toMatchObject({ behavior: 'allow' })
+      const states = plans().map((item) => [item.version, item.status])
+      expect(states).toContainEqual([1, 'revised'])
+      expect(states).toContainEqual([2, 'approved'])
+      expect(states).not.toContainEqual([1, 'approved'])
     })
 
     test('an approval into auto that Claude honours is left alone', async () => {

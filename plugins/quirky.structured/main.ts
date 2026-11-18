@@ -1068,8 +1068,8 @@ export function activate(context: PluginContext): void {
 
   /**
    * What a resumed Claude session carries over from the old journal: its last mode, the plan numbering
-   * and the newest plan. A plan still waiting there can never be answered now, so it is journaled on the
-   * new session as not answered.
+   * and the newest plan. The newest plan is journaled again on the new session (a waiting one as not
+   * answered, since it can never be answered now) so the next resume still finds the numbering.
    */
   const planStateOf = (oldSessionId: string, newSessionId: string): StructuredStartOptions => {
     let mode: ModeItem['mode'] | undefined
@@ -1089,7 +1089,9 @@ export function activate(context: PluginContext): void {
     if (newest?.status === 'waiting') {
       const { askId: _askId, ...rest } = newest
       lastPlan = { ...rest, status: 'not-answered', reason: 'restarted' }
-      appendMessage({ sessionId: newSessionId, role: 'system', text: `Plan v${highest}: not-answered`, item: lastPlan })
+    }
+    if (lastPlan !== undefined) {
+      appendMessage({ sessionId: newSessionId, role: 'system', text: `Plan v${highest}: ${lastPlan.status}`, item: lastPlan })
     }
     return {
       ...(mode === undefined ? {} : { permissionMode: mode }),

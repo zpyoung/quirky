@@ -627,6 +627,34 @@ describe('structured plan mode across a resume', () => {
     }
   })
 
+  test('plan numbering and the newest plan survive a second resume that presented no plan', async () => {
+    const claudeQueries = await boot()
+    const old = await created({ permissionMode: 'plan' })
+    const first = exitPlan(claudeQueries[0]!, 'one')
+    const ask = await pendingAsk()
+    await call(client, 'quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'approve-review', source: 'option' } }, skipped: [] })
+    expect(await first).toMatchObject({ behavior: 'allow' })
+    await call(client, 'quirky.structured/stop', { session: old.id })
+    const restarted = await restart()
+    try {
+      const hopOne = await call<Session>(client, 'quirky.structured/resume', { session: old.id })
+      await waitFor(() => claudeQueries.length === 2)
+      await waitForAsync(async () => ((await itemsOf(hopOne.id)).some((item) => item.kind === 'mode') ? true : null))
+      await call(client, 'quirky.structured/stop', { session: hopOne.id })
+      const hopTwo = await call<Session>(client, 'quirky.structured/resume', { session: hopOne.id })
+      await waitFor(() => claudeQueries.length === 3)
+      void exitPlan(claudeQueries[2]!, 'two')
+      await waitForAsync(async () => (await itemsOf(hopTwo.id)).some((item) => item.kind === 'plan' && item.status === 'waiting') || null)
+      expect((await itemsOf(hopTwo.id)).filter((item) => item.kind === 'plan').map((item) => [item.version, item.status])).toEqual([
+        [1, 'approved'],
+        [2, 'waiting']
+      ])
+      await call(client, 'quirky.structured/stop', { session: hopTwo.id })
+    } finally {
+      await restarted.stop()
+    }
+  })
+
   test('a session in accept edits resumes in accept edits', async () => {
     const claudeQueries = await boot()
     const old = await created({ permissionMode: 'acceptEdits' })
