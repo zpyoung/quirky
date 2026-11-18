@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { chromium, type Locator } from 'playwright'
+import { chromium, type Locator, type Page } from 'playwright'
+import * as captureModule from './capture'
 import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, inspectSurface, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
 import { CAPTURE_BROWSER_CANDIDATES, captureBrowserExecutable } from './browser'
 import { goldenFor, SCREENSHOT_SIZE } from './goldens'
@@ -537,6 +538,9 @@ type FakeCaptureRuntimeOptions = {
   slotFailure?: string
   slotFailureTarget?: string
   readinessPending?: boolean
+  readinessLateResult?: boolean
+  slotEvaluateHangs?: boolean
+  slotEvaluateError?: string
   slotDetails?: { busy: boolean; text: string; error?: string; visible?: boolean; content?: boolean }
   dialogs?: string[]
   dialogsAfterReload?: string[][]
@@ -553,6 +557,7 @@ type FakeCaptureRuntimeOptions = {
 
 function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = []
+  const evaluateCalls = { value: 0 }
   const targetId = { value: '' }
   const terminalContext = { session: '', pane: '' }
   const terminalLines = new Map<string, string[]>()
@@ -626,6 +631,9 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       getByText: (text: string | RegExp) => locator(`${selector} ${String(text)}`),
       filter: () => item,
       async evaluate() {
+        evaluateCalls.value += 1
+        if (settings.slotEvaluateHangs) return await new Promise<never>(() => {})
+        if (settings.slotEvaluateError) throw new Error(settings.slotEvaluateError)
         const details = settings.slotDetails ?? { busy: false, text: 'fixture content', error: '', visible: true, content: true }
         return { ...details, text: details.text, error: details.error ?? '', visible: details.visible ?? true, content: details.content ?? true }
       },
@@ -734,11 +742,13 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       return true
     },
     async evaluate(_fn?: unknown, selector?: unknown) {
+      evaluateCalls.value += 1
       if (typeof selector === 'string' && selector.includes('overlay:quirky.tasks/workspace-composer')) {
         composerVisible = false
         dialogs = dialogs.filter((name) => name !== composerTitle)
         return
       }
+      if (settings.readinessLateResult !== undefined) return settings.readinessLateResult
       return theme.value === 'light' ? '#eeeeee' : '#111111'
     },
     async screenshot() { return new Uint8Array([1, 2, 3, 4]) },
@@ -790,8 +800,150 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       activeAskId = fixture.askId
       askPending = true
     },
-    cleanup: () => rmSync(outputDir, { recursive: true, force: true })
+    cleanup: () => rmSync(outputDir, { recursive: true, force: true }),
+    evaluateCount: () => evaluateCalls.value
   }
+}
+
+type ReadinessTimingEvidence = {
+  sequence: number
+  deadlineMs: number
+  budgetMs: number
+  phaseOffsetMs: number
+  readyMs: number | null
+  hostRejectedMs: number | null
+  diagnosticLatencyMs: number | null
+  hostMaxLagMs: number
+  polls: number | null
+  firstPollMs: number | null
+  lastPollMs: number | null
+  maxGapMs: number | null
+  maxPollMs: number | null
+  totalPollMs: number | null
+  longTaskObserver: boolean | null
+  longTaskCoverageFromMs: number | null
+  longTasks: { count: number; totalMs: number; maxMs: number } | null
+  lastFailed: string | null
+  lateReady: boolean | null
+  cleanup: 'proved' | `unproved: ${string}`
+}
+
+const captureExports = captureModule as unknown as Record<string, unknown>
+
+function readinessCheck(): (arg: unknown) => boolean {
+  const check = captureExports.contentReadiness
+  expect(typeof check).toBe('function')
+  if (typeof check !== 'function') throw new Error('contentReadiness export is unavailable')
+  return check as (arg: unknown) => boolean
+}
+
+function readinessClose(): (token: string) => unknown {
+  const close = captureExports.closeReadinessPhase
+  expect(typeof close).toBe('function')
+  if (typeof close !== 'function') throw new Error('closeReadinessPhase export is unavailable')
+  return close as (token: string) => unknown
+}
+
+function readinessTiming(message: string): ReadinessTimingEvidence | null {
+  const parse = captureExports.readinessTimingFromError
+  expect(typeof parse).toBe('function')
+  if (typeof parse !== 'function') throw new Error('readinessTimingFromError export is unavailable')
+  return (parse as (value: string) => ReadinessTimingEvidence | null)(message)
+}
+
+function readinessObserverScript(): string {
+  return `<script>
+    window.__observerCounts = { constructed: 0, disconnected: 0 };
+    const NativePerformanceObserver = window.PerformanceObserver;
+    window.PerformanceObserver = class extends NativePerformanceObserver {
+      constructor(callback) {
+        super(callback);
+        window.__observerCounts.constructed += 1;
+      }
+      disconnect() {
+        window.__observerCounts.disconnected += 1;
+        return super.disconnect();
+      }
+    };
+  </script>`
+}
+
+function genericReadinessHtml(text = 'Loading fixture content', script = ''): string {
+  return `<style>
+    :root { --bg: #111111 }
+    .plugin-slot-body { min-height: 120px; width: 600px; }
+  </style>
+  <div data-plugin-slot="view:acme.fixture/page" class="plugin-slot"><div class="plugin-slot-body"><span id="fixture-content">${text}</span></div></div>
+  ${readinessObserverScript()}<script>${script}</script>`
+}
+
+function gitReadinessHtml(script = ''): string {
+  return `<style>
+    :root { --bg: #111111 }
+    [data-review-body] { margin: 8px; }
+    .cm-editor { width: 500px; height: 80px; border: 1px solid; }
+    .cm-content, .cm-line { min-height: 20px; }
+  </style>
+  <div data-plugin-slot="view:quirky.git/diff" class="plugin-slot"><div class="plugin-slot-body">
+    <section data-path="src/app.ts"><header>src/app.ts Reviewed</header>
+      <div data-review-body hidden>Loading diff...</div></section>
+    <section data-path="src/local-review-fixture.ts"><header>local-review-fixture.ts</header>
+      <div data-review-body><div class="cm-editor"><div class="cm-content"><div class="cm-line"><span id="local-code"></span></div></div></div></div></section>
+    <section data-path="src/review-note.ts"><header>review-note.ts</header><div data-review-body>
+      <p class="git-review__since">Showing changes since you reviewed</p>
+      <div class="cm-editor"><div class="cm-content"><div class="cm-line"><span>export const reviewedAt = 1</span></div></div></div>
+    </div></section>
+  </div></div>${readinessObserverScript()}<script>${script}</script>`
+}
+
+async function withReadinessPage<T>(run: (page: Page) => Promise<T>): Promise<T> {
+  const home = mkdtempSync(join(tmpdir(), 'capture-readiness-phase-'))
+  const environment = createIsolatedRuntimeEnvironment(home)
+  mkdirSync(environment.TMPDIR!, { recursive: true })
+  mkdirSync(environment.XDG_RUNTIME_DIR!, { recursive: true })
+  const browser = await chromium.launch({
+    executablePath: captureBrowserExecutable(),
+    headless: true,
+    env: environment
+  })
+  try {
+    const page = await browser.newPage({ viewport: { width: 1400, height: 880 }, deviceScaleFactor: 2 })
+    return await run(page)
+  } finally {
+    await browser.close()
+    rmSync(home, { recursive: true, force: true })
+  }
+}
+
+function makeFakeRuntimeForPage(page: Page, timeoutMs = 3_000, options: FakeCaptureRuntimeOptions = {}) {
+  const fake = buildFakeCaptureRuntime(options)
+  fake.runtime.page = page
+  fake.runtime.options.timeoutMs = timeoutMs
+  return fake
+}
+
+type PageReadinessEntry = {
+  state: 'open' | 'closed'
+  sequence: number
+  closedBy: string | null
+  trace: { polls: number; lastFailed: string | null; startedAt: number }
+}
+
+type PageReadinessStore = { phases: Record<string, PageReadinessEntry> }
+
+async function readinessEntries(page: Page): Promise<Array<{ token: string } & PageReadinessEntry>> {
+  return await page.evaluate(() => {
+    const pageWindow = window as unknown as { __quirkyCaptureReadiness?: PageReadinessStore }
+    const store = pageWindow.__quirkyCaptureReadiness
+    return Object.entries(store?.phases ?? {}).map(([token, entry]) => ({ token, ...entry }))
+  })
+}
+
+async function observerCounts(page: Page): Promise<{ constructed: number; disconnected: number }> {
+  return await page.evaluate(() => {
+    const pageWindow = window as unknown as { __observerCounts?: { constructed: number; disconnected: number } }
+    return pageWindow.__observerCounts ?? { constructed: 0, disconnected: 0 }
+  })
 }
 
 test('discovers capture browsers in Playwright-first order with an actionable missing-browser error', () => {
@@ -1080,7 +1232,7 @@ test('Accounts prepares and closes each cell with its own terminal session', asy
   }
 })
 
-test('reports the slot state when content readiness times out', async () => {
+test('reports the slot state and null trace when content readiness times out', async () => {
   const text = 'Loading fixture content '.repeat(8)
   const fake = buildFakeCaptureRuntime({
     readinessPending: true,
@@ -1088,9 +1240,47 @@ test('reports the slot state when content readiness times out', async () => {
   })
   try {
     const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
-    expect(result.capture.error).toBe(
-      `slot view:acme.fixture/page content exceeded 40ms (busy: true, text: "${text.slice(0, 120)}")`
-    )
+    const error = result.capture.error!
+    expect(error.startsWith(`slot view:acme.fixture/page content exceeded 40ms (busy: true, text: "${text.slice(0, 120)}"); timing={`)).toBe(true)
+    const timing = readinessTiming(error)
+    expect(timing).not.toBeNull()
+    if (!timing) throw new Error('timeout did not include readiness timing')
+    expect(timing).toMatchObject({
+      deadlineMs: 40,
+      polls: null,
+      longTaskObserver: null,
+      longTasks: null,
+      lastFailed: null
+    })
+    expect(timing.cleanup.startsWith('unproved:')).toBe(true)
+    expect(timing.hostMaxLagMs).toBeGreaterThanOrEqual(0)
+  } finally {
+    fake.cleanup()
+  }
+})
+
+test('late readiness is diagnostic only and failed captures still take a diagnostic screenshot', async () => {
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    readinessLateResult: true,
+    slotDetails: { busy: false, text: 'fixture became ready too late', visible: true, content: true }
+  })
+  let screenshots = 0
+  const originalScreenshot = fake.page.screenshot.bind(fake.page)
+  fake.page.screenshot = async () => {
+    screenshots += 1
+    return await originalScreenshot()
+  }
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    expect(result.capture.status).toBe('failed')
+    expect(result.capture.error).toMatch(/content exceeded 40ms/)
+    expect(readinessTiming(result.capture.error!)?.lateReady).toBe(true)
+    expect(fake.evaluateCount()).toBeGreaterThan(0)
+    expect(screenshots).toBeGreaterThan(0)
+    expect(fake.runtime.manifest.failures.some((failure) =>
+      failure.startsWith('view:acme.fixture/page (dark): slot view:acme.fixture/page content exceeded')
+    )).toBe(true)
   } finally {
     fake.cleanup()
   }
@@ -1112,13 +1302,13 @@ test('Git admission requires rendered code in every expanded diff', async () => 
       const git = target('view:quirky.git/diff', 'quirky.git', 'view')
       const cases = [
         { name: 'folded loading remains admissible' },
-        { name: 'transparent code leaves', transparentLeaves: true },
-        { name: 'empty expanded editor', empty: true },
-        { name: 'hidden expanded content', hidden: true },
-        { name: 'hidden code leaves', hiddenLeaves: true },
-        { name: 'marker outside the expanded code', misplaced: true },
-        { name: 'visible loading', loading: true },
-        { name: 'visible progress', busy: true },
+        { name: 'transparent code leaves', transparentLeaves: true, expectedClause: 'git-code' },
+        { name: 'empty expanded editor', empty: true, expectedClause: 'git-code' },
+        { name: 'hidden expanded content', hidden: true, expectedClause: 'git-code' },
+        { name: 'hidden code leaves', hiddenLeaves: true, expectedClause: 'git-code' },
+        { name: 'marker outside the expanded code', misplaced: true, expectedClause: 'git-local-fixture' },
+        { name: 'visible loading', loading: true, expectedClause: 'loading-leaf' },
+        { name: 'visible progress', busy: true, expectedClause: 'busy' },
         { name: 'visible error', error: true }
       ]
       for (const fault of cases) {
@@ -1157,13 +1347,591 @@ test('Git admission requires rendered code in every expanded diff', async () => 
             expect(createHash('sha256').update(readFileSync(image.path)).digest('hex')).toBe(image.sha256)
           } else {
             await fake.runtime.client.callAny('ui.view.open', { id: git.id })
-            await expect(inspectSurface(fake.runtime, git), fault.name).rejects.toThrow(/content exceeded|reported an error/)
+            const message = await inspectSurface(fake.runtime, git).then(
+              () => '',
+              (error) => String(error)
+            )
+            expect(message, fault.name).toMatch(/content exceeded|reported an error/)
+            if (fault.expectedClause) {
+              expect(readinessTiming(message)?.lastFailed, fault.name).toBe(fault.expectedClause)
+            } else {
+              expect(message, fault.name).toMatch(/reported an error/)
+              expect(readinessTiming(message), fault.name).toBeNull()
+            }
           }
         } finally { fake.cleanup() }
       }
     } finally { await browser.close() }
   } finally { rmSync(home, { recursive: true, force: true }) }
 }, 120_000)
+
+test('Git readiness captures on the poll handshake and closes its traced phase', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(gitReadinessHtml(`
+      (() => {
+        const fill = () => {
+          const store = window.__quirkyCaptureReadiness;
+          const phase = store && Object.values(store.phases).find(entry => entry.state === 'open');
+          if (phase && phase.trace.polls >= 2) {
+            document.querySelector('#local-code').textContent = 'export const localReviewFixture = true';
+            return;
+          }
+          requestAnimationFrame(fill);
+        };
+        requestAnimationFrame(fill);
+      })();
+    `))
+    const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    try {
+      const result = await captureTargetCell(fake.runtime, git, 'dark')
+      expect(result.capture.status, result.capture.error).toBe('captured')
+      const runtime = fake.runtime as CaptureRuntime & {
+        lastReadiness?: { targetId: string; sequence: number; timing: ReadinessTimingEvidence }
+      }
+      expect(runtime.lastReadiness?.targetId).toBe('view:quirky.git/diff')
+      const readiness = runtime.lastReadiness
+      expect(readiness).toBeDefined()
+      if (!readiness) throw new Error('successful capture omitted readiness timing')
+      const timing = readiness.timing
+      expect(timing.polls).toBeGreaterThanOrEqual(3)
+      expect(timing.lastFailed).toBe('git-code')
+      expect(timing.readyMs).not.toBeNull()
+      expect(timing.readyMs!).toBeGreaterThanOrEqual(0)
+      expect(timing.readyMs!).toBeLessThanOrEqual(timing.budgetMs)
+      expect(timing.cleanup).toBe('proved')
+      expect(timing.deadlineMs).toBe(3_000)
+      const phase = (await readinessEntries(page)).find((entry) => entry.sequence === readiness.sequence)
+      expect(phase).toMatchObject({ state: 'closed', closedBy: 'host' })
+      const counts = await observerCounts(page)
+      expect(counts.constructed - counts.disconnected).toBe(0)
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 120_000)
+
+test('host deadline timing separates a Git page long task', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(gitReadinessHtml(`
+      (() => {
+        let blocked = false;
+        const blockAfterTwoPolls = () => {
+          const store = window.__quirkyCaptureReadiness;
+          const phase = store && Object.values(store.phases).find(entry => entry.state === 'open');
+          if (!blocked && phase && phase.trace.polls >= 2) {
+            blocked = true;
+            const until = performance.now() + 4_000;
+            while (performance.now() < until) {}
+            return;
+          }
+          if (!blocked) requestAnimationFrame(blockAfterTwoPolls);
+        };
+        requestAnimationFrame(blockAfterTwoPolls);
+      })();
+    `))
+    const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: git.id })
+      const message = await inspectSurface(fake.runtime, git).then(
+        () => '',
+        (error) => String(error)
+      )
+      expect(message.startsWith('Error: slot view:quirky.git/diff content exceeded 3000ms (busy: false, text: "')).toBe(true)
+      const timing = readinessTiming(message)
+      expect(timing).not.toBeNull()
+      if (!timing) throw new Error('Git timeout omitted readiness timing')
+      expect(timing.deadlineMs).toBe(3_000)
+      expect(timing.hostRejectedMs).toBeGreaterThanOrEqual(timing.budgetMs)
+      expect(timing.longTaskObserver).toBe(true)
+      expect(timing.longTasks?.count).toBeGreaterThanOrEqual(1)
+      expect(timing.longTasks?.maxMs).toBeGreaterThanOrEqual(3_900)
+      expect(timing.lastFailed).toBe('git-code')
+      expect(timing.longTaskCoverageFromMs).toBe(timing.firstPollMs)
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 30_000)
+
+test('Git timeout evidence preserves timing before the unchanged error cap', async () => {
+  await withReadinessPage(async (page) => {
+    const hidden = gitReadinessHtml().replace(
+      '.cm-content, .cm-line { min-height: 20px; }',
+      '.cm-content, .cm-line { min-height: 20px; } .cm-line span { visibility: hidden; }'
+    )
+    await page.setContent(hidden)
+    const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    fake.runtime.options.timeoutMs = 3_000
+    try {
+      const result = await captureTargetCell(fake.runtime, git, 'dark')
+      const error = result.capture.error!
+      expect(result.capture.status).toBe('failed')
+      expect(error.length).toBe(2_000)
+      expect(error.startsWith('slot view:quirky.git/diff content exceeded 3000ms')).toBe(true)
+      const timingIndex = error.indexOf('; timing=')
+      const requirementIndex = error.indexOf('; reviewed header and visible code')
+      expect(timingIndex).toBeGreaterThanOrEqual(0)
+      expect(requirementIndex).toBeGreaterThan(timingIndex)
+      expect(readinessTiming(error)?.lastFailed).toBe('git-code')
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 30_000)
+
+test('long diagnostic errors are capped before formatting timing and sanitizedError keeps its cap', async () => {
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    slotEvaluateError: 'diagnostic failure '.repeat(600),
+    slotDetails: { busy: true, text: 'Loading fixture content' }
+  })
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    const error = result.capture.error!
+    expect(error.length).toBeLessThanOrEqual(2_000)
+    expect(error.startsWith('slot view:acme.fixture/page content exceeded 40ms (diagnostics unavailable: ')).toBe(true)
+    const diagnosticReason = error.slice(error.indexOf('diagnostics unavailable: ') + 'diagnostics unavailable: '.length, error.indexOf('); timing='))
+    expect(diagnosticReason.length).toBeLessThanOrEqual(160)
+    const timing = readinessTiming(error)
+    expect(timing).not.toBeNull()
+    expect(timing?.cleanup.startsWith('unproved: ')).toBe(true)
+    expect(timing?.cleanup.slice('unproved: '.length).length).toBeLessThanOrEqual(160)
+    const sanitizer = captureExports.sanitizedError
+    expect(typeof sanitizer).toBe('function')
+    if (typeof sanitizer !== 'function') throw new Error('sanitizedError export is unavailable')
+    expect((sanitizer as (error: unknown, secrets: string[]) => string)(new Error('x'.repeat(3_000)), []).length).toBe(2_000)
+  } finally {
+    fake.cleanup()
+  }
+})
+
+test('redaction preserves structured timeout timing and removes diagnostic tokens', async () => {
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    slotEvaluateError: 'token=fixture',
+    slotDetails: { busy: true, text: 'Loading fixture content' }
+  })
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    expect(result.capture.status).toBe('failed')
+    expect(result.capture.error).not.toContain('token=fixture')
+    expect(readinessTiming(result.capture.error!)?.cleanup).toBe('unproved: token=<redacted>')
+  } finally {
+    fake.cleanup()
+  }
+})
+
+test('unsupported long-task observation is distinct from measured zero tasks', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml('Ready content'))
+    await page.evaluate(() => {
+      Object.defineProperty(PerformanceObserver, 'supportedEntryTypes', { value: ['mark'] })
+    })
+    const fake = makeFakeRuntimeForPage(page)
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+      await inspectSurface(fake.runtime, fixture)
+      expect(fake.runtime.lastReadiness?.timing).toMatchObject({
+        longTaskObserver: false,
+        longTasks: null,
+        longTaskCoverageFromMs: null,
+        cleanup: 'proved'
+      })
+      expect(await observerCounts(page)).toEqual({ constructed: 0, disconnected: 0 })
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 15_000)
+
+test('fake slot evaluation hangs are bounded and preserve timeout timing', async () => {
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    slotEvaluateHangs: true,
+    slotDetails: { busy: true, text: 'Loading fixture content' }
+  })
+  const startedAt = Date.now()
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    const error = result.capture.error!
+    expect(Date.now() - startedAt).toBeLessThanOrEqual(12_000)
+    expect(error.startsWith('slot view:acme.fixture/page content exceeded 40ms (diagnostics unavailable: ')).toBe(true)
+    expect(error).toContain('; timing={')
+    expect(readinessTiming(error)).not.toBeNull()
+  } finally {
+    fake.cleanup()
+  }
+}, 12_000)
+
+test('an endless page cannot extend bounded timeout diagnostics', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(gitReadinessHtml(`
+      (() => {
+        const blockAfterTwoPolls = () => {
+          const store = window.__quirkyCaptureReadiness;
+          const phase = store && Object.values(store.phases).find(entry => entry.state === 'open');
+          if (phase && phase.trace.polls >= 2) {
+            while (true) {}
+          }
+          requestAnimationFrame(blockAfterTwoPolls);
+        };
+        requestAnimationFrame(blockAfterTwoPolls);
+      })();
+    `))
+    const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: git.id })
+      const startedAt = Date.now()
+      const message = await inspectSurface(fake.runtime, git).then(
+        () => '',
+        (error) => String(error)
+      )
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(13_000)
+      expect(message.startsWith('Error: slot view:quirky.git/diff content exceeded 3000ms (diagnostics unavailable: ')).toBe(true)
+      const timing = readinessTiming(message)
+      expect(timing).not.toBeNull()
+      expect(timing?.cleanup.startsWith('unproved:')).toBe(true)
+      expect(timing?.lateReady).toBeNull()
+    } finally {
+      fake.cleanup()
+      if (!page.isClosed()) await page.close().catch(() => {})
+    }
+  })
+}, 20_000)
+
+test('page closure during readiness preserves the original Playwright error', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml())
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+      const startedAt = Date.now()
+      const inspection = inspectSurface(fake.runtime, fixture).then(
+        () => '',
+        (failure) => String(failure)
+      )
+      await page.waitForFunction(() => {
+        const pageWindow = window as unknown as { __quirkyCaptureReadiness?: PageReadinessStore }
+        const phase = Object.values(pageWindow.__quirkyCaptureReadiness?.phases ?? {}).find((entry) => entry.state === 'open')
+        return phase && phase.trace.polls > 0
+      }, undefined, { timeout: 1_000 })
+      // This delay is the real page-close timing under test; fake timers cannot close Chromium mid-protocol call.
+      await Bun.sleep(500)
+      await page.close()
+      const error = await inspection
+      expect(Date.now() - startedAt).toBeLessThan(6_000)
+      expect(error).toMatch(/closed/i)
+      expect(error).not.toMatch(/content exceeded/)
+    } finally {
+      fake.cleanup()
+      if (!page.isClosed()) await page.close().catch(() => {})
+    }
+  })
+}, 10_000)
+
+test('abort does no host page evaluation and the orphaned phase closes only by successor', async () => {
+  const controller = new AbortController()
+  const abortReason = new Error('readiness phase cancelled')
+  const fakeHolder: { cleanup?: () => void } = {}
+  await withReadinessPage(async (page) => {
+    const monitor = `
+      (() => {
+        let token = null;
+        let lastPoll = -1;
+        let lastChange = Date.now();
+        setInterval(() => {
+          const store = window.__quirkyCaptureReadiness;
+          const entry = store && Object.entries(store.phases).find(([, phase]) => phase.state === 'open');
+          if (!entry) return;
+          const [currentToken, phase] = entry;
+          const now = Date.now();
+          if (currentToken !== token) {
+            token = currentToken;
+            lastPoll = phase.trace.polls;
+            lastChange = now;
+          } else if (phase.trace.polls !== lastPoll) {
+            lastPoll = phase.trace.polls;
+            lastChange = now;
+          }
+          if (now >= phase.trace.startedAt + 4_000 && now - lastChange >= 200) {
+            window.__pollStableSnapshot = { token, state: phase.state, polls: phase.trace.polls };
+          }
+        }, 25);
+      })();
+    `
+    await page.setContent(genericReadinessHtml('Loading fixture content', monitor))
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    const fake = makeFakeRuntimeForPage(page, 3_000)
+    fakeHolder.cleanup = fake.cleanup
+    fake.runtime.options.signal = controller.signal
+    await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+
+    let monitoring = true
+    let pageEvaluationsAfterAbort = 0
+    let locatorEvaluationsAfterAbort = 0
+    const originalPageEvaluate = page.evaluate.bind(page)
+    Object.defineProperty(page, 'evaluate', {
+      configurable: true,
+      value: (...args: unknown[]) => {
+        if (monitoring && controller.signal.aborted) pageEvaluationsAfterAbort += 1
+        return Reflect.apply(originalPageEvaluate, page, args)
+      }
+    })
+    const originalLocator = page.locator.bind(page)
+    Object.defineProperty(page, 'locator', {
+      configurable: true,
+      value: (...args: unknown[]) => {
+        const locator = Reflect.apply(originalLocator, page, args) as Locator
+        const originalLocatorEvaluate = locator.evaluate.bind(locator)
+        Object.defineProperty(locator, 'evaluate', {
+          configurable: true,
+          value: (...evaluateArgs: unknown[]) => {
+            if (monitoring && controller.signal.aborted) locatorEvaluationsAfterAbort += 1
+            return Reflect.apply(originalLocatorEvaluate, locator, evaluateArgs)
+          }
+        })
+        return locator
+      }
+    })
+
+    let abortTimer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const inspection = inspectSurface(fake.runtime, fixture).then(
+        () => null,
+        (error) => error
+      )
+      const firstPoll = await page.waitForFunction(() => {
+        const pageWindow = window as unknown as { __quirkyCaptureReadiness?: PageReadinessStore }
+        const phase = Object.entries(pageWindow.__quirkyCaptureReadiness?.phases ?? {})
+          .find(([, entry]) => entry.state === 'open' && entry.trace.polls > 0)
+        return phase ? { token: phase[0], sequence: phase[1].sequence } : false
+      }, undefined, { timeout: 1_000 })
+      const phase = await firstPoll.jsonValue() as { token: string; sequence: number }
+      // A real 200 ms abort is needed to observe the browser poller after its owner has stopped waiting.
+      abortTimer = setTimeout(() => controller.abort(abortReason), 200)
+      const result = await inspection
+      clearTimeout(abortTimer)
+      expect(result).toBe(abortReason)
+      const stablePollsHandle = await page.waitForFunction(() => {
+        const pageWindow = window as unknown as {
+          __pollStableSnapshot?: { token: string; state: string; polls: number }
+        }
+        return pageWindow.__pollStableSnapshot ?? false
+      }, undefined, { timeout: 5_000 })
+      const stablePolls = await stablePollsHandle.jsonValue() as { token: string; state: string; polls: number }
+      expect(stablePolls.token).toBe(phase.token)
+      expect(stablePolls.state).toBe('open')
+      expect(stablePolls.polls).toBeGreaterThan(0)
+      expect(pageEvaluationsAfterAbort).toBe(0)
+      expect(locatorEvaluationsAfterAbort).toBe(0)
+      monitoring = false
+      expect((await readinessEntries(page)).find((entry) => entry.token === phase.token)?.trace.polls)
+        .toBe(stablePolls.polls)
+      let counts = await observerCounts(page)
+      expect(counts.constructed - counts.disconnected).toBe(1)
+
+      const successor = {
+        slotSelector: '[data-plugin-slot="view:acme.fixture/page"]',
+        targetId: fixture.id,
+        ask: null,
+        terminal: null,
+        phase: { token: 'abort-successor', sequence: phase.sequence + 1, startedAt: Date.now() }
+      }
+      expect(await page.evaluate(readinessCheck(), successor)).toBe(false)
+      const phases = await readinessEntries(page)
+      expect(phases.find((entry) => entry.token === phase.token)).toMatchObject({ state: 'closed', closedBy: 'successor' })
+      expect(phases.find((entry) => entry.token === 'abort-successor')).toMatchObject({ state: 'open' })
+      counts = await observerCounts(page)
+      expect(counts.constructed - counts.disconnected).toBe(1)
+      expect(await page.evaluate(readinessClose(), 'abort-successor')).toMatchObject({ observerDisconnected: true })
+      counts = await observerCounts(page)
+      expect(counts.constructed - counts.disconnected).toBe(0)
+    } finally {
+      clearTimeout(abortTimer)
+      fakeHolder.cleanup?.()
+    }
+  })
+}, 12_000)
+
+test('contentReadiness returns booleans and traces failed clauses only for open phases', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml())
+    const check = readinessCheck()
+    const selector = '[data-plugin-slot="view:acme.fixture/page"]'
+    const untraced = { slotSelector: selector, targetId: 'view:acme.fixture/page', ask: null, terminal: null, phase: null }
+    expect(await page.evaluate(check, untraced)).toBe(false)
+    expect(await page.evaluate(() => Object.hasOwn(globalThis, '__quirkyCaptureReadiness'))).toBe(false)
+    await page.locator('#fixture-content').evaluate((node) => { node.textContent = 'Ready fixture content' })
+    expect(await page.evaluate(check, untraced)).toBe(true)
+    expect(await page.evaluate(() => Object.hasOwn(globalThis, '__quirkyCaptureReadiness'))).toBe(false)
+
+    await page.locator('#fixture-content').evaluate((node) => { node.textContent = 'Loading fixture content' })
+    const arg = {
+      ...untraced,
+      phase: { token: 'boolean-only-phase', sequence: 10, startedAt: Date.now() }
+    }
+    const notReady = await page.evaluate(check, arg)
+    expect(notReady).toBe(false)
+    expect(typeof notReady).toBe('boolean')
+    const failedTrace = (await readinessEntries(page)).find((entry) => entry.token === 'boolean-only-phase')
+    expect(failedTrace?.trace.lastFailed).toBe('loading-leaf')
+    await page.locator('#fixture-content').evaluate((node) => { node.textContent = 'Ready fixture content' })
+    const ready = await page.evaluate(check, arg)
+    expect(ready).toBe(true)
+    expect(typeof ready).toBe('boolean')
+
+    const closed = await page.evaluate(readinessClose(), 'boolean-only-phase')
+    expect(closed).toMatchObject({ observerDisconnected: true })
+    const before = (await readinessEntries(page)).find((entry) => entry.token === 'boolean-only-phase')
+    const observersBeforeStalePoll = await observerCounts(page)
+    const stale = await page.evaluate(check, arg)
+    expect(stale).toBe(false)
+    expect(typeof stale).toBe('boolean')
+    const after = (await readinessEntries(page)).find((entry) => entry.token === 'boolean-only-phase')
+    expect(after).toMatchObject({ state: before?.state, closedBy: before?.closedBy, trace: { polls: before?.trace.polls } })
+    const observersAfterStalePoll = await observerCounts(page)
+    expect(observersAfterStalePoll).toEqual(observersBeforeStalePoll)
+    expect(observersAfterStalePoll.constructed - observersAfterStalePoll.disconnected).toBe(0)
+  })
+}, 15_000)
+
+test('a successful phase tombstone rejects stale polls without observer work', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml('Ready fixture content'))
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    const fake = makeFakeRuntimeForPage(page)
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+      await inspectSurface(fake.runtime, fixture)
+      const runtime = fake.runtime as CaptureRuntime & {
+        lastReadiness?: { targetId: string; sequence: number; timing: ReadinessTimingEvidence }
+      }
+      const readiness = runtime.lastReadiness
+      expect(readiness?.targetId).toBe(fixture.id)
+      expect(readiness).toBeDefined()
+      if (!readiness) throw new Error('successful inspection omitted readiness timing')
+      const entry = (await readinessEntries(page)).find((phase) => phase.sequence === readiness.sequence)
+      expect(entry).toMatchObject({ state: 'closed', closedBy: 'host' })
+      const before = await observerCounts(page)
+      const check = readinessCheck()
+      const stale = await page.evaluate(check, {
+        slotSelector: '[data-plugin-slot="view:acme.fixture/page"]',
+        targetId: fixture.id,
+        ask: null,
+        terminal: null,
+        phase: { token: entry!.token, sequence: readiness.sequence, startedAt: entry!.trace.startedAt }
+      })
+      expect(stale).toBe(false)
+      expect((await readinessEntries(page)).find((phase) => phase.token === entry!.token))
+        .toMatchObject({ state: 'closed', closedBy: 'host', trace: { polls: entry!.trace.polls } })
+      const after = await observerCounts(page)
+      expect(after.constructed - after.disconnected).toBe(0)
+      expect(after.constructed).toBe(before.constructed)
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 15_000)
+
+test('successor phases close only older entries and lower sequences become tombstones', async () => {
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml())
+    const check = readinessCheck()
+    const close = readinessClose()
+    const selector = '[data-plugin-slot="view:acme.fixture/page"]'
+    const makeArg = (token: string, sequence: number) => ({
+      slotSelector: selector,
+      targetId: 'view:acme.fixture/page',
+      ask: null,
+      terminal: null,
+      phase: { token, sequence, startedAt: Date.now() }
+    })
+
+    expect(await page.evaluate(check, makeArg('phase-A', 20))).toBe(false)
+    let counts = await observerCounts(page)
+    expect(counts.constructed - counts.disconnected).toBe(1)
+    expect(await page.evaluate(check, makeArg('phase-B', 21))).toBe(false)
+    const afterSuccessor = await readinessEntries(page)
+    const phaseA = afterSuccessor.find((entry) => entry.token === 'phase-A')
+    const phaseB = afterSuccessor.find((entry) => entry.token === 'phase-B')
+    expect(phaseA).toMatchObject({ state: 'closed', closedBy: 'successor' })
+    expect(phaseB).toMatchObject({ state: 'open', sequence: 21 })
+    counts = await observerCounts(page)
+    expect(counts.constructed - counts.disconnected).toBe(1)
+
+    const returnedA = await page.evaluate(close, 'phase-A')
+    expect(returnedA).toMatchObject({ token: 'phase-A', observerDisconnected: true })
+    const afterLateClose = (await readinessEntries(page)).find((entry) => entry.token === 'phase-B')
+    expect(afterLateClose).toMatchObject({ state: 'open', sequence: phaseB?.sequence, trace: { polls: phaseB?.trace.polls } })
+
+    expect(await page.evaluate(check, makeArg('phase-superseded', 19))).toBe(false)
+    const superseded = (await readinessEntries(page)).find((entry) => entry.token === 'phase-superseded')
+    expect(superseded).toMatchObject({ state: 'closed', sequence: 19, closedBy: 'superseded' })
+    counts = await observerCounts(page)
+    expect(counts.constructed - counts.disconnected).toBe(1)
+    expect((await readinessEntries(page)).some((entry) => entry.token === 'phase-A')).toBe(true)
+
+    expect(await page.evaluate(close, 'phase-B')).toMatchObject({ token: 'phase-B', observerDisconnected: true })
+    const closedB = (await readinessEntries(page)).find((entry) => entry.token === 'phase-B')
+    expect(closedB).toMatchObject({ state: 'closed', closedBy: 'host' })
+    counts = await observerCounts(page)
+    expect(counts.constructed - counts.disconnected).toBe(0)
+  })
+}, 15_000)
+
+test('readiness timing resets at both entry points and sequences stay attributable', async () => {
+  const blocked = buildFakeCaptureRuntime()
+  const captureRuntime = blocked.runtime as CaptureRuntime & {
+    lastReadiness?: { targetId: string; sequence: number; timing: ReadinessTimingEvidence }
+  }
+  try {
+    captureRuntime.lastReadiness = { targetId: 'stale', sequence: 1, timing: {} as NonNullable<CaptureRuntime['lastReadiness']>['timing'] }
+    blocked.runtime.ownedAskFixtures.set('unresolved', blocked.runtime.cellAskFixture!)
+    await captureTargetCell(blocked.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    expect(captureRuntime.lastReadiness).toBeUndefined()
+  } finally {
+    blocked.cleanup()
+  }
+
+  await withReadinessPage(async (page) => {
+    await page.setContent(genericReadinessHtml('Ready fixture content'))
+    const failures: Record<string, string> = {}
+    const fake = makeFakeRuntimeForPage(page, 3_000, { rpcFailures: failures })
+    const runtime = fake.runtime as CaptureRuntime & {
+      lastReadiness?: { targetId: string; sequence: number; timing: ReadinessTimingEvidence }
+    }
+    const fixture = target('view:acme.fixture/page', 'acme.fixture', 'view')
+    try {
+      await fake.runtime.client.callAny('ui.view.open', { id: fixture.id })
+      await inspectSurface(fake.runtime, fixture)
+      const first = runtime.lastReadiness
+      expect(first).toBeDefined()
+      if (!first) throw new Error('first phase timing was not recorded')
+      const firstToken = (await readinessEntries(page)).find((entry) => entry.sequence === first.sequence)?.token
+
+      await inspectSurface(fake.runtime, fixture)
+      const second = runtime.lastReadiness
+      expect(second).toBeDefined()
+      if (!second) throw new Error('second phase timing was not recorded')
+      const secondToken = (await readinessEntries(page)).find((entry) => entry.sequence === second.sequence)?.token
+      expect(second.sequence).toBeGreaterThan(first.sequence)
+      expect(secondToken).toBeDefined()
+      expect(secondToken).not.toBe(firstToken)
+
+      failures['ui.state'] = 'state unavailable'
+      await expect(inspectSurface(fake.runtime, fixture)).rejects.toThrow('state unavailable')
+      expect(runtime.lastReadiness).toBeUndefined()
+    } finally {
+      fake.cleanup()
+    }
+  })
+}, 15_000)
 
 describe('opening the tool that hosts a target', () => {
   test('a sidebar section is hosted by the tool that lists it as its body or an alias', () => {
