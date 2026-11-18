@@ -12,7 +12,6 @@ import {
   claudeTextDelta,
   closingEntries,
   errorItem,
-  statusItem,
   stderrLines,
   summarizeInput,
   turnEndItem,
@@ -52,7 +51,9 @@ const DENIED = 'Denied from Quirky'
 const INTERRUPT_TIMEOUT_MS = 2000
 const KEEP_PLANNING = 'Keep planning.'
 const EMPTY_PLAN = 'The plan was empty. Present the plan again.'
+const SUPERSEDED_PLAN = 'A newer plan replaced this one. This plan was not approved.'
 const STOPPED_PLAN = 'The user stopped before answering. The plan was not approved; stay in plan mode.'
+const AUTO_REFUSED_SWITCH_FAILED = "Auto mode isn't available and switching to Accept edits failed."
 const AUTO_REFUSED = "Auto mode isn't available. Using Accept edits."
 
 const MODES: readonly PermissionModeName[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
@@ -70,7 +71,7 @@ function isModeName(value: unknown): value is PermissionModeName {
 }
 
 /** What ends the wait on a plan before the user answers its ask. */
-type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' }
+type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' } | { kind: 'superseded' }
 
 type PendingPlan = {
   askId: string | null
@@ -613,6 +614,12 @@ class ClaudeRunner implements StructuredRunner {
    */
   private async exitPlanMode(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
     const found = planText(input, run.lastPlanText, run.plansDir)
+    const older = run.pendingPlan
+    if (older && !older.settled) {
+      older.settled = true
+      older.interrupt.resolve({ kind: 'superseded' })
+    }
+    if (older) await older.done.promise
     for (const earlier of [...run.plans.values()]) {
       if (earlier.status === 'waiting' || earlier.status === 'not-answered') {
         this.appendPlan(sessionId, run, { ...withoutAsk(earlier), status: 'revised' })
@@ -666,6 +673,7 @@ class ClaudeRunner implements StructuredRunner {
       })()
       const outcome = await Promise.race([answered, pending.interrupt.promise])
       if (outcome.kind !== 'answer' && pending.askId !== null) await this.context.cancelAsk(pending.askId).catch(() => {})
+      if (outcome.kind === 'superseded') return { behavior: 'deny', message: SUPERSEDED_PLAN }
       if (outcome.kind === 'feedback') return keepPlanning(outcome.text.trim() === '' ? KEEP_PLANNING : outcome.text)
       if (outcome.kind === 'mode-switch') {
         notAnswered('mode-switch')
@@ -693,7 +701,7 @@ class ClaudeRunner implements StructuredRunner {
         updatedPermissions: [{ type: 'setMode', mode: target, destination: 'session' }]
       }
     } finally {
-      run.pendingPlan = null
+      if (run.pendingPlan === pending) run.pendingPlan = null
       pending.settled = true
       pending.done.resolve()
     }
@@ -754,22 +762,31 @@ class ClaudeRunner implements StructuredRunner {
   /** Follows the mode Claude reports, and corrects an approval into Auto that Claude did not honour. */
   private async reportMode(sessionId: string, run: Running, reported: unknown): Promise<void> {
     if (!isModeName(reported)) return
-    if (run.pendingApprovalTarget === 'auto' && reported !== 'auto') {
+    if (run.pendingApprovalTarget === 'auto') {
       run.pendingApprovalTarget = null
-      try {
-        await run.query.setPermissionMode('acceptEdits')
-      } catch {
-        // the journaled mode still tells the user where Claude is headed
+      if (reported !== 'auto') {
+        await this.correctRefusedAuto(sessionId, run, reported)
+        return
       }
-      run.autoAvailable = false
-      run.mode = 'acceptEdits'
-      const approved = run.approvedVersion === null ? undefined : run.plans.get(run.approvedVersion)
-      if (approved) this.appendPlan(sessionId, run, { ...approved, status: 'approved', approvedMode: 'acceptEdits' })
-      this.appendMode(sessionId, run)
-      this.context.appendMessage({ sessionId, role: 'system', text: AUTO_REFUSED, item: statusItem(AUTO_REFUSED) })
-      return
     }
     this.recordMode(sessionId, run, reported)
+  }
+
+  private async correctRefusedAuto(sessionId: string, run: Running, reported: PermissionModeName): Promise<void> {
+    run.autoAvailable = false
+    try {
+      await run.query.setPermissionMode('acceptEdits')
+    } catch {
+      this.recordMode(sessionId, run, reported)
+      const notice = `${AUTO_REFUSED_SWITCH_FAILED} Claude is in ${MODE_LABELS[reported]} mode.`
+      this.context.appendMessage({ sessionId, role: 'system', text: notice, item: { kind: 'prose', text: notice } })
+      return
+    }
+    run.mode = 'acceptEdits'
+    const approved = run.approvedVersion === null ? undefined : run.plans.get(run.approvedVersion)
+    if (approved) this.appendPlan(sessionId, run, { ...approved, status: 'approved', approvedMode: 'acceptEdits' })
+    this.appendMode(sessionId, run)
+    this.context.appendMessage({ sessionId, role: 'system', text: AUTO_REFUSED, item: { kind: 'prose', text: AUTO_REFUSED } })
   }
 
   private async pump(sessionId: string, run: Running): Promise<void> {
