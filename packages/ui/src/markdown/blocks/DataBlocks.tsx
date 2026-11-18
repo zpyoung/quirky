@@ -233,7 +233,7 @@ function resolveChart(spec: ChartSpec, sources: Record<string, { language: strin
     }
   }
   const name = spec.from as string
-  const source = sources[name]
+  const source = Object.hasOwn(sources, name) ? sources[name] : undefined
   if (!source) return { error: `no csv block named ${name}` }
   const table = parseTable(source.language, source.code)
   if ('error' in table) return { error: `${name}: ${table.error}` }

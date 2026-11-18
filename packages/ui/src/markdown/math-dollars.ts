@@ -1,8 +1,28 @@
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/
+const QUOTE_PREFIX = /^(?:[ \t]*>[ \t]?)+/
+const FENCE_START = /^([ \t]*)((?:(?:[-*+]|\d+[.)])[ \t]+)*)(`{3,}|~{3,})(.*)$/
+const FENCE_END = /^[ \t]*(`{3,}|~{3,})[ \t]*$/
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/
 const BLANK = /^\s*$/
 
 type Segment = { text: string; protectedText: boolean }
+
+function splitQuote(line: string): { quoted: boolean; rest: string } {
+  const prefix = QUOTE_PREFIX.exec(line)
+  return prefix ? { quoted: true, rest: line.slice(prefix[0].length) } : { quoted: false, rest: line }
+}
+
+type FenceOpen = { marker: string; minIndent: number }
+
+/** A fence opener once any blockquote prefix is stripped; it may follow list markers, and is deeply indented only inside a list. */
+function openFence(rest: string, inList: boolean): FenceOpen | null {
+  const match = FENCE_START.exec(rest)
+  if (!match) return null
+  const [, indent, listMarkers, marker, info] = match
+  if (marker[0] === '`' && info.includes('`')) return null
+  if (indent.length > 3 && !listMarkers && !inList) return null
+  const minIndent = listMarkers ? indent.length + listMarkers.length : inList ? Math.max(0, indent.length - 3) : 0
+  return { marker, minIndent }
+}
 
 /** Splits markdown into runs that may hold math and runs (fenced or indented code) that never do. */
 function splitCodeBlocks(markdown: string): Segment[] {
@@ -18,18 +38,22 @@ function splitCodeBlocks(markdown: string): Segment[] {
   let previousListOrIndented = false
   while (index < lines.length) {
     const line = lines[index]
-    const open = FENCE_OPEN.exec(line)
+    const { quoted, rest } = splitQuote(line)
+    const indentedCode = /^(?: {4}|\t)/.test(line) && !BLANK.test(line) && previousBlank && !previousListOrIndented
+    const open = indentedCode ? null : openFence(rest, previousListOrIndented)
     if (open) {
       flushPlain()
-      const marker = open[1]
       const block = [line]
       index += 1
       while (index < lines.length) {
         const current = lines[index]
+        const inner = splitQuote(current)
+        if (quoted && !inner.quoted) break
+        if (open.minIndent > 0 && !BLANK.test(inner.rest) && /^ */.exec(inner.rest)![0].length < open.minIndent) break
         block.push(current)
         index += 1
-        const close = FENCE_OPEN.exec(current)
-        if (close && close[1][0] === marker[0] && close[1].length >= marker.length && current.trim() === close[1]) break
+        const close = FENCE_END.exec(inner.rest)
+        if (close && close[1][0] === open.marker[0] && close[1].length >= open.marker.length) break
       }
       segments.push({ text: block.join('\n'), protectedText: true })
       previousBlank = false

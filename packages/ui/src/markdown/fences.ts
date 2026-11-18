@@ -58,14 +58,32 @@ function withoutFencedCode(markdown: string): string {
   return parts.join('\n')
 }
 
-/** The distinct `src` values of markdown images that are neither remote nor data URLs, as written. */
+const IMAGE_REFERENCE = /!\[((?:[^\]\\\n]|\\.)*)\](?:\[((?:[^\]\\\n]|\\.)*)\])?/g
+const DEFINITION = /^ {0,3}\[((?:[^\]\\\n]|\\.)+)\]:[ \t]*<?([^\s>]+)>?/
+
+const referenceLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase()
+
+/** The destinations of link reference definitions, keyed by normalised label; the first definition wins, as in CommonMark. */
+function referenceDefinitions(prose: string): Map<string, string> {
+  const definitions = new Map<string, string>()
+  for (const line of prose.split('\n')) {
+    const match = DEFINITION.exec(line)
+    if (match && !definitions.has(referenceLabel(match[1]))) definitions.set(referenceLabel(match[1]), match[2])
+  }
+  return definitions
+}
+
+/** The distinct `src` values of markdown images that are neither remote nor data URLs, as written, inline or by reference. */
 export function collectLocalImageSources(markdown: string): string[] {
   if (!markdown.includes('![')) return []
-  const found = new Set<string>()
-  for (const match of withoutFencedCode(markdown).matchAll(IMAGE)) {
-    const src = match[1]
-    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)) continue
-    found.add(src)
+  const prose = withoutFencedCode(markdown)
+  const sources = [...prose.matchAll(IMAGE)].map((match) => match[1])
+  const definitions = referenceDefinitions(prose)
+  if (definitions.size > 0) {
+    for (const match of prose.matchAll(IMAGE_REFERENCE)) {
+      const target = definitions.get(referenceLabel(match[2] === undefined || match[2].trim() === '' ? match[1] : match[2]))
+      if (target !== undefined) sources.push(target)
+    }
   }
-  return [...found]
+  return [...new Set(sources.filter((src) => !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)))]
 }

@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import DOMPurify from 'dompurify'
 import type { FenceProps } from '../types'
 import { BlockFrame, CodeBlock, CopyButton } from './CodeBlock'
+import { loadsImages } from './mermaid-safety'
 import { RenderError } from './RenderError'
 
 type Outcome = { kind: 'pending' } | { kind: 'ready'; svg: string } | { kind: 'failed'; message: string }
@@ -43,10 +44,29 @@ function summarize(error: unknown): string {
   return kept.join(': ').replace(/:\s*:/g, ':')
 }
 
+const REFUSED = 'it loads remote images'
+
 const SVG_CACHE_LIMIT = 50
 const svgCache = new Map<string, string>()
 
-const cacheKey = (code: string) => `${document.documentElement.dataset.theme ?? ''}\u0000${code}`
+/** Identifies the colours mermaid would be given right now, so a cached drawing is only reused under the theme it was drawn for. */
+const themeSignature = () => `${document.documentElement.dataset.theme ?? ''}\u0000${JSON.stringify(themeVariables())}`
+
+const cacheKey = (signature: string, code: string) => `${signature}\u0000${code}`
+
+/** The current theme signature, updated when the root element's theme attributes change. */
+function useThemeSignature(): string {
+  const [signature, setSignature] = useState(themeSignature)
+  useEffect(() => {
+    const root = document.documentElement
+    const update = () => setSignature(themeSignature())
+    update()
+    const observer = new MutationObserver(update)
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] })
+    return () => observer.disconnect()
+  }, [])
+  return signature
+}
 
 function remember(key: string, svg: string) {
   svgCache.delete(key)
@@ -57,16 +77,23 @@ function remember(key: string, svg: string) {
 /** A `mermaid` fence: plain source while open, then a diagram drawn with strict security and a Source toggle. */
 export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps) {
   const id = `qmd-mermaid-${useId().replace(/[^\w-]/g, '')}`
+  const signature = useThemeSignature()
+  const refused = loadsImages(code)
   // a remount, such as the one when streaming ends, reuses the drawing instead of flashing the source
   const [outcome, setOutcome] = useState<Outcome>(() => {
-    const cached = isIncomplete ? undefined : svgCache.get(cacheKey(code))
+    if (refused) return { kind: 'failed', message: REFUSED }
+    const cached = isIncomplete ? undefined : svgCache.get(cacheKey(signature, code))
     return cached === undefined ? { kind: 'pending' } : { kind: 'ready', svg: cached }
   })
   const [showSource, setShowSource] = useState(false)
 
   useEffect(() => {
     if (isIncomplete) return
-    const key = cacheKey(code)
+    if (refused) {
+      setOutcome({ kind: 'failed', message: REFUSED })
+      return
+    }
+    const key = cacheKey(signature, code)
     const cached = svgCache.get(key)
     if (cached !== undefined) {
       setOutcome({ kind: 'ready', svg: cached })
@@ -89,7 +116,7 @@ export function MermaidFence({ code, isIncomplete, language, meta }: FenceProps)
     return () => {
       live = false
     }
-  }, [code, isIncomplete, id])
+  }, [code, isIncomplete, id, signature, refused])
 
   if (isIncomplete || outcome.kind === 'pending') return <CodeBlock code={code} language={language} meta={meta} isIncomplete={isIncomplete} />
   if (outcome.kind === 'failed') {
