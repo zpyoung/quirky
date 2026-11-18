@@ -8,7 +8,7 @@ export type Draft = {
   text: string
   images: string[]
   pastes: { id: string; text: string }[]
-  picks: { model: string | null; effort: string | null; mode: string | null; plan: boolean }
+  picks: { model: string | null; effort: string | null; mode: string | null }
 }
 
 export const MAX_DRAFT_BYTES = 64 * 1024
@@ -29,16 +29,25 @@ const isStringOrNull = (value: unknown): value is string | null => value === nul
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
 
-/** True when `value` is exactly a `Draft`: no missing, extra or wrongly typed fields. */
+/**
+ * True when `value` is a `Draft`: no missing, extra or wrongly typed fields. Picks written before Plan
+ * became a mode carry a fourth `plan` flag; those still count, and `normalizeDraft` folds the flag in.
+ */
 export function isDraft(value: unknown): value is Draft {
   if (!isRecord(value) || Object.keys(value).length !== 4) return false
   const { text, images, pastes, picks } = value
   if (typeof text !== 'string' || !isStringArray(images) || !Array.isArray(pastes)) return false
   if (!pastes.every((paste) => isRecord(paste) && Object.keys(paste).length === 2 &&
     typeof paste.id === 'string' && typeof paste.text === 'string')) return false
-  return isRecord(picks) && Object.keys(picks).length === 4 &&
-    isStringOrNull(picks.model) && isStringOrNull(picks.effort) && isStringOrNull(picks.mode) &&
-    typeof picks.plan === 'boolean'
+  if (!isRecord(picks) || !isStringOrNull(picks.model) || !isStringOrNull(picks.effort) || !isStringOrNull(picks.mode)) return false
+  const keys = Object.keys(picks).length
+  return keys === 3 || (keys === 4 && typeof picks.plan === 'boolean')
+}
+
+/** `draft` with the picks in the current three-key shape; a legacy `plan: true` becomes mode `plan`. */
+export function normalizeDraft(draft: Draft): Draft {
+  const { plan, ...picks } = draft.picks as Draft['picks'] & { plan?: boolean }
+  return { ...draft, picks: plan === true ? { ...picks, mode: 'plan' } : picks }
 }
 
 /** Session ids become directory names, so only plain single path segments qualify. */
@@ -58,14 +67,14 @@ export class ComposerDrafts {
       'SELECT draft FROM composer_drafts WHERE session_id = ?',
       this.sessionOf(params)
     )
-    return row ? (JSON.parse(row.draft) as Draft) : null
+    return row ? normalizeDraft(JSON.parse(row.draft) as Draft) : null
   }
 
   saveDraft = (params: Record<string, unknown>): { ok: true } => {
     const session = this.sessionOf(params)
     const { draft } = params
     if (!isDraft(draft)) throw this.fail('invalid-params', 'draft must have text, images, pastes and picks of the right types')
-    const json = JSON.stringify(draft)
+    const json = JSON.stringify(normalizeDraft(draft))
     if (Buffer.byteLength(json) > MAX_DRAFT_BYTES) throw this.fail('invalid-params', 'draft is over 64 KiB')
     this.store.run(
       `INSERT INTO composer_drafts (session_id, draft, updated_at) VALUES (?, ?, ?)

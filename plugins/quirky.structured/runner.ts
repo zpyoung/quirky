@@ -4,6 +4,7 @@ import type {
   AskEnvelope,
   AskSpec,
   ChatItem,
+  PlanItem,
   Session,
   SessionProviderSession,
   SessionStatus,
@@ -32,8 +33,13 @@ export type StructuredContext = {
   /**
    * Registers an ask and resolves with its answer, journaling an `ask` item as soon as the ask exists.
    * Native questions use the kernel-issued live lease; ordinary tool approvals retain their existing card path.
+   * A `silent` ask journals no `ask` item, for callers that journal their own item carrying the ask ID.
    */
-  createAsk(spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }): Promise<AskEnvelope>
+  createAsk(
+    spec: AskSpec,
+    sessionId: string,
+    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void }
+  ): Promise<AskEnvelope>
   /** Cancels a pending ask the runner no longer needs, so its card becomes a dismissed record. */
   cancelAsk(askId: string): Promise<void>
   /** Stores a native provider session ID before the first turn is started. */
@@ -52,20 +58,25 @@ export type StructuredContext = {
 export type StructuredLaunchOptions = { model?: string; effort?: string; env?: Record<string, string | null> }
 
 /**
- * Start-only provider identity and the permission mode and plan mode the session opens in, already
- * checked against the agent's capabilities; launch options remain provider-native model/effort strings.
+ * Start-only inputs: provider identity (launch options remain provider-native model/effort strings),
+ * the permission mode to start in, and the plan state a resumed session continues from.
  */
 export type StructuredStartOptions = StructuredLaunchOptions & {
   providerSession?: SessionProviderSession
   permissionMode?: string
-  planMode?: boolean
+  /** Highest plan version already journaled, so numbering continues across a resume. */
+  planVersion?: number
+  /** Text of the newest plan version, so an unchanged re-presentation is recognised after a resume. */
+  lastPlanText?: string
+  /** The newest plan version as journaled for the resumed session, so the next version can mark it revised. */
+  lastPlan?: PlanItem
 }
 
 /** Extras of one message: absolute image paths the agent should see, and the queue entry the message came from. */
 export type StructuredSendOptions = { images?: string[]; queuedId?: string }
 
-/** The composer picks a running session can take; plan mode wins over the permission mode while on. */
-export type StructuredSettings = { model?: string; effort?: string; permissionMode?: string; planMode?: boolean }
+/** The composer picks a running session can take; plan mode is one of the permission modes. */
+export type StructuredSettings = { model?: string; effort?: string; permissionMode?: string }
 
 /** Drives background (no PTY) agent sessions. One runner serves every structured session. */
 export interface StructuredRunner {
@@ -83,6 +94,15 @@ export interface StructuredRunner {
   configure?(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings>
   /** The models the running agent offers, as ids `configure` accepts. Absent on runners with a fixed catalog. */
   models?(sessionId: string): Promise<{ id: string; label: string }[]>
+  /** Whether Auto is offered for the running session's current model. Absent on runners without permission modes. */
+  autoAvailable?(sessionId: string): boolean
+  /** Whether a plan is waiting for the user's answer. Absent on runners without plan mode. */
+  planWaiting?(sessionId: string): boolean
+  /**
+   * Answers the waiting plan as "keep planning" with `text` and returns true; returns false, touching
+   * nothing, when no plan waits or the session is unknown, so the caller sends the text normally.
+   */
+  planFeedback?(sessionId: string, text: string): boolean
   interrupt(sessionId: string): Promise<void>
   stop(sessionId: string): Promise<void>
 }

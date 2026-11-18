@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { Badge, Button, ContextMenuList, ControlIcon, Popover, type ContextMenuItem } from '@quirky/ui'
 import type { Picks, TurnSettings } from './controls'
 
@@ -7,10 +7,9 @@ const DEFAULT = 'Default'
 export type SettingsSection = 'model' | 'effort' | 'mode'
 
 type Panel = 'summary' | 'model' | 'mode'
-type RowName = 'model' | 'effort' | 'mode' | 'plan'
+type RowName = 'model' | 'effort' | 'mode'
 
 const SEARCH_THRESHOLD = 8
-const PLAN_DESCRIPTION = 'Read only until you approve a plan'
 
 const chipButton = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)', borderRadius: 'var(--ui-radius-window)' } satisfies CSSProperties
 const panel = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-2)' } satisfies CSSProperties
@@ -29,24 +28,6 @@ const hint = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4) var(--
 const empty = { padding: 'var(--ui-space-8)' } satisfies CSSProperties
 const badgeButton = { display: 'inline-flex', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' } satisfies CSSProperties
 const badgeInner = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-2)' } satisfies CSSProperties
-
-const track = (on: boolean): CSSProperties => ({
-  display: 'inline-flex',
-  alignItems: 'center',
-  flex: '0 0 auto',
-  width: 'calc(var(--ui-space-16) * 2)',
-  height: 'var(--ui-space-16)',
-  borderRadius: 'var(--ui-radius-window)',
-  background: on ? 'var(--ui-accent)' : 'var(--ui-border)'
-})
-const knob = (on: boolean): CSSProperties => ({
-  width: 'var(--ui-space-12)',
-  height: 'var(--ui-space-12)',
-  marginInlineStart: 'var(--ui-space-2)',
-  borderRadius: '50%',
-  background: on ? 'var(--ui-surface)' : 'var(--ui-muted)',
-  transform: on ? 'translateX(var(--ui-space-16))' : undefined
-})
 
 /**
  * The closed chip's text: model and effort, or the model alone when the agent has no effort. A setting
@@ -68,12 +49,13 @@ const enabledRows = (root: HTMLElement | null): HTMLElement[] =>
   [...(root?.querySelectorAll<HTMLElement>('[data-settings-row]') ?? [])].filter((element) => !(element as HTMLButtonElement).disabled && element.getAttribute('aria-disabled') !== 'true')
 
 /** A summary row naming one setting and its current value; choosing it opens that setting's list. */
-function SummaryRow({ name, label, value, reason, danger, onOpen }: { name: 'model' | 'mode'; label: string; value: string; reason: string | undefined; danger?: boolean; onOpen: () => void }) {
+function SummaryRow({ name, label, value, reason, note, danger, onOpen }: { name: 'model' | 'mode'; label: string; value: string; reason: string | undefined; note?: string; danger?: boolean; onOpen: () => void }) {
   return (
     <button type="button" className="qt-menu-item" style={row} data-settings-row={name} data-opens={name} disabled={reason !== undefined} title={reason} onClick={onOpen}>
       <span style={rowText}>
         <span>{label}</span>
         {reason !== undefined && <span className="ui-help-text">{reason}</span>}
+        {note !== undefined && <span className="ui-help-text" data-settings-note="plan">{note}</span>}
       </span>
       {reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}
       <ControlIcon name="caret-right" />
@@ -84,7 +66,7 @@ function SummaryRow({ name, label, value, reason, danger, onOpen }: { name: 'mod
 /**
  * The toolbar chip naming the next turn's model and effort. It opens a summary of every turn setting
  * with its current value: Model and Permissions open their own list (models get a search field past 8
- * entries), Effort steps in place with the arrow keys, and Plan mode is a switch. Every choice applies
+ * entries), Effort steps in place with the arrow keys, and Plan is a row in Permissions. Every choice applies
  * at once through `onPicks`. Unsupported settings stay visible, disabled, with the reason shown under
  * them. `open` and `section` let a `/` command open it at a given setting.
  */
@@ -107,14 +89,13 @@ export function SettingsChip({
   const body = useRef<HTMLDivElement>(null)
   const searchField = useRef<HTMLInputElement>(null)
   const focusNext = useRef<RowName | null>(null)
-  const planLabel = useId()
-  const planDescription = useId()
   const [view, setView] = useState<Panel>('summary')
   const [query, setQuery] = useState('')
   const searchable = settings.modelList.length > SEARCH_THRESHOLD
   const needle = query.trim().toLowerCase()
   const models = searchable && needle ? settings.modelList.filter((entry) => entry.label.toLowerCase().includes(needle)) : settings.modelList
   const modeOff = settings.modeReason ?? (settings.modes.length === 0 ? 'No permission modes' : undefined)
+  const planNote = settings.modes.length === 0 ? settings.modeReasons.plan : undefined
   const effortIndex = settings.choices.findIndex((choice) => choice.value === settings.effort)
   const effortLabel = settings.choices[effortIndex]?.label
   const effortOff = settings.effortReason !== undefined
@@ -210,11 +191,13 @@ export function SettingsChip({
   ]
   const modeItems: ContextMenuItem[] = settings.modes.map((name, index) => {
     const danger = settings.isDangerous(name)
-    const description = settings.modeDescription(name) ?? (danger ? 'Acts without asking for approval' : undefined)
+    const reason = settings.modeReasons[name]
+    const description = reason ?? settings.modeDescription(name) ?? (danger ? 'Acts without asking for approval' : undefined)
     return {
       id: name,
       label: settings.modeLabel(name),
       ...(description === undefined ? {} : { detail: description }),
+      ...(reason === undefined ? {} : { enabled: false, title: reason }),
       checked: name === settings.mode,
       danger,
       separatorBefore: danger && index > 0 && !settings.isDangerous(settings.modes[index - 1]!)
@@ -277,29 +260,7 @@ export function SettingsChip({
           </span>
         )}
       </div>
-      <SummaryRow name="mode" label="Permissions" value={settings.modeLabel(settings.mode)} reason={modeOff} danger={settings.isDangerous(settings.mode)} onOpen={() => onShowList('mode')} />
-      <div className="qt-menu-separator" role="separator" />
-      <button
-        type="button"
-        role="switch"
-        aria-checked={picks.plan}
-        aria-labelledby={planLabel}
-        aria-describedby={planDescription}
-        disabled={settings.planReason !== undefined}
-        title={settings.planReason}
-        className="qt-menu-item"
-        style={row}
-        data-settings-row="plan"
-        onClick={() => onPicks({ ...picks, plan: !picks.plan })}
-      >
-        <span style={rowText}>
-          <span id={planLabel}>Plan mode</span>
-          <span id={planDescription} className="ui-help-text">{settings.planReason ?? PLAN_DESCRIPTION}</span>
-        </span>
-        <span style={track(picks.plan)} aria-hidden="true">
-          <span style={knob(picks.plan)} />
-        </span>
-      </button>
+      <SummaryRow name="mode" label="Permissions" value={settings.modeLabel(settings.mode)} reason={modeOff} note={planNote} danger={settings.isDangerous(settings.mode)} onOpen={() => onShowList('mode')} />
       <div style={hint} aria-hidden="true">
         <span>↑↓ move</span>
         {!effortOff && <span>←→ effort</span>}
@@ -349,40 +310,33 @@ export function SettingsChip({
 }
 
 /**
- * The badges for a permission mode or Plan that is not the default; each ✕ returns it to the default.
- * A mode that lets the agent act without asking gets the failing tone and says so, so it is never missed.
+ * The badge for a permission mode that is not the default; its ✕ returns to the default. Plan takes the
+ * accent tone, and a mode that lets the agent act without asking the failing tone and says so, so it is never missed.
  */
 export function ModeBadges({ settings, picks, onPicks }: { settings: TurnSettings; picks: Picks; onPicks: (picks: Picks) => void }) {
   const mode = settings.mode
   const defaultMode = settings.defaultMode
+  if (defaultMode === null || mode === '' || mode === defaultMode) return null
   const dangerous = settings.isDangerous(mode)
+  const plan = mode === 'plan'
   return (
-    <>
-      {picks.plan && (
-        <button type="button" style={badgeButton} aria-label="Turn off Plan mode" title="Click to turn off plan mode" onClick={() => onPicks({ ...picks, plan: false })}>
-          <Badge tone="accent">
-            <span style={badgeInner}>Plan <ControlIcon name="x" /></span>
-          </Badge>
-        </button>
-      )}
-      {defaultMode !== null && mode !== '' && mode !== defaultMode && (
-        <button
-          type="button"
-          style={badgeButton}
-          aria-label={`Return permissions to ${settings.modeLabel(defaultMode)}`}
-          title={
-            dangerous
-              ? `${settings.modeLabel(mode)} is on: the agent acts without asking for approval. Click to go back to ${settings.modeLabel(defaultMode)}`
-              : `Click to go back to ${settings.modeLabel(defaultMode)}`
-          }
-          data-dangerous={dangerous ? 'true' : undefined}
-          onClick={() => onPicks({ ...picks, mode: defaultMode })}
-        >
-          <Badge tone={dangerous ? 'failing' : 'needs-you'}>
-            <span style={badgeInner}>{settings.modeLabel(mode)} <ControlIcon name="x" /></span>
-          </Badge>
-        </button>
-      )}
-    </>
+    <button
+      type="button"
+      style={badgeButton}
+      aria-label={plan ? 'Turn off Plan mode' : `Return permissions to ${settings.modeLabel(defaultMode)}`}
+      title={
+        dangerous
+          ? `${settings.modeLabel(mode)} is on: the agent acts without asking for approval. Click to go back to ${settings.modeLabel(defaultMode)}`
+          : plan
+            ? `Click to leave plan mode for ${settings.modeLabel(defaultMode)}`
+            : `Click to go back to ${settings.modeLabel(defaultMode)}`
+      }
+      data-dangerous={dangerous ? 'true' : undefined}
+      onClick={() => onPicks({ ...picks, mode: defaultMode })}
+    >
+      <Badge tone={dangerous ? 'failing' : plan ? 'accent' : 'needs-you'}>
+        <span style={badgeInner}>{settings.modeLabel(mode)} <ControlIcon name="x" /></span>
+      </Badge>
+    </button>
   )
 }

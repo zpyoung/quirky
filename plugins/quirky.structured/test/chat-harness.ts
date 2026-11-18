@@ -22,9 +22,11 @@ export type FakeGit = {
 export class ChatRunner implements StructuredRunner {
   sent: { sessionId: string; text: string; options?: StructuredSendOptions }[] = []
   sendError: Error | null = null
+  startOptions: StructuredStartOptions[] = []
   started: { sessionId: string; options: StructuredStartOptions }[] = []
   constructor(readonly context: StructuredContext) {}
   async start(session: Session, prompt?: string, options: StructuredStartOptions = {}) {
+    this.startOptions.push(options)
     this.started.push({ sessionId: session.id, options })
     if (prompt !== undefined && prompt !== '') {
       this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt })
@@ -44,6 +46,22 @@ export class ChatRunner implements StructuredRunner {
     return settings
   }
   models?: (sessionId: string) => Promise<{ id: string; label: string }[]>
+  /** What the runner reports for Auto; tests flip it to exercise the refusal. */
+  autoOffered = true
+  autoAvailable(_sessionId: string) {
+    return this.autoOffered
+  }
+  /** Sessions whose plan a test pretends is waiting; a send to one becomes feedback. */
+  waitingPlans = new Set<string>()
+  feedback: { sessionId: string; text: string }[] = []
+  planWaiting(sessionId: string) {
+    return this.waitingPlans.has(sessionId)
+  }
+  planFeedback(sessionId: string, text: string) {
+    if (!this.waitingPlans.has(sessionId)) return false
+    this.feedback.push({ sessionId, text })
+    return true
+  }
   /** Runs when a message reaches the agent, before it is recorded; lets a test observe ordering. */
   onSend: (() => void) | null = null
   interrupted: string[] = []

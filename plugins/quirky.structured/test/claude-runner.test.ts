@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AgentCommand, AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, PlanItem, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
 import { claudeCommands, createClaudeRunner, type ClaudeQueryParams, type ClaudeSlashCommand } from '../claude-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
 import { FakeQuery } from './fakes/fake-query'
@@ -16,7 +16,9 @@ async function until(check: () => boolean) {
 
 let messages: StructuredMessage[]
 let statuses: SessionStatus[]
-let asks: { spec: AskSpec; sessionId: string; resolve: (envelope: AskEnvelope) => void }[]
+let asks: { spec: AskSpec; sessionId: string; silent: boolean; askId: string; resolve: (envelope: AskEnvelope) => void }[]
+let cancelled: string[]
+let plansDir: string
 let queries: FakeQuery[]
 let providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[]
 let runner: StructuredRunner
@@ -37,10 +39,15 @@ function makeContext(): StructuredContext {
     setStatus(_id, status) {
       statuses.push(status)
     },
-    async cancelAsk() {},
-    createAsk(spec, sessionId) {
+    async cancelAsk(askId) {
+      cancelled.push(askId)
+      asks.find((ask) => ask.askId === askId)?.resolve({ ...envelope('declined'), askId })
+    },
+    createAsk(spec, sessionId, options) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
-      asks.push({ spec, sessionId, resolve })
+      const askId = `ask_${asks.length + 1}`
+      asks.push({ spec, sessionId, silent: options?.silent === true, askId, resolve })
+      options?.onAsk?.(askId)
       return promise
     },
     async setProviderSession(sessionId, providerSession) {
@@ -81,6 +88,8 @@ beforeEach(() => {
   messages = []
   statuses = []
   asks = []
+  cancelled = []
+  plansDir = realpathSync(mkdtempSync(join(tmpdir(), 'plans-')))
   queries = []
   providerSessions = []
   session = {
@@ -99,6 +108,7 @@ beforeEach(() => {
     restorable: false
   }
   runner = createClaudeRunner(makeContext(), {
+    plansDir,
     query: (params: ClaudeQueryParams) => {
       const query = new FakeQuery(params)
       queries.push(query)
@@ -107,41 +117,59 @@ beforeEach(() => {
   })
 })
 
+afterEach(() => rmSync(plansDir, { recursive: true, force: true }))
+
 async function begin(prompt = 'hello') {
   await runner.start(session, prompt)
   return queries[0]
 }
 
 describe('configure', () => {
-  test('plan mode, model and effort reach the running query', async () => {
+  test('permission mode, model and effort reach the running query and the journal', async () => {
     const query = await begin()
-    const result = await runner.configure!(session.id, { planMode: true, model: 'opus', effort: 'high' })
+    const result = await runner.configure!(session.id, { permissionMode: 'plan', model: 'opus', effort: 'high' })
     expect(query.permissionModes).toEqual(['plan'])
     expect(query.models).toEqual(['opus'])
     expect(query.flagSettings).toEqual([{ effortLevel: 'high' }])
-    expect(result).toMatchObject({ model: 'opus', effort: 'high', planMode: true })
+    expect(result).toEqual({ model: 'opus', effort: 'high', permissionMode: 'plan' })
+    expect(messages.at(-1)!.item).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: false })
   })
 
-  test('turning plan mode off restores the picked permission mode', async () => {
+  test('the settings carry the mode Claude is in, with no separate plan flag', async () => {
     const query = await begin()
     await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
-    await runner.configure!(session.id, { planMode: true })
-    await runner.configure!(session.id, { planMode: false })
+    expect(await runner.configure!(session.id, { effort: 'low' })).toEqual({ effort: 'low', permissionMode: 'acceptEdits' })
+    await runner.configure!(session.id, { permissionMode: 'plan' })
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
     expect(query.permissionModes).toEqual(['acceptEdits', 'plan', 'acceptEdits'])
   })
 
   test('overlapping configure calls apply in order and report what the SDK was last told', async () => {
     const query = await begin()
     query.permissionModeDelayMs = (mode) => (mode === 'plan' ? 40 : 0)
-    const first = runner.configure!(session.id, { planMode: true })
-    const second = runner.configure!(session.id, { permissionMode: 'acceptEdits', planMode: false })
+    const first = runner.configure!(session.id, { permissionMode: 'plan' })
+    const second = runner.configure!(session.id, { permissionMode: 'acceptEdits' })
     const [, last] = await Promise.all([first, second])
     expect(query.permissionModes).toEqual(['plan', 'acceptEdits'])
-    expect(last).toMatchObject({ permissionMode: 'acceptEdits', planMode: false })
+    expect(last).toMatchObject({ permissionMode: 'acceptEdits' })
+  })
+
+  test('picking the mode Claude already holds journals nothing new', async () => {
+    const query = await begin()
+    const before = messages.length
+    await runner.configure!(session.id, { permissionMode: 'default' })
+    expect(messages).toHaveLength(before)
+    expect(query.permissionModes).toEqual(['default'])
+  })
+
+  test('a mode Quirky cannot journal is refused', async () => {
+    const query = await begin()
+    await expect(runner.configure!(session.id, { permissionMode: 'not-a-mode' })).rejects.toThrow('unsupported permission mode')
+    expect(query.permissionModes).toEqual([])
   })
 
   test('a session that is not running refuses', async () => {
-    await expect(runner.configure!('s_none', { planMode: true })).rejects.toThrow('session is not running')
+    await expect(runner.configure!('s_none', { permissionMode: 'plan' })).rejects.toThrow('session is not running')
   })
 
   test('every Claude permission mode passes straight to the SDK', async () => {
@@ -180,7 +208,7 @@ describe('configure', () => {
 
   test('an empty configure reads the settings without calling the SDK', async () => {
     const query = await begin()
-    expect(await runner.configure!(session.id, {})).toEqual({ permissionMode: 'default', planMode: false })
+    expect(await runner.configure!(session.id, {})).toEqual({ permissionMode: 'default' })
     expect(query.permissionModes).toEqual([])
   })
 })
@@ -195,13 +223,13 @@ describe('start permission mode', () => {
   test('the opening permission mode reaches the query options and the reported settings', async () => {
     await runner.start(session, 'hello', { permissionMode: 'bypassPermissions' })
     expect(queries[0].params.options?.permissionMode).toBe('bypassPermissions')
-    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'bypassPermissions', planMode: false })
+    expect(await runner.configure!(session.id, {})).toMatchObject({ permissionMode: 'bypassPermissions' })
   })
 
-  test('opening in plan mode starts the query in plan and remembers the mode underneath', async () => {
-    await runner.start(session, 'hello', { permissionMode: 'acceptEdits', planMode: true })
+  test('opening in plan mode starts the query in plan, and leaving it switches to the picked mode', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'plan' })
     expect(queries[0].params.options?.permissionMode).toBe('plan')
-    await runner.configure!(session.id, { planMode: false })
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
     expect(queries[0].permissionModes).toEqual(['acceptEdits'])
   })
 })
@@ -214,6 +242,17 @@ describe('start', () => {
     expect(typeof query.params.options?.canUseTool).toBe('function')
     await until(() => query.written.length === 1)
     expect(query.written[0]).toMatchObject({ type: 'user', message: { role: 'user', content: 'hello' } })
+  })
+
+  test('starts in the requested permission mode and journals it', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'plan' })
+    expect(queries[0].params.options?.permissionMode).toBe('plan')
+    expect(messages.at(-1)!.item).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: false })
+  })
+
+  test('an unknown start mode falls back to default', async () => {
+    await runner.start(session, 'hello', { permissionMode: 'not-a-mode' })
+    expect(queries[0].params.options?.permissionMode).toBe('default')
   })
 
   test('a model and effort pick reaches the query options', async () => {
@@ -261,7 +300,7 @@ describe('start', () => {
   test('opens a native session without submitting an initial model turn', async () => {
     await runner.start(session, undefined)
     expect(providerSessions).toEqual([])
-    expect(messages).toEqual([])
+    expect(messages.map((m) => m.item)).toEqual([{ kind: 'mode', mode: 'default', autoAvailable: false }])
     expect(statuses).toEqual(['running'])
 
     const nativeInit = { type: 'system', subtype: 'init', session_id: 'idle-native-id' }
@@ -287,7 +326,7 @@ describe('start', () => {
 
   test('journals the prompt, sets working and returns before the session ends', async () => {
     await begin('do it')
-    expect(messages).toHaveLength(1)
+    expect(messages).toHaveLength(2)
     expect(messages[0]).toMatchObject({ sessionId: 's_1', role: 'user', text: 'do it' })
     expect(statuses).toEqual(['working'])
   })
@@ -355,34 +394,34 @@ describe('journaling', () => {
       session_id: 'c1'
     }
     query.emit(result)
-    await until(() => messages.length === 6)
+    await until(() => messages.length === 7)
 
-    expect(messages.slice(1).map((m) => m.role)).toEqual(['system', 'assistant', 'tool', 'tool', 'result'])
-    expect(messages[1].data).toEqual(init)
-    expect(messages[2]).toMatchObject({ text: 'Hi there', data: assistant })
-    expect(messages[3]).toMatchObject({ text: 'Bash: ls -la', data: toolUse })
-    expect(messages[4].text).toContain('file.txt')
-    expect(messages[4].data).toEqual(toolResult)
-    expect(messages[5].text).toContain('All done')
-    expect(messages[5].text).toContain('$0.0123')
-    expect(messages[5].text).toContain('2.1s')
-    expect(messages[5].data).toEqual(result)
+    expect(messages.slice(2).map((m) => m.role)).toEqual(['system', 'assistant', 'tool', 'tool', 'result'])
+    expect(messages[2].data).toEqual(init)
+    expect(messages[3]).toMatchObject({ text: 'Hi there', data: assistant })
+    expect(messages[4]).toMatchObject({ text: 'Bash: ls -la', data: toolUse })
+    expect(messages[5].text).toContain('file.txt')
+    expect(messages[5].data).toEqual(toolResult)
+    expect(messages[6].text).toContain('All done')
+    expect(messages[6].text).toContain('$0.0123')
+    expect(messages[6].text).toContain('2.1s')
+    expect(messages[6].data).toEqual(result)
   })
 
   test('result without cost or duration is just the summary', async () => {
     const query = await begin()
     query.emit({ type: 'result', subtype: 'success', result: 'Fine', is_error: false })
-    await until(() => messages.length === 2)
-    expect(messages[1]).toMatchObject({ role: 'result', text: 'Fine' })
+    await until(() => messages.length === 3)
+    expect(messages[2]).toMatchObject({ role: 'result', text: 'Fine' })
   })
 
   test('error results report their subtype and errors', async () => {
     const query = await begin()
     query.emit({ type: 'result', subtype: 'error_max_turns', is_error: true, errors: ['too long'] })
-    await until(() => messages.length === 2)
-    expect(messages[1].role).toBe('result')
-    expect(messages[1].text).toContain('error_max_turns')
-    expect(messages[1].text).toContain('too long')
+    await until(() => messages.length === 3)
+    expect(messages[2].role).toBe('result')
+    expect(messages[2].text).toContain('error_max_turns')
+    expect(messages[2].text).toContain('too long')
   })
 })
 
@@ -529,6 +568,488 @@ describe('canUseTool', () => {
   })
 })
 
+describe('plan mode', () => {
+  const canUse = (query: FakeQuery, tool: string, input: Record<string, unknown> = {}) =>
+    (query.params.options!.canUseTool as any)(tool, input, { signal: new AbortController().signal, toolUseID: 'tu' })
+  const items = () => messages.map((m) => m.item)
+  const plans = () => items().filter((item): item is PlanItem => item?.kind === 'plan')
+  const modes = () => items().filter((item) => item?.kind === 'mode')
+  const answer = (decision: string, reason?: string) => envelope('answered', decision, reason)
+  const withAuto = async (query: FakeQuery) => {
+    query.initialization = { models: [{ value: 'opus', supportsAutoMode: true }] }
+    query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'opus', permissionMode: 'plan' })
+    await until(() => runner.autoAvailable!(session.id))
+  }
+  const present = async (query: FakeQuery, input: Record<string, unknown> = { plan: '# Plan\n- step' }) => {
+    const before = asks.length
+    const pending = canUse(query, 'ExitPlanMode', input)
+    await until(() => asks.length === before + 1)
+    return pending
+  }
+
+  describe('ExitPlanMode', () => {
+    test('journals a waiting plan carrying the silent ask id', async () => {
+      const query = await begin()
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      expect(asks[0]!.silent).toBe(true)
+      expect((asks[0]!.spec.questions[0] as any).options.map((o: any) => o.value)).toEqual(['approve-auto', 'approve-review', 'keep'])
+      expect(plans()[0]).toEqual({ kind: 'plan', version: 1, status: 'waiting', text: '# Plan\n- step', askId: 'ask_1' })
+      expect(runner.planWaiting!(session.id)).toBe(true)
+      expect(statuses.at(-1)).toBe('waiting')
+      asks[0]!.resolve(answer('keep'))
+      await pending
+      expect(statuses.at(-1)).toBe('working')
+    })
+
+    test('approve with auto available allows and switches to auto in the same reply', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      await until(() => asks.length === 1)
+      asks[0]!.resolve(answer('approve-auto'))
+      const input = { plan: '# Plan\n- step' }
+      expect(await pending).toEqual({
+        behavior: 'allow',
+        updatedInput: input,
+        updatedPermissions: [{ type: 'setMode', mode: 'auto', destination: 'session' }]
+      })
+      const tail = items().slice(-2)
+      expect(tail[0]).toEqual({ kind: 'plan', version: 1, status: 'approved', text: '# Plan\n- step', approvedMode: 'auto' })
+      expect(tail[1]).toEqual({ kind: 'mode', mode: 'auto', autoAvailable: true })
+      expect(runner.planWaiting!(session.id)).toBe(false)
+    })
+
+    test('approve with auto unavailable lands in accept edits', async () => {
+      const query = await begin()
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      expect(await pending).toMatchObject({ behavior: 'allow', updatedPermissions: [{ type: 'setMode', mode: 'acceptEdits' }] })
+      expect(plans().at(-1)).toMatchObject({ status: 'approved', approvedMode: 'acceptEdits' })
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'acceptEdits', autoAvailable: false })
+    })
+
+    test('approve for review lands in ask mode', async () => {
+      const query = await begin()
+      await runner.configure!(session.id, { permissionMode: 'plan' })
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-review'))
+      expect(await pending).toMatchObject({ behavior: 'allow', updatedPermissions: [{ type: 'setMode', mode: 'default', destination: 'session' }] })
+      expect(plans().at(-1)).toMatchObject({ status: 'approved', approvedMode: 'default' })
+      expect(modes().at(-1)).toMatchObject({ mode: 'default' })
+    })
+
+    test('keep planning denies with the reason, or a default, and stays in plan', async () => {
+      const query = await begin()
+      await runner.configure!(session.id, { permissionMode: 'plan' })
+      const first = present(query)
+      asks[0]!.resolve(answer('keep', 'Split step 2'))
+      expect(await first).toEqual({ behavior: 'deny', message: 'Split step 2' })
+      expect(plans().at(-1)).toMatchObject({ version: 1, status: 'not-answered', reason: 'feedback' })
+      expect(plans().at(-1)).not.toHaveProperty('askId')
+      const second = present(query)
+      asks[1]!.resolve(answer('keep'))
+      expect(await second).toEqual({ behavior: 'deny', message: 'Keep planning.' })
+      expect(modes().at(-1)).toMatchObject({ mode: 'plan' })
+    })
+
+    test('planFeedback answers the waiting plan, cancels its ask and is one-shot', async () => {
+      const query = await begin()
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      expect(runner.planFeedback!(session.id, 'Does this survive a restart?')).toBe(true)
+      expect(runner.planFeedback!(session.id, 'again')).toBe(false)
+      expect(await pending).toEqual({ behavior: 'deny', message: 'Does this survive a restart?' })
+      expect(cancelled).toEqual(['ask_1'])
+      expect(plans().at(-1)).toMatchObject({ version: 1, status: 'not-answered', reason: 'feedback' })
+    })
+
+    test('an empty feedback text still keeps planning', async () => {
+      const query = await begin()
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      runner.planFeedback!(session.id, '  ')
+      expect(await pending).toEqual({ behavior: 'deny', message: 'Keep planning.' })
+    })
+
+    test('planFeedback is false with no waiting plan or an unknown session', async () => {
+      await begin()
+      expect(runner.planFeedback!(session.id, 'hi')).toBe(false)
+      expect(runner.planFeedback!('s_none', 'hi')).toBe(false)
+      expect(runner.planWaiting!('s_none')).toBe(false)
+    })
+
+    test('stop leaves the plan not answered and never allows it', async () => {
+      const query = await begin()
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      await runner.stop(session.id)
+      expect(await pending).toEqual({
+        behavior: 'deny',
+        message: 'The user stopped before answering. The plan was not approved; stay in plan mode.'
+      })
+      expect(plans().at(-1)).toMatchObject({ version: 1, status: 'not-answered', reason: 'stopped' })
+      expect(cancelled).toEqual(['ask_1'])
+    })
+
+    test('interrupt leaves the plan not answered', async () => {
+      const query = await begin()
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      await runner.interrupt(session.id)
+      expect(await pending).toMatchObject({ behavior: 'deny' })
+      expect(plans().at(-1)).toMatchObject({ status: 'not-answered', reason: 'stopped' })
+    })
+
+    test('a manual mode switch denies the plan first, then switches', async () => {
+      const query = await begin()
+      await runner.configure!(session.id, { permissionMode: 'plan' })
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      query.permissionModes.length = 0
+      const switching = runner.configure!(session.id, { permissionMode: 'acceptEdits' })
+      expect(await pending).toEqual({
+        behavior: 'deny',
+        message: 'The user switched to Accept edits mode. The plan was not approved.'
+      })
+      expect(await switching).toMatchObject({ permissionMode: 'acceptEdits' })
+      expect(query.permissionModes).toEqual(['acceptEdits'])
+      expect(plans().at(-1)).toMatchObject({ version: 1, status: 'not-answered', reason: 'mode-switch' })
+      const kinds = items().slice(-2).map((item) => item!.kind)
+      expect(kinds).toEqual(['plan', 'mode'])
+      expect(cancelled).toEqual(['ask_1'])
+    })
+
+    test('picking plan while a plan waits does not disturb it', async () => {
+      const query = await begin()
+      await runner.configure!(session.id, { permissionMode: 'plan' })
+      const pending = present(query)
+      await until(() => plans().length === 1)
+      await runner.configure!(session.id, { permissionMode: 'plan' })
+      expect(runner.planWaiting!(session.id)).toBe(true)
+      asks[0]!.resolve(answer('keep'))
+      await pending
+    })
+
+    test('a newer version revises the earlier one and counts on', async () => {
+      const query = await begin()
+      const first = present(query, { plan: 'one' })
+      asks[0]!.resolve(answer('keep', 'more'))
+      await first
+      const second = present(query, { plan: 'two' })
+      await until(() => plans().length === 4)
+      expect(plans().map((p) => [p.version, p.status])).toEqual([[1, 'waiting'], [1, 'not-answered'], [1, 'revised'], [2, 'waiting']])
+      expect(plans()[2]).toMatchObject({ text: 'one', reason: 'feedback' })
+      expect(plans()[2]).not.toHaveProperty('unchanged')
+      expect(plans()[3]).toEqual({ kind: 'plan', version: 2, status: 'waiting', text: 'two', askId: 'ask_2' })
+      asks[1]!.resolve(answer('keep'))
+      await second
+    })
+
+    test('presenting the same text again is marked unchanged', async () => {
+      const query = await begin()
+      const first = present(query, { plan: 'same' })
+      asks[0]!.resolve(answer('keep'))
+      await first
+      const second = present(query, { plan: 'same' })
+      await until(() => plans().at(-1)?.status === 'waiting')
+      expect(plans().at(-1)).toMatchObject({ version: 2, unchanged: true })
+      asks[1]!.resolve(answer('keep'))
+      await second
+    })
+
+    test('an empty plan is never approved', async () => {
+      const query = await begin()
+      const pending = present(query, { plan: '' })
+      await until(() => plans().length === 1)
+      expect(plans()[0]).toMatchObject({ empty: true, text: '' })
+      asks[0]!.resolve(answer('approve-auto'))
+      expect(await pending).toEqual({ behavior: 'deny', message: 'The plan was empty. Present the plan again.' })
+      expect(plans().at(-1)).toMatchObject({ status: 'not-answered', reason: 'feedback', empty: true })
+      expect(plans().some((p) => p.status === 'approved')).toBe(false)
+    })
+
+    test('anything but an answered approve fails closed', async () => {
+      const query = await begin()
+      const unanswered: AskEnvelope[] = [
+        envelope('declined'),
+        envelope('timed_out'),
+        envelope('partial'),
+        envelope('answered'),
+        { status: 'unavailable', askId: 'a_1', answers: {}, skipped: [], summary: '', reason: 'no ui' }
+      ]
+      for (const result of unanswered) {
+        const pending = present(query)
+        asks.at(-1)!.resolve(result)
+        expect(await pending).toEqual({
+          behavior: 'deny',
+          message: 'The user stopped before answering. The plan was not approved; stay in plan mode.'
+        })
+        expect(plans().at(-1)).toMatchObject({ status: 'not-answered', reason: 'stopped' })
+      }
+    })
+
+    test('a failing ask denies instead of throwing', async () => {
+      const broken = createClaudeRunner(
+        { ...makeContext(), createAsk: () => Promise.reject(new Error('ask owner gone')) },
+        { plansDir, query: (params) => (queries.push(new FakeQuery(params)), queries.at(-1)!) }
+      )
+      await broken.start({ ...session, id: 's_2' }, 'hello')
+      const result = await canUse(queries.at(-1)!, 'ExitPlanMode', { plan: 'x' })
+      expect(result).toMatchObject({ behavior: 'deny' })
+      expect(plans().at(-1)).toMatchObject({ status: 'not-answered', reason: 'stopped' })
+    })
+
+    test('the plan file text wins, with the checked path on the item', async () => {
+      const query = await begin()
+      const file = join(plansDir, 'calm-plan.md')
+      writeFileSync(file, '# From file')
+      const pending = present(query, { planFilePath: file, plan: 'stale inline' })
+      await until(() => plans().length === 1)
+      expect(plans()[0]).toMatchObject({ text: '# From file', filePath: file })
+      asks[0]!.resolve(answer('keep'))
+      await pending
+    })
+
+    test('a plan file outside the plans directory is ignored', async () => {
+      const query = await begin()
+      const outside = mkdtempSync(join(tmpdir(), 'outside-'))
+      writeFileSync(join(outside, 'secret.md'), 'secret')
+      const pending = present(query, { planFilePath: join(outside, 'secret.md'), plan: 'inline' })
+      await until(() => plans().length === 1)
+      expect(plans()[0]).toMatchObject({ text: 'inline' })
+      expect(plans()[0]).not.toHaveProperty('filePath')
+      asks[0]!.resolve(answer('keep'))
+      await pending
+      rmSync(outside, { recursive: true, force: true })
+    })
+
+    test('a plan file that still holds the previous plan yields to newer inline text', async () => {
+      const query = await begin()
+      const file = join(plansDir, 'a.md')
+      writeFileSync(file, 'first')
+      const one = present(query, { planFilePath: file, plan: 'first' })
+      asks[0]!.resolve(answer('keep'))
+      await one
+      const two = present(query, { planFilePath: file, plan: 'second' })
+      await until(() => plans().at(-1)?.status === 'waiting')
+      expect(plans().at(-1)).toMatchObject({ version: 2, text: 'second' })
+      asks[1]!.resolve(answer('keep'))
+      await two
+    })
+
+    test('a resumed session continues numbering and revises the restarted plan', async () => {
+      const restarted: PlanItem = { kind: 'plan', version: 2, status: 'not-answered', text: 'old', reason: 'restarted' }
+      await runner.start(session, undefined, { permissionMode: 'plan', planVersion: 2, lastPlanText: 'old', lastPlan: restarted })
+      const query = queries[0]!
+      expect(messages.at(-1)!.item).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: false })
+      const pending = present(query, { plan: 'old' })
+      await until(() => plans().length === 2)
+      expect(plans()[0]).toEqual({ kind: 'plan', version: 2, status: 'revised', text: 'old', reason: 'restarted' })
+      expect(plans()[1]).toMatchObject({ version: 3, status: 'waiting', unchanged: true })
+      asks[0]!.resolve(answer('keep'))
+      await pending
+    })
+
+    test('an approved version is not revised by the next one', async () => {
+      const query = await begin()
+      const one = present(query, { plan: 'one' })
+      asks[0]!.resolve(answer('approve-review'))
+      await one
+      const two = present(query, { plan: 'two' })
+      await until(() => plans().at(-1)?.version === 2)
+      expect(plans().filter((p) => p.status === 'revised')).toEqual([])
+      asks[1]!.resolve(answer('keep'))
+      await two
+    })
+  })
+
+  describe('EnterPlanMode', () => {
+    test('is allowed without an ask and journals the plan mode', async () => {
+      const query = await begin()
+      expect(await canUse(query, 'EnterPlanMode', {})).toEqual({ behavior: 'allow', updatedInput: {} })
+      expect(asks).toEqual([])
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: false })
+      const count = modes().length
+      await canUse(query, 'EnterPlanMode', {})
+      expect(modes()).toHaveLength(count)
+    })
+  })
+
+  describe('reported mode', () => {
+    test('init and status reports journal a mode change once', async () => {
+      const query = await begin()
+      const before = modes().length
+      query.emit({ type: 'system', subtype: 'init', session_id: 'c1', permissionMode: 'default' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'acceptEdits', session_id: 'c1' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'acceptEdits', session_id: 'c1' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'bypassPermissions', session_id: 'c1' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
+      await until(() => modes().length === before + 3)
+      await tick()
+      expect(modes().slice(before)).toEqual([
+        { kind: 'mode', mode: 'acceptEdits', autoAvailable: false },
+        { kind: 'mode', mode: 'bypassPermissions', autoAvailable: false },
+        { kind: 'mode', mode: 'plan', autoAvailable: false }
+      ])
+    })
+
+    test('a status that only carries the mode adds no status row', async () => {
+      const query = await begin()
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
+      await until(() => modes().length === 2)
+      expect(items().filter((item) => item?.kind === 'status')).toEqual([])
+    })
+
+    test('ExitPlanMode and EnterPlanMode calls and results add no activity rows', async () => {
+      const query = await begin()
+      query.emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'x1', name: 'ExitPlanMode', input: { plan: 'p' } }] } })
+      query.emit({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'x1', content: 'ok' }] } })
+      query.emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'x2', name: 'EnterPlanMode', input: {} }] } })
+      query.emit({ type: 'result', subtype: 'success', result: 'ok', is_error: false })
+      await until(() => items().some((item) => item?.kind === 'turn-end'))
+      expect(items().filter((item) => item?.kind === 'activity')).toEqual([])
+    })
+
+    test('Auto refused after an approval corrects to accept edits and says so', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.permissionModes.length = 0
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'default', session_id: 'c1' })
+      await until(() => items().some((item) => item?.kind === 'prose' && item.text === "Auto mode isn't available. Using Accept edits."))
+      expect(query.permissionModes).toEqual(['acceptEdits'])
+      expect(runner.autoAvailable!(session.id)).toBe(false)
+      expect(items().slice(-3)).toEqual([
+        { kind: 'plan', version: 1, status: 'approved', text: '# Plan\n- step', approvedMode: 'acceptEdits' },
+        { kind: 'mode', mode: 'acceptEdits', autoAvailable: false },
+        { kind: 'prose', text: "Auto mode isn't available. Using Accept edits." }
+      ])
+    })
+
+    test('a failed fallback switch journals the mode Claude reported and says so', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.refusedPermissionMode = { mode: 'acceptEdits', message: 'switch failed' }
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'default', session_id: 'c1' })
+      await until(() => items().some((item) => item?.kind === 'prose' && item.text.includes('failed')))
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'default', autoAvailable: false })
+      expect(modes().some((item) => item?.kind === 'mode' && item.mode === 'acceptEdits')).toBe(false)
+    })
+
+    test('Claude re-entering plan after Auto was honoured is not treated as a refusal', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.permissionModes.length = 0
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'auto', session_id: 'c1' })
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
+      await until(() => modes().at(-1)?.mode === 'plan')
+      expect(query.permissionModes).toEqual([])
+    })
+
+    test('a second ExitPlanMode closes the first and leaves only the newer plan answerable', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# Revised' })
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      await until(() => asks.length === 2)
+      expect(runner.planWaiting!(session.id)).toBe(true)
+      asks[1]!.resolve(answer('approve-review'))
+      expect(await second).toMatchObject({ behavior: 'allow' })
+      const states = plans().map((item) => [item.version, item.status])
+      expect(states).toContainEqual([1, 'revised'])
+      expect(states).toContainEqual([2, 'approved'])
+      expect(states).not.toContainEqual([1, 'approved'])
+    })
+
+    test('three overlapping ExitPlanMode calls leave only the newest approvable', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# B' })
+      const third = canUse(query, 'ExitPlanMode', { plan: '# C' })
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      expect(await second).toMatchObject({ behavior: 'deny' })
+      await until(() => asks.length === 2)
+      await tick()
+      expect(asks).toHaveLength(2)
+      asks[1]!.resolve(answer('approve-review'))
+      expect(await third).toMatchObject({ behavior: 'allow', updatedInput: { plan: '# C' } })
+      const states = plans().map((item) => [item.version, item.status])
+      expect(states).toContainEqual([1, 'revised'])
+      expect(states).toContainEqual([2, 'approved'])
+      expect(states.filter(([, status]) => status === 'approved')).toHaveLength(1)
+    })
+
+    test('an approval into auto that Claude honours is left alone', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      const before = messages.length
+      query.permissionModes.length = 0
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'auto', session_id: 'c1' })
+      await tick()
+      expect(messages).toHaveLength(before)
+      expect(query.permissionModes).toEqual([])
+    })
+
+    test('the pending approval is forgotten once the turn ends', async () => {
+      const query = await begin()
+      await withAuto(query)
+      const pending = present(query)
+      asks[0]!.resolve(answer('approve-auto'))
+      await pending
+      query.emit({ type: 'result', subtype: 'success', result: 'ok', is_error: false })
+      await until(() => statuses.includes('done'))
+      query.permissionModes.length = 0
+      query.emit({ type: 'system', subtype: 'status', status: null, permissionMode: 'plan', session_id: 'c1' })
+      await until(() => modes().at(-1)?.mode === 'plan')
+      expect(query.permissionModes).toEqual([])
+    })
+  })
+
+  describe('auto availability', () => {
+    test('comes from the current model after init and is journaled on the mode item', async () => {
+      const query = await begin()
+      expect(runner.autoAvailable!(session.id)).toBe(false)
+      await withAuto(query)
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: true })
+    })
+
+    test('is re-evaluated after the model changes', async () => {
+      const query = await begin()
+      query.initialization = { models: [{ value: 'opus', supportsAutoMode: true }, { value: 'haiku' }] }
+      query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'opus', permissionMode: 'default' })
+      await until(() => runner.autoAvailable!(session.id))
+      await runner.configure!(session.id, { model: 'haiku' })
+      expect(runner.autoAvailable!(session.id)).toBe(false)
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'default', autoAvailable: false })
+      await runner.configure!(session.id, { model: 'opus' })
+      expect(modes().at(-1)).toEqual({ kind: 'mode', mode: 'default', autoAvailable: true })
+    })
+
+    test('a failing initialization leaves auto unavailable', async () => {
+      const query = await begin()
+      query.initialization = null
+      query.emit({ type: 'system', subtype: 'init', session_id: 'c1', model: 'opus', permissionMode: 'default' })
+      await tick()
+      await tick()
+      expect(runner.autoAvailable!(session.id)).toBe(false)
+    })
+  })
+})
+
 describe('send', () => {
   test('pushes a user turn, journals it and sets working', async () => {
     const query = await begin()
@@ -590,12 +1111,12 @@ describe('chat items', () => {
       { type: 'weird' },
       { type: 'result', subtype: 'success', result: 'ok', is_error: false, duration_ms: 5 }
     )
-    await until(() => messages.length === 7)
+    await until(() => messages.length === 8)
     expect(items().every((item) => item !== undefined)).toBe(true)
-    expect(items().map((item) => item!.kind)).toEqual(['user', 'status', 'prose', 'activity', 'activity', 'status', 'turn-end'])
-    expect(items()[3]).toMatchObject({ callId: 't1', state: 'running' })
-    expect(items()[4]).toMatchObject({ callId: 't1', state: 'done' })
-    expect(items()[6]).toEqual({ kind: 'turn-end', state: 'done', durationMs: 5 })
+    expect(items().map((item) => item!.kind)).toEqual(['user', 'mode', 'status', 'prose', 'activity', 'activity', 'status', 'turn-end'])
+    expect(items()[4]).toMatchObject({ callId: 't1', state: 'running' })
+    expect(items()[5]).toMatchObject({ callId: 't1', state: 'done' })
+    expect(items()[7]).toEqual({ kind: 'turn-end', state: 'done', durationMs: 5 })
   })
 
   test('sent messages carry their images and queue id', async () => {
@@ -647,9 +1168,9 @@ describe('chat items', () => {
   test('stopping mid-turn closes running calls as stopped, then ends the turn as stopped', async () => {
     const query = await begin()
     await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 9' } }, { type: 'tool_use', id: 't2', name: 'Edit', input: { file_path: '/a', old_string: 'a', new_string: 'b' } }] } })
-    await until(() => messages.length === 3)
+    await until(() => messages.length === 4)
     await runner.stop('s_1')
-    expect(items().slice(3).map((item) => item && [item.kind, (item as any).callId, (item as any).state])).toEqual([
+    expect(items().slice(4).map((item) => item && [item.kind, (item as any).callId, (item as any).state])).toEqual([
       ['activity', 't1', 'stopped'],
       ['file-change', 't2', 'stopped'],
       ['turn-end', undefined, 'stopped']
@@ -694,10 +1215,10 @@ describe('chat items', () => {
   test('a crash mid-turn ends the turn as failed and journals an error item', async () => {
     const query = await begin()
     await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a' } }] } })
-    await until(() => messages.length === 2)
+    await until(() => messages.length === 3)
     query.fail(new Error('claude crashed'))
     await until(() => statuses.includes('exited'))
-    expect(items().slice(2).map((item) => item!.kind)).toEqual(['activity', 'turn-end', 'error'])
+    expect(items().slice(3).map((item) => item!.kind)).toEqual(['activity', 'turn-end', 'error'])
     expect(items().at(-1)).toEqual({ kind: 'error', reason: 'exited', stderrTail: ['claude crashed'], resumable: false })
   })
 
@@ -730,9 +1251,9 @@ describe('interrupt', () => {
   test('mid-turn it stops running calls, ends the turn as stopped and leaves the session able to send', async () => {
     const query = await begin()
     await emit(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 9' } }] } })
-    await until(() => messages.length === 2)
+    await until(() => messages.length === 3)
     await runner.interrupt('s_1')
-    expect(items().slice(2).map((item) => [item.kind, item.callId, item.state])).toEqual([
+    expect(items().slice(3).map((item) => [item.kind, item.callId, item.state])).toEqual([
       ['activity', 't1', 'stopped'],
       ['turn-end', undefined, 'stopped']
     ])
@@ -750,7 +1271,7 @@ describe('interrupt', () => {
   test('echoes of the interrupt after the turn closed journal nothing', async () => {
     const query = await begin()
     await emit(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Write', input: { file_path: '/a/bye.txt', content: 'x' } }] } })
-    await until(() => messages.length === 2)
+    await until(() => messages.length === 3)
     await runner.interrupt('s_1')
     const before = messages.length
     await emit(

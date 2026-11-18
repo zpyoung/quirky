@@ -75,6 +75,7 @@ const SHELL_TARGETS: ReadonlySet<string> = new Set(['host:shell', 'host:scoped',
 export type CaptureCell = { targetId: string; theme: CaptureTheme }
 export const OVERLAY_OPEN_MS = 15_000
 const OVERLAY_TRIGGER_NAMES = new WeakMap<Promise<unknown>, string>()
+let readinessSequence = 0
 
 function namedOverlayTrigger(command: string, trigger: Promise<unknown>): Promise<unknown> {
   OVERLAY_TRIGGER_NAMES.set(trigger, command)
@@ -105,6 +106,71 @@ const TERMINAL_SURFACE_PLUGINS: ReadonlySet<string> = new Set([
 type RuntimeClient = FixtureRpcClient & { close(): void }
 
 type RendererTheme = ThemeInfo & { plugin: string | null }
+export type ReadinessClause =
+  | 'unmounted' | 'hidden' | 'busy' | 'loading-leaf' | 'loading-text'
+  | 'ask-card' | 'chat-agents' | 'quick-open' | 'terminal-pane' | 'empty'
+  | 'git-reviewed-header' | 'git-reviewed-collapsed' | 'git-expanded-count'
+  | 'git-code' | 'git-local-fixture' | 'git-since-notice'
+
+export type ReadinessPhase = { token: string; sequence: number; startedAt: number }
+export type ReadinessArg = {
+  slotSelector: string
+  targetId: string
+  ask: AskCardFixture | null
+  terminal: CaptureTerminalFixture | null
+  phase: ReadinessPhase | null
+}
+
+export type ReadinessTrace = {
+  token: string
+  sequence: number
+  targetId: string
+  startedAt: number
+  polls: number
+  firstPollAt: number | null
+  lastPollAt: number | null
+  maxGapMs: number | null
+  maxPollMs: number
+  totalPollMs: number
+  readyAt: number | null
+  lastFailed: ReadinessClause | null
+  longTaskObserver: boolean
+  longTasks: { count: number; totalMs: number; maxMs: number } | null
+}
+
+export type ReadinessTiming = {
+  sequence: number
+  deadlineMs: number
+  budgetMs: number
+  phaseOffsetMs: number
+  readyMs: number | null
+  hostRejectedMs: number | null
+  diagnosticLatencyMs: number | null
+  hostMaxLagMs: number
+  polls: number | null
+  firstPollMs: number | null
+  lastPollMs: number | null
+  maxGapMs: number | null
+  maxPollMs: number | null
+  totalPollMs: number | null
+  longTaskObserver: boolean | null
+  longTaskCoverageFromMs: number | null
+  longTasks: { count: number; totalMs: number; maxMs: number } | null
+  lastFailed: ReadinessClause | null
+  lateReady: boolean | null
+  cleanup: 'proved' | `unproved: ${string}`
+}
+
+type ReadinessPhaseEntry = {
+  state: 'open' | 'closed'
+  sequence: number
+  closedBy: 'host' | 'successor' | 'superseded' | null
+  trace: ReadinessTrace
+  observer: PerformanceObserver | null
+}
+
+type ReadinessPageStore = { phases: Record<string, ReadinessPhaseEntry> }
+type ReadinessPageGlobal = typeof globalThis & { __quirkyCaptureReadiness?: ReadinessPageStore }
 
 export type CaptureRuntime = {
   options: CaptureOptions
@@ -135,6 +201,7 @@ export type CaptureRuntime = {
   secrets: string[]
   pageErrors: string[]
   fixtureInputErrors: ReadonlyMap<string, string>
+  lastReadiness?: { targetId: string; sequence: number; timing: ReadinessTiming }
 }
 class CaptureRuntimeError extends Error {}
 
@@ -1220,8 +1287,395 @@ export async function paletteFieldMounted(page: Page): Promise<boolean> {
     .getByRole('textbox', { name: PALETTE_SEARCH_LABEL, exact: true }).count() > 0
 }
 
+export function contentReadiness(arg: ReadinessArg): boolean {
+  const addLongTasks = (entry: ReadinessPhaseEntry, records: PerformanceEntry[]) => {
+    const stats = entry.trace.longTasks
+    if (!stats) return
+    for (const record of records) {
+      stats.count += 1
+      stats.totalMs += record.duration
+      stats.maxMs = Math.max(stats.maxMs, record.duration)
+    }
+  }
+  const flushAndDisconnect = (entry: ReadinessPhaseEntry): boolean => {
+    const observer = entry.observer
+    if (!observer) return true
+    try { addLongTasks(entry, observer.takeRecords()) } catch {}
+    try {
+      observer.disconnect()
+      entry.observer = null
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  let phaseEntry: ReadinessPhaseEntry | null = null
+  const phase = arg.phase
+  if (phase) {
+    const pageGlobal = globalThis as ReadinessPageGlobal
+    const store = pageGlobal.__quirkyCaptureReadiness ?? {
+      phases: Object.create(null) as Record<string, ReadinessPhaseEntry>
+    }
+    pageGlobal.__quirkyCaptureReadiness = store
+    const known = store.phases[phase.token]
+    if (known?.state === 'closed') return false
+    if (known) {
+      phaseEntry = known
+    } else {
+      const trace: ReadinessTrace = {
+        token: phase.token,
+        sequence: phase.sequence,
+        targetId: arg.targetId,
+        startedAt: phase.startedAt,
+        polls: 0,
+        firstPollAt: null,
+        lastPollAt: null,
+        maxGapMs: null,
+        maxPollMs: 0,
+        totalPollMs: 0,
+        readyAt: null,
+        lastFailed: null,
+        longTaskObserver: false,
+        longTasks: null
+      }
+      const superseded = Object.values(store.phases).some((entry) => entry.sequence > phase.sequence)
+      phaseEntry = {
+        state: superseded ? 'closed' : 'open',
+        sequence: phase.sequence,
+        closedBy: superseded ? 'superseded' : null,
+        trace,
+        observer: null
+      }
+      store.phases[phase.token] = phaseEntry
+      if (superseded) return false
+
+      for (const previous of Object.values(store.phases)) {
+        if (previous === phaseEntry || previous.sequence >= phase.sequence || previous.state === 'closed') continue
+        flushAndDisconnect(previous)
+        previous.state = 'closed'
+        previous.closedBy = 'successor'
+      }
+
+      if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+        let observer: PerformanceObserver | null = null
+        try {
+          observer = new PerformanceObserver((list) => {
+            if (phaseEntry?.state === 'open') addLongTasks(phaseEntry, list.getEntries())
+          })
+          observer.observe({ entryTypes: ['longtask'] })
+          phaseEntry.observer = observer
+          phaseEntry.trace.longTaskObserver = true
+          phaseEntry.trace.longTasks = { count: 0, totalMs: 0, maxMs: 0 }
+        } catch {
+          if (observer) {
+            try {
+              observer.disconnect()
+            } catch {
+              phaseEntry.observer = observer
+            }
+          }
+          phaseEntry.trace.longTaskObserver = false
+          phaseEntry.trace.longTasks = null
+        }
+      }
+    }
+    if (phaseEntry.state !== 'open') return false
+  }
+
+  const pollStarted = phaseEntry ? performance.now() : 0
+  const pollAt = phaseEntry ? Date.now() - phaseEntry.trace.startedAt : 0
+  if (phaseEntry) {
+    const trace = phaseEntry.trace
+    if (trace.firstPollAt === null) trace.firstPollAt = pollAt
+    if (trace.lastPollAt !== null) trace.maxGapMs = Math.max(trace.maxGapMs ?? 0, pollAt - trace.lastPollAt)
+    trace.lastPollAt = pollAt
+    trace.polls += 1
+  }
+
+  let failedClause: ReadinessClause | null = null
+  const fail = (clause: ReadinessClause): false => {
+    failedClause = clause
+    return false
+  }
+  const admitted = (() => {
+    const node = document.querySelector(arg.slotSelector)
+    if (!node) return fail('unmounted')
+    const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
+    const element = body ?? node
+    const visible = (child: Element | null): child is Element => {
+      if (!child) return false
+      const style = getComputedStyle(child)
+      const rect = child.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+    }
+    const style = getComputedStyle(element)
+    const rect = element.getBoundingClientRect()
+    const ownVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+    const visibleChild = [...element.querySelectorAll('*')].some((child) => {
+      const childStyle = getComputedStyle(child)
+      const childRect = child.getBoundingClientRect()
+      return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+    })
+    if (!ownVisible && !visibleChild) return fail('hidden')
+    if (node.querySelector('[aria-busy="true"], [role="progressbar"]')) return fail('busy')
+    const loadingLeaf = [...element.querySelectorAll('*')].some((child) => {
+      if (child.children.length > 0 || !/^loading(?:\b|…)/i.test((child.textContent ?? '').trim())) return false
+      const childStyle = getComputedStyle(child)
+      const childRect = child.getBoundingClientRect()
+      return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+    })
+    if (loadingLeaf) return fail('loading-leaf')
+    if (node.querySelector('[role="alert"], .plugin-slot-error')) return true
+    const text = (element.textContent ?? '').trim()
+    if (/^loading\b/i.test(text)) return fail('loading-text')
+    if (arg.targetId === 'view:quirky.ask/card') {
+      const cards = [...element.querySelectorAll('[data-approval-card]')].filter(visible)
+      const card = cards[0]
+      if (!arg.ask || cards.length !== 1 || card?.getAttribute('data-approval-card') !== arg.ask.askId ||
+        card.querySelector('[data-approval-command]')?.textContent?.trim() !== arg.ask.command) return fail('ask-card')
+      return ['Allow once', 'Allow for this session', 'Deny'].every((label) =>
+        [...card.querySelectorAll<HTMLButtonElement>('button')].some((button) =>
+          button.textContent?.trim() === label && !button.disabled && visible(button)))
+        || fail('ask-card')
+    }
+    if (arg.targetId === 'overlay:quirky.session/chat-dialogs') {
+      const dialog = element.querySelector('[role="dialog"]')
+      const group = dialog?.querySelector('[role="group"][aria-label="Agents"]')
+      const buttons = group ? [...group.querySelectorAll<HTMLButtonElement>('button')] : []
+      const ready = visible(dialog ?? null) && visible(group ?? null) && buttons.length === 4 &&
+        buttons.every((button) => visible(button) && (!button.disabled ||
+          Boolean(button.title.trim() && button.querySelector('span')?.textContent?.trim())))
+      return ready || fail('chat-agents')
+    }
+    if (arg.targetId === 'overlay:quirky.editor/quick-open') {
+      const input = element.querySelector<HTMLInputElement>('input[aria-label="Go to file"]')
+      const ready = input?.value === 'app.ts' && !/Searching files|Opening file/.test(text) &&
+        [...element.querySelectorAll<HTMLButtonElement>('[role="option"]')].some((option) =>
+          !option.disabled && visible(option) && option.querySelector('small')?.textContent?.trim() === 'src/app.ts')
+      return ready || fail('quick-open')
+    }
+    if (arg.targetId === 'view:quirky.session/worktree') {
+      if (!arg.terminal) return fail('terminal-pane')
+      const pane = [...element.querySelectorAll('.qt-pane')].find((candidate) =>
+        candidate.getAttribute('data-session') === arg.terminal!.sessionId &&
+        candidate.getAttribute('data-pane') === arg.terminal!.paneId)
+      const ready = visible(pane ?? null) && visible(pane?.querySelector('.terminal-pane-screen .xterm-screen') ?? null) &&
+        !pane?.querySelector('[data-terminal-connection-state], [role="alert"], [aria-busy="true"], [role="progressbar"]')
+      return ready || fail('terminal-pane')
+    }
+    if (arg.targetId === 'view:quirky.git/diff') {
+      const reviewed = element.querySelector('section[data-path="src/app.ts"]')
+      const expanded = [...element.querySelectorAll<HTMLElement>('[data-review-body]')].filter((reviewBody) => !reviewBody.hidden)
+      const textRange = document.createRange()
+      const renderedText = (line: HTMLElement) => {
+        const parts: string[] = []
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+        for (let textNode = walker.nextNode(); textNode !== null; textNode = walker.nextNode()) {
+          const parent = textNode.parentElement
+          if (!visible(parent) || !parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue
+          textRange.selectNodeContents(textNode)
+          const textRect = textRange.getBoundingClientRect()
+          if (textRect.width > 0 && textRect.height > 0) parts.push(textNode.textContent ?? '')
+        }
+        return parts.join('')
+      }
+      const diffs = expanded.map((reviewBody) => ({
+        body: reviewBody,
+        path: reviewBody.closest('section[data-path]')?.getAttribute('data-path'),
+        code: [...reviewBody.querySelectorAll<HTMLElement>('.cm-editor .cm-content')]
+          .filter((content) => visible(content.closest('.cm-editor')) && visible(content) &&
+            content.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+          .flatMap((content) => [...content.querySelectorAll<HTMLElement>('.cm-line')])
+          .filter((line) => visible(line) && line.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+          .map(renderedText).join('\n').trim()
+      }))
+      const local = diffs.find((diff) => diff.path === 'src/local-review-fixture.ts')
+      const since = diffs.find((diff) => diff.path === 'src/review-note.ts')?.body.querySelector<HTMLElement>('.git-review__since')
+      if (!visible(reviewed?.querySelector('header') ?? null)) return fail('git-reviewed-header')
+      if (reviewed?.querySelector<HTMLElement>('[data-review-body]')?.hidden !== true) return fail('git-reviewed-collapsed')
+      if (expanded.length !== 2) return fail('git-expanded-count')
+      if (!diffs.every((diff) => visible(diff.body) && diff.code.length > 0)) return fail('git-code')
+      if (local?.code.includes('export const localReviewFixture = true') !== true) return fail('git-local-fixture')
+      if (!visible(since ?? null) || since?.innerText.includes('Showing changes since you reviewed') !== true) {
+        return fail('git-since-notice')
+      }
+      return true
+    }
+    return text.length > 0 || visibleChild || fail('empty')
+  })()
+
+  if (phaseEntry) {
+    const trace = phaseEntry.trace
+    const elapsed = performance.now() - pollStarted
+    trace.maxPollMs = Math.max(trace.maxPollMs, elapsed)
+    trace.totalPollMs += elapsed
+    if (failedClause) trace.lastFailed = failedClause
+    if (admitted) trace.readyAt = Date.now() - trace.startedAt
+  }
+  return admitted
+}
+
+export function closeReadinessPhase(token: string): (ReadinessTrace & { observerDisconnected: boolean }) | null {
+  const pageGlobal = globalThis as ReadinessPageGlobal
+  const store = pageGlobal.__quirkyCaptureReadiness ?? {
+    phases: Object.create(null) as Record<string, ReadinessPhaseEntry>
+  }
+  pageGlobal.__quirkyCaptureReadiness = store
+  let entry = store.phases[token]
+  if (!entry) {
+    entry = {
+      state: 'closed',
+      sequence: 0,
+      closedBy: 'host',
+      observer: null,
+      trace: {
+        token,
+        sequence: 0,
+        targetId: '',
+        startedAt: Date.now(),
+        polls: 0,
+        firstPollAt: null,
+        lastPollAt: null,
+        maxGapMs: null,
+        maxPollMs: 0,
+        totalPollMs: 0,
+        readyAt: null,
+        lastFailed: null,
+        longTaskObserver: false,
+        longTasks: null
+      }
+    }
+    store.phases[token] = entry
+  }
+  if (entry.state === 'open') {
+    entry.state = 'closed'
+    entry.closedBy = 'host'
+  }
+  let observerDisconnected = true
+  const observer = entry.observer
+  if (observer) {
+    try {
+      const stats = entry.trace.longTasks
+      if (stats) {
+        for (const record of observer.takeRecords()) {
+          stats.count += 1
+          stats.totalMs += record.duration
+          stats.maxMs = Math.max(stats.maxMs, record.duration)
+        }
+      }
+    } catch {}
+    try {
+      observer.disconnect()
+      entry.observer = null
+    } catch {
+      observerDisconnected = false
+    }
+  }
+  return { ...entry.trace, observerDisconnected }
+}
+
+export function readinessTimingFromError(message: string): ReadinessTiming | null {
+  const marker = '; timing='
+  const markerAt = message.indexOf(marker)
+  if (markerAt < 0) return null
+  const start = markerAt + marker.length
+  if (message[start] !== '{') return null
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = start; index < message.length; index += 1) {
+    const character = message[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') quoted = false
+      continue
+    }
+    if (character === '"') quoted = true
+    else if (character === '{') depth += 1
+    else if (character === '}') {
+      depth -= 1
+      if (depth === 0) {
+        try {
+          const parsed: unknown = JSON.parse(message.slice(start, index + 1))
+          if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed as ReadinessTiming
+          }
+        } catch {}
+        return null
+      }
+    }
+  }
+  return null
+}
+
+/** Redacts free text without letting credential patterns consume structured timing delimiters. */
+function sanitizedCaptureError(error: unknown, secrets: string[]): string {
+  const message = errorMessage(error)
+  const timing = readinessTimingFromError(message)
+  if (!timing) return sanitizedError(error, secrets)
+  const marker = '; timing='
+  const timingAt = message.indexOf(marker)
+  const originalTiming = JSON.stringify(timing)
+  const prefix = sanitizedError(message.slice(0, timingAt), secrets)
+  const suffix = sanitizedError(message.slice(timingAt + marker.length + originalTiming.length), secrets)
+  const redactedTiming = JSON.stringify(timing, (key, value: unknown) => {
+    if (typeof value !== 'string') return value
+    const redacted = sanitizedError(value, secrets)
+    return key === 'cleanup' ? redacted.slice(0, 'unproved: '.length + 160) : redacted
+  })
+  return `${prefix}${marker}${redactedTiming}${suffix}`.slice(0, 2_000)
+}
+
+function readinessTraceFrom(value: unknown, phase: ReadinessPhase, targetId: string): ReadinessTrace | null {
+  const candidate = record(value)
+  if (candidate.token !== phase.token || candidate.sequence !== phase.sequence || candidate.targetId !== targetId ||
+    typeof candidate.startedAt !== 'number' || typeof candidate.polls !== 'number' ||
+    typeof candidate.maxPollMs !== 'number' || typeof candidate.totalPollMs !== 'number' ||
+    typeof candidate.longTaskObserver !== 'boolean') return null
+  return value as ReadinessTrace
+}
+
+function timingForReadiness(
+  phase: ReadinessPhase,
+  deadlineMs: number,
+  budgetMs: number,
+  phaseOffsetMs: number,
+  trace: ReadinessTrace | null,
+  hostRejectedMs: number | null,
+  diagnosticLatencyMs: number | null,
+  hostMaxLagMs: number,
+  lateReady: boolean | null,
+  cleanup: ReadinessTiming['cleanup']
+): ReadinessTiming {
+  return {
+    sequence: phase.sequence,
+    deadlineMs,
+    budgetMs,
+    phaseOffsetMs,
+    readyMs: trace?.readyAt ?? null,
+    hostRejectedMs,
+    diagnosticLatencyMs,
+    hostMaxLagMs,
+    polls: trace?.polls ?? null,
+    firstPollMs: trace?.firstPollAt ?? null,
+    lastPollMs: trace?.lastPollAt ?? null,
+    maxGapMs: trace?.maxGapMs ?? null,
+    maxPollMs: trace?.maxPollMs ?? null,
+    totalPollMs: trace?.totalPollMs ?? null,
+    longTaskObserver: trace?.longTaskObserver ?? null,
+    longTaskCoverageFromMs: trace && trace.longTaskObserver ? trace.firstPollAt : null,
+    longTasks: trace?.longTasks ?? null,
+    lastFailed: trace?.lastFailed ?? null,
+    lateReady,
+    cleanup
+  }
+}
+
 /** Admits only the live mounted content required by a production screenshot cell. */
 export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+  runtime.lastReadiness = undefined
   const aliases = runtime.manifest.contributionInventory?.toolAliases.filter((alias) => alias.renderedTarget.id === target.id) ?? []
   const toolId = aliases[0]?.toolId ?? (target.kind === 'sidebar-section' ? hostingToolFor(runtime.model, target) : null)
   await waitForStateShown(runtime, target, toolId)
@@ -1291,133 +1745,263 @@ export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTar
     }
   }
   const remainingContentMs = Math.max(1, readinessTimeout - (Date.now() - contentStarted))
+  const budgetMs = remainingContentMs
+  const sequence = ++readinessSequence
+  const token = randomUUID()
+  let hostMaxLagMs = 0
+  let nextHostLagAt = Date.now() + 100
+  const hostLagInterval = setInterval(() => {
+    const now = Date.now()
+    hostMaxLagMs = Math.max(hostMaxLagMs, now - nextHostLagAt)
+    nextHostLagAt = now + 100
+  }, 100)
+  const startedAt = Date.now()
+  nextHostLagAt = startedAt + 100
+  const phase: ReadinessPhase = { token, sequence, startedAt }
+  const arg: ReadinessArg = {
+    slotSelector: mountSelector,
+    targetId: target.id,
+    ask: runtime.cellAskFixture,
+    terminal,
+    phase
+  }
   try {
-    await bounded(runtime.page.waitForFunction(({ slotSelector, targetId, ask, terminal }) => {
-      const node = document.querySelector(slotSelector)
-      if (!node) return false
-      const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
-      const element = body ?? node
-      const visible = (child: Element | null): child is Element => {
-        if (!child) return false
-        const style = getComputedStyle(child)
-        const rect = child.getBoundingClientRect()
-        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
-      }
-      const style = getComputedStyle(element)
-      const rect = element.getBoundingClientRect()
-      const ownVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
-      const visibleChild = [...element.querySelectorAll('*')].some((child) => {
-        const childStyle = getComputedStyle(child)
-        const childRect = child.getBoundingClientRect()
-        return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
-      })
-      if (!ownVisible && !visibleChild) return false
-      if (node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]')) return false
-      const loadingLeaf = [...element.querySelectorAll('*')].some((child) => {
-        if (child.children.length > 0 || !/^loading(?:\b|…)/i.test((child.textContent ?? '').trim())) return false
-        const childStyle = getComputedStyle(child)
-        const childRect = child.getBoundingClientRect()
-        return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
-      })
-      if (loadingLeaf) return false
-      if (node.querySelector('[role=\"alert\"], .plugin-slot-error')) return true
-      const text = (element.textContent ?? '').trim()
-      if (/^loading\b/i.test(text)) return false
-      if (targetId === 'view:quirky.ask/card') {
-        const cards = [...element.querySelectorAll('[data-approval-card]')].filter(visible)
-        const card = cards[0]
-        if (!ask || cards.length !== 1 || card?.getAttribute('data-approval-card') !== ask.askId ||
-          card.querySelector('[data-approval-command]')?.textContent?.trim() !== ask.command) return false
-        return ['Allow once', 'Allow for this session', 'Deny'].every((label) =>
-          [...card.querySelectorAll<HTMLButtonElement>('button')].some((button) =>
-            button.textContent?.trim() === label && !button.disabled && visible(button)))
-      }
-      if (targetId === 'overlay:quirky.session/chat-dialogs') {
-        const dialog = element.querySelector('[role="dialog"]')
-        const group = dialog?.querySelector('[role="group"][aria-label="Agents"]')
-        const buttons = group ? [...group.querySelectorAll<HTMLButtonElement>('button')] : []
-        return visible(dialog ?? null) && visible(group ?? null) && buttons.length === 4 &&
-          buttons.every((button) => visible(button) && (!button.disabled ||
-            Boolean(button.title.trim() && button.querySelector('span')?.textContent?.trim())))
-      }
-      if (targetId === 'overlay:quirky.editor/quick-open') {
-        const input = element.querySelector<HTMLInputElement>('input[aria-label="Go to file"]')
-        return input?.value === 'app.ts' && !/Searching files|Opening file/.test(text) &&
-          [...element.querySelectorAll<HTMLButtonElement>('[role="option"]')].some((option) =>
-            !option.disabled && visible(option) && option.querySelector('small')?.textContent?.trim() === 'src/app.ts')
-      }
-      if (targetId === 'view:quirky.git/diff') {
-        const reviewed = element.querySelector('section[data-path="src/app.ts"]')
-        const expanded = [...element.querySelectorAll<HTMLElement>('[data-review-body]')].filter((body) => !body.hidden)
-        const textRange = document.createRange()
-        const renderedText = (line: HTMLElement) => {
-          const parts: string[] = []
-          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
-          for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
-            const parent = text.parentElement
-            if (!visible(parent) || !parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue
-            textRange.selectNodeContents(text)
-            const rect = textRange.getBoundingClientRect()
-            if (rect.width > 0 && rect.height > 0) parts.push(text.textContent ?? '')
-          }
-          return parts.join('')
+    try {
+      throwIfAborted(runtime.options.signal)
+      await bounded(runtime.page.waitForFunction(contentReadiness, arg, { timeout: budgetMs }),
+        budgetMs, runtime.options.signal, `slot ${target.id} content`)
+    } catch (error) {
+      if (runtime.options.signal?.aborted) throw abortError(runtime.options.signal)
+      const message = errorMessage(error)
+      const timeout = /content exceeded \d+ms/.test(message) || /Timeout.*exceeded/i.test(message)
+      if (!timeout) {
+        if (!runtime.options.signal?.aborted) {
+          try {
+            await bounded(runtime.page.evaluate(closeReadinessPhase, phase.token), 1_000,
+              runtime.options.signal, `slot ${target.id} readiness close`)
+          } catch {}
         }
-        const diffs = expanded.map((body) => ({
-          body,
-          path: body.closest('section[data-path]')?.getAttribute('data-path'),
-          code: [...body.querySelectorAll<HTMLElement>('.cm-editor .cm-content')]
-            .filter((content) => visible(content.closest('.cm-editor')) && visible(content) &&
-              content.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
-            .flatMap((content) => [...content.querySelectorAll<HTMLElement>('.cm-line')])
-            .filter((line) => visible(line) && line.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
-            .map(renderedText).join('\n').trim()
-        }))
-        const local = diffs.find((diff) => diff.path === 'src/local-review-fixture.ts')
-        const since = diffs.find((diff) => diff.path === 'src/review-note.ts')?.body.querySelector<HTMLElement>('.git-review__since')
-        return visible(reviewed?.querySelector('header') ?? null) &&
-          reviewed?.querySelector<HTMLElement>('[data-review-body]')?.hidden === true && diffs.length === 2 &&
-          diffs.every((diff) => visible(diff.body) && diff.code.length > 0) &&
-          local?.code.includes('export const localReviewFixture = true') === true &&
-          visible(since ?? null) && since?.innerText.includes('Showing changes since you reviewed') === true
+        throw error
       }
-      if (targetId === 'view:quirky.session/worktree') {
-        if (!terminal) return false
-        const pane = [...element.querySelectorAll('.qt-pane')].find((pane) =>
-          pane.getAttribute('data-session') === terminal.sessionId && pane.getAttribute('data-pane') === terminal.paneId)
-        return visible(pane ?? null) && visible(pane?.querySelector('.terminal-pane-screen .xterm-screen') ?? null) &&
-          !pane?.querySelector('[data-terminal-connection-state], [role="alert"], [aria-busy="true"], [role="progressbar"]')
+
+      const timeoutMessage = `slot ${target.id} content exceeded ${readinessTimeout}ms`
+      const hostRejectedMs = Date.now() - startedAt
+      let diagnosticLatencyMs: number | null = null
+      let diagnosticFailure: string | null = null
+      let details: { text: string; busy: boolean; nodes?: unknown[] } | null = null
+      let trace: ReadinessTrace | null = null
+      let cleanup: ReadinessTiming['cleanup'] = 'unproved: timeout diagnostics did not answer'
+      if (!runtime.options.signal?.aborted) {
+        const diagnosticStartedAt = Date.now()
+        try {
+          const responseValue = await bounded(root.evaluate((node, args: {
+            targetId: string
+            phase: ReadinessPhase
+            token: string
+          }) => {
+            let details: {
+              text: string
+              busy: boolean
+              nodes: Array<{
+                tag: string
+                class: string
+                text: string | undefined
+                rect: unknown
+                display: string
+                visibility: string
+                ancestors: Array<{ tag: string; hidden: boolean; display: string; rect: unknown }>
+              }>
+            } | null = null
+            let diagnosticReason: string | null = null
+            try {
+              const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
+              const element = body ?? node
+              details = {
+                text: (element.textContent ?? '').trim(),
+                busy: node.querySelector('[aria-busy="true"], [role="progressbar"]') !== null,
+                nodes: [...element.querySelectorAll('*')].filter((child) =>
+                  child.matches('[aria-busy="true"], [role="progressbar"], [role="alert"], [data-terminal-connection-state], [data-review-body], [data-approval-card], [role="option"], .cm-content') ||
+                  (child.children.length === 0 && /^(loading|searching|connecting)\b/i.test(child.textContent?.trim() ?? ''))
+                ).slice(0, 8).map((child) => ({
+                  tag: child.tagName,
+                  class: child.className,
+                  text: child.textContent?.trim().slice(0, 120),
+                  rect: child.getBoundingClientRect().toJSON(),
+                  display: getComputedStyle(child).display,
+                  visibility: getComputedStyle(child).visibility,
+                  ancestors: [child.parentElement, child.parentElement?.parentElement]
+                    .filter((parent) => parent !== null && parent !== undefined)
+                    .map((parent) => ({
+                      tag: parent.tagName,
+                      hidden: parent.hidden,
+                      display: getComputedStyle(parent).display,
+                      rect: parent.getBoundingClientRect().toJSON()
+                    }))
+                }))
+              }
+            } catch (error) {
+              diagnosticReason = error instanceof Error ? error.message : String(error)
+            }
+
+            const pageGlobal = globalThis as ReadinessPageGlobal
+            const store = pageGlobal.__quirkyCaptureReadiness ?? {
+              phases: Object.create(null) as Record<string, ReadinessPhaseEntry>
+            }
+            pageGlobal.__quirkyCaptureReadiness = store
+            let entry = store.phases[args.token]
+            if (!entry) {
+              const trace: ReadinessTrace = {
+                token: args.token,
+                sequence: args.phase.sequence,
+                targetId: args.targetId,
+                startedAt: args.phase.startedAt,
+                polls: 0,
+                firstPollAt: null,
+                lastPollAt: null,
+                maxGapMs: null,
+                maxPollMs: 0,
+                totalPollMs: 0,
+                readyAt: null,
+                lastFailed: null,
+                longTaskObserver: false,
+                longTasks: null
+              }
+              entry = {
+                state: 'closed',
+                sequence: args.phase.sequence,
+                closedBy: 'host',
+                trace,
+                observer: null
+              }
+              store.phases[args.token] = entry
+            }
+            if (entry.state === 'open') {
+              entry.state = 'closed'
+              entry.closedBy = 'host'
+            }
+            let observerDisconnected = true
+            const observer = entry.observer
+            if (observer) {
+              try {
+                const stats = entry.trace.longTasks
+                if (stats) {
+                  for (const task of observer.takeRecords()) {
+                    stats.count += 1
+                    stats.totalMs += task.duration
+                    stats.maxMs = Math.max(stats.maxMs, task.duration)
+                  }
+                }
+              } catch {}
+              try {
+                observer.disconnect()
+                entry.observer = null
+              } catch {
+                observerDisconnected = false
+              }
+            }
+            return { details, diagnosticReason, trace: entry.trace, observerDisconnected }
+          }, { targetId: target.id, phase, token }), 5_000, runtime.options.signal, `slot ${target.id} timeout diagnostics`)
+          diagnosticLatencyMs = Date.now() - diagnosticStartedAt
+          const response = record(responseValue)
+          const detailsValue = Object.hasOwn(response, 'details') ? response.details : responseValue
+          const candidateDetails = record(detailsValue)
+          if (typeof candidateDetails.text === 'string' && typeof candidateDetails.busy === 'boolean') {
+            details = {
+              text: candidateDetails.text,
+              busy: candidateDetails.busy,
+              ...(Array.isArray(candidateDetails.nodes) ? { nodes: candidateDetails.nodes } : {})
+            }
+          }
+          if (typeof response.diagnosticReason === 'string') diagnosticFailure = response.diagnosticReason.slice(0, 160)
+          else if (!details) diagnosticFailure = 'slot diagnostic details were unavailable'
+          trace = readinessTraceFrom(
+            Object.hasOwn(response, 'trace') ? response.trace : responseValue,
+            phase,
+            target.id
+          )
+          cleanup = response.observerDisconnected === true
+            ? 'proved'
+            : 'unproved: observer disconnect was not confirmed'
+        } catch (diagnosticError) {
+          diagnosticLatencyMs = Date.now() - diagnosticStartedAt
+          diagnosticFailure = errorMessage(diagnosticError).slice(0, 160)
+          cleanup = `unproved: ${diagnosticFailure}`
+        }
+      } else {
+        diagnosticFailure = 'capture was aborted before diagnostics'
+        cleanup = `unproved: ${diagnosticFailure}`
       }
-      return text.length > 0 || visibleChild
-    }, { slotSelector: mountSelector, targetId: target.id, ask: runtime.cellAskFixture, terminal },
-    { timeout: remainingContentMs }), remainingContentMs, runtime.options.signal, `slot ${target.id} content`)
-  } catch (error) {
-    const timeoutMessage = `slot ${target.id} content exceeded ${readinessTimeout}ms`
-    if (runtime.options.signal?.aborted ||
-      (!/content exceeded \d+ms/.test(errorMessage(error)) && !/Timeout.*exceeded/i.test(errorMessage(error)))) throw error
-    const details = await root.evaluate((node) => {
-      const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
-      const element = body ?? node
-      return {
-        text: (element.textContent ?? '').trim(),
-        busy: node.querySelector('[aria-busy="true"], [role="progressbar"]') !== null,
-        nodes: [...element.querySelectorAll('*')].filter((child) =>
-          child.matches('[aria-busy="true"], [role="progressbar"], [role="alert"], [data-terminal-connection-state], [data-review-body], [data-approval-card], [role="option"], .cm-content') ||
-          (child.children.length === 0 && /^(loading|searching|connecting)\b/i.test(child.textContent?.trim() ?? ''))
-        ).slice(0, 8).map((child) => ({
-          tag: child.tagName, class: child.className, text: child.textContent?.trim().slice(0, 120),
-          rect: child.getBoundingClientRect().toJSON(),
-          display: getComputedStyle(child).display, visibility: getComputedStyle(child).visibility,
-          ancestors: [child.parentElement, child.parentElement?.parentElement].filter((parent) => parent !== null && parent !== undefined)
-            .map((parent) => ({ tag: parent.tagName, hidden: parent.hidden, display: getComputedStyle(parent).display, rect: parent.getBoundingClientRect().toJSON() }))
-        }))
+
+      let lateReady: boolean | null = null
+      if (!runtime.options.signal?.aborted) {
+        try {
+          const lateResult = await bounded(runtime.page.evaluate(contentReadiness, {
+            ...arg,
+            phase: null
+          }), 2_000, runtime.options.signal, `slot ${target.id} late readiness check`)
+          lateReady = lateResult === true
+        } catch {
+          lateReady = null
+        }
       }
-    })
-    const requirement = target.id === 'view:quirky.ask/card' ? 'Ask card approval card (owned ID, command, enabled approval controls)' :
-      target.id === 'view:quirky.session/worktree' ? 'requested attached terminal surface' :
-      target.id === 'view:quirky.git/diff' ? 'reviewed header and visible code in both expanded fixture diffs' :
-      target.id === 'overlay:quirky.editor/quick-open' ? 'current src/app.ts quick-open result' :
-      target.id === 'overlay:quirky.session/chat-dialogs' ? 'New chat Agents group with four choices' : ''
-    throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))})${requirement ? `; ${requirement}; phase=content; elapsed=${Date.now() - contentStarted}ms; nodes=${JSON.stringify(details.nodes)}` : ''}`)
+      const timing = timingForReadiness(
+        phase,
+        readinessTimeout,
+        budgetMs,
+        startedAt - contentStarted,
+        trace,
+        hostRejectedMs,
+        diagnosticLatencyMs,
+        hostMaxLagMs,
+        lateReady,
+        cleanup
+      )
+      const serializedTiming = JSON.stringify(timing)
+      if (!details || diagnosticFailure) {
+        const reason = (diagnosticFailure ?? 'slot diagnostic details were unavailable').slice(0, 160)
+        throw new Error(`${timeoutMessage} (diagnostics unavailable: ${reason}); timing=${serializedTiming}`)
+      }
+      const requirement = target.id === 'view:quirky.ask/card' ? 'Ask card approval card (owned ID, command, enabled approval controls)' :
+        target.id === 'view:quirky.session/worktree' ? 'requested attached terminal surface' :
+        target.id === 'view:quirky.git/diff' ? 'reviewed header and visible code in both expanded fixture diffs' :
+        target.id === 'overlay:quirky.editor/quick-open' ? 'current src/app.ts quick-open result' :
+        target.id === 'overlay:quirky.session/chat-dialogs' ? 'New chat Agents group with four choices' : ''
+      const nodes = Array.isArray(details.nodes) ? details.nodes : []
+      throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))}); timing=${serializedTiming}${requirement ? `; ${requirement}; phase=content; elapsed=${Date.now() - contentStarted}ms; nodes=${JSON.stringify(nodes)}` : ''}`)
+    }
+
+    let trace: ReadinessTrace | null = null
+    let cleanup: ReadinessTiming['cleanup'] = 'unproved: observer disconnect was not confirmed'
+    try {
+      if (runtime.options.signal?.aborted) throw abortError(runtime.options.signal)
+      const closeValue = await bounded(runtime.page.evaluate(closeReadinessPhase, phase.token), 1_000,
+        runtime.options.signal, `slot ${target.id} readiness close`)
+      if (runtime.options.signal?.aborted) throw abortError(runtime.options.signal)
+      trace = readinessTraceFrom(closeValue, phase, target.id)
+      if (record(closeValue).observerDisconnected === true) cleanup = 'proved'
+    } catch (closeError) {
+      if (runtime.options.signal?.aborted) throw abortError(runtime.options.signal)
+      cleanup = `unproved: ${errorMessage(closeError).slice(0, 160)}`
+    }
+    if (runtime.options.signal?.aborted) throw abortError(runtime.options.signal)
+    runtime.lastReadiness = {
+      targetId: target.id,
+      sequence,
+      timing: timingForReadiness(
+        phase,
+        readinessTimeout,
+        budgetMs,
+        startedAt - contentStarted,
+        trace,
+        null,
+        null,
+        hostMaxLagMs,
+        null,
+        cleanup
+      )
+    }
+  } finally {
+    clearInterval(hostLagInterval)
   }
   const details = await root.evaluate((node) => {
     const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
@@ -1624,7 +2208,7 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
         throw error
       }
     }
-    const message = sanitizedError(error, runtime.secrets)
+    const message = sanitizedCaptureError(error, runtime.secrets)
     if (!image && !existsSync(path)) {
       try {
         image = await screenshot(runtime, path, true)
@@ -1874,6 +2458,7 @@ export async function captureTargetCell(
   capture: CaptureEvidence
   isolation: { ready: true } | { ready: false; blocker: string }
 }> {
+  runtime.lastReadiness = undefined
   const cell = { targetId: target.id, theme }
   if (runtime.ownedAskFixtures.size || runtime.askAcquisitionUncertain ||
     runtime.ownedTerminalFixtures.size || runtime.terminalAcquisitionUncertain || runtime.dirtyCloseFixture) {

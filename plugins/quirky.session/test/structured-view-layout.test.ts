@@ -7,6 +7,7 @@ declare global {
   interface Window {
     sentCalls: unknown[]
     toggleCalls: unknown[]
+    initialMessages?: unknown[]
   }
 }
 
@@ -74,7 +75,8 @@ function browserEntry(): string {
 
     const context = {
       call(method: string, params?: Record<string, unknown>) {
-        if (method === 'quirky.structured/messages' || method === 'quirky.structured/queue' || method === 'quirky.view/list') return Promise.resolve([])
+        if (method === 'quirky.structured/messages') return Promise.resolve(window.initialMessages ?? [])
+        if (method === 'quirky.structured/queue' || method === 'quirky.view/list') return Promise.resolve([])
         if (method === 'quirky.structured/send') {
           window.sentCalls.push(params)
           return Promise.resolve(null)
@@ -134,10 +136,12 @@ function pageMarkup(): string {
     </html>`
 }
 
-async function openComposer() {
-  const context = await browser!.newContext({ viewport: VIEWPORT })
+/** Opens the chat with `messages` journaled and a center workspace `centerWidth` wide. */
+async function openComposer({ centerWidth = CENTER_WIDTH, messages = [] }: { centerWidth?: number; messages?: unknown[] } = {}) {
+  const context = await browser!.newContext({ viewport: { width: VIEWPORT.width + centerWidth - CENTER_WIDTH, height: VIEWPORT.height } })
   const page = await context.newPage()
   await page.setContent(pageMarkup())
+  await page.evaluate((initial) => void (window.initialMessages = initial), messages)
   for (const stylesheet of STYLESHEETS) {
     await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
   }
@@ -216,6 +220,59 @@ describe('the chat composer beside the floating workspace toggle', () => {
     await assertComposerClearance()
   }, 60_000)
 
+})
+
+const PLAN_MESSAGES = [
+  { sessionId: 'structured-1', seq: 1, role: 'user', text: 'plan it', at: 1_700_000_000_000, item: { kind: 'user', text: 'plan it' } },
+  {
+    sessionId: 'structured-1',
+    seq: 2,
+    role: 'assistant',
+    text: '',
+    at: 1_700_000_001_000,
+    item: { kind: 'plan', version: 1, status: 'waiting', askId: 'ask-1', text: '# Handle ExitPlanMode\n\n1. Read the plan file' }
+  }
+]
+
+describe('the plan panel layout', () => {
+  test.skipIf(!executable)('a narrow chat shows the plan in a sheet over the chat, not beside it', async () => {
+    const { context, page } = await openComposer({ messages: PLAN_MESSAGES })
+    try {
+      const sheet = page.getByRole('dialog', { name: 'Plan' })
+      await sheet.waitFor()
+      await sheet.getByText('Handle ExitPlanMode').waitFor()
+      expect(await page.locator('aside[aria-label="Plan"]').count()).toBe(0)
+      const box = (await sheet.boundingBox())!
+      expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width)
+      expect(box.height).toBeGreaterThan(0)
+      await sheet.getByRole('button', { name: 'Approve, auto mode' }).waitFor()
+      await page.keyboard.press('Escape')
+      await sheet.waitFor({ state: 'detached' })
+      await page.getByRole('button', { name: 'Plan · v1 waiting' }).click()
+      await sheet.waitFor()
+    } finally {
+      await context.close()
+    }
+  }, 60_000)
+
+  test.skipIf(!executable)('a wide chat shows the plan in an aside beside the transcript', async () => {
+    const { context, page } = await openComposer({ centerWidth: 1300, messages: PLAN_MESSAGES })
+    try {
+      const aside = page.locator('aside[aria-label="Plan"]')
+      await aside.waitFor()
+      await aside.getByText('Handle ExitPlanMode').waitFor()
+      expect(await page.getByRole('dialog').count()).toBe(0)
+      const asideBox = (await aside.boundingBox())!
+      const logBox = (await page.getByRole('log').boundingBox())!
+      expect(logBox.x + logBox.width).toBeLessThanOrEqual(asideBox.x + 1)
+      expect(asideBox.width).toBeGreaterThan(300)
+      expect(asideBox.width).toBeLessThanOrEqual(440)
+      await aside.getByRole('button', { name: 'Close plan' }).click()
+      await aside.waitFor({ state: 'detached' })
+    } finally {
+      await context.close()
+    }
+  }, 60_000)
 })
 
 describe('the chat transcript header', () => {

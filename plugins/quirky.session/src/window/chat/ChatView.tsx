@@ -1,17 +1,23 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'
+import { Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { Composer } from './Composer'
 import { Embedded } from './Embedded'
-import { groupTurns } from './turns'
+import { currentMode, planVersions, previousMode } from './plan'
+import { PlanChip } from './PlanChip'
+import { PlanPanel } from './PlanPanel'
+import { groupChatTurns } from './turns'
 import { TurnView, VIEW_PANE_VIEW } from './Turn'
 
 const NO_MESSAGES: StructuredMessage[] = []
 type MessagePhase = { status: 'loading' } | { status: 'ready' } | { status: 'off' } | { status: 'failed'; message: string }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** The transcript column's width plus the Views pane's, in length units; a narrower body shows the plan in a sheet. */
+const PLAN_ASIDE_MIN_UNITS = 720 + 320
 
 /** How far from the end the transcript may be scrolled and still follow new content. */
 const BOTTOM_SLACK = 24
@@ -63,6 +69,15 @@ const pane = {
   minWidth: 0,
   borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
 } satisfies CSSProperties
+const plan = {
+  display: 'flex',
+  flex: '0 0 calc(380 * var(--ui-length-unit))',
+  flexDirection: 'column',
+  minHeight: 0,
+  minWidth: 0,
+  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
+} satisfies CSSProperties
+const headerEnd = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', flexShrink: 0 } satisfies CSSProperties
 const header = {
   display: 'flex',
   alignItems: 'center',
@@ -141,6 +156,30 @@ function usePaneViews(context: UiPluginContext, sessionId: string): number {
   return count
 }
 
+/**
+ * Whether `ref`'s element is wide enough to hold the plan panel beside the transcript. An element
+ * with no layout yet counts as wide, so the panel never flashes in a sheet before the first measure.
+ */
+function usePlanFits(ref: RefObject<HTMLElement | null>): boolean {
+  const [fits, setFits] = useState(true)
+  useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const measure = () => {
+      const width = element.getBoundingClientRect().width
+      if (width === 0) return
+      const unit = Number.parseFloat(getComputedStyle(element).getPropertyValue('--ui-length-unit'))
+      setFits(width >= PLAN_ASIDE_MIN_UNITS * (Number.isFinite(unit) ? unit : 1))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref])
+  return fits
+}
+
 /** The static feature set of `agent`, or null while it loads or when it cannot be read. */
 function useCapabilities(context: UiPluginContext, agent: string): AgentCapabilities | null {
   const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(null)
@@ -199,9 +238,11 @@ function useEarlierChats(context: UiPluginContext, session: Session): EarlierCha
 
 /**
  * A structured session as a chat: turns with prose, folded activity, cards, asks and views, the
- * Views pane beside them and the composer below. A resumed chat shows the turns of the sessions it
- * was resumed from first. Messages without a chat item still show as plain rows, and the
- * transcript follows new content only while it is scrolled to the end.
+ * Views pane and the plan panel beside them and the composer below. A resumed chat shows the turns of
+ * the sessions it was resumed from first. The plan panel shows the newest plan version, opens when a
+ * version waits on load or any newer one arrives, and is a sheet when the chat is too narrow for it.
+ * Messages without a chat item still show as plain rows, and the transcript follows new content only
+ * while it is scrolled to the end.
  */
 export function ChatView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
@@ -222,12 +263,38 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const paneViews = usePaneViews(context, session.id)
   const earlier = useEarlierChats(context, session)
   const turns = useMemo(
-    () =>
-      [...earlier, { session, messages: stored }].flatMap((chat) =>
-        groupTurns(chat.messages, { showAll }).map((turn) => ({ owner: chat.session, key: `${chat.session.id}:${turn.key}`, turn }))
-      ),
+    () => {
+      const chats = [...earlier, { session, messages: stored }]
+      const grouped = groupChatTurns(chats.map((chat) => chat.messages), { showAll })
+      return chats.flatMap((chat, index) => grouped[index]!.map((turn) => ({ owner: chat.session, key: `${chat.session.id}:${turn.key}`, turn })))
+    },
     [earlier, session, stored, showAll]
   )
+  const history = useMemo(() => [...earlier.flatMap((chat) => chat.messages), ...stored], [earlier, stored])
+  const versions = useMemo(() => planVersions(history), [history])
+  const mode = useMemo(() => currentMode(history), [history])
+  const modeBeforePlan = useMemo(() => previousMode(history), [history])
+  const newest = versions.at(-1)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [viewed, setViewed] = useState<number | null>(null)
+  const lastSeen = useRef<number | null>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const fits = usePlanFits(bodyRef)
+  const shown = versions.find((entry) => entry.version === viewed) ?? newest
+  const closePanel = () => setPanelOpen(false)
+  const planPanel =
+    panelOpen && shown ? (
+      <PlanPanel
+        key={shown.version}
+        context={context}
+        sessionId={session.id}
+        version={shown}
+        isNewest={shown.version === newest?.version}
+        onClose={closePanel}
+        framed={fits}
+      />
+    ) : null
+  const autoAvailable = mode !== null ? mode.autoAvailable === true : stored.length === 0 ? undefined : false
   const working = session.status === 'working' || session.status === 'waiting'
 
   const latest = useRef(0)
@@ -259,6 +326,9 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   }
 
   useEffect(() => {
+    lastSeen.current = null
+    setPanelOpen(false)
+    setViewed(null)
     cancelled.current = false
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'plugin.changed') {
@@ -290,6 +360,19 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
       unsubscribeConnection()
     }
   }, [context, session.id])
+
+  useEffect(() => {
+    if (phase.status !== 'ready') return
+    const latestVersion = newest?.version ?? 0
+    if (lastSeen.current === null) {
+      lastSeen.current = latestVersion
+      setPanelOpen(newest?.status === 'waiting')
+    } else if (latestVersion > lastSeen.current) {
+      lastSeen.current = latestVersion
+      setViewed(null)
+      setPanelOpen(true)
+    }
+  }, [phase.status, newest?.version, newest?.status])
 
   useLayoutEffect(() => {
     const element = scrollRef.current
@@ -342,21 +425,33 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     <div style={layout}>
       <header style={header}>
         <h2 style={heading}>{session.title}</h2>
-        <label className="ui-checkbox-label" htmlFor={showAllId}>
-          <input
-            id={showAllId}
-            type="checkbox"
-            checked={showAll}
-            onChange={(event) => {
-              const enabled = event.target.checked
-              rememberShowAllEvents(session, enabled)
-              void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
-            }}
-          />
-          <span>Show all events</span>
-        </label>
+        <div style={headerEnd}>
+          {newest && (
+            <PlanChip
+              newest={newest}
+              open={panelOpen}
+              onToggle={() => {
+                setViewed(null)
+                setPanelOpen(!panelOpen)
+              }}
+            />
+          )}
+          <label className="ui-checkbox-label" htmlFor={showAllId}>
+            <input
+              id={showAllId}
+              type="checkbox"
+              checked={showAll}
+              onChange={(event) => {
+                const enabled = event.target.checked
+                rememberShowAllEvents(session, enabled)
+                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
+              }}
+            />
+            <span>Show all events</span>
+          </label>
+        </div>
       </header>
-      <div style={body}>
+      <div ref={bodyRef} style={body}>
         <div style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
             <div ref={columnRef} style={column}>
@@ -366,7 +461,18 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
               )}
               {phase.status === 'ready' && turns.length === 0 && <EmptyState message="No messages yet." />}
               {turns.map(({ owner, key, turn }, index) => (
-                <TurnView key={key} context={context} session={owner} capabilities={capabilities} data={turn} index={index} />
+                <TurnView
+                  key={key}
+                  context={context}
+                  session={owner}
+                  capabilities={capabilities}
+                  data={turn}
+                  index={index}
+                  onOpenPlan={(version) => {
+                    setViewed(version === newest?.version ? null : version)
+                    setPanelOpen(true)
+                  }}
+                />
               ))}
             </div>
           </div>
@@ -381,8 +487,26 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
             <Embedded context={context} viewId={VIEW_PANE_VIEW} input={{ session: session.id }} fallback="" />
           </aside>
         )}
+        {planPanel !== null && fits && (
+          <aside style={plan} aria-label="Plan">
+            {planPanel}
+          </aside>
+        )}
       </div>
-      <Composer context={context} session={session} capabilities={capabilities} working={working} />
+      {planPanel !== null && !fits && (
+        <Dialog open title="Plan" variant="sheet" scrollBody onClose={closePanel}>
+          {planPanel}
+        </Dialog>
+      )}
+      <Composer
+        context={context}
+        session={session}
+        capabilities={capabilities}
+        working={working}
+        reportedMode={mode?.mode}
+        autoAvailable={autoAvailable}
+        previousMode={modeBeforePlan}
+      />
     </div>
   )
 }

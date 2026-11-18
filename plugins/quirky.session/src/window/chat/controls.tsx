@@ -16,9 +16,11 @@ export type AgentOptions = {
 }
 
 /** What the user has picked in the composer; null means the agent's own default. */
-export type Picks = { model: string | null; effort: string | null; mode: string | null; plan: boolean }
+export type Picks = { model: string | null; effort: string | null; mode: string | null }
 
-export const NO_PICKS: Picks = { model: null, effort: null, mode: null, plan: false }
+export const NO_PICKS: Picks = { model: null, effort: null, mode: null }
+
+const AUTO_UNAVAILABLE = "Auto mode isn't available for this model"
 
 const LOADING = 'Loading capabilities'
 
@@ -148,6 +150,7 @@ export type TurnSettings = {
   choices: Choice[]
   /** Empty when the session launched without one, so the agent runs on its own default. */
   effort: string
+  /** The Mode list's rows, in the agent's order; `modeReasons` says why one cannot be picked. */
   modes: string[]
   mode: string
   defaultMode: string | null
@@ -159,9 +162,19 @@ export type TurnSettings = {
   modeDescription: (mode: string) => string | undefined
   modelReason: string | undefined
   effortReason: string | undefined
+  /** Why the whole Permissions list is off, such as an agent with no permission modes. */
   modeReason: string | undefined
-  planReason: string | undefined
+  /** Why a single mode row is off, by mode id. */
+  modeReasons: Record<string, string | undefined>
   imagesReason: string | undefined
+}
+
+/** Why a Mode row is off: Auto when the model lacks it, Plan when the agent has none; a mode the agent offers has no reason. */
+function modeReasonsOf(capabilities: AgentCapabilities | null, autoAvailable: boolean | undefined): TurnSettings['modeReasons'] {
+  return {
+    auto: autoAvailable === false ? AUTO_UNAVAILABLE : undefined,
+    plan: reasonOf(capabilities?.planMode)
+  }
 }
 
 /** Loads the permission mode a running session is in, which can differ from the agent's default when it opened in another. */
@@ -191,6 +204,7 @@ const MODE_DESCRIPTIONS: Record<string, Record<string, string>> = {
   claude: {
     default: 'Ask before edits and commands',
     acceptEdits: 'Edit files; ask before commands',
+    plan: 'Read only until you approve a plan',
     auto: 'A classifier approves safe actions',
     dontAsk: 'Deny anything not pre-approved',
     bypassPermissions: 'Run every tool without asking'
@@ -203,13 +217,18 @@ const MODE_DESCRIPTIONS: Record<string, Record<string, string>> = {
   }
 }
 
-/** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
+/**
+ * Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's
+ * lists. `autoAvailable` is whether Claude offers Auto; leave it undefined before the chat has
+ * reported, when Auto is not ruled out.
+ */
 export function useTurnSettings(
   context: UiPluginContext,
   session: Session,
   capabilities: AgentCapabilities | null,
   options: AgentOptions | null,
-  picks: Picks
+  picks: Picks,
+  autoAvailable?: boolean
 ): TurnSettings {
   const launched = launchPicks(session)
   const live = useLiveModels(context, session, capabilities, options)
@@ -221,8 +240,7 @@ export function useTurnSettings(
   const choices = options ? effortChoices(options, model) : []
   const effort = picks.effort ?? launched.effort ?? ''
   const permissionModes = capabilities?.permissionModes
-  // the runner sends plan as the permission mode whenever planMode is on, so the Plan switch alone owns it
-  const modes = permissionModes?.ok ? permissionModes.modes.filter((name) => name !== 'plan') : []
+  const modes = permissionModes?.ok ? permissionModes.modes : []
   const defaultMode = modes[0] ?? null
   const mode = picks.mode ?? (liveMode !== null && modes.includes(liveMode) ? liveMode : null) ?? defaultMode ?? ''
   const labels = permissionModes?.ok ? permissionModes.labels : undefined
@@ -248,7 +266,7 @@ export function useTurnSettings(
     modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
     effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
     modeReason: reasonOf(permissionModes),
-    planReason: reasonOf(capabilities?.planMode),
+    modeReasons: modeReasonsOf(capabilities, autoAvailable),
     imagesReason: reasonOf(capabilities?.images)
   }
 }
