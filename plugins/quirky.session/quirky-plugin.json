@@ -253,6 +253,56 @@
         }
       },
       {
+        "id": "markdownAssets",
+        "description": "Which paths named in a chat reply are real files of the session's worktree, and displayable urls for its images. A path that is missing or outside the worktree answers null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Paths as written, each with an optional `:line` or `:line:col` suffix. At most 200 entries of at most 1024 characters."
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Image sources as written. At most 200 entries of at most 1024 characters."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Each requested path as written to `{ path, line? }` with `path` relative to the session's directory, or null."
+            },
+            "images": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Each requested image source as written to a displayable url, or null."
+            }
+          },
+          "required": [
+            "files",
+            "images"
+          ]
+        }
+      },
+      {
         "id": "create",
         "description": "Starts a terminal session. `agent` defaults to the default agent (else the first installed one, else a shell). `prompt` reaches the agent the way that agent takes it; `promptDelivery` on the result says how. A prompt pasted after start settles later and emits `changed`, unless `waitForPrompt` is set. `title` names the tab; `command` runs one shell command instead of an interactive shell (agent shell only)",
         "params": {

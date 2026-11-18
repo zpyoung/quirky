@@ -16,6 +16,9 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** How far from the end the transcript may be scrolled and still follow new content. */
 const BOTTOM_SLACK = 24
 
+/** How many levels below the transcript column a reading anchor may sit. */
+const ANCHOR_DEPTH = 6
+
 const layout = {
   display: 'flex',
   flex: 1,
@@ -26,6 +29,22 @@ const layout = {
   background: 'var(--ui-surface)'
 } satisfies CSSProperties
 const body = { display: 'flex', flex: 1, minHeight: 0, minWidth: 0 } satisfies CSSProperties
+const transcript = { position: 'relative', display: 'flex', flex: 1, minHeight: 0, minWidth: 0 } satisfies CSSProperties
+const jump = {
+  position: 'absolute',
+  insetBlockEnd: 'var(--ui-space-12)',
+  insetInlineStart: '50%',
+  transform: 'translateX(-50%)',
+  padding: 'var(--ui-space-4) var(--ui-space-12)',
+  color: 'var(--ui-surface)',
+  background: 'var(--ui-accent)',
+  border: 0,
+  borderRadius: 'var(--ui-radius-window)',
+  boxShadow: '0 var(--ui-space-4) var(--ui-space-12) var(--ui-shadow)',
+  fontSize: 'var(--ui-font-label)',
+  fontWeight: 600,
+  cursor: 'pointer'
+} satisfies CSSProperties
 const scroller = { flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', padding: 'var(--ui-space-16) 0 var(--ui-space-24)' } satisfies CSSProperties
 const column = {
   display: 'flex',
@@ -66,6 +85,22 @@ const heading = {
 /** Whether `element` is scrolled to its end, give or take a few lines. */
 export function atBottom(element: Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK
+}
+
+/**
+ * The deepest element at the top of `scroller` that is still in view, with its offset from the
+ * scroller's top. Holding that offset steady keeps the reader's place when content above it resizes.
+ */
+function readingAnchor(scroller: HTMLElement, column: HTMLElement): { element: Element; offset: number } | null {
+  const top = scroller.getBoundingClientRect().top
+  let node: Element = column
+  for (let depth = 0; depth < ANCHOR_DEPTH; depth++) {
+    const next = [...node.children].find((child) => child.getBoundingClientRect().bottom > top)
+    if (!next) break
+    node = next
+    if (next.getBoundingClientRect().top >= top) break
+  }
+  return node === column ? null : { element: node, offset: node.getBoundingClientRect().top - top }
 }
 
 /** The number of this session's views the agent placed in the pane, read again whenever views change. */
@@ -139,7 +174,11 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     () => showAllEventsFor(session)
   )
   const scrollRef = useRef<HTMLDivElement>(null)
+  const columnRef = useRef<HTMLDivElement>(null)
   const following = useRef(true)
+  const lastTop = useRef(0)
+  const anchor = useRef<{ element: Element; offset: number } | null>(null)
+  const [behind, setBehind] = useState(false)
   const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
   const paneViews = usePaneViews(context, session.id)
@@ -212,6 +251,46 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     if (element && following.current) element.scrollTop = element.scrollHeight
   }, [turns])
 
+  // WKWebView has no overflow-anchor, so a reader scrolled up is held in place by hand
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current
+    const column = columnRef.current
+    if (!scroller || !column || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => {
+      if (following.current) {
+        scroller.scrollTop = scroller.scrollHeight
+        return
+      }
+      const held = anchor.current
+      if (held && column.contains(held.element)) {
+        const drift = held.element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - held.offset
+        if (drift !== 0) scroller.scrollTop += drift
+      }
+      anchor.current = readingAnchor(scroller, column)
+    })
+    observer.observe(column)
+    return () => observer.disconnect()
+  }, [phase.status === 'off'])
+
+  function onScrolled(element: HTMLElement): void {
+    // only a scroll upward leaves the end, so a smooth scroll back down is not mistaken for a reader leaving it
+    following.current = atBottom(element) || (following.current && element.scrollTop >= lastTop.current)
+    lastTop.current = element.scrollTop
+    const column = columnRef.current
+    anchor.current = following.current || !column ? null : readingAnchor(element, column)
+    setBehind(!following.current)
+  }
+
+  function jumpToLatest(): void {
+    const element = scrollRef.current
+    if (!element) return
+    following.current = true
+    anchor.current = null
+    setBehind(false)
+    if (typeof element.scrollTo === 'function') element.scrollTo({ top: element.scrollHeight, behavior: 'smooth' })
+    else element.scrollTop = element.scrollHeight
+  }
+
   if (phase.status === 'off') return <EmptyState message="Structured sessions are off" />
 
   return (
@@ -233,26 +312,24 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         </label>
       </header>
       <div style={body}>
-        <div
-          ref={scrollRef}
-          style={scroller}
-          role="log"
-          aria-live="polite"
-          aria-label="Transcript"
-          onScroll={(event) => {
-            following.current = atBottom(event.currentTarget)
-          }}
-        >
-          <div style={column}>
-            {phase.status === 'loading' && turns.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}
-            {phase.status === 'failed' && (
-              <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />
-            )}
-            {phase.status === 'ready' && turns.length === 0 && <EmptyState message="No messages yet." />}
-            {turns.map((turn, index) => (
-              <TurnView key={turn.key} context={context} session={session} capabilities={capabilities} data={turn} index={index} />
-            ))}
+        <div style={transcript}>
+          <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
+            <div ref={columnRef} style={column}>
+              {phase.status === 'loading' && turns.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}
+              {phase.status === 'failed' && (
+                <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />
+              )}
+              {phase.status === 'ready' && turns.length === 0 && <EmptyState message="No messages yet." />}
+              {turns.map((turn, index) => (
+                <TurnView key={turn.key} context={context} session={session} capabilities={capabilities} data={turn} index={index} />
+              ))}
+            </div>
           </div>
+          {behind && (
+            <button type="button" style={jump} aria-label="Jump to latest" onClick={jumpToLatest}>
+              Jump to latest
+            </button>
+          )}
         </div>
         {paneViews > 0 && (
           <aside style={pane} aria-label="Views">
