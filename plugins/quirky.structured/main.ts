@@ -6,6 +6,8 @@ import type {
   AskEnvelope,
   AskSpec,
   MethodHandler,
+  ModeItem,
+  PlanItem,
   PluginCaller,
   PluginContext,
   PluginInfo,
@@ -25,7 +27,7 @@ import { createCodexRunner } from './codex-runner'
 import { resolvePiThroughLoginShell } from './pi-path'
 import { createPiRunner } from './pi-runner'
 import { Journal, journalMigrations } from './journal'
-import { errorItem, statusItem, stderrLines } from './items'
+import { errorItem, statusItem, stderrLines, userItem } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
 import type {
   NewStructuredMessage,
@@ -542,7 +544,11 @@ export function activate(context: PluginContext): void {
     return client
   }
 
-  const createAsk = async (spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }): Promise<AskEnvelope> => {
+  const createAsk = async (
+    spec: AskSpec,
+    sessionId: string,
+    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void }
+  ): Promise<AskEnvelope> => {
     const entry = live.get(sessionId)
     if (!askOwnerIsActive(sessionId, entry)) throw new Error('structured session is not active')
     const lease = entry.lease
@@ -582,13 +588,15 @@ export function activate(context: PluginContext): void {
         await cancelAsk(askId)
         throw new Error('Structured ask owner is no longer available')
       }
-      const variant = options?.nativeQuestion ? 'question' : 'approval'
-      appendMessage({
-        sessionId,
-        role: 'system',
-        text: variant === 'question' ? 'Question for you' : 'Approval needed',
-        item: { kind: 'ask', askId, variant }
-      })
+      if (options?.silent !== true) {
+        const variant = options?.nativeQuestion ? 'question' : 'approval'
+        appendMessage({
+          sessionId,
+          role: 'system',
+          text: variant === 'question' ? 'Question for you' : 'Approval needed',
+          item: { kind: 'ask', askId, variant }
+        })
+      }
       options?.onAsk?.(askId)
       const waiter = client
       for (;;) {
@@ -913,10 +921,19 @@ export function activate(context: PluginContext): void {
           'title',
           'deferStart',
           'lifetime',
-          'lifetimeKey'
+          'lifetimeKey',
+          'permissionMode'
         ].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
+    const permissionMode = params.permissionMode
+    if (permissionMode !== undefined) {
+      const modes = capabilitiesFor(params.agent as string)!.permissionModes
+      if (!modes.ok) throw context.error('invalid-params', modes.reason)
+      if (typeof permissionMode !== 'string' || !modes.modes.includes(permissionMode)) {
+        throw context.error('invalid-params', `permissionMode must be one of ${modes.modes.join(', ')}`)
+      }
+    }
     const deferStart = params.deferStart === true
     if (params.deferStart !== undefined && typeof params.deferStart !== 'boolean') throw context.error('invalid-params', 'deferStart must be a boolean')
     if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) throw context.error('invalid-params', 'title must be a non-empty string')
@@ -1015,8 +1032,9 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...(resolution?.structured ?? {}),
+        ...(typeof permissionMode === 'string' ? { permissionMode } : {}),
         env: environmentForLease(lease.env, environment)
       }
       startRunner(registered, agent, prompt, launchOptions, token)
@@ -1025,6 +1043,37 @@ export function activate(context: PluginContext): void {
     }
     if (ownerPluginId !== null) await reconcileOwnedSessions()
     return registered
+  }
+
+  /**
+   * What a resumed Claude session carries over from the old journal: its last mode, the plan numbering
+   * and the newest plan. A plan still waiting there can never be answered now, so it is journaled on the
+   * new session as not answered.
+   */
+  const planStateOf = (oldSessionId: string, newSessionId: string): StructuredStartOptions => {
+    let mode: ModeItem['mode'] | undefined
+    const plans = new Map<number, PlanItem>()
+    for (let after = 0; ; ) {
+      const page = journal.list(oldSessionId, after, 500)
+      for (const message of page) {
+        if (message.item?.kind === 'mode') mode = message.item.mode
+        else if (message.item?.kind === 'plan') plans.set(message.item.version, message.item)
+      }
+      if (page.length < 500) break
+      after = page[page.length - 1]!.seq
+    }
+    const highest = Math.max(0, ...plans.keys())
+    const newest = plans.get(highest)
+    let lastPlan = newest
+    if (newest?.status === 'waiting') {
+      const { askId: _askId, ...rest } = newest
+      lastPlan = { ...rest, status: 'not-answered', reason: 'restarted' }
+      appendMessage({ sessionId: newSessionId, role: 'system', text: `Plan v${highest}: not-answered`, item: lastPlan })
+    }
+    return {
+      ...(mode === undefined ? {} : { permissionMode: mode }),
+      ...(newest === undefined ? {} : { planVersion: highest, lastPlanText: newest.text, ...(lastPlan === undefined ? {} : { lastPlan }) })
+    }
   }
 
   const resume: MethodHandler = async (params, caller) => {
@@ -1174,8 +1223,9 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...options,
+        ...(agent === 'claude' ? planStateOf(old.id, registered.id) : {}),
         env: environmentForLease(lease.env, environment)
       }
       queue.moveSession(old.id, registered.id)
@@ -1276,20 +1326,33 @@ export function activate(context: PluginContext): void {
       const latestSeq = journal.list(sessionId, 0, 1, true)[0]?.seq ?? 0
       if (latestSeq !== guards.expectedAfterSeq) rejectGuard('stale-evidence')
     }
-    if (receipt) {
+    const reserveReceipt = (): StructuredSendResult | null => {
+      if (!receipt) return null
       const reservation = journal.reserveSendReceipt(
         { operationId: receipt.operationId, sessionId, payloadHash: receipt.payloadHash },
         Date.now()
       )
       if (!reservation) throw context.error('conflict', 'structured send receipt ledger is full')
-      if (!reservation.created) {
-        const existing = reservation.receipt
-        if (existing.sessionId !== sessionId || existing.payloadHash !== receipt.payloadHash) {
-          throw context.error('conflict', `structured send operation ${receipt.operationId} was reused with different input`)
-        }
-        return existing.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
+      if (reservation.created) return null
+      const existing = reservation.receipt
+      if (existing.sessionId !== sessionId || existing.payloadHash !== receipt.payloadHash) {
+        throw context.error('conflict', `structured send operation ${receipt.operationId} was reused with different input`)
       }
+      return existing.state === 'completed' ? { ok: true } : { ok: false, reason: 'operation_unknown' }
     }
+    const planRunner = runnerBySession.get(session.id)
+    if (planRunner?.planWaiting?.(session.id) === true && extras.images !== undefined && extras.images.length > 0) {
+      throw context.error('invalid-params', "images can't be sent as plan feedback")
+    }
+    if (planRunner?.planFeedback?.(session.id, text) === true) {
+      const replay = reserveReceipt()
+      if (replay) return replay
+      appendMessage({ sessionId: session.id, role: 'user', text, item: userItem(text) })
+      if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
+      return { ok: true }
+    }
+    const replay = reserveReceipt()
+    if (replay) return replay
     if (extras.when === 'idle' && entry && (entry.status === 'working' || entry.status === 'waiting')) {
       const queued = queue.add(session.id, { text, ...(extras.images === undefined ? {} : { images: extras.images }) }, Date.now())
       emitQueue(session.id)
@@ -1428,7 +1491,7 @@ export function activate(context: PluginContext): void {
   }
 
   const configure: MethodHandler = async (params) => {
-    const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode', 'planMode'].includes(key))
+    const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode'].includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured configure does not support ${unsupported}`)
     if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
     for (const key of ['model', 'effort', 'permissionMode'] as const) {
@@ -1437,7 +1500,6 @@ export function activate(context: PluginContext): void {
         throw context.error('invalid-params', `${key} must be a string of 1 to 128 characters`)
       }
     }
-    if (params.planMode !== undefined && typeof params.planMode !== 'boolean') throw context.error('invalid-params', 'planMode must be a boolean')
     const session = await requireStructured(params.session)
     if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot configure provider ${session.agent}`)
     const support = capabilitiesFor(session.agent)!
@@ -1446,7 +1508,6 @@ export function activate(context: PluginContext): void {
     }
     if (params.model !== undefined) refuse(support.model, 'model')
     if (params.effort !== undefined) refuse(support.effort, 'effort')
-    if (params.planMode !== undefined) refuse(support.planMode, 'plan mode')
     if (params.permissionMode !== undefined) {
       refuse(support.permissionModes, 'permission mode')
       if (support.permissionModes.ok && !support.permissionModes.modes.includes(params.permissionMode as string)) {
@@ -1459,11 +1520,13 @@ export function activate(context: PluginContext): void {
     const runner = runnerBySession.get(session.id)
     if (!entry || entry.stopping || entry.status === 'exited' || !runner) throw context.error('conflict', 'structured session is not active')
     if (!runner.configure) throw context.error('conflict', `${session.agent} cannot change settings after it starts`)
+    if (params.permissionMode === 'auto' && runner.autoAvailable?.(session.id) === false) {
+      throw context.error('conflict', 'auto mode is not available')
+    }
     const picks: StructuredSettings = {
       ...(params.model === undefined ? {} : { model: params.model as string }),
       ...(params.effort === undefined ? {} : { effort: params.effort as string }),
-      ...(params.permissionMode === undefined ? {} : { permissionMode: params.permissionMode as string }),
-      ...(params.planMode === undefined ? {} : { planMode: params.planMode as boolean })
+      ...(params.permissionMode === undefined ? {} : { permissionMode: params.permissionMode as string })
     }
     try {
       return { ok: true, settings: await runner.configure(session.id, picks) }

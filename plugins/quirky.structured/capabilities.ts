@@ -10,7 +10,7 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
     steer: OK,
     model: OK,
     planMode: OK,
-    permissionModes: { ok: true, modes: ['default', 'acceptEdits', 'plan'] },
+    permissionModes: { ok: true, modes: ['default', 'acceptEdits', 'auto', 'plan'] },
     images: OK,
     effort: OK,
     approveForSession: OK,

@@ -560,15 +560,15 @@ describe('configure', () => {
   test('hands the picks to the runner and reports the settings in force', async () => {
     chat = await bootChat()
     const session = await working(chat)
-    const result = await chat.call('quirky.structured/configure', { session: session.id, planMode: true, permissionMode: 'acceptEdits' })
-    expect(result).toEqual({ ok: true, settings: { planMode: true, permissionMode: 'acceptEdits' } })
-    expect(chat.runner.configured).toEqual([{ sessionId: session.id, settings: { planMode: true, permissionMode: 'acceptEdits' } }])
+    const result = await chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'plan' })
+    expect(result).toEqual({ ok: true, settings: { permissionMode: 'plan' } })
+    expect(chat.runner.configured).toEqual([{ sessionId: session.id, settings: { permissionMode: 'plan' } }])
   })
 
   test('a pick the agent cannot take fails with the capability reason', async () => {
     chat = await bootChat()
     const session = await chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'go' })
-    const error = await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: true }))
+    const error = await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 'plan' }))
     expect(error.message).toContain('Codex runs with on-request approval in Quirky')
     expect(chat.runner.configured).toEqual([])
   })
@@ -576,7 +576,7 @@ describe('configure', () => {
   test('rejects unknown keys and bad types', async () => {
     chat = await bootChat()
     const session = await working(chat)
-    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: 'yes' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, permissionMode: 5 }))).code).toBe(RpcErrorCode.InvalidParams)
     expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, bogus: 1 }))).code).toBe(RpcErrorCode.InvalidParams)
   })
 })
