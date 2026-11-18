@@ -27,7 +27,7 @@ export const RenderersContext = createContext<CustomRenderer[]>(BUILT_IN_RENDERE
 export const StreamingContext = createContext(false)
 
 /** The code block still being written at the end of a streaming message, which streamdown cannot see inside a blockquote. */
-export const OpenFenceContext = createContext<{ language: string; code: string } | null>(null)
+export const OpenFenceContext = createContext<{ extent: number } | null>(null)
 
 export function textOf(node: ReactNode): string {
   if (node === null || node === undefined || typeof node === 'boolean') return ''
@@ -197,6 +197,11 @@ function markedLines(children: ReactNode): ReactNode[] | undefined {
   return lines.map((line, index) => <Fragment key={index}>{line}</Fragment>)
 }
 
+function sourceExtent(node: ExtraProps['node']): number | undefined {
+  const { start, end } = node?.position ?? {}
+  return start?.offset !== undefined && end?.offset !== undefined ? end.offset - start.offset : undefined
+}
+
 function FenceCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
   const renderers = useContext(RenderersContext)
   const openFence = useContext(OpenFenceContext)
@@ -205,7 +210,7 @@ function FenceCode({ node, className, children }: ComponentProps<'code'> & Extra
   const metaValue = node?.properties?.metastring
   const meta = typeof metaValue === 'string' ? metaValue : undefined
   const code = textOf(children).replace(/\n$/, '')
-  const isIncomplete = streamdownIncomplete || (openFence !== null && openFence.language === language && openFence.code.trimEnd() === code.trimEnd())
+  const isIncomplete = streamdownIncomplete || (openFence !== null && sourceExtent(node) === openFence.extent)
   const renderer = language === '' ? undefined : renderers.find((entry) => (Array.isArray(entry.language) ? entry.language.includes(language) : entry.language === language))
   if (renderer) {
     const Component = renderer.component

@@ -219,6 +219,36 @@ describe('streaming (SC-1, SC-2)', () => {
     }
   })
 
+  test('an open fence is found inside any nesting of blockquotes and list items', async () => {
+    const nested = ['- > ```ts\n  > const a = 1', '> - ```ts\n>   const a = 1', '> > ```ts\n> > const a = 1', '- - ```ts\n    const a = 1', '1. > - > ```ts\n   >   > const a = 1']
+    for (const text of nested) {
+      const { container } = await mount({ text, streaming: true })
+      const block = one(container, '.qmd-code[data-language="ts"]')
+      expect(block.dataset.incomplete).toBe('true')
+      expect(block.querySelector('.qmd-line span[style]')).toBeNull()
+      expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
+      expect(block.querySelector('.qmd-caret')).toBeTruthy()
+    }
+  })
+
+  test('a closed fence inside nested containers leaves the caret after the block', async () => {
+    const { container } = await mount({ text: '- > ```ts\n  > const a = 1\n  > ```\n\nafter', streaming: true })
+    const block = one(container, '.qmd-code[data-language="ts"]')
+    expect(block.dataset.incomplete).toBeUndefined()
+    expect(block.querySelector('.qmd-caret')).toBeNull()
+    expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
+  })
+
+  test('only the open fence is incomplete when an earlier fence has the same language and content', async () => {
+    const { container } = await mount({ text: '```ts\nconst a = 1\n```\n\nand again\n\n```ts\nconst a = 1', streaming: true })
+    const blocks = all(container, '.qmd-code[data-language="ts"]')
+    expect(blocks.length).toBe(2)
+    expect(blocks[0].dataset.incomplete).toBeUndefined()
+    expect(blocks[1].dataset.incomplete).toBe('true')
+    expect(blocks[0].querySelector('.qmd-caret')).toBeNull()
+    expect(container.querySelectorAll('.qmd-caret').length).toBe(1)
+  })
+
   test('the caret follows the last block when no fence is open', async () => {
     const { container } = await mount({ text: 'Now running the reload test suite', streaming: true })
     const carets = all(container, '.qmd-caret')
@@ -427,6 +457,18 @@ describe('path chips (SC-6)', () => {
     expect(container.querySelector('[data-path-chip]')).toBeNull()
     expect(one(container, 'a code[data-streamdown="inline-code"]').textContent).toBe('src/a.ts')
     expect(resolveFiles.mock.calls.flatMap((call) => call[0])).not.toContain('src/a.ts')
+  })
+
+  test('inline code in reference-style link labels is never a candidate', async () => {
+    const { assets, resolveFiles } = assetsFor({ 'src/a.ts': {}, 'src/b.ts': {}, 'src/c.ts': {}, 'src/d.ts': {} })
+    const text = 'One [`src/a.ts`][ref], two [`src/b.ts`][], three [`src/c.ts`], four `src/d.ts`.\n\n[ref]: https://example.com\n[`src/b.ts`]: https://example.com\n[`src/c.ts`]: https://example.com'
+    const { container } = await mount({ text, assets })
+    await settle(() => !!container.querySelector('[data-path-chip]'), 'chip')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(resolveFiles.mock.calls.flatMap((call) => call[0])).toEqual(['src/d.ts'])
+    expect(all(container, '[data-path-chip]').length).toBe(1)
   })
 
   test('without assets there are no chips and prose paths stay prose', async () => {
