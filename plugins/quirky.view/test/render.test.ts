@@ -369,12 +369,12 @@ describe('markdown', () => {
   test('renders formatted text and tables', async () => {
     const { element } = await rendered('# Title\n\nSome **bold** and `code`.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n')
     expect(element.querySelector('h1')!.textContent).toBe('Title')
-    expect(element.querySelector('strong')!.textContent).toBe('bold')
-    expect(element.querySelector('code')!.textContent).toBe('code')
+    expect(element.querySelector('[data-streamdown="strong"]')!.textContent).toBe('bold')
+    expect(element.querySelector('code[data-streamdown="inline-code"]')!.textContent).toBe('code')
     expect(element.querySelectorAll('table td')).toHaveLength(2)
   })
 
-  test('strips scripts, images, raw HTML and attributes', async () => {
+  test('shows raw HTML as literal text and never makes it live', async () => {
     const { element } = await rendered(
       ['<script>window.pwned = 1</script>', '', '![tracker](https://example.com/t.png)', '', '<img src="https://example.com/x.png" onerror="alert(1)">', '', '<div style="color:red" onclick="alert(1)">raw</div>', '', 'plain text'].join('\n')
     )
@@ -383,7 +383,23 @@ describe('markdown', () => {
     expect(element.querySelector('[onclick]')).toBeNull()
     expect(element.querySelector('[onerror]')).toBeNull()
     expect(text(element)).toContain('plain text')
-    expect(text(element)).not.toContain('pwned')
+    expect((window as { pwned?: unknown }).pwned).toBeUndefined()
+    expect(element.querySelector('[onclick], [onerror], [style*="color:red"]')).toBeNull()
+  })
+
+  test('renders a GitHub alert as a styled alert', async () => {
+    const { element } = await rendered('> [!NOTE]\n> Heads up\n')
+    const alert = element.querySelector('[data-alert="note"]')
+    expect(alert).not.toBeNull()
+    expect(alert!.textContent).toContain('Heads up')
+  })
+
+  test('renders a fenced code block with its header', async () => {
+    const { element } = await rendered('```ts\nconst answer = 42\n```\n')
+    const block = element.querySelector('[data-streamdown="code-block"]')
+    expect(block).not.toBeNull()
+    expect(block!.querySelector('[data-streamdown="code-block-header"]')).not.toBeNull()
+    expect(text(block!)).toContain('const answer = 42')
   })
 
   test('keeps only http and https links', async () => {
