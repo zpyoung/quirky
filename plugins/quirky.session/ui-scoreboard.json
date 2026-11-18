@@ -1294,6 +1294,14 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{note !== undefined && <span className=\"ui-help-text\" data-settings-note=\"plan\">{note}</span>}"
+      },
+      "anchor": "note !== undefined &&",
+      "reason": "Shows why Plan is missing under the Permissions row of an agent with no permission modes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
         "quote": "{reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}"
       },
       "anchor": "reason === undefined &&",

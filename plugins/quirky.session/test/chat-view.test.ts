@@ -4,7 +4,7 @@ import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type AgentCapabilities, type ChatItem, type PermissionModeName, type PlanItem, type Session, type StructuredMessage } from '@quirky/protocol'
 import { currentMode, planVersions, previousMode } from '../src/window/chat/plan'
-import { groupTurns, summarizeActivity, type ActivityCall } from '../src/window/chat/turns'
+import { groupChatTurns, groupTurns, summarizeActivity, type ActivityCall } from '../src/window/chat/turns'
 import { agentInfo, agentListing, fakeContext, session, settle, type FakeContext } from './ui-fake'
 
 type Handler = (params: Record<string, any>) => unknown
@@ -105,6 +105,16 @@ describe('plan blocks', () => {
     expect(first?.kind === 'plan' && [first.item.version, first.item.status]).toEqual([1, 'revised'])
     const second = turns[1]!.blocks.filter((block) => block.kind === 'plan')
     expect(second.map((block) => (block.kind === 'plan' ? block.item.version : 0))).toEqual([2])
+  })
+
+  test('across resumed chats a plan version renders once, in the earlier chat, in its latest state', () => {
+    const [earlier, current] = groupChatTurns([
+      [user(1, 'plan it'), planMsg(2, 2, 'waiting', { askId: 'dead' })],
+      [planMsg(1, 2, 'not-answered', { reason: 'restarted' }), user(2, 'again'), planMsg(3, 3, 'waiting', { askId: 'live' })]
+    ])
+    const plans = (turns: typeof earlier) => turns!.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'plan' ? [[block.item.version, block.item.status]] : []))
+    expect(plans(earlier)).toEqual([[2, 'not-answered']])
+    expect(plans(current)).toEqual([[3, 'waiting']])
   })
 
   test('mode items never open a turn or render', () => {
