@@ -31,6 +31,31 @@ export type ChatItem =
   | { kind: 'turn-end'; state: 'done' | 'stopped' | 'failed'; durationMs?: number }
   | { kind: 'error'; reason: 'exited' | 'spawn' | 'protocol'; stderrTail: string[]; resumable: boolean }
   | { kind: 'status'; text: string }
+  | {
+      kind: 'plan'
+      version: number
+      status: PlanStatus
+      text: string
+      filePath?: string
+      askId?: string
+      empty?: boolean
+      unchanged?: boolean
+      approvedMode?: 'auto' | 'acceptEdits' | 'default'
+      reason?: 'feedback' | 'stopped' | 'mode-switch' | 'restarted'
+    }
+  | { kind: 'mode'; mode: 'default' | 'acceptEdits' | 'auto' | 'plan'; autoAvailable?: boolean }
+
+/** Lifecycle of one plan version shown in the transcript. */
+export type PlanStatus = 'waiting' | 'revised' | 'approved' | 'not-answered'
+
+/** A plan version a runner journaled; `version` is 1-based per session. */
+export type PlanItem = Extract<ChatItem, { kind: 'plan' }>
+
+/** A permission-mode change marker in the transcript. */
+export type ModeItem = Extract<ChatItem, { kind: 'mode' }>
+
+/** Name of a permission mode a session can be in. */
+export type PermissionModeName = ModeItem['mode']
 
 /** Whether an agent supports a feature; `reason` is the hover text shown when it does not. */
 export type Capability = { ok: true } | { ok: false; reason: string }
