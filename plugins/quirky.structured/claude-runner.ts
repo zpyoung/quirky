@@ -193,6 +193,12 @@ type Running = {
   /** The newest journaled item of each plan version, so a status change can journal a full copy. */
   plans: Map<number, PlanItem>
   pendingPlan: PendingPlan | null
+  /** Tail of the ExitPlanMode calls queued on this run; each call runs after the one before it. */
+  planQueue: Promise<void>
+  /** Count of ExitPlanMode calls received, so a queued call can tell a newer one has arrived. */
+  planArrivals: number
+  /** ExitPlanMode calls received and not yet finished. */
+  planInFlight: number
   /** The mode an approval asked Claude to switch to, until the turn's result confirms it. */
   pendingApprovalTarget: 'auto' | 'acceptEdits' | 'default' | null
   approvedVersion: number | null
@@ -350,6 +356,9 @@ class ClaudeRunner implements StructuredRunner {
       lastPlanText: launchOptions.lastPlanText ?? null,
       plans: new Map(launchOptions.lastPlan === undefined ? [] : [[launchOptions.lastPlan.version, launchOptions.lastPlan]]),
       pendingPlan: null,
+      planQueue: Promise.resolve(),
+      planArrivals: 0,
+      planInFlight: 0,
       pendingApprovalTarget: null,
       approvedVersion: null,
       slashCommands: null,
@@ -613,13 +622,26 @@ class ClaudeRunner implements StructuredRunner {
    * allows the tool; every other ending denies it and leaves Claude in plan mode.
    */
   private async exitPlanMode(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
-    const found = planText(input, run.lastPlanText, run.plansDir)
-    const older = run.pendingPlan
-    if (older && !older.settled) {
-      older.settled = true
-      older.interrupt.resolve({ kind: 'superseded' })
+    const arrival = ++run.planArrivals
+    const previous = run.planInFlight === 0 ? null : run.planQueue
+    run.planInFlight++
+    const turn = Promise.withResolvers<void>()
+    run.planQueue = turn.promise
+    // supersede synchronously so the waiting plan stops being answerable before this call queues
+    this.settlePlan(run, { kind: 'superseded' })
+    try {
+      if (previous) await previous
+      // only the newest call may install a live ask; a call overtaken while queued is denied unseen
+      if (arrival !== run.planArrivals) return { behavior: 'deny', message: SUPERSEDED_PLAN }
+      return await this.presentPlan(sessionId, run, input)
+    } finally {
+      run.planInFlight--
+      turn.resolve()
     }
-    if (older) await older.done.promise
+  }
+
+  private async presentPlan(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
+    const found = planText(input, run.lastPlanText, run.plansDir)
     for (const earlier of [...run.plans.values()]) {
       if (earlier.status === 'waiting' || earlier.status === 'not-answered') {
         this.appendPlan(sessionId, run, { ...withoutAsk(earlier), status: 'revised' })

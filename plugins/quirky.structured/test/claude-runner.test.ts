@@ -971,6 +971,25 @@ describe('plan mode', () => {
       expect(states).not.toContainEqual([1, 'approved'])
     })
 
+    test('three overlapping ExitPlanMode calls leave only the newest approvable', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# B' })
+      const third = canUse(query, 'ExitPlanMode', { plan: '# C' })
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      expect(await second).toMatchObject({ behavior: 'deny' })
+      await until(() => asks.length === 2)
+      await tick()
+      expect(asks).toHaveLength(2)
+      asks[1]!.resolve(answer('approve-review'))
+      expect(await third).toMatchObject({ behavior: 'allow', updatedInput: { plan: '# C' } })
+      const states = plans().map((item) => [item.version, item.status])
+      expect(states).toContainEqual([1, 'revised'])
+      expect(states).toContainEqual([2, 'approved'])
+      expect(states.filter(([, status]) => status === 'approved')).toHaveLength(1)
+    })
+
     test('an approval into auto that Claude honours is left alone', async () => {
       const query = await begin()
       await withAuto(query)
