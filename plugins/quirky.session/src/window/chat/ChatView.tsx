@@ -8,7 +8,7 @@ import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
 import { PlanPanel } from './PlanPanel'
-import { groupTurns } from './turns'
+import { groupChatTurns } from './turns'
 import { TurnView, VIEW_PANE_VIEW } from './Turn'
 
 const NO_MESSAGES: StructuredMessage[] = []
@@ -224,10 +224,11 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const paneViews = usePaneViews(context, session.id)
   const earlier = useEarlierChats(context, session)
   const turns = useMemo(
-    () =>
-      [...earlier, { session, messages: stored }].flatMap((chat) =>
-        groupTurns(chat.messages, { showAll }).map((turn) => ({ owner: chat.session, key: `${chat.session.id}:${turn.key}`, turn }))
-      ),
+    () => {
+      const chats = [...earlier, { session, messages: stored }]
+      const grouped = groupChatTurns(chats.map((chat) => chat.messages), { showAll })
+      return chats.flatMap((chat, index) => grouped[index]!.map((turn) => ({ owner: chat.session, key: `${chat.session.id}:${turn.key}`, turn })))
+    },
     [earlier, session, stored, showAll]
   )
   const history = useMemo(() => [...earlier.flatMap((chat) => chat.messages), ...stored], [earlier, stored])

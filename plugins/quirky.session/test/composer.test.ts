@@ -980,6 +980,13 @@ describe('screens: settings (SC-15, SC-16)', () => {
     expect(popover()).toBeNull()
   })
 
+  test('for pi the Permissions row also shows why there is no Plan', async () => {
+    await mount({}, { capabilities: PI, agent: 'pi' })
+    await click(settingsChip())
+    expect(summaryRow('mode').textContent).toContain('pi has no permission modes')
+    expect(summaryRow('mode').textContent).toContain('pi has no plan mode')
+  })
+
   test('/mode opens the popover straight at the permission list', async () => {
     await mount()
     await typeText('/mode')

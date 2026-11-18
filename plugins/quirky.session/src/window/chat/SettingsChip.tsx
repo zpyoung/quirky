@@ -49,12 +49,13 @@ const enabledRows = (root: HTMLElement | null): HTMLElement[] =>
   [...(root?.querySelectorAll<HTMLElement>('[data-settings-row]') ?? [])].filter((element) => !(element as HTMLButtonElement).disabled && element.getAttribute('aria-disabled') !== 'true')
 
 /** A summary row naming one setting and its current value; choosing it opens that setting's list. */
-function SummaryRow({ name, label, value, reason, danger, onOpen }: { name: 'model' | 'mode'; label: string; value: string; reason: string | undefined; danger?: boolean; onOpen: () => void }) {
+function SummaryRow({ name, label, value, reason, note, danger, onOpen }: { name: 'model' | 'mode'; label: string; value: string; reason: string | undefined; note?: string; danger?: boolean; onOpen: () => void }) {
   return (
     <button type="button" className="qt-menu-item" style={row} data-settings-row={name} data-opens={name} disabled={reason !== undefined} title={reason} onClick={onOpen}>
       <span style={rowText}>
         <span>{label}</span>
         {reason !== undefined && <span className="ui-help-text">{reason}</span>}
+        {note !== undefined && <span className="ui-help-text" data-settings-note="plan">{note}</span>}
       </span>
       {reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}
       <ControlIcon name="caret-right" />
@@ -94,6 +95,7 @@ export function SettingsChip({
   const needle = query.trim().toLowerCase()
   const models = searchable && needle ? settings.modelList.filter((entry) => entry.label.toLowerCase().includes(needle)) : settings.modelList
   const modeOff = settings.modeReason ?? (settings.modes.length === 0 ? 'No permission modes' : undefined)
+  const planNote = settings.modes.length === 0 ? settings.modeReasons.plan : undefined
   const effortIndex = settings.choices.findIndex((choice) => choice.value === settings.effort)
   const effortLabel = settings.choices[effortIndex]?.label
   const effortOff = settings.effortReason !== undefined
@@ -258,7 +260,7 @@ export function SettingsChip({
           </span>
         )}
       </div>
-      <SummaryRow name="mode" label="Permissions" value={settings.modeLabel(settings.mode)} reason={modeOff} danger={settings.isDangerous(settings.mode)} onOpen={() => onShowList('mode')} />
+      <SummaryRow name="mode" label="Permissions" value={settings.modeLabel(settings.mode)} reason={modeOff} note={planNote} danger={settings.isDangerous(settings.mode)} onOpen={() => onShowList('mode')} />
       <div style={hint} aria-hidden="true">
         <span>↑↓ move</span>
         {!effortOff && <span>←→ effort</span>}

@@ -70,10 +70,24 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
  * composer and never render. Messages with no `item` stay as `legacy` blocks, and `status` items and
  * diagnostics are left out unless `showAll`.
  */
-export function groupTurns(messages: StructuredMessage[], { showAll = false }: { showAll?: boolean } = {}): Turn[] {
+export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean } = {}): Turn[] {
+  return groupChatTurns([messages], options)[0] ?? []
+}
+
+/**
+ * `chats` (each in journal order, oldest session first) as one list of turns per chat. Plan items
+ * of one version are deduplicated across all the chats: the version shows once, in the turn where
+ * it first appeared, in its latest state, so a resumed chat's copy overrides the earlier one.
+ */
+export function groupChatTurns(chats: StructuredMessage[][], { showAll = false }: { showAll?: boolean } = {}): Turn[][] {
+  const plans = new Map<number, PlainEntry>()
+  const grouped = chats.map((messages) => groupOne(messages, showAll, plans))
+  return grouped.map((drafts) => drafts.map(({ turn, entries }) => ({ ...turn, blocks: toBlocks(entries, turn.end) })))
+}
+
+function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<number, PlainEntry>): Draft[] {
   const drafts: Draft[] = []
   const calls = new Map<string, CallEntry>()
-  const plans = new Map<number, PlainEntry>()
   const open = (message: StructuredMessage, user: Turn['user']): Draft => {
     const draft: Draft = { turn: { key: `turn-${message.seq}`, at: message.at, user, blocks: [], end: null }, entries: [] }
     drafts.push(draft)
@@ -126,7 +140,7 @@ export function groupTurns(messages: StructuredMessage[], { showAll = false }: {
     draft.entries.push({ kind: 'plain', seq: message.seq, item })
   }
 
-  return drafts.map(({ turn, entries }) => ({ ...turn, blocks: toBlocks(entries, turn.end) }))
+  return drafts
 }
 
 const settle = <T extends { state: CallState }>(item: T, stopped: boolean): T =>
