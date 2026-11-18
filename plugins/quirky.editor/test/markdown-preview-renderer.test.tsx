@@ -11,13 +11,52 @@ let createRoot: (container: HTMLElement) => Root
 let MarkdownSurface: ComponentType<SurfaceProps>
 let roots: { root: Root; element: HTMLElement }[] = []
 let renders: string[] = []
+const loads: string[] = []
+
+/** What mermaid or a library under it does with a url found in the source: every way to start an image load. */
+function attemptImageLoads(source: string) {
+  const url = source.match(/https?:\/\/[^\s"')]+/)?.[0]
+  if (!url) return
+  new Image().src = url
+  const element = document.createElement('img')
+  element.src = url
+  element.setAttribute('src', url)
+  document.createElementNS('http://www.w3.org/2000/svg', 'image').setAttribute('href', url)
+}
+
+type Restore = () => void
+let restoreLoaders: Restore[] = []
+
+/** Replaces the platform image loaders with recorders so any remote load that gets through is visible. */
+function recordImageLoads() {
+  const record = (kind: string, value: unknown) => loads.push(`${kind}:${String(value)}`)
+  const proto = (globalThis as unknown as { HTMLImageElement: { prototype: object } }).HTMLImageElement.prototype
+  let owner: object | null = proto
+  while (owner && !Object.getOwnPropertyDescriptor(owner, 'src')) owner = Object.getPrototypeOf(owner)
+  const descriptor = Object.getOwnPropertyDescriptor(owner as object, 'src') as PropertyDescriptor
+  Object.defineProperty(owner as object, 'src', { ...descriptor, set: (value: string) => record('src', value) })
+  restoreLoaders.push(() => Object.defineProperty(owner as object, 'src', descriptor))
+
+  const imageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Image') as PropertyDescriptor
+  class RecordingImage { set src(value: string) { record('Image', value) } }
+  Object.defineProperty(globalThis, 'Image', { ...imageDescriptor, value: RecordingImage })
+  restoreLoaders.push(() => Object.defineProperty(globalThis, 'Image', imageDescriptor))
+
+  const elementProto = (globalThis as unknown as { Element: { prototype: Record<string, unknown> } }).Element.prototype
+  const setAttribute = elementProto.setAttribute as (this: Element, name: string, value: string) => void
+  elementProto.setAttribute = function (this: Element, name: string, value: string) {
+    if (['img', 'image'].includes(this.localName) && /^(src|srcset|href)$/i.test(name)) record('setAttribute', `${name}=${value}`)
+    return setAttribute.call(this, name, value)
+  }
+  restoreLoaders.push(() => { elementProto.setAttribute = setAttribute })
+}
 
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   mock.module('mermaid', () => ({ default: {
     initialize() {},
-    render: async (_id: string, source: string) => { renders.push(source); return { svg: '<svg><text>fixture diagram</text></svg>' } }
+    render: async (_id: string, source: string) => { renders.push(source); attemptImageLoads(source); return { svg: '<svg><text>fixture diagram</text></svg>' } }
   } }))
   ;({ createRoot } = await import('react-dom/client'))
   ;({ MarkdownSurface } = await import('../src/markdown/MarkdownSurface'))
@@ -27,6 +66,9 @@ afterEach(async () => {
   for (const { root, element } of roots) { await act(async () => root.unmount()); element.remove() }
   roots = []
   renders = []
+  loads.length = 0
+  for (const restore of restoreLoaders.reverse()) restore()
+  restoreLoaders = []
 })
 
 async function mountPreview(content: string, imageUrls: Record<string, string> = {}): Promise<HTMLElement> {
@@ -113,10 +155,32 @@ test('a GitHub alert renders the shared alert block', async () => {
 })
 
 test('a mermaid fence renders through MermaidDiagram', async () => {
+  recordImageLoads()
   const article = await mountPreview('```mermaid\ngraph TD; A-->B\n```')
   await act(async () => { await Bun.sleep(50) })
   expect(article.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Mermaid diagram')
   expect(renders).toEqual(['graph TD; A-->B'])
+  expect(loads).toEqual([])
+})
+
+test('a mermaid source that names a remote image is refused and never starts a load', async () => {
+  recordImageLoads()
+  const article = await mountPreview('```mermaid\nflowchart LR\n A@{ img: "https://tracker.example/pixel" }\n```')
+  await act(async () => { await Bun.sleep(50) })
+  expect(renders).toEqual([])
+  expect(loads).toEqual([])
+  expect(article.querySelector('[role="img"]')).toBeNull()
+  expect(article.querySelector('.markdown-mermaid-error')?.textContent).toContain('loads remote images')
+  expect(article.querySelector('.markdown-mermaid-error details pre')?.textContent).toContain('https://tracker.example/pixel')
+})
+
+test('a remote image the pre-check misses is still blocked while mermaid draws', async () => {
+  recordImageLoads()
+  const article = await mountPreview('```mermaid\nflowchart LR\n A@{ label: "}", img: "https://tracker.example/pixel" }\n```')
+  await act(async () => { await Bun.sleep(50) })
+  expect(article.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('Mermaid diagram')
+  expect(renders.length).toBe(1)
+  expect(loads).toEqual([])
 })
 
 test('headings render and in-document links point at the preview heading ids', async () => {
