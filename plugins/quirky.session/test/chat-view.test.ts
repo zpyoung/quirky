@@ -115,6 +115,22 @@ describe('plan blocks', () => {
     const plans = (turns: typeof earlier) => turns!.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'plan' ? [[block.item.version, block.item.status]] : []))
     expect(plans(earlier)).toEqual([[2, 'not-answered']])
     expect(plans(current)).toEqual([[3, 'waiting']])
+    expect(current!.map((turn) => turn.user?.text ?? null)).toEqual(['again'])
+  })
+
+  // the daemon journals the newest plan again at the start of a resumed chat; only the plan panel needs it
+  test('a resumed chat whose earlier chat is not loaded opens no turn for the carried-over plan', () => {
+    const turns = groupTurns([planMsg(1, 2, 'not-answered', { reason: 'restarted' }), modeMsg(2, 'default'), user(3, 'Status?'), prose(4, 'fine')])
+    expect(turns.map((turn) => turn.user?.text ?? null)).toEqual(['Status?'])
+    expect(turns[0]!.blocks.map((block) => block.kind)).toEqual(['prose'])
+  })
+
+  test('a plan before any user message still shows when agent output follows it in the same turn', () => {
+    const turns = groupTurns([planMsg(1, 1, 'approved'), prose(2, 'building it'), user(3, 'next')])
+    expect(turns.map((turn) => [turn.key, turn.user?.text ?? null, turn.blocks.map((block) => block.kind)])).toEqual([
+      ['turn-1', null, ['plan', 'prose']],
+      ['turn-3', 'next', []]
+    ])
   })
 
   test('mode items never open a turn or render', () => {
@@ -131,6 +147,21 @@ describe('turn grouping', () => {
     expect(turns.map((turn) => turn.blocks.map((block) => block.kind))).toEqual([['prose'], ['prose']])
     expect(turns[0]!.end).toBeNull()
     expect(turns[1]!.end).toEqual({ state: 'done' })
+  })
+
+  // claude journals a zero-turn result on resume, e.g. while reporting a background task the old session left
+  test('a turn end before any user item opens no empty turn', () => {
+    const [earlier, current] = groupChatTurns([
+      [user(1, 'first'), prose(2, 'one'), end(3, 'done')],
+      [modeMsg(1, 'bypassPermissions'), end(2, 'done', 100), user(3, 'Status?'), prose(4, 'fine')]
+    ])
+    expect(earlier!.map((turn) => turn.end)).toEqual([{ state: 'done' }])
+    expect(current!.map((turn) => [turn.user?.text ?? null, turn.end])).toEqual([['Status?', null]])
+  })
+
+  test('a turn end of a stopped turn before any user item in a resumed chat opens no turn', () => {
+    const turns = groupTurns([end(1, 'stopped'), user(2, 'go on')])
+    expect(turns.map((turn) => turn.user?.text ?? null)).toEqual(['go on'])
   })
 
   test('messages before any user item share a turn with no user message', () => {
