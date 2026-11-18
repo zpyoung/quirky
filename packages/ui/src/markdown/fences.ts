@@ -4,28 +4,78 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
 
 type Fence = { language: string; meta: string; code: string; closed: boolean }
 
-function* fences(markdown: string): Generator<Fence> {
-  let open: { marker: string; language: string; meta: string; lines: string[] } | null = null
-  for (const line of markdown.split('\n')) {
-    const match = FENCE.exec(line)
-    if (open === null) {
-      if (!match) continue
-      const info = match[2].trim()
-      const space = info.search(/\s/)
-      open = { marker: match[1], language: (space < 0 ? info : info.slice(0, space)).toLowerCase(), meta: space < 0 ? '' : info.slice(space + 1).trim(), lines: [] }
-    } else if (match && match[1][0] === open.marker[0] && match[1].length >= open.marker.length && match[2].trim() === '') {
-      yield { language: open.language, meta: open.meta, code: open.lines.join('\n'), closed: true }
-      open = null
-    } else open.lines.push(line)
+const QUOTE_MARKER = /^ {0,3}> ?/
+const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)]) +(?=\S)/
+
+type OpenFence = { marker: string; language: string; meta: string; lines: string[]; quotes: number; column: number }
+
+const closeFence = (open: OpenFence, closed: boolean): Fence => ({ language: open.language, meta: open.meta, code: open.lines.join('\n'), closed })
+
+/** Strips up to `limit` blockquote markers from a line and says how many it removed. */
+function stripQuotes(line: string, limit: number): { text: string; quotes: number } {
+  let text = line
+  let quotes = 0
+  while (quotes < limit) {
+    const marker = QUOTE_MARKER.exec(text)
+    if (!marker) break
+    text = text.slice(marker[0].length)
+    quotes++
   }
-  if (open) yield { language: open.language, meta: open.meta, code: open.lines.join('\n'), closed: false }
+  return { text, quotes }
+}
+
+const leadingSpaces = (line: string) => line.length - line.trimStart().length
+
+/** Fences in blockquotes and list items are found with their container markers and indentation removed. */
+function* fences(markdown: string): Generator<Fence> {
+  let open: OpenFence | null = null
+  let listColumn = 0
+  for (const raw of markdown.split('\n')) {
+    if (open !== null) {
+      const { text, quotes } = stripQuotes(raw, open.quotes)
+      const blank = text.trim() === ''
+      if (quotes === open.quotes && (blank || leadingSpaces(text) >= open.column)) {
+        const line = blank ? '' : text.slice(open.column)
+        const match = FENCE.exec(line)
+        if (match && match[1][0] === open.marker[0] && match[1].length >= open.marker.length && match[2].trim() === '') {
+          yield closeFence(open, true)
+          open = null
+        } else open.lines.push(line)
+        continue
+      }
+      // the container the fence sat in has ended, which ends the fence with it
+      yield closeFence(open, true)
+      open = null
+    }
+    let { text, quotes } = stripQuotes(raw, Infinity)
+    if (text.trim() !== '') {
+      if (leadingSpaces(text) < listColumn) listColumn = 0
+      else text = text.slice(listColumn)
+    }
+    for (let marker = LIST_MARKER.exec(text.trimStart()); marker !== null && leadingSpaces(text) <= 3; marker = LIST_MARKER.exec(text.trimStart())) {
+      const consumed = leadingSpaces(text) + marker[0].length
+      listColumn += consumed
+      text = text.slice(consumed)
+    }
+    const match = FENCE.exec(text)
+    if (!match) continue
+    const info = match[2].trim()
+    const space = info.search(/\s/)
+    open = { marker: match[1], language: (space < 0 ? info : info.slice(0, space)).toLowerCase(), meta: space < 0 ? '' : info.slice(space + 1).trim(), lines: [], quotes, column: listColumn }
+  }
+  if (open) yield closeFence(open, false)
+}
+
+/** The fenced code block the text ends inside, when it has no closing fence yet, at any blockquote or list nesting. */
+export function openFenceAtEnd(markdown: string): { language: string; code: string } | null {
+  let last: Fence | null = null
+  for (const fence of fences(markdown)) last = fence
+  return last !== null && !last.closed ? { language: last.language, code: last.code } : null
 }
 
 /** True when the text ends inside a fenced code block that has no closing fence yet. */
 export function endsInOpenFence(markdown: string): boolean {
-  let last: Fence | null = null
-  for (const fence of fences(markdown)) last = fence
-  return last !== null && !last.closed
+  return openFenceAtEnd(markdown) !== null
 }
 
 const TITLE = /(?:^|\s)title=(?:"([^"]*)"|'([^']*)'|(\S+))/
@@ -104,7 +154,7 @@ function withoutFencedCode(markdown: string): string {
 }
 
 const IMAGE_REFERENCE = /!\[((?:[^\]\\\n]|\\.)*)\](?:\[((?:[^\]\\\n]|\\.)*)\])?/g
-const DEFINITION = /^ {0,3}\[((?:[^\]\\\n]|\\.)+)\]:[ \t]*<?([^\s>]+)>?/
+const DEFINITION = /^ {0,3}\[((?:[^\]\\\n]|\\.)+)\]:[ \t]*(?:<([^<>\n]*)>|(\S+))/
 
 const referenceLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase()
 
@@ -113,7 +163,7 @@ function referenceDefinitions(prose: string): Map<string, string> {
   const definitions = new Map<string, string>()
   for (const line of prose.split('\n')) {
     const match = DEFINITION.exec(line)
-    if (match && !definitions.has(referenceLabel(match[1]))) definitions.set(referenceLabel(match[1]), match[2])
+    if (match && !definitions.has(referenceLabel(match[1]))) definitions.set(referenceLabel(match[1]), match[2] ?? match[3])
   }
   return definitions
 }
@@ -130,5 +180,5 @@ export function collectLocalImageSources(markdown: string): string[] {
       if (target !== undefined) sources.push(target)
     }
   }
-  return [...new Set(sources.filter((src) => !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)))]
+  return [...new Set(sources.filter((src) => src !== '' && !/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(src)))]
 }

@@ -216,8 +216,23 @@ describe('maskLooseDollars', () => {
     expect(maskLooseDollars('$5 $6', [[0, 2]], mask)).toBe('$5 ' + mask + '6')
   })
 
+  test('escaped parentheses in link and image destinations and in definitions are not math', () => {
+    for (const source of ['![shot](docs/shot\\(1\\).png)', '[a](docs/a\\(1\\).md "t")', '![shot][s]\n\n[s]: docs/shot\\(1\\).png']) {
+      expect(maskLooseDollars(source, [], mask)).toBe(source)
+    }
+    expect(maskLooseDollars('![a](b.png) then \\(x\\)', [], mask)).toBe('![a](b.png) then  $x$ ')
+  })
+
   test('is a no-op on a second pass over its own output once unmasked', () => {
     const once = maskLooseDollars('costs $5 and $10, $O(n)$', [], mask).replaceAll(mask, '$')
     expect(maskLooseDollars(once, [], mask)).toBe(maskLooseDollars('costs $5 and $10, $O(n)$', [], mask))
+  })
+})
+
+describe('escaped parentheses in destinations', () => {
+  test('an image whose path has escaped parentheses stays an image with no math', async () => {
+    const { tree } = await parse('![shot](docs/shot\\(1\\).png)', 'untrusted')
+    expect(mathNodes(tree)).toEqual([])
+    expect(nodes(tree, 'image').length).toBe(1)
   })
 })

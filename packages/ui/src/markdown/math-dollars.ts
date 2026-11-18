@@ -48,6 +48,31 @@ function findCloser(source: string, from: number, spans: readonly SourceSpan[]):
   return -1
 }
 
+const DEFINITION_START = /^ {0,3}\[(?:[^\]\\\n]|\\.)+\]:/
+
+/** Offset just past the parenthesis that closes a link destination starting at `from`, or -1 when the paragraph ends first. */
+function destinationEnd(source: string, from: number): number {
+  const limit = paragraphEnd(source, from)
+  let depth = 0
+  for (let index = from; index < limit; index += 1) {
+    const char = source[index]
+    if (char === '\\') index += 1
+    else if (char === '(') depth += 1
+    else if (char === ')') {
+      if (depth === 0) return index + 1
+      depth -= 1
+    }
+  }
+  return -1
+}
+
+/** True when `index` sits after the label of a link reference definition on its own line. */
+function inDefinitionLine(source: string, index: number): boolean {
+  const lineStart = source.lastIndexOf('\n', index - 1) + 1
+  const label = DEFINITION_START.exec(source.slice(lineStart, index))
+  return label !== null && lineStart + label[0].length <= index
+}
+
 /** Rewrites `\(…\)` and `\[…\]` to dollar math of the same length, or returns null when the pair is not math. */
 function rewriteEscapedDelimiter(source: string, index: number, spans: readonly SourceSpan[]): { text: string; next: number } | null {
   const inline = source[index + 1] === '('
@@ -72,6 +97,7 @@ function rewriteEscapedDelimiter(source: string, index: number, spans: readonly 
 export function maskLooseDollars(source: string, spans: readonly SourceSpan[], mask: string): string {
   let out = ''
   let index = 0
+  let destinationUntil = 0
   while (index < source.length) {
     const span = spanContaining(spans, index)
     if (span) {
@@ -98,7 +124,7 @@ export function maskLooseDollars(source: string, spans: readonly SourceSpan[], m
     }
     if (char === '\\') {
       const next = source[index + 1]
-      if (next === '(' || next === '[') {
+      if ((next === '(' || next === '[') && index >= destinationUntil && !inDefinitionLine(source, index)) {
         const rewritten = rewriteEscapedDelimiter(source, index, spans)
         if (rewritten) {
           out += rewritten.text
@@ -109,6 +135,10 @@ export function maskLooseDollars(source: string, spans: readonly SourceSpan[], m
       out += next === undefined ? char : char + next
       index += 2
       continue
+    }
+    if (char === ']' && source[index + 1] === '(') {
+      const end = destinationEnd(source, index + 2)
+      if (end !== -1) destinationUntil = end
     }
     if (char === '$') {
       let run = 1
