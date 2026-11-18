@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { Database } from 'bun:sqlite'
 import { chromium, type Browser, type BrowserServer, type Locator, type Page } from 'playwright'
 import { type UiModel, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -380,6 +381,44 @@ export async function waitForRuntime(home: string, child: Bun.Subprocess<'ignore
     await Bun.sleep(Math.min(100, Math.max(1, deadline - Date.now())))
   }
   throw new Error(`daemon did not become ready within ${timeoutMs}ms`)
+}
+
+const SHOWCASE_TRANSCRIPT = 'packages/ui/test/fixtures/markdown-showcase.md'
+const SHOWCASE_PROMPT = 'Why do partial replies disappear after a reload?'
+const SHOWCASE_AT = Date.UTC(2026, 10, 17, 9, 30)
+
+/**
+ * Gives a structured session a finished turn whose agent reply is the markdown showcase, so its
+ * capture shows every rendered block. The journal belongs to quirky.structured and has no method
+ * that takes a ready-made reply, so the rows are written into its store directly. The store
+ * exists only once the plugin has run, which `ensureStore` makes sure of.
+ */
+export async function seedStructuredTranscript(
+  home: string,
+  sessionId: string,
+  repoRoot: string,
+  ensureStore: () => Promise<unknown>
+): Promise<void> {
+  const showcase = readFileSync(join(repoRoot, SHOWCASE_TRANSCRIPT), 'utf8')
+  await ensureStore()
+  const store = join(home, 'plugin-data', 'quirky.structured', 'store.db')
+  if (!existsSync(store)) throw new Error('quirky.structured has no journal to seed')
+  const db = new Database(store)
+  try {
+    db.exec('PRAGMA busy_timeout = 5000')
+    const insert = db.query('INSERT INTO structured_messages (session_id, seq, role, text, data, item, at) VALUES (?, ?, ?, ?, NULL, ?, ?)')
+    const rows: [string, string, object][] = [
+      ['user', SHOWCASE_PROMPT, { kind: 'user', text: SHOWCASE_PROMPT }],
+      ['assistant', showcase, { kind: 'prose', text: showcase }],
+      ['result', '', { kind: 'turn-end', state: 'done', durationMs: 42_000 }]
+    ]
+    db.transaction(() => {
+      const next = (db.query('SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM structured_messages WHERE session_id = ?').get(sessionId) as { next: number }).next
+      rows.forEach(([role, text, item], index) => insert.run(sessionId, next + index, role, text, JSON.stringify(item), SHOWCASE_AT + index * 1000))
+    })()
+  } finally {
+    db.close()
+  }
 }
 
 export async function rpc(
@@ -2784,6 +2823,9 @@ async function runCaptureApplication(options: CaptureOptions, scenario?: (runtim
           throw new Error('quirky.session/register did not return a session ID')
         }
         structuredSessionId = session.id
+        await seedStructuredTranscript(scope.home, session.id, repoRoot, () =>
+          rpc(activeClient, 'quirky.structured/messages', { session: session.id }, options.timeoutMs, options.signal)
+        )
       } catch (error) {
         manifest.failures.push(`fixture structured session: ${sanitizedError(error, secrets)}`)
         persistProgress()

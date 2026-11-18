@@ -257,13 +257,13 @@ export async function startNativeHelper(
     throw fault('browser_unavailable', 'the pinned native browser helper could not be started')
   }
   try {
-    const deadline = Date.now() + 10_000
+    const deadline = Date.now() + 30_000
     while (!existsSync(socketPath)) {
       if (Date.now() >= deadline) throw new Error('native helper socket startup timed out')
       const exited = await Promise.race([child.exited.then(() => true), Bun.sleep(20).then(() => false)])
       if (exited) throw new Error('native helper exited before creating its private socket')
     }
-    const launched = await nativeRequest(socketPath, 'launch', { cdpUrl }, 10_000)
+    const launched = await nativeRequest(socketPath, 'launch', { cdpUrl }, 30_000)
     if (!launched.success) throw new Error(launched.error ?? 'native helper could not attach to owned Chrome')
   } catch {
     await stopOwned(child, 500)

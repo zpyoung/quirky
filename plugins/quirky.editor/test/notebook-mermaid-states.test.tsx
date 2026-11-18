@@ -2163,6 +2163,74 @@ try {
 `)
 }, 30_000)
 
+test('Mermaid refuses a remote-image source and blocks one the pre-check misses without any remote load', async () => {
+  await runMermaidScenario(String.raw`import assert from 'node:assert/strict'
+import React, { act } from 'react'
+import { mock } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+GlobalRegistrator.register(); globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const loads = [], renders = []
+const record = (kind, value) => loads.push(kind + ':' + value)
+mock.module('mermaid', () => ({ default: {
+  initialize() {},
+  async render(_id, source) {
+    renders.push(source)
+    const url = source.match(/https?:\/\/[^\s"')]+/)?.[0]
+    if (url) { new Image().src = url; const element = document.createElement('img'); element.src = url; element.setAttribute('src', url) }
+    return { svg: '<svg><text>drawn</text></svg>' }
+  }
+} }))
+const imageProto = HTMLImageElement.prototype
+let owner = imageProto
+while (owner && !Object.getOwnPropertyDescriptor(owner, 'src')) owner = Object.getPrototypeOf(owner)
+const srcDescriptor = Object.getOwnPropertyDescriptor(owner, 'src')
+Object.defineProperty(owner, 'src', { ...srcDescriptor, set: (value) => record('src', value) })
+globalThis.Image = class { set src(value) { record('Image', value) } }
+const setAttribute = Element.prototype.setAttribute
+Element.prototype.setAttribute = function (name, value) {
+  if (['img', 'image'].includes(this.localName) && /^(src|srcset|href)$/i.test(name)) record('setAttribute', name + '=' + value)
+  return setAttribute.call(this, name, value)
+}
+const { createRoot } = await import('react-dom/client')
+const { MermaidDiagram } = await import('./src/markdown/MermaidDiagram')
+const { activate, deactivate } = await import('./src/ui')
+const controls = await import('./src/window/uiControl')
+const handlers = new Map()
+const context = {
+  pluginId: 'quirky.editor', provide: (id, handler) => handlers.set(id, handler), subscribe: () => () => {}, getSetting: () => 300, getLayout: () => ({}), toast() {},
+  async call(method, params) {
+    if (method === 'ui.window.self') return { connId: 22 }
+    if (method === 'ui.window.command.run') return { result: await handlers.get(params.id)(params.args) }
+    return {}
+  }
+}
+activate(context)
+const scope = controls.createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document', context })
+async function mount(source) {
+  const host = document.createElement('div'); const root = createRoot(host)
+  await act(async () => root.render(React.createElement(controls.EditorUiControlProvider, { scope }, React.createElement(MermaidDiagram, { source }))))
+  await act(async () => { await Bun.sleep(30) })
+  return { host, unmount: () => act(async () => root.unmount()) }
+}
+try {
+  const refused = await mount('flowchart LR\n A@{ img: "https://tracker.example/pixel" }')
+  assert.match(refused.host.querySelector('.ui-inline-error').textContent, /loads remote images/)
+  assert.equal(refused.host.querySelector('[role="img"]'), null)
+  assert.deepEqual(renders, [])
+  assert.deepEqual(loads, [])
+  await refused.unmount()
+  const missed = await mount('flowchart LR\n A@{ label: "}", img: "https://tracker.example/pixel" }')
+  assert.equal(missed.host.querySelector('[role="img"]').textContent, 'drawn')
+  assert.equal(renders.length, 1)
+  assert.deepEqual(loads, [])
+  await missed.unmount()
+  console.log('Remote-image Mermaid source refused and guarded without a recorded load')
+} finally {
+  scope.dispose(); deactivate(); await GlobalRegistrator.unregister()
+}
+`)
+}, 30_000)
+
 test.skipIf(!existsSync(chromium.executablePath()))('Notebook and Mermaid sanitize active output in a real browser and retain shared token themes', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'quirky-mermaid-browser-'))
   const editorRoot = resolve(import.meta.dir, '..')

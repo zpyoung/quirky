@@ -22,7 +22,7 @@ const COMPOSITION_CONFIRM_MS = 50
 
 /**
  * The composer's key handling at highest precedence: send/steer/newline per `sendKey`, suggestion-list
- * navigation offered first, IME-safe Enter, and Cmd+B/I/E formatting.
+ * navigation offered first, IME-safe Enter, Shift+Tab mode cycling, and Cmd+B/I/E formatting.
  */
 export function composerKeymap(props: EditorCallbacks): Extension {
   let compositionEndedAt = -Infinity
@@ -32,6 +32,11 @@ export function composerKeymap(props: EditorCallbacks): Extension {
     if (p.disabled) return false
     const nav = NAV[event.key]
     const mod = event.metaKey || event.ctrlKey
+    if (event.key === 'Tab' && event.shiftKey && !event.altKey && !mod && p.onCycleMode) {
+      event.preventDefault()
+      p.onCycleMode()
+      return true
+    }
     if (!nav) return false
     if (nav === 'enter') {
       const confirming = event.isComposing || view.composing || (event.keyCode === 229 && Date.now() - compositionEndedAt < COMPOSITION_CONFIRM_MS)

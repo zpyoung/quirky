@@ -8,6 +8,7 @@ import { TestResults } from './cards/TestResults'
 import { ViewError } from './cards/ViewError'
 import { Embedded } from './Embedded'
 import { ErrorRow } from './ErrorRow'
+import { planRowText } from './plan'
 import { Prose, renderUserMarkdown } from './Prose'
 import { formatDuration, type Block, type Turn as TurnData } from './turns'
 
@@ -40,6 +41,21 @@ const you = {
 const images = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)', marginTop: 'var(--ui-space-4)', color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 const quiet = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 const failed = { ...quiet, color: 'var(--ui-failing)' } satisfies CSSProperties
+const planRow = {
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  padding: 'var(--ui-space-6) var(--ui-space-8)',
+  color: 'var(--ui-muted)',
+  background: 'var(--ui-transparent)',
+  border: 'var(--ui-border-width) solid var(--ui-border)',
+  borderRadius: 'var(--ui-radius-window)',
+  font: 'inherit',
+  fontSize: 'var(--ui-font-label)',
+  textAlign: 'start',
+  cursor: 'pointer'
+} satisfies CSSProperties
+const planRowLive = { ...planRow, color: 'var(--ui-text)', border: 'var(--ui-border-width) solid var(--ui-accent)' } satisfies CSSProperties
 
 const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1)
 const timeOf = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -53,16 +69,18 @@ function BlockView({
   context,
   session,
   capabilities,
-  block
+  block,
+  onShowPlan
 }: {
   context: UiPluginContext
   session: Session
   capabilities: AgentCapabilities | null
   block: Block
+  onShowPlan?: (version: number) => void
 }) {
   switch (block.kind) {
     case 'prose':
-      return <Prose context={context} text={block.text} streaming={block.streaming} />
+      return <Prose context={context} session={session} text={block.text} streaming={block.streaming} />
     case 'activity':
       return <Activity calls={block.calls} />
     case 'file-change':
@@ -71,6 +89,12 @@ function BlockView({
       return <TestResults item={block.item} />
     case 'steps':
       return <Steps item={block.item} state={block.state} />
+    case 'plan':
+      return (
+        <button type="button" style={block.item.status === 'waiting' ? planRowLive : planRow} onClick={() => onShowPlan?.(block.item.version)}>
+          {planRowText(block.item)}
+        </button>
+      )
     case 'ask': {
       const disabled = sessionApproveDisabled(capabilities)
       return (
@@ -110,13 +134,16 @@ export function TurnView({
   session,
   capabilities,
   data,
-  index
+  index,
+  onOpenPlan
 }: {
   context: UiPluginContext
   session: Session
   capabilities: AgentCapabilities | null
   data: TurnData
   index: number
+  /** Opens the plan panel on a version; the plan rows are inert without it. */
+  onOpenPlan?: (version: number) => void
 }) {
   const duration = data.end?.durationMs === undefined ? '' : formatDuration(data.end.durationMs)
   return (
@@ -139,7 +166,7 @@ export function TurnView({
         </div>
       )}
       {data.blocks.map((block) => (
-        <BlockView key={block.seq} context={context} session={session} capabilities={capabilities} block={block} />
+        <BlockView key={block.seq} context={context} session={session} capabilities={capabilities} block={block} onShowPlan={onOpenPlan} />
       ))}
       {data.end?.state === 'stopped' && <div style={quiet}>{duration ? `Stopped after ${duration}` : 'Stopped'}</div>}
       {data.end?.state === 'failed' && <div style={failed}>{duration ? `Turn failed after ${duration}` : 'Turn failed'}</div>}
