@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 const write = (name: string, body: string) => writeFileSync(join(dir, name), `import { expect, test } from 'bun:test'\nimport { existsSync, writeFileSync } from 'node:fs'\n${body}\n`)
-const options = (files: string[], overrides: Partial<{ platform: Platform; jobs: number; limitMs: number; run: Run; alone: ReadonlySet<string>; log: (text: string) => void }> = {}) => ({
+const options = (files: string[], overrides: Partial<{ platform: Platform; jobs: number; limitMs: number; fileLimits: ReadonlyMap<string, number>; run: Run; alone: ReadonlySet<string>; log: (text: string) => void }> = {}) => ({
   cwd: dir,
   files,
   platform: 'linux' as const,
@@ -31,12 +31,16 @@ const sep = (file: string, classname: string, name: string) => [file, classname,
 const reportOf = (args: string[]) => args.find((arg) => arg.startsWith('--reporter-outfile='))!.slice('--reporter-outfile='.length)
 
 /** A fake `bun test` that writes one report entry and exits as scripted per file. */
-function fake(script: Record<string, { code: number; tests?: Record<string, 'pass' | 'fail'>; report?: boolean; timedOut?: boolean }>, seen: { reports: string[]; calls: string[] } = { reports: [], calls: [] }): Run {
-  return async (_cwd, args) => {
+function fake(
+  script: Record<string, { code: number; tests?: Record<string, 'pass' | 'fail'>; report?: boolean; timedOut?: boolean }>,
+  seen: { reports: string[]; calls: string[]; limits?: Array<{ file: string; limitMs: number }> } = { reports: [], calls: [] }
+): Run {
+  return async (_cwd, args, limitMs) => {
     const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
     const { code, tests = {}, report = true, timedOut = false } = script[file]
     seen.calls.push(file)
     seen.reports.push(reportOf(args))
+    seen.limits?.push({ file, limitMs })
     if (report) {
       const cases = Object.entries(tests).map(([name, status]) => (status === 'fail' ? `<testcase name="${name}" classname=""><failure message="x" /></testcase>` : `<testcase name="${name}" classname="" />`))
       writeFileSync(reportOf(args), `<testsuites><testsuite name="${file}">${cases.join('')}</testsuite></testsuites>`)
@@ -130,6 +134,54 @@ test('keeps input order, bounds concurrency by jobs, and passes the limit throug
   expect(results.map((result) => result.file)).toEqual(files)
   expect(peak).toBe(3)
   expect(new Set(limits)).toEqual(new Set([1234]))
+})
+test('uses per-file limits for first attempts and eligible reruns', async () => {
+  const selectedFile = 'scripts/parity/cli-files.test.ts'
+  const ordinaryFile = 'ordinary.test.ts'
+  const fileLimits = new Map([[selectedFile, 840_000]])
+  const firstSeen = { reports: [] as string[], calls: [] as string[], limits: [] as Array<{ file: string; limitMs: number }> }
+  const first = await runTestFiles(options([selectedFile, ordinaryFile], {
+    jobs: 1,
+    limitMs: 600_000,
+    fileLimits,
+    run: fake({
+      [selectedFile]: { code: 1, tests: { selected: 'fail' } },
+      [ordinaryFile]: { code: 1, tests: { ordinary: 'fail' } }
+    }, firstSeen)
+  }))
+
+  expect(first.map((entry) => entry.file)).toEqual([selectedFile, ordinaryFile])
+  expect(firstSeen.limits).toEqual([
+    { file: selectedFile, limitMs: 840_000 },
+    { file: ordinaryFile, limitMs: 600_000 }
+  ])
+
+  const rerunSeen = { reports: [] as string[], calls: [] as string[], limits: [] as Array<{ file: string; limitMs: number }> }
+  const rerun = await rerunFailed(options([], {
+    limitMs: 600_000,
+    fileLimits,
+    run: fake({
+      [selectedFile]: { code: 0, tests: { selected: 'pass' } },
+      [ordinaryFile]: { code: 0, tests: { ordinary: 'pass' } }
+    }, rerunSeen)
+  }), first, 5)
+
+  expect(rerun.skipped).toBe(false)
+  expect(rerun.results.map((entry) => entry.file)).toEqual([selectedFile, ordinaryFile])
+  expect(rerunSeen.limits).toEqual([
+    { file: selectedFile, limitMs: 840_000 },
+    { file: ordinaryFile, limitMs: 600_000 }
+  ])
+})
+
+test('keeps the supplied limit for a selected file when no map is provided', async () => {
+  const selectedFile = 'scripts/parity/cli-files.test.ts'
+  const seen = { reports: [] as string[], calls: [] as string[], limits: [] as Array<{ file: string; limitMs: number }> }
+  await runTestFiles(options([selectedFile], {
+    limitMs: 1234,
+    run: fake({ [selectedFile]: { code: 0 } }, seen)
+  }))
+  expect(seen.limits).toEqual([{ file: selectedFile, limitMs: 1234 }])
 })
 
 test('runs listed files first and alone, then runs the rest concurrently without changing result order', async () => {

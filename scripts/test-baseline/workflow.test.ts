@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
+import { CLI_FILES_LIMITS } from '../parity/cli-files-limits'
 import { discover, macosOnly } from '../suite'
 import { createProcessScope } from '../test-support/process-scope'
 
@@ -830,14 +831,22 @@ describe('token scope', () => {
     expect(writes.map(([scope]) => scope).sort()).toEqual(['issues', 'pull-requests'])
   })
 
-  test('linux and macos run test code with a 30 minute limit and no fail-fast', () => {
-    for (const name of ['linux', 'macos']) {
-      const job = jobs[name] as Job & { 'timeout-minutes'?: number; strategy?: { 'fail-fast'?: boolean } }
-      expect(job['timeout-minutes']).toBe(30)
-    }
+  test('macos allows both CLI-files attempts while linux keeps its 30 minute limit and no fail-fast', () => {
+    expect(jobs.macos!['timeout-minutes']).toBe(60)
+    expect(jobs.linux!['timeout-minutes']).toBe(30)
     const linux = jobs.linux as Job & { strategy: { 'fail-fast': boolean; matrix: { shard: string } } }
     expect(linux.strategy['fail-fast']).toBe(false)
     expect(linux.strategy.matrix.shard).toBe('${{ fromJSON(needs.plan.outputs.linux_shards) }}')
+  })
+
+  test('macos encloses both CLI-files attempts and reserves setup, result publication and finalization', () => {
+    const uploads = resultUploadSteps('macos')
+    expect(uploads.map(step => step.id)).toEqual(['upload_results_1', 'upload_results_2', 'upload_results_3'])
+    for (const step of uploads) expect(step['timeout-minutes']).toBe(5)
+    const uploadsMs = uploads.reduce((sum, step) => sum + step['timeout-minutes']! * 60_000, 0)
+    const requiredMs = 600_000 + 2 * CLI_FILES_LIMITS.fileMs + uploadsMs + 120_000
+    expect(requiredMs).toBe(3_300_000)
+    expect(jobs.macos!['timeout-minutes']! * 60_000).toBeGreaterThanOrEqual(requiredMs)
   })
 
   test('no run script interpolates anything but the jobs-ok expression', () => {

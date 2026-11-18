@@ -394,16 +394,21 @@ describe('review marks', () => {
 
     s.write('b.ts', 'bee\n')
     await review()
-    await waitFor(() => countOf('quirky.git/reviewChanged') >= quiet.review + 1)
+    await waitFor(
+      () => countOf('quirky.git/reviewChanged') >= quiet.review + 1 && countOf('quirky.git/changed') > quiet.changed
+    )
     expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 1)
     expect(countOf('quirky.git/changed')).toBeGreaterThan(quiet.changed)
     await review()
     await s.flushEvents()
     expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 1)
 
+    const beforeClear = countOf('quirky.git/changed')
     await s.client.callAny('quirky.worktree/set', { worktree: s.feat.id, baseRef: 'main' })
     await review()
-    await waitFor(() => countOf('quirky.git/reviewChanged') >= quiet.review + 2)
+    await waitFor(
+      () => countOf('quirky.git/reviewChanged') >= quiet.review + 2 && countOf('quirky.git/changed') > beforeClear
+    )
     expect(countOf('quirky.git/reviewChanged')).toBe(quiet.review + 2)
     await review()
     await s.flushEvents()
