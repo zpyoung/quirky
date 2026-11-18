@@ -210,6 +210,7 @@ export function parseChartSpec(source: string): ChartSpec | { error: string } {
     if (!isRecord(entry)) return { error: `data[${index}] must be an object` }
     if (raw.type === 'bar') {
       if (typeof entry.label !== 'string' || !isNumber(entry.value)) return { error: `data[${index}] needs a string "label" and a number "value"` }
+      if (entry.value < 0) return { error: 'bar values must be zero or more' }
       data.push({ label: entry.label, value: entry.value })
     } else {
       if ((typeof entry.x !== 'string' && !isNumber(entry.x)) || !isNumber(entry.y)) return { error: `data[${index}] needs an "x" and a number "y"` }
@@ -247,6 +248,7 @@ function resolveChart(spec: ChartSpec, sources: Record<string, { language: strin
     const cell = (row[yIndex] ?? '').trim()
     const value = Number(cell.replace(/,/g, ''))
     if (cell === '' || !Number.isFinite(value)) return { error: `${spec.y} has a value that is not a number: ${cell || 'empty'}` }
+    if (spec.type === 'bar' && value < 0) return { error: 'bar values must be zero or more' }
     points.push({ label: row[xIndex] ?? '', value })
   }
   if (points.length === 0) return { error: `${name} has no rows` }

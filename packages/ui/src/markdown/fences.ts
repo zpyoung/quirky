@@ -43,7 +43,52 @@ export function collectChartSources(markdown: string): ChartSources {
   return sources
 }
 
-const IMAGE = /!\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g
+const IMAGE_START = /!\[[^\]\n]*\]\(/g
+
+/** The destination of an inline link starting at `from` (just past the opening paren), CommonMark style: `<...>` or balanced parentheses, then an optional title. */
+function inlineDestination(text: string, from: number): string | null {
+  let index = from
+  while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
+  let destination: string
+  if (text[index] === '<') {
+    const end = text.indexOf('>', index)
+    const newline = text.indexOf('\n', index)
+    if (end < 0 || (newline >= 0 && newline < end)) return null
+    destination = text.slice(index + 1, end)
+    index = end + 1
+  } else {
+    const start = index
+    let depth = 0
+    while (index < text.length) {
+      const char = text[index]
+      if (char === '\\' && index + 1 < text.length) index += 2
+      else if (char === '(') { depth++; index++ }
+      else if (char === ')') { if (depth === 0) break; depth--; index++ }
+      else if (char === ' ' || char === '\t' || char === '\n') break
+      else index++
+    }
+    if (depth !== 0) return null
+    destination = text.slice(start, index)
+  }
+  while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
+  const quote = text[index]
+  if (quote === '"' || quote === "'" || quote === '(') {
+    const close = text.indexOf(quote === '(' ? ')' : quote, index + 1)
+    if (close < 0) return null
+    index = close + 1
+    while (text[index] === ' ' || text[index] === '\t' || text[index] === '\n') index++
+  }
+  return text[index] === ')' && destination !== '' ? destination : null
+}
+
+function inlineImageSources(prose: string): string[] {
+  const sources: string[] = []
+  for (const match of prose.matchAll(IMAGE_START)) {
+    const destination = inlineDestination(prose, match.index + match[0].length)
+    if (destination !== null) sources.push(destination)
+  }
+  return sources
+}
 
 function withoutFencedCode(markdown: string): string {
   const parts: string[] = []
@@ -77,7 +122,7 @@ function referenceDefinitions(prose: string): Map<string, string> {
 export function collectLocalImageSources(markdown: string): string[] {
   if (!markdown.includes('![')) return []
   const prose = withoutFencedCode(markdown)
-  const sources = [...prose.matchAll(IMAGE)].map((match) => match[1])
+  const sources = inlineImageSources(prose)
   const definitions = referenceDefinitions(prose)
   if (definitions.size > 0) {
     for (const match of prose.matchAll(IMAGE_REFERENCE)) {
