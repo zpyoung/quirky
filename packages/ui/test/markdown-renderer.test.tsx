@@ -4,7 +4,16 @@ import type { Root } from 'react-dom/client'
 import type * as MarkdownModule from '../src/markdown'
 import type { MarkdownAssets, QuirkyMarkdownProps } from '../src/markdown'
 
+const imageSources: string[] = []
 const mermaidRender = mock(async (_id: string, source: string) => {
+  if (source.includes('tracker.example')) {
+    const probe = new Image()
+    probe.src = 'https://tracker.example/pixel'
+  }
+  if (source.includes('themed')) {
+    const variables = mermaidInitialize.mock.calls.at(-1)?.[0].themeVariables as Record<string, string> | undefined
+    return { svg: `<svg viewBox="0 0 10 10"><text>${variables?.background}</text></svg>` }
+  }
   if (source.includes('-->>')) throw new Error('Parse error on line 2:\n...A[loadTurns] -->> B[mergeProse]\n-----------------------^\nExpecting \'SEMI\', got \'LINK\'')
   if (source.includes('pwn')) return { svg: '<svg viewBox="0 0 10 10"><script>window.__pwned = true</script><text onclick="window.__pwned = true">pwned</text></svg>' }
   return { svg: '<svg viewBox="0 0 10 10"><text>drawn</text></svg>' }
@@ -60,6 +69,7 @@ beforeEach(() => {
   writeText.mockClear()
   mermaidRender.mockClear()
   mermaidInitialize.mockClear()
+  imageSources.length = 0
 })
 
 afterEach(async () => {
@@ -288,6 +298,16 @@ describe('links and images (SC-5, SC-7, SC-8)', () => {
     expect(all(container, 'img').length).toBe(1)
   })
 
+  test('reference-style local images are resolved like inline ones', async () => {
+    const { assets, resolveImages } = assetsFor({}, { 'shots/a.png': 'blob:a', 'shots/b.png': 'blob:b', 'shots/c.png': 'blob:c' })
+    const text = '![full][s] and ![s2][] and ![S3]\n\n![none][nope]\n\n[s]: shots/a.png "title"\n[s2]: <shots/b.png>\n[s3]: shots/c.png\n\n```md\n![fenced][f]\n[f]: shots/fenced.png\n```'
+    const { container } = await mount({ text, assets })
+    await settle(() => container.querySelectorAll('figure img').length === 3, 'figures')
+    expect(resolveImages).toHaveBeenCalledTimes(1)
+    expect([...resolveImages.mock.calls[0][0]].sort()).toEqual(['shots/a.png', 'shots/b.png', 'shots/c.png'])
+    expect(all(container, 'figure img').map((img) => img.getAttribute('src')).sort()).toEqual(['blob:a', 'blob:b', 'blob:c'])
+  })
+
   test('a local image with no assets renders its alt text', async () => {
     const { container } = await mount({ text: '![the alt](shots/a.png)' })
     expect(container.querySelector('img')).toBeNull()
@@ -355,6 +375,15 @@ describe('path chips (SC-6)', () => {
     expect(container.textContent).toContain('inside/fence.ts:4')
     await click(all(container, '[data-path-chip]')[0])
     expect(openFile).toHaveBeenCalledWith('chat/turns.ts', 119)
+  })
+
+  test('a path in prose that does not resolve reads exactly as the prose, not as code', async () => {
+    const { assets, resolveFiles } = assetsFor({ 'a/b.ts': {} })
+    const { container } = await mount({ text: 'see a/b.ts and gone/missing.ts:7 and `kept/code.ts` here', assets })
+    await settle(() => container.querySelectorAll('[data-path-chip]').length === 1, 'chip')
+    await settle(() => resolveFiles.mock.calls.length > 0)
+    expect(all(container, 'code[data-streamdown="inline-code"]').map((code) => code.textContent)).toEqual(['kept/code.ts'])
+    expect(container.textContent).toBe('see a/b.ts and gone/missing.ts:7 and kept/code.ts here')
   })
 
   test('without assets there are no chips and prose paths stay prose', async () => {
@@ -526,6 +555,13 @@ describe('data fences (SC-13)', () => {
     expect(all(container, 'circle').length).toBe(3)
   })
 
+  test('a from naming an inherited property is a missing block, not a crash', async () => {
+    for (const name of ['constructor', 'toString', '__proto__']) {
+      const { container } = await mount({ text: `\`\`\`chart\n{"type":"bar","from":"${name}","x":"a","y":"b"}\n\`\`\`` })
+      expect(one(container, '[data-qmd-error]').textContent).toContain(`no csv block named ${name}`)
+    }
+  })
+
   test('chart errors name the problem', async () => {
     const noBlock = await mount({ text: '```chart\n{"type":"bar","from":"nope","x":"a","y":"b"}\n```' })
     expect(one(noBlock.container, '[data-qmd-error]').textContent).toContain("Couldn't read this chart block: no csv block named nope")
@@ -562,6 +598,56 @@ describe('mermaid and math (SC-4, SC-10)', () => {
     expect(container.querySelector('script')).toBeNull()
     expect(container.querySelector('[onclick]')).toBeNull()
     expect((globalThis as { __pwned?: boolean }).__pwned).toBeUndefined()
+  })
+
+  test('a diagram that would load an image is refused before mermaid runs, so nothing is fetched', async () => {
+    const sources = [
+      'flowchart LR\n  A@{ img: "https://tracker.example/pixel", label: "x", pos: "t", w: 60, h: 60 }',
+      'flowchart LR\n  A@{ shape: icon, icon: "logos:aws" } --> tracker.example',
+      'flowchart LR\n  A["<img src=\'https://tracker.example/p.gif\'>"]',
+      'flowchart LR\n  A --> B\n  classDef x background:url(https://tracker.example/p.gif)\n  class A x'
+    ]
+    const original = globalThis.Image
+    class RecordingImage {
+      set src(value: string) {
+        imageSources.push(value)
+      }
+    }
+    ;(globalThis as { Image: unknown }).Image = RecordingImage
+    try {
+      for (const source of sources) {
+        const { container } = await mount({ text: `\`\`\`mermaid\n${source}\n\`\`\`` })
+        await settle(() => !!container.querySelector('[data-qmd-error]'), 'refusal note')
+        expect(one(container, '[data-qmd-error] .qmd-error-message').textContent).toBe("Couldn't draw this diagram: it loads remote images. Showing the source.")
+        expect(container.textContent).toContain('tracker.example')
+      }
+    } finally {
+      ;(globalThis as { Image: unknown }).Image = original
+    }
+    expect(mermaidRender).not.toHaveBeenCalled()
+    expect(imageSources).toEqual([])
+  })
+
+  test('a drawn diagram is redrawn with the new colours when the theme changes', async () => {
+    const root = document.documentElement
+    root.setAttribute('data-theme', 'dark')
+    root.style.setProperty('--ui-surface', '#101010')
+    try {
+      const { container } = await mount({ text: '```mermaid\nflowchart LR\n  themed --> B\n```' })
+      await settle(() => container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent === '#101010', 'dark diagram')
+      await act(async () => {
+        root.setAttribute('data-theme', 'light')
+        root.style.setProperty('--ui-surface', '#f5f5f5')
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      })
+      await settle(() => container.querySelector('[data-qmd-data="mermaid"] .qmd-figure-body')?.textContent === '#f5f5f5', 'light diagram')
+      expect(mermaidInitialize.mock.calls.at(-1)?.[0].themeVariables).toMatchObject({ background: '#f5f5f5' })
+    } finally {
+      for (const { root: mountedRoot } of [...mounted]) await act(async () => mountedRoot.unmount())
+      mounted.length = 0
+      root.removeAttribute('data-theme')
+      root.style.removeProperty('--ui-surface')
+    }
   })
 
   test('while a mermaid fence is open it is plain source and mermaid is not called', async () => {

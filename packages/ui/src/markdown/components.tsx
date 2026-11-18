@@ -132,6 +132,8 @@ function InlineCode({ children, ...rest }: ComponentProps<'code'> & ExtraProps) 
   const candidate = typeof marked === 'string' ? marked : isPathCandidate(text) ? text : undefined
   const resolved = candidate ? files[candidate] : undefined
   if (candidate && resolved) return <PathChip candidate={candidate} line={resolved.line} />
+  // a candidate split out of prose that did not resolve is prose again; only written inline code stays code
+  if (typeof marked === 'string') return <>{children}</>
   return <code data-streamdown="inline-code">{children}</code>
 }
 
