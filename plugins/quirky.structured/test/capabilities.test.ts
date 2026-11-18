@@ -17,13 +17,14 @@ describe('capabilities values', () => {
       resume: { ok: true }
     })
     expect(claude.permissionModes).toMatchObject({ ok: true })
-    expect((claude.permissionModes as { modes: string[] }).modes).toContain('plan')
+    expect(claude.permissionModes).toEqual({ ok: true, modes: ['default', 'acceptEdits', 'auto', 'plan'] })
   })
 
   test('codex has no plan mode or permission modes, and says why', () => {
     const codex = capabilitiesFor('codex')!
     expect(codex.planMode).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
     expect(codex.permissionModes).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
+    expect(codex.planMode.ok).toBe(false)
     expect([codex.steer, codex.model, codex.images, codex.effort, codex.approveForSession, codex.resume].every((c) => c.ok)).toBe(true)
   })
 

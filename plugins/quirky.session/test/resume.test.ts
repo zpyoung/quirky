@@ -553,3 +553,114 @@ describe('structured provider resume', () => {
     }
   })
 })
+
+describe('structured plan mode across a resume', () => {
+  type Item = { kind: string; [key: string]: unknown }
+  const itemsOf = async (id: string) =>
+    (await call<StructuredMessage[]>(client, 'quirky.structured/messages', { session: id })).flatMap((message) => (message.item ? [message.item as Item] : []))
+  const exitPlan = (query: FakeQuery, plan: string) =>
+    (query.params.options!.canUseTool as any)('ExitPlanMode', { plan }, { signal: new AbortController().signal, toolUseID: `t-${plan}` })
+  const pendingAsk = (known: string[] = []) =>
+    waitForAsync(async () => (await call<{ id: string }[]>(client, 'quirky.ask/list', { pendingOnly: true })).find((ask) => !known.includes(ask.id)))
+
+  /** Boots the structured plugins with a Claude runner that records each query. */
+  async function boot() {
+    await h.cleanup()
+    h = await startPluginHarness(STRUCTURED_SESSION_PLUGINS)
+    ;({ client, events } = await h.connectWithEvents('cli'))
+    const claudeQueries: FakeQuery[] = []
+    globals.__QUIRKY_TEST_STRUCTURED_RUNNER__ = structuredRunnerFactory(h.home, createCodexAppServerFixture(h.home).executable, claudeQueries)
+    return claudeQueries
+  }
+  const restart = async () => {
+    const restarted = await restartDaemon(h, { builtinPluginsDir: makeBuiltinDir(h.home, STRUCTURED_SESSION_PLUGINS, 'plan-resume-builtins') })
+    client = restarted.client
+    return restarted
+  }
+  const created = async (extra: Record<string, unknown>) => {
+    const session = await call<Session>(client, 'quirky.structured/create', { worktree: 'id:wt_real', agent: 'claude', prompt: 'go', ...extra })
+    await waitForAsync(async () => ((await call<Session>(client, 'quirky.session/get', { session: session.id })).providerSession?.id ? true : null))
+    return session
+  }
+
+  test('a plan waiting when Quirky restarts resumes in plan mode as not answered, and numbering continues', async () => {
+    const claudeQueries = await boot()
+    const old = await created({ permissionMode: 'plan' })
+    const first = exitPlan(claudeQueries[0]!, 'one')
+    const ask = await pendingAsk()
+    await call(client, 'quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'keep', source: 'option' } }, skipped: ['reason'] })
+    expect(await first).toMatchObject({ behavior: 'deny' })
+    void exitPlan(claudeQueries[0]!, 'two')
+    await pendingAsk([ask.id])
+    expect((await itemsOf(old.id)).filter((item) => item.kind === 'plan').map((item) => [item.version, item.status])).toEqual([
+      [1, 'waiting'],
+      [1, 'not-answered'],
+      [1, 'revised'],
+      [2, 'waiting']
+    ])
+
+    const restarted = await restart()
+    try {
+      const resumed = await call<Session>(client, 'quirky.structured/resume', { session: old.id })
+      await waitFor(() => claudeQueries.length === 2)
+      expect(claudeQueries[1]!.params.options?.permissionMode).toBe('plan')
+      const items = await waitForAsync(async () => {
+        const all = await itemsOf(resumed.id)
+        return all.some((item) => item.kind === 'mode') ? all : null
+      })
+      expect(items.filter((item) => item.kind === 'plan')).toEqual([
+        { kind: 'plan', version: 2, status: 'not-answered', text: 'two', reason: 'restarted' }
+      ])
+      expect(items.find((item) => item.kind === 'mode')).toEqual({ kind: 'mode', mode: 'plan', autoAvailable: false })
+
+      void exitPlan(claudeQueries[1]!, 'three')
+      await waitForAsync(async () => (await itemsOf(resumed.id)).some((item) => item.kind === 'plan' && item.version === 3))
+      const plans = (await itemsOf(resumed.id)).filter((item) => item.kind === 'plan')
+      expect(plans.map((item) => [item.version, item.status])).toEqual([
+        [2, 'not-answered'],
+        [2, 'revised'],
+        [3, 'waiting']
+      ])
+      await call(client, 'quirky.structured/stop', { session: resumed.id })
+    } finally {
+      await restarted.stop()
+    }
+  })
+
+  test('a session in accept edits resumes in accept edits', async () => {
+    const claudeQueries = await boot()
+    const old = await created({ permissionMode: 'acceptEdits' })
+    await call(client, 'quirky.structured/stop', { session: old.id })
+    const restarted = await restart()
+    try {
+      const resumed = await call<Session>(client, 'quirky.structured/resume', { session: old.id })
+      await waitFor(() => claudeQueries.length === 2)
+      expect(claudeQueries[1]!.params.options?.permissionMode).toBe('acceptEdits')
+      const items = await waitForAsync(async () => {
+        const all = await itemsOf(resumed.id)
+        return all.some((item) => item.kind === 'mode') ? all : null
+      })
+      expect(items.find((item) => item.kind === 'mode')).toMatchObject({ mode: 'acceptEdits' })
+      expect(items.some((item) => item.kind === 'plan')).toBe(false)
+      await call(client, 'quirky.structured/stop', { session: resumed.id })
+    } finally {
+      await restarted.stop()
+    }
+  })
+
+  test('a session journaled before plan mode resumes in ask mode', async () => {
+    const claudeQueries = await boot()
+    const old = await created({})
+    await call(client, 'quirky.structured/stop', { session: old.id })
+    const restarted = await restart()
+    try {
+      await call<Session>(client, 'quirky.structured/resume', { session: old.id })
+      await waitFor(() => claudeQueries.length === 2)
+      expect(claudeQueries[1]!.params.options?.permissionMode).toBe('default')
+      await call(client, 'quirky.structured/stop', { session: (await call<Session[]>(client, 'quirky.session/list', {})).find((session) => session.resumedFrom === old.id)!.id })
+    } finally {
+      await restarted.stop()
+    }
+  })
+})
+

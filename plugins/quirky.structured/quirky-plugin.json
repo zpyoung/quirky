@@ -25,6 +25,7 @@
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
+            "permissionMode": { "type": "string", "description": "The permission mode to start in; one of the agent's permissionModes." },
             "lifetime": { "type": "string", "enum": ["plugin"], "description": "Plugin callers only: stop this live connection when its authenticated creating plugin is disabled or removed. Omit for an independent session." },
             "lifetimeKey": { "type": "string", "description": "With plugin lifetime, groups this connection under the creating plugin's opaque resource key (1 to 128 characters, validated at runtime)." },
             "options": {
@@ -361,7 +362,7 @@
       },
       {
         "id": "configure",
-        "description": "Applies composer picks to a running session: model and effort, permission mode, plan mode. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
+        "description": "Applies composer picks to a running session: model and effort, and permission mode (Plan is one of the modes). Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
         "params": {
           "type": "object",
           "additionalProperties": false,
@@ -369,8 +370,7 @@
             "session": { "type": "string" },
             "model": { "type": "string" },
             "effort": { "type": "string" },
-            "permissionMode": { "type": "string" },
-            "planMode": { "type": "boolean" }
+            "permissionMode": { "type": "string" }
           },
           "required": ["session"]
         },
@@ -383,8 +383,7 @@
               "properties": {
                 "model": { "type": "string" },
                 "effort": { "type": "string" },
-                "permissionMode": { "type": "string" },
-                "planMode": { "type": "boolean" }
+                "permissionMode": { "type": "string" }
               }
             }
           },

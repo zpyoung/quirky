@@ -10,6 +10,8 @@ export class FakeQuery implements ClaudeQuery {
   permissionModes: string[] = []
   models: (string | undefined)[] = []
   flagSettings: Record<string, unknown>[] = []
+  /** The models `initializationResult` reports; `null` makes it fail like an unready SDK. */
+  initialization: { models: { value: string; supportsAutoMode?: boolean }[] } | null = { models: [] }
   private buffer: any[] = []
   private waiting: { resolve: (r: IteratorResult<any>) => void; reject: (e: Error) => void } | null = null
   private failure: Error | null = null
@@ -54,6 +56,11 @@ export class FakeQuery implements ClaudeQuery {
 
   async setModel(model?: string) {
     this.models.push(model)
+  }
+
+  async initializationResult() {
+    if (this.initialization === null) throw new Error('initialization failed')
+    return this.initialization
   }
 
   async applyFlagSettings(settings: Record<string, unknown>) {
