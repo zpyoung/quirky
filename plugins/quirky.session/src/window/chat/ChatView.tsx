@@ -281,7 +281,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     setBehind(!following.current)
   }
 
-  function jumpToLatest(): void {
+  function onJumpToLatest(): void {
     const element = scrollRef.current
     if (!element) return
     following.current = true
@@ -326,7 +326,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
             </div>
           </div>
           {behind && (
-            <button type="button" style={jump} aria-label="Jump to latest" onClick={jumpToLatest}>
+            <button type="button" style={jump} aria-label="Jump to latest" onClick={onJumpToLatest}>
               Jump to latest
             </button>
           )}
