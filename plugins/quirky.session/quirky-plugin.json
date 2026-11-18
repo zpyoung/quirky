@@ -288,7 +288,7 @@
             "files": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Each requested path as written to `{ path, line? }` with `path` relative to the session's directory, or null."
+              "description": "Each requested path as written to `{ path, line? }` with `path` relative to the worktree root, or null. Always null for a floating session."
             },
             "images": {
               "type": "object",

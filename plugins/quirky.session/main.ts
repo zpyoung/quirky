@@ -21,7 +21,7 @@ export async function activate(context: PluginContext): Promise<void> {
   const drafts = new ComposerDrafts(store, context.dataDir, (id) => records.get(id) !== null, (kind, message) => context.error(kind, message))
   const sessions = new SessionService(context, records)
 
-  const markdownAssets = createMarkdownAssets({ context, cwdOf: (ref) => sessions.get({ session: ref }).cwd })
+  const markdownAssets = createMarkdownAssets({ context, sessionOf: (ref) => sessions.get({ session: ref }) })
 
   const methods = {
     list: (params: Record<string, unknown>, caller: PluginCaller) => {

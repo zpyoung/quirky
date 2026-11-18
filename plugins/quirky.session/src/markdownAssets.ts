@@ -24,10 +24,12 @@ export interface MarkdownAssetsResult {
 }
 
 interface Deps {
-  context: Pick<PluginContext, 'createFileResource' | 'error'>
-  /** The working directory of the session `ref`; throws `not-found` for an unknown session. */
-  cwdOf(ref: string): string
+  context: Pick<PluginContext, 'call' | 'createFileResource' | 'error'>
+  /** The working directory and worktree of the session `ref`; throws `not-found` for an unknown session. */
+  sessionOf(ref: string): { cwd: string; worktreeId: string }
 }
+
+const FLOATING = 'floating'
 
 /** The entries of `value` when it is a list of at most 200 strings of at most 1024 characters. */
 function entriesOf(deps: Deps, name: string, value: unknown): string[] {
@@ -40,12 +42,14 @@ function entriesOf(deps: Deps, name: string, value: unknown): string[] {
 
 /**
  * The file `entry` names when it is a regular file inside `root` once symlinks are resolved, else null.
- * Absolute paths, `..` and symlinks all pass through the same containment check.
+ * A relative `entry` means what it means to the agent, so it resolves from `base`, the session's
+ * directory, which may sit below `root`. Absolute paths, `..` and symlinks all pass through the same
+ * containment check, and `relativePath` is relative to `root`.
  */
-async function resolveInside(root: string, entry: string): Promise<{ canonical: string; relativePath: string; mtimeMs: number } | null> {
+async function resolveInside(root: string, base: string, entry: string): Promise<{ canonical: string; relativePath: string; mtimeMs: number } | null> {
   if (entry === '' || entry.includes('\0') || SCHEME.test(entry) || entry.startsWith('//')) return null
   try {
-    const canonical = await realpath(isAbsolute(entry) ? entry : join(root, entry))
+    const canonical = await realpath(isAbsolute(entry) ? entry : join(base, entry))
     const relativePath = relative(root, canonical)
     if (relativePath === '' || relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) return null
     const info = await stat(canonical)
@@ -59,8 +63,12 @@ async function resolveInside(root: string, entry: string): Promise<{ canonical: 
 /**
  * The `quirky.session/markdownAssets` handler: tells the chat which paths named in an agent reply
  * are real files of the session's worktree and gives it a displayable url for worktree images.
- * It never throws for a file that is missing or outside the root, only for malformed params or an
- * unknown session. Image resources are kept per file and modification time for the daemon's life.
+ * Paths resolve from the session's directory, but the worktree root bounds containment and the
+ * returned file `path` is relative to it, which is what `quirky.editor/open` expects. A floating
+ * session has no worktree to open files in, so its files answer null and its images stay inside
+ * its directory. It never throws for a file that is missing or outside the root, only for malformed
+ * params or an unknown session. Image resources are kept per file and modification time for the
+ * daemon's life.
  */
 export function createMarkdownAssets(deps: Deps): (params: Record<string, unknown>) => Promise<MarkdownAssetsResult> {
   const resources = new Map<string, Promise<string | null>>()
@@ -87,10 +95,12 @@ export function createMarkdownAssets(deps: Deps): (params: Record<string, unknow
     if (typeof params.session !== 'string' || params.session === '') throw deps.context.error('invalid-params', 'session is required')
     const files = entriesOf(deps, 'files', params.files)
     const images = entriesOf(deps, 'images', params.images)
-    const cwd = deps.cwdOf(params.session)
+    const { cwd, worktreeId } = deps.sessionOf(params.session)
+    let base: string
     let root: string
     try {
-      root = await realpath(cwd)
+      base = await realpath(cwd)
+      root = worktreeId === FLOATING ? base : await realpath(((await deps.context.call('quirky.worktree/resolve', { selector: `id:${worktreeId}` })) as { path: string }).path)
     } catch {
       return { files: Object.fromEntries(files.map((entry) => [entry, null])), images: Object.fromEntries(images.map((entry) => [entry, null])) }
     }
@@ -99,11 +109,11 @@ export function createMarkdownAssets(deps: Deps): (params: Record<string, unknow
     await Promise.all([
       ...files.map(async (entry) => {
         const match = LINE_SUFFIX.exec(entry)
-        const found = await resolveInside(root, match?.[1] ?? entry)
+        const found = worktreeId === FLOATING ? null : await resolveInside(root, base, match?.[1] ?? entry)
         result.files[entry] = found ? { path: found.relativePath, ...(match?.[2] ? { line: Number(match[2]) } : {}) } : null
       }),
       ...images.map(async (entry) => {
-        const found = await resolveInside(root, entry)
+        const found = await resolveInside(root, base, entry)
         result.images[entry] = found ? ((await imageUrl(found)) ?? null) : null
       })
     ])
