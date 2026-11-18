@@ -2434,3 +2434,43 @@ All post-integration checks below completed successfully. Injected startup failu
 | `bun test scripts/test-baseline/runner.test.ts` | 24 pass, 0 fail | `integration-baseline-runner.log` | `473ee9ee6397d4ae57154ed8b229d8818d0029963774ce3d4b2155ca55333c63` |
 | `bun test scripts/test-baseline/workflow.test.ts` | 61 pass, 1 skip, 0 fail | `integration-baseline-workflow.log` | `09c76b58c2518dcc83d76c7ecbdbf933dccccfd179aaf0f4d042c55f3b1f1380` |
 | `bun run typecheck` | Exit 0 after base integration | `integration-typecheck.log` | `ba7d8fd30ec044295e3edad14e40229b83f784e637e15cefdb28582bc21a7f0c` |
+
+## g3-87 Git readiness measurement
+
+All four Git captures passed admission in two fresh runtimes (both themes); the historical readiness timeout did not reproduce. This single measurement does not identify a cause or establish a visual score.
+
+Reader: the goal-3 reviewer and judge. Decision: use the recorded phase timings to choose the next investigation, without treating a late re-check or missing observation as admission.
+
+Cause: unknown
+
+Capture commit: `e9be5ec2b074d81472d16f6fa67cfda6812ade09`. Started at `2026-11-18T03:53:41.642Z`. Retained evidence: `/tmp/g387-evidence.o7c0Jb`. Probe exit: `0`. SHA-256 of `SHA256SUMS`: `bb2b66953d211aedebfd5d2fa1b922a724169d7ed0ef526ec0b885c9025b537f`.
+
+Command: `bun scripts/ui-review/readiness-probe.ts --output "$R/probe" --runs 2`, where `R=/tmp/g387-evidence.o7c0Jb`, run from this worktree. The prescribed wrapper used `env -i`, a fresh temporary `HOME` and `QUIRKY_HOME`, `TMPDIR` under that home, and `PATH=/Users/zpyoung/.bun/bin:/usr/bin:/bin:/usr/sbin:/sbin`. It recorded owned-process checks before and after, then removed the temporary home. No repeat was retried.
+
+| Run | Output | Load before (1/5/15 min) | Load after (1/5/15 min) | Stopped |
+| --- | --- | --- | --- | --- |
+| 1 | `/tmp/g387-evidence.o7c0Jb/probe/run-1` | `[10.6220703125,8.9560546875,8.40185546875]` | `[10.5810546875,9.02392578125,8.43505859375]` | `null` |
+| 2 | `/tmp/g387-evidence.o7c0Jb/probe/run-2` | `[10.5810546875,9.02392578125,8.43505859375]` | `[10.03515625,9.01708984375,8.44677734375]` | `null` |
+
+| Run / target / theme | Status | Cell ms | Isolation ready | Timing source | ReadinessTiming (all fields, ms unless noted) | Image path / SHA-256 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 / `view:quirky.git/diff` / dark | captured | 1619 | true | `lastReadiness` | <code>{"sequence":1,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1197,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":3,"polls":57,"firstPollMs":33,"lastPollMs":1196,"maxGapMs":197,"maxPollMs":1.600000023841858,"totalPollMs":11.699999928474426,"longTaskObserver":true,"longTaskCoverageFromMs":33,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"git-code","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-1/captures/dark/view%3Aquirky.git%2Fdiff.png` / `63b706b9847b58c81ba9378e79c9835c25d13e1719b76fa7f1f7e12f6730308a` |
+| 1 / `view:quirky.git/diff` / light | captured | 1173 | true | `lastReadiness` | <code>{"sequence":2,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":992,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":5,"polls":61,"firstPollMs":2,"lastPollMs":991,"maxGapMs":18,"maxPollMs":0.699999988079071,"totalPollMs":9.899999737739563,"longTaskObserver":true,"longTaskCoverageFromMs":2,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"loading-leaf","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-1/captures/light/view%3Aquirky.git%2Fdiff.png` / `d2594223fd1ac8339835af222a15608c287002c308412cdd635cb8a1b2e1e573` |
+| 2 / `view:quirky.git/diff` / dark | captured | 1381 | true | `lastReadiness` | <code>{"sequence":3,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1145,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":5,"polls":69,"firstPollMs":21,"lastPollMs":1145,"maxGapMs":23,"maxPollMs":1.199999988079071,"totalPollMs":12.399999976158142,"longTaskObserver":true,"longTaskCoverageFromMs":21,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"git-code","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-2/captures/dark/view%3Aquirky.git%2Fdiff.png` / `63b706b9847b58c81ba9378e79c9835c25d13e1719b76fa7f1f7e12f6730308a` |
+| 2 / `view:quirky.git/diff` / light | captured | 1312 | true | `lastReadiness` | <code>{"sequence":4,"deadlineMs":10000,"budgetMs":10000,"phaseOffsetMs":0,"readyMs":1134,"hostRejectedMs":null,"diagnosticLatencyMs":null,"hostMaxLagMs":3,"polls":69,"firstPollMs":5,"lastPollMs":1134,"maxGapMs":24,"maxPollMs":0.699999988079071,"totalPollMs":10.900000154972076,"longTaskObserver":true,"longTaskCoverageFromMs":5,"longTasks":{"count":0,"totalMs":0,"maxMs":0},"lastFailed":"loading-leaf","lateReady":null,"cleanup":"proved"}</code> | `/tmp/g387-evidence.o7c0Jb/probe/run-2/captures/light/view%3Aquirky.git%2Fdiff.png` / `edd21b11042f3c09ea1e756b842a5b5cf6a03ad894a3fe51684b75a397b313e3` |
+
+Long-task coverage starts only at `firstPollMs` (`longTaskCoverageFromMs`). `longTaskObserver: false` or `null` means not observed, not idle. `maxGapMs` is the only poll-spacing evidence. `lateReady: false` rules out nothing; `true` is diagnostic only and never admits failed content. Cleanup values report page proof, not assumed disposal. These successful samples provide no timeout diagnostic-latency or late-readiness measurement; their corresponding fields are `null`.
+
+The runtime `capture-progress.json` files describe setup/runtime outcomes for a custom scenario, not a completed numerical campaign. `readiness-probe.json` owns these samples. No numerical scores or cause classifications were measured. The inspected dark run-1 and light run-2 images show code in both expanded fixtures and the reviewed `src/app.ts` collapsed; this was a headless content check, not scoring.
+
+| Artifact (relative to retained evidence root) | SHA-256 |
+| --- | --- |
+| `probe/readiness-probe.json` | `c1e1afcae44a88c67429f07e2104c0a76f1bfc651789fd4184c2600773a24852` |
+| `probe/run-1/capture-progress.json` | `6ec926d8ee110b04e76b93dbf9caf4bef87d9f75ee8f2a1313a1525ec8cb3529` |
+| `probe/run-2/capture-progress.json` | `0c48078716fb7c71dfe00d53f499e781e9f0ed364001c2b8ac5961b968187e07` |
+
+The four PNG hashes and paths are in the sample table. `SHA256SUMS` also covers every retained process listing, theme-selection record, exit record and probe log.
+
+Owned process checks: `owned-before.txt`, `owned-after-home.txt` and `owned-after-daemon.txt` are all empty (0 bytes). Global context listings are context only; no unrelated process was required to exit or killed.
+
+No deadline, admission check, target or negative test changed. Product code and polling mode are unchanged. Native menus and window chrome were not checked.
