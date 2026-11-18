@@ -7,6 +7,7 @@ import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSyn
 import { absolutePathsOf, AgentChip, NO_PICKS, reasonOf, useAgentOptions, useTurnSettings, type Picks } from './controls'
 import { createChat } from './createChat'
 import { ComposerEditor } from './editor/ComposerEditor'
+import { ImageChip } from './ImageChip'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
 import { useFileSearch } from './Mentions'
 import { QueuedList, useQueue, type SteeredMessage } from './QueuedList'
@@ -128,6 +129,7 @@ export function Composer({
   const [steered, setSteered] = useState<SteeredMessage[]>([])
   const [focused, setFocused] = useState(false)
   const editor = useRef<ComposerEditorHandle>(null)
+  const previews = useRef(new Set<string>())
   const lastQuery = useRef('')
   const options = useAgentOptions(context, session.agent)
   const settings = useTurnSettings(context, session, capabilities, options, picks)
@@ -190,6 +192,25 @@ export function Composer({
     if (!working) setSteered([])
   }, [working])
 
+  useEffect(() => {
+    const created = previews.current
+    return () => {
+      for (const url of created) URL.revokeObjectURL(url)
+      created.clear()
+    }
+  }, [])
+
+  const previewOf = (file: File) => {
+    const url = URL.createObjectURL(file)
+    previews.current.add(url)
+    return url
+  }
+
+  const removeImage = (image: Attachment) => {
+    setImages((current) => current.filter((existing) => existing !== image))
+    if (image.preview && previews.current.delete(image.preview)) URL.revokeObjectURL(image.preview)
+  }
+
   const steerWatchers = useRef(new Set<{ text: string; arrived: boolean }>())
 
   useEffect(
@@ -219,7 +240,7 @@ export function Composer({
   const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {
     const snapshot = again ?? { text, images, pastes }
     const body = composeMessage(snapshot.text, snapshot.pastes)
-    if (body === '') return
+    if (body === '' && snapshot.images.length === 0) return
     const steerReason = reasonOf(capabilities?.steer)
     if (kind === 'steer' && working && steerReason !== undefined) {
       fail(steerReason)
@@ -317,13 +338,13 @@ export function Composer({
       } else if (settings.imagesReason !== undefined) {
         problem ??= settings.imagesReason
       } else if (path) {
-        added.push({ name: file.name, path })
+        added.push({ name: file.name, path, preview: previewOf(file) })
       } else if (!PASTE_MIMES.includes(file.type)) {
         problem ??= `${file.name || 'The pasted file'} is not a supported image`
       } else {
         try {
           const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }
-          added.push({ name: file.name || basename(saved.path), path: saved.path })
+          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })
         } catch (error) {
           problem ??= messageOf(error)
         }
@@ -358,7 +379,11 @@ export function Composer({
 
   const listKey = trigger ? `${trigger.kind}:${trigger.from}` : null
   const listOpen = trigger !== null && listKey !== dismissed
-  const items: Suggestion[] = !listOpen ? [] : trigger.kind === '@' ? fileSuggestions(search.items) : slashSuggestions(commands, trigger.query, agentLabel)
+  const items: Suggestion[] = !listOpen
+    ? []
+    : trigger.kind === '@'
+      ? fileSuggestions(search.items)
+      : slashSuggestions(commands, trigger.query, agentLabel, text.slice(0, trigger.from).trim() === '')
 
   const choose = (item: Suggestion) => {
     if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })
@@ -394,7 +419,7 @@ export function Composer({
   }
 
   const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files')
-  const canSend = text.trim() !== '' || pastes.length > 0
+  const canSend = text.trim() !== '' || pastes.length > 0 || images.length > 0
   const attachReason = settings.imagesReason ?? (filePicker ? undefined : DROP_HINT)
   const placeholder = working
     ? sendKey === 'mod-enter'
@@ -469,14 +494,13 @@ export function Composer({
         <div style={card(attached, working || focused)} onFocusCapture={() => setFocused(true)} onBlurCapture={() => setFocused(false)}>
           {(images.length > 0 || pastes.length > 0) && (
             <div style={chips} aria-label="Attachments">
-              {images.map((image) => (
-                <ScopeChip
-                  key={image.path}
-                  label={image.name}
-                  removeLabel={`Remove ${image.name}`}
-                  onRemove={() => setImages((current) => current.filter((existing) => existing !== image))}
-                />
-              ))}
+              {images.map((image) =>
+                image.preview ? (
+                  <ImageChip key={image.path} name={image.name} preview={image.preview} onRemove={() => removeImage(image)} />
+                ) : (
+                  <ScopeChip key={image.path} label={image.name} removeLabel={`Remove ${image.name}`} onRemove={() => removeImage(image)} />
+                )
+              )}
               {pastes.map((paste) => (
                 <ScopeChip
                   key={paste.id}

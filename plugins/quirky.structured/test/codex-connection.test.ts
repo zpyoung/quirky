@@ -185,3 +185,25 @@ describe('Codex app-server connection process lifecycle', () => {
     expect(readFailures.map((error) => error.message)).toEqual(['Codex app-server stdout failed: read failed'])
   })
 })
+
+describe('Codex app-server optional requests', () => {
+  test('an optional request that times out only rejects, and its late answer is dropped without failing the connection', async () => {
+    let output!: ReadableStreamDefaultController<Uint8Array>
+    const failures: Error[] = []
+    const connection = connect(makeHandle({ stdout: new ReadableStream<Uint8Array>({ start(controller) { output = controller } }) }), failures)
+
+    await expect(connection.request('skills/list', {}, 20, { optional: true })).rejects.toThrow('timed out')
+    output.enqueue(new TextEncoder().encode('{"id":1,"result":{"data":[]}}\n'))
+    const next = connection.request('echo', {})
+    output.enqueue(new TextEncoder().encode('{"id":2,"result":"ok"}\n'))
+    await expect(next).resolves.toBe('ok')
+    expect(failures).toEqual([])
+  })
+
+  test('a required request that times out still fails the connection', async () => {
+    const failures: Error[] = []
+    const connection = connect(makeHandle(), failures)
+    await expect(connection.request('thread/start', {}, 20)).rejects.toThrow('timed out')
+    expect(failures.map((failure) => failure.message)).toEqual(['Codex app-server thread/start timed out after 20ms'])
+  })
+})

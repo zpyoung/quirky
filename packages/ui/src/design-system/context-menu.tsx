@@ -74,6 +74,10 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
     if (autoFocus && !header) root.current?.focus()
   }, [autoFocus, header])
 
+  useEffect(() => {
+    root.current?.querySelector<HTMLElement>('[data-highlighted]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [highlight])
+
   const closeSubmenu = () => {
     setOpen(-1)
     root.current?.focus()

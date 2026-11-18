@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util'
 import * as cliWorldModule from './cli-world'
 import { getProcessInspectionMetadata, type CliFilesWorld } from './cli-world'
 import { CliFilesRunner, runCliFilesParity } from './cli-files'
+import { CLI_FILES_LIMITS } from './cli-files-limits'
 
 type ProcessIdentity = {
   pid: number
@@ -1403,6 +1404,162 @@ test('CLI-files never certifies a late returned browser PID whose start identity
     fixture.dispose()
   }
 })
+test('CLI-files work and cleanup deadlines follow the shared timer policy', async () => {
+  const realDateNow = Date.now
+  const realSetTimeout = globalThis.setTimeout
+  const realClearTimeout = globalThis.clearTimeout
+  let controlledNow = realDateNow()
+  Date.now = () => controlledNow
+  type ControlledTimer = { delay: number; handle: ReturnType<typeof setTimeout>; fire(): void }
+  const timers: ControlledTimer[] = []
+  const fakeTimerHandles = new Set<ReturnType<typeof setTimeout>>()
+  globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+    const [handler, delay, ...callbackArgs] = args
+    if (Number(delay) === CLI_FILES_LIMITS.workMs || Number(delay) === 5_000) {
+      const handle = {} as ReturnType<typeof setTimeout>
+      fakeTimerHandles.add(handle)
+      timers.push({
+        delay: Number(delay),
+        handle,
+        fire: () => {
+          if (typeof handler === 'function') Reflect.apply(handler, undefined, callbackArgs)
+        }
+      })
+      return handle
+    }
+    return realSetTimeout(...args)
+  }) as typeof setTimeout
+  globalThis.clearTimeout = ((handle: ReturnType<typeof setTimeout>) => {
+    if (!fakeTimerHandles.has(handle)) realClearTimeout(handle)
+  }) as typeof clearTimeout
+  const runners: CliFilesRunner[] = []
+  const createRunner = () => {
+    const runner = new CliFilesRunner({})
+    runners.push(runner)
+    return runner
+  }
+  const workDeadlineMessage = `CLI file rehearsal exceeded its ${CLI_FILES_LIMITS.workMs / 1_000}-second work deadline`
+
+  try {
+    expect(CLI_FILES_LIMITS.workMs + CLI_FILES_LIMITS.cleanupMs).toBeLessThan(CLI_FILES_LIMITS.watchdogMs)
+    expect(CLI_FILES_LIMITS.watchdogMs).toBeLessThan(CLI_FILES_LIMITS.testMs)
+    expect(CLI_FILES_LIMITS.testMs).toBeLessThan(CLI_FILES_LIMITS.fileMs)
+
+    for (const elapsedMs of [330_001, CLI_FILES_LIMITS.workMs - 1]) {
+      const runner = createRunner()
+      controlledNow = runner.startedAt + elapsedMs
+      expect(() => runner.failIfStopped()).not.toThrow()
+    }
+
+    const expiredRunner = createRunner()
+    controlledNow = expiredRunner.startedAt + CLI_FILES_LIMITS.workMs
+    let synchronousFailure: unknown
+    try {
+      expiredRunner.failIfStopped()
+    } catch (error) {
+      synchronousFailure = error
+    }
+    expect(synchronousFailure).toMatchObject({ kind: 'deadline', message: workDeadlineMessage })
+
+    const timerRunner = createRunner()
+    const workTimer = timers.find(timer => timer.handle === timerRunner.workTimer)
+    expect(workTimer?.delay).toBe(CLI_FILES_LIMITS.workMs)
+    controlledNow = timerRunner.startedAt + CLI_FILES_LIMITS.workMs
+    workTimer?.fire()
+    expect(timerRunner.workController.signal.aborted).toBe(true)
+    expect(() => timerRunner.failIfStopped()).toThrow(workDeadlineMessage)
+
+    const cleanupRunner = createRunner()
+    const cleanupTimeouts: number[] = []
+    cleanupRunner.world = {
+      cliEntry: '/repo/packages/cli/src/main.ts',
+      execute: async (_argv: string[], options?: { timeoutMs?: number }) => {
+        cleanupTimeouts.push(options?.timeoutMs ?? -1)
+        return { stdout: '{}', stderr: '', exitCode: 0, stdoutBytes: 2, elapsedMs: 0 }
+      }
+    } as unknown as CliFilesWorld
+    controlledNow = cleanupRunner.startedAt + CLI_FILES_LIMITS.workMs + CLI_FILES_LIMITS.cleanupMs - 5_000
+    const cleanupDeadline = cleanupRunner.beginCleanup()
+    expect(cleanupDeadline).toBe(cleanupRunner.startedAt + CLI_FILES_LIMITS.workMs + CLI_FILES_LIMITS.cleanupMs)
+    const cleanupTimer = timers.find(timer => timer.handle === cleanupRunner.cleanupTimer)
+    expect(cleanupTimer?.delay).toBe(5_000)
+    await cleanupRunner.execute(['status'], { id: 'cleanup-reserve', cleanup: true })
+    expect(cleanupTimeouts).toEqual([5_000])
+
+    controlledNow = cleanupRunner.startedAt + CLI_FILES_LIMITS.workMs + CLI_FILES_LIMITS.cleanupMs
+    await expect(cleanupRunner.execute(['status'], { id: 'cleanup-expired', cleanup: true }))
+      .rejects.toMatchObject({ kind: 'cleanup-deadline', message: 'no teardown time remains' })
+    expect(cleanupTimeouts).toEqual([5_000])
+  } finally {
+    for (const runner of runners) {
+      if (runner.workTimer !== undefined) globalThis.clearTimeout(runner.workTimer)
+      if (runner.cleanupTimer !== undefined) globalThis.clearTimeout(runner.cleanupTimer)
+      runner.workController.abort()
+      runner.cleanupController.abort()
+    }
+    globalThis.setTimeout = realSetTimeout
+    globalThis.clearTimeout = realClearTimeout
+    Date.now = realDateNow
+  }
+})
+
+test('CLI-files world caps factory work at the policy limit and preserves shorter deadlines', async () => {
+  const realDateNow = Date.now
+  const realSetTimeout = globalThis.setTimeout
+  const realClearTimeout = globalThis.clearTimeout
+  let controlledNow = realDateNow()
+  const scheduledDelays: number[] = []
+  const fakeTimerHandles = new Set<ReturnType<typeof setTimeout>>()
+  Date.now = () => controlledNow
+  globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+    const delay = Number(args[1] ?? 0)
+    if (delay === CLI_FILES_LIMITS.workMs || delay === 5_000) {
+      scheduledDelays.push(delay)
+      const handle = {} as ReturnType<typeof setTimeout>
+      fakeTimerHandles.add(handle)
+      return handle
+    }
+    return realSetTimeout(...args)
+  }) as typeof setTimeout
+  globalThis.clearTimeout = ((handle: ReturnType<typeof setTimeout>) => {
+    if (!fakeTimerHandles.has(handle)) realClearTimeout(handle)
+  }) as typeof clearTimeout
+  const worlds: CliFilesWorld[] = []
+  const fixtures: Array<{ dispose(): void }> = []
+
+  try {
+    const factory = requireFactory()
+    for (const requestedMs of [CLI_FILES_LIMITS.workMs + 10_000, 5_000]) {
+      const scheduledDelayCount = scheduledDelays.length
+      const fixture = makeFactoryFixture()
+      fixtures.push(fixture)
+      const startedAt = controlledNow
+      const effectiveMs = Math.min(requestedMs, CLI_FILES_LIMITS.workMs)
+      const world = await factory({ deadline: startedAt + requestedMs }, fixture.dependencies)
+      worlds.push(world)
+      expect(scheduledDelays.slice(scheduledDelayCount)).toContain(effectiveMs)
+
+      controlledNow = startedAt + effectiveMs
+      await expect(world.execute([process.execPath, world.cliEntry]))
+        .rejects.toMatchObject({ kind: 'deadline', message: 'CLI files work deadline reached' })
+      await world.cleanup()
+      worlds.pop()
+      fixture.dispose()
+      fixtures.pop()
+      controlledNow += 1
+    }
+  } finally {
+    try {
+      for (const world of worlds) await world.cleanup()
+    } finally {
+      for (const fixture of fixtures) fixture.dispose()
+      globalThis.setTimeout = realSetTimeout
+      globalThis.clearTimeout = realClearTimeout
+      Date.now = realDateNow
+    }
+  }
+})
+
 test('CLI-files captures coherent window evidence within the remaining-work deadline', async () => {
   const realDateNow = Date.now
   let controlledNow = realDateNow()

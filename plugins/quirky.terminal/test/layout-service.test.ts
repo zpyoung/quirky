@@ -238,6 +238,106 @@ describe('SC-4, SC-5: sessions started and closed elsewhere', () => {
   })
 })
 
+describe('structured sessions started outside the UI', () => {
+  const registerChat = (params: Record<string, unknown> = {}) =>
+    call<Session>(client, 'quirky.session/register', { worktree: `id:${WT}`, agent: 'claude', kind: 'structured', title: 'Claude', ...params })
+  const holds = (ws: Workspace, sessionId: string) => tabsOf(ws).flatMap(panesOf).filter((pane) => pane.session === sessionId).length
+  /** Starts a shell elsewhere and waits for its tab, so every reconciliation queued before it has run. */
+  const settle = async () => {
+    const marker = await createSession(client, { worktree: `id:${WT}`, agent: 'shell' })
+    return waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, marker.id) === 1 ? current : null
+    })
+  }
+
+  test('a structured session registered through the API gets one active tab', async () => {
+    await api('workspace', { workspace: WT, ensure: true })
+    const chat = await registerChat()
+    const ws = await waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, chat.id) === 1 ? current : null
+    })
+    expect(titles(ws)).toEqual(['Terminal 1', 'Claude'])
+    expect(groupsOf(ws)[0]!.activeTab).toBe(lastTab(ws).id)
+  })
+
+  test('a background structured session gets no tab', async () => {
+    const chat = await registerChat({ background: true })
+    const ws = await settle()
+    expect(holds(ws, chat.id)).toBe(0)
+  })
+
+  test('the UI path adopting after reconciliation already did leaves one tab, brought to the front', async () => {
+    await api('workspace', { workspace: WT, ensure: true })
+    const chat = await registerChat()
+    let ws = await waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, chat.id) === 1 ? current : null
+    })
+    ws = (await api('activateTab', { tab: tabsOf(ws)[0]!.id })).workspace
+    const group = groupsOf(ws)[0]!.id
+
+    ws = (await api('adoptSession', { group, session: chat.id })).workspace
+    expect(holds(ws, chat.id)).toBe(1)
+    expect(groupsOf(ws)[0]!.activeTab).toBe(tabNamed(ws, 'Claude').id)
+    const revision = ws.revision
+    ws = (await api('adoptSession', { group, session: chat.id })).workspace
+    expect(ws.revision).toBe(revision)
+    expect(holds(await settle(), chat.id)).toBe(1)
+  })
+
+  test('adopting in the same breath as the registration never binds the session twice', async () => {
+    const ws = await layoutOf()
+    const group = ws.activeGroup
+    const chat = await registerChat()
+    await api('adoptSession', { group, session: chat.id })
+    expect(holds(await settle(), chat.id)).toBe(1)
+  })
+
+  test('closing the chat tab ends the session and it does not come back', async () => {
+    const chat = await registerChat()
+    const ws = await waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, chat.id) === 1 ? current : null
+    })
+    await api('closeTab', { tab: tabNamed(ws, 'Claude').id, yes: true })
+    expect((await sessionList()).some((s) => s.id === chat.id)).toBe(false)
+    expect(holds(await settle(), chat.id)).toBe(0)
+  })
+
+  test('a chat tab whose session refuses to close stays open with the error', async () => {
+    const chat = await registerChat({ title: 'Refuses close' })
+    const ws = await waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, chat.id) === 1 ? current : null
+    })
+    const failure = await error(api('closeTab', { tab: tabNamed(ws, 'Refuses close').id, yes: true }))
+    expect(failure?.code).toBe(RpcErrorCode.Conflict)
+    expect(holds(await layoutOf(), chat.id)).toBe(1)
+  })
+
+  test('a live structured session recorded while the daemon was down is adopted by startup reconciliation', async () => {
+    await api('workspace', { workspace: WT, ensure: true })
+    await h.daemon.stop()
+    const file = join(h.home, 'plugin-data', 'quirky.session', 'sessions.json')
+    const sessions = JSON.parse(readFileSync(file, 'utf8')) as Session[]
+    const chat: Session = { ...sessions[0]!, id: 's_offlinechat', kind: 'structured', agent: 'claude', title: 'Claude', status: 'working', createdAt: Date.now() }
+    await Bun.write(file, JSON.stringify([...sessions, chat]))
+
+    const restarted = await restartDaemon(h)
+    try {
+      const after = await waitForAsync(async () => {
+        const current = (await api('workspace', { workspace: WT }, restarted.client)).workspace as Workspace
+        return holds(current, chat.id) === 1 ? current : null
+      })
+      expect(titles(after)).toEqual(['Terminal 1', 'Claude'])
+    } finally {
+      await restarted.stop()
+    }
+  })
+})
+
 describe('SC-6, SC-7: revisions and bad targets', () => {
   test('SC-6: a stale revision is a conflict naming the current one, and nothing changes', async () => {
     let ws = await newTab()

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
+import { CLI_FILES_LIMITS, CLI_FILES_TEST_FILE } from '../parity/cli-files-limits'
 import type { bunTestFile } from '../suite'
 import { readSpeedEvidence } from '../speed/ci'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
@@ -335,7 +336,17 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
   const { macosOnly } = await import('../suite')
   const alone = macosOnly(join(ctx.cwd, ALONE_LIST))
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err, alone }
+  const options = {
+    cwd: ctx.cwd,
+    files,
+    platform: values.macos ? ('macos' as const) : ('linux' as const),
+    jobs: FILES_AT_ONCE_CI,
+    limitMs: FILE_LIMIT_MS,
+    run: ctx.run,
+    log: ctx.err,
+    alone,
+    fileLimits: new Map<string, number>([[CLI_FILES_TEST_FILE, CLI_FILES_LIMITS.fileMs]])
+  }
   const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
   writeJson(out, rerun.results)

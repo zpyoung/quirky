@@ -1,7 +1,7 @@
 import { constants, existsSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
-import type { AskEnvelope, AskSpec, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, AskSpec, Session } from '@quirky/protocol'
 import { capabilitiesFor } from './capabilities'
 import {
   CallTracker,
@@ -18,6 +18,7 @@ import {
 } from './items'
 import { approvalOutcome, approvalSpec, nativeQuestionPlan } from './native-questions'
 import { MAX_IMAGE_BYTES } from './queue'
+import { hoistCommand } from './slash-commands'
 import {
   PiRpc,
   MAX_WRITE_BYTES,
@@ -41,6 +42,7 @@ export type PiRunnerDeps = {
 
 const STARTUP_TIMEOUT_MS = 60_000
 const SEND_TIMEOUT_MS = 45_000
+const COMMANDS_TIMEOUT_MS = 10_000
 const ABORT_TIMEOUT_MS = 2_000
 const QUESTION_LIMIT = 300
 
@@ -94,6 +96,12 @@ type Running = {
   exit?: PiExit
   deniedReasons: string[]
   settings: StructuredSettings
+  /** What started this process, so omp can be relaunched on the same conversation in another approval mode. */
+  launch: { session: Session; executable: string; options: StructuredStartOptions }
+  providerSessionId: string
+  sessionFile: string
+  /** The list last reported, which decides how an outgoing message is rewritten. */
+  commands: AgentCommand[]
 }
 
 type Starting = { stopped: boolean; run?: Running }
@@ -110,6 +118,43 @@ function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, st
     else env[name] = value
   }
   return env
+}
+
+const PI_KINDS: Record<string, AgentCommand['kind']> = {
+  skill: 'skill',
+  prompt: 'command',
+  extension: 'command',
+  custom: 'command',
+  file: 'command',
+  mcp_prompt: 'mcp',
+  builtin: 'builtin'
+}
+
+/**
+ * Sorts pi's `get_commands` or omp's `get_available_commands` entries into the kinds Quirky shows.
+ * An entry a pi package ships is a plugin entry. omp's built-ins run only when they open the
+ * message, so they are start-only.
+ */
+export function piCommands(list: readonly unknown[]): AgentCommand[] {
+  return list.flatMap((value): AgentCommand[] => {
+    const entry = record(value)
+    const name = text(entry?.name)
+    const source = text(entry?.source)
+    const kind = PI_KINDS[source]
+    if (name === '' || kind === undefined) return []
+    const description = text(entry?.description).trim()
+    const hint = text(record(entry?.input)?.hint).trim()
+    const fromPackage = record(entry?.sourceInfo)?.origin === 'package' && kind !== 'builtin'
+    return [
+      {
+        name,
+        kind: fromPackage ? 'plugin' : kind,
+        ...(description === '' ? {} : { description }),
+        ...(hint === '' || hint === 'arguments' ? {} : { argumentHint: hint }),
+        ...(kind === 'builtin' ? { startOnly: true } : {})
+      }
+    ]
+  })
 }
 
 /** The allow and deny labels of a select that is a yes/no approval, or null when it is a real choice. */
@@ -165,13 +210,18 @@ class PiRunner implements StructuredRunner {
         if (providerSession !== undefined && sessionId !== providerSession.id) {
           throw new Error(`${this.variant} resumed session ${sessionId}, expected ${providerSession.id}`)
         }
+        run.providerSessionId = sessionId
+        run.sessionFile = text(state?.sessionFile)
         await this.context.setProviderSession(session.id, {
           id: sessionId,
-          transcriptPath: text(state?.sessionFile) || null
+          transcriptPath: run.sessionFile || null
         })
         if (startup.stopped) return
         this.requireLive(run)
         if (this.variant === 'omp') await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+        if (startup.stopped) return
+        this.requireLive(run)
+        await this.loadCommands(run)
         if (startup.stopped) return
         this.requireLive(run)
         this.running.set(session.id, run)
@@ -187,6 +237,23 @@ class PiRunner implements StructuredRunner {
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
+  }
+
+  /** Reports the commands the child offers: pi's `get_commands`, or omp's `get_available_commands`. A failure leaves the list empty. */
+  private async loadCommands(run: Running): Promise<void> {
+    const command = this.variant === 'omp' ? 'get_available_commands' : 'get_commands'
+    try {
+      const data = record(await run.rpc.request(command, {}, COMMANDS_TIMEOUT_MS))
+      this.reportCommands(run, data?.commands)
+    } catch {
+      // an older child without the command offers no list
+    }
+  }
+
+  private reportCommands(run: Running, list: unknown): void {
+    if (!Array.isArray(list) || run.stopped) return
+    run.commands = piCommands(list)
+    this.context.reportCommands?.(run.sessionId, run.commands)
   }
 
   /** Fails startup when the child exited during an awaited step, so no session is reported running without a process. */
@@ -227,7 +294,56 @@ class PiRunner implements StructuredRunner {
       await run.rpc.request('set_thinking_level', { level: settings.effort }, SEND_TIMEOUT_MS)
       run.settings = { ...run.settings, effort: settings.effort }
     }
+    if (settings.permissionMode !== undefined && settings.permissionMode !== run.settings.permissionMode) {
+      if (this.variant !== 'omp') throw new Error(`${this.variant} has no permission modes`)
+      return { ...(await this.relaunch(run, settings.permissionMode)).settings }
+    }
     return { ...run.settings }
+  }
+
+  /**
+   * Restarts omp on the same conversation with another `--approval-mode`, since omp reads it only at
+   * launch. The old process keeps serving until the new one has resumed, so a failed relaunch leaves
+   * the chat as it was; a turn in progress refuses the switch instead of being cut off.
+   */
+  private async relaunch(old: Running, permissionMode: string): Promise<Running> {
+    const busy = () => old.working || old.pendingDialogs > 0
+    if (busy()) throw new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`)
+    const resume = old.sessionFile !== '' && existsSync(old.sessionFile) ? old.sessionFile : old.providerSessionId
+    const { model, effort } = old.settings
+    const options: StructuredStartOptions = {
+      ...(old.launch.options.env === undefined ? {} : { env: old.launch.options.env }),
+      ...(model === undefined ? {} : { model }),
+      ...(effort === undefined ? {} : { effort }),
+      permissionMode
+    }
+    const next = this.createRun(old.launch.session, old.launch.executable, options, resume)
+    const discard = async (reason: Error): Promise<never> => {
+      next.stopped = true
+      await next.rpc.close()
+      throw reason
+    }
+    try {
+      const state = record(await next.rpc.request('get_state', {}, STARTUP_TIMEOUT_MS))
+      const resumed = text(state?.sessionId)
+      if (resumed !== old.providerSessionId) throw new Error(`${this.variant} resumed session ${resumed}, expected ${old.providerSessionId}`)
+      this.requireLive(next)
+      if (this.variant === 'omp') await next.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+      this.requireLive(next)
+      next.providerSessionId = resumed
+      next.sessionFile = text(state?.sessionFile) || old.sessionFile
+    } catch (error) {
+      return discard(error instanceof PiRpcError ? new Error(error.message, { cause: error }) : (error as Error))
+    }
+    if (this.running.get(old.sessionId) !== old || old.stopped || old.ended) return discard(new Error('session is not running'))
+    if (busy()) return discard(new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`))
+    next.ready = true
+    next.idleStatus = old.idleStatus
+    next.commands = old.commands
+    this.running.set(old.sessionId, next)
+    old.stopped = true
+    await old.rpc.close()
+    return next
   }
 
   /** Lists the agent's available models as `provider/id`, so each id is one `configure` accepts. */
@@ -309,10 +425,15 @@ class PiRunner implements StructuredRunner {
       pendingDialogs: 0,
       dialogCancels: new Map(),
       deniedReasons: [],
+      commands: [],
       settings: {
         ...(typeof options.model === 'string' ? { model: options.model } : {}),
-        ...(typeof options.effort === 'string' ? { effort: options.effort } : {})
-      }
+        ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+        ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { permissionMode: options.permissionMode } : {})
+      },
+      launch: { session, executable, options },
+      providerSessionId: '',
+      sessionFile: ''
     }
     run.rpc = new PiRpc(
       {
@@ -320,6 +441,7 @@ class PiRunner implements StructuredRunner {
         args: piLaunchArgs(this.variant, {
           ...(typeof options.model === 'string' ? { model: options.model } : {}),
           ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+          ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
           ...(resume === undefined ? {} : { resume })
         }),
         cwd: session.cwd,
@@ -387,7 +509,7 @@ class PiRunner implements StructuredRunner {
     })
     const steering = run.working
     if (!steering) this.beginTurn(run)
-    const params = { message, ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
+    const params = { message: hoistCommand(message, run.commands), ...(images.length > 0 ? { images } : {}), ...(steering ? {} : { streamingBehavior: 'steer' }) }
     try {
       const data = record(await run.rpc.request(steering ? 'steer' : 'prompt', params, SEND_TIMEOUT_MS))
       if (!steering && (data?.disposition === 'handled' || data?.agentInvoked === false)) this.finishTurn(run, 'done')
@@ -420,6 +542,9 @@ class PiRunner implements StructuredRunner {
 
   private handleFrame(run: Running, frame: PiFrame): void {
     switch (frame.type) {
+      case 'available_commands_update':
+        this.reportCommands(run, frame.commands)
+        return
       case 'agent_start':
         this.beginTurn(run)
         return

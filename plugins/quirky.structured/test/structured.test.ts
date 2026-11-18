@@ -658,7 +658,6 @@ describe('the Claude runner inside the plugin', () => {
     })
     const expected = [
       { name: 'compact', kind: 'command' },
-      { name: 'review', kind: 'command' },
       { name: 'pdf', kind: 'skill' },
       { name: 'review', kind: 'skill' }
     ]
@@ -874,7 +873,8 @@ describe('the Codex runner inside the plugin', () => {
     expect(fixture.requests().filter((request) => request.method).map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
-      'thread/start'
+      'thread/start',
+      'skills/list'
     ])
     expect(await call('quirky.structured/messages', { session: session.id })).toEqual([])
 

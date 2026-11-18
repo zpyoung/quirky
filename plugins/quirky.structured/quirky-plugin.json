@@ -32,7 +32,9 @@
               "additionalProperties": true,
               "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
             },
-            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
+            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." },
+            "permissionMode": { "type": "string", "description": "A permission mode from the agent's capabilities to open in. Omitted, the session opens in the mode matching the agent's terminal permission preset, else the agent's first mode." },
+            "planMode": { "type": "boolean", "description": "Open in plan mode; refused with conflict for an agent without plan mode." }
           },
           "required": ["agent"]
         },
@@ -239,7 +241,9 @@
               "type": "object",
               "properties": {
                 "ok": { "type": "boolean" },
-                "modes": { "type": "array", "items": { "type": "string" } },
+                "modes": { "type": "array", "items": { "type": "string" }, "description": "The first is the agent's default." },
+                "labels": { "type": "object", "additionalProperties": true, "description": "A display name per mode id, each a string." },
+                "dangerous": { "type": "array", "items": { "type": "string" }, "description": "Modes that let the agent act without asking." },
                 "reason": { "type": "string" }
               },
               "required": ["ok"]
@@ -360,6 +364,25 @@
         }
       },
       {
+        "id": "defaults",
+        "description": "The model and effort the agent's own settings give a new session in the worktree (Claude Code settings, Codex config.toml, pi settings.json, omp config.yml), null where they name none or cannot be read.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] }, "worktree": { "type": "string" } },
+          "required": ["agent", "worktree"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "model": { "description": "The model id, or null." },
+            "effort": { "description": "The effort level, or null." }
+          },
+          "required": ["model", "effort"]
+        }
+      },
+      {
         "id": "configure",
         "description": "Applies composer picks to a running session: model and effort, permission mode, plan mode. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
         "params": {
@@ -389,6 +412,32 @@
             }
           },
           "required": ["ok", "settings"]
+        }
+      },
+      {
+        "id": "settings",
+        "description": "The settings a running session is in: model, effort, permission mode and plan mode, as configure reports them. A session that is not running returns empty settings.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": { "type": "string" },
+                "effort": { "type": "string" },
+                "permissionMode": { "type": "string" },
+                "planMode": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["settings"]
         }
       },
       {

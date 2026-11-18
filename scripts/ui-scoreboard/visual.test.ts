@@ -10,6 +10,7 @@ import { measureVisuals, notRunVisuals } from './visual'
 import { CAPTURE_TIMEOUT_MS, DEFAULT_REVIEWER_ALIAS, REVIEW_TIMEOUT_MS } from '../ui-review/arguments'
 import { SCORE_DIMENSIONS, THEMES, type CaptureOptions, type ReviewOptions } from '../ui-review/contracts'
 import type { VisualDependencies } from './contracts'
+import type { ReviewerPreflightResult } from '../ui-review/review'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -144,12 +145,35 @@ function reviewReport(manifest: CaptureManifest, overrides: Partial<ReviewReport
   }
 }
 
+const preflightProcess = {
+  exitCode: 0,
+  stdout: { text: '', bytes: 0, truncated: false },
+  stderr: { text: '', bytes: 0, truncated: false },
+  timedOut: false,
+  aborted: false
+}
+const successfulPreflightResult: ReviewerPreflightResult = {
+  ok: true,
+  resolved: { provider: 'google', model: 'fixture-vision', family: 'google' },
+  process: preflightProcess
+}
+const successfulPreflight: VisualDependencies['preflight'] = async () => successfulPreflightResult
+type PreflightFailureCode = Extract<ReviewerPreflightResult, { ok: false }>['issue']['code']
+function failedPreflight(
+  message: string,
+  code: PreflightFailureCode = 'operational',
+  resolved?: Extract<ReviewerPreflightResult, { ok: false }>['resolved']
+): ReviewerPreflightResult {
+  return { ok: false, ...(resolved === undefined ? {} : { resolved }), process: preflightProcess, issue: { code, message } }
+}
+
 function options(): VisualOptions {
   return { outputDir: outputDir(), authorFamily: 'openai', reviewerAlias: DEFAULT_REVIEWER_ALIAS }
 }
 
 function dependencies(manifest: CaptureManifest, review?: VisualDependencies['review']): VisualDependencies {
   return {
+    preflight: successfulPreflight,
     capture: async () => manifest,
     review: review ?? (async (filtered) => reviewReport(filtered))
   }
@@ -243,17 +267,29 @@ function projectedManifest(source: Inventory): CaptureManifest {
 describe('visual scoreboard measurement', () => {
   test('captures the full two-theme inventory and reviews each complete target with a filtered manifest', async () => {
     const source = inventory()
-    const visualOptions = options()
+    const signal = new AbortController().signal
+    const visualOptions = { ...options(), signal }
+    const events: string[] = []
+    let preflightCalls = 0
     const fullManifest = captureManifest(source, { failures: ['one optional surface failed to mount'] })
     const original = structuredClone(fullManifest)
     const captureOptions: CaptureOptions[] = []
     const reviewCalls: Array<{ manifest: CaptureManifest; options: ReviewOptions }> = []
     const result = await measureVisuals(source, visualOptions, {
+      preflight: async (received) => {
+        preflightCalls++
+        events.push('preflight')
+        expect(received).toMatchObject({ reviewerAlias: DEFAULT_REVIEWER_ALIAS, authorFamily: 'openai', timeoutMs: REVIEW_TIMEOUT_MS })
+        expect(received.signal).toBe(signal)
+        return successfulPreflightResult
+      },
       capture: async (received) => {
+        events.push('capture')
         captureOptions.push(received)
         return fullManifest
       },
       review: async (manifest, received) => {
+        events.push('review')
         reviewCalls.push({ manifest: structuredClone(manifest), options: received })
         return reviewReport(manifest, {
           captures: manifest.captures.map((capture) => reviewedCapture(capture.targetId, capture.theme, 85, { passed: false }))
@@ -261,6 +297,8 @@ describe('visual scoreboard measurement', () => {
       }
     })
 
+    expect(preflightCalls).toBe(1)
+    expect(events.slice(0, 2)).toEqual(['preflight', 'capture'])
     expect(captureOptions).toHaveLength(1)
     expect(captureOptions[0]).toMatchObject({
       repoRoot: source.repoRoot,
@@ -300,6 +338,7 @@ describe('visual scoreboard measurement', () => {
     const manifest = captureManifest(source, { scope: 'filtered', selectors: [pluginId], targets })
     let receivedOptions: CaptureOptions | undefined
     const result = await measureVisuals(source, { ...options(), plugin: pluginId }, {
+      preflight: successfulPreflight,
       capture: async (received) => {
         receivedOptions = received
         return manifest
@@ -313,6 +352,69 @@ describe('visual scoreboard measurement', () => {
     expect(result.cells).toHaveLength(targets.length * THEMES.length)
     expect(result.cells.every((visual) => visual.plugin === pluginId && visual.status === 'pass')).toBe(true)
     expect(result.failures).toEqual([])
+  })
+
+  test('preflight failures stop capture and review for full and selected-plugin targets', async () => {
+    const failures: Array<{ name: string; diagnostic: string; result?: ReviewerPreflightResult; rejection?: Error }> = [
+      { name: 'operational', diagnostic: 'Reviewer unavailable', result: failedPreflight('Reviewer unavailable') },
+      { name: 'timeout', diagnostic: 'Reviewer preflight timed out.', result: failedPreflight('Reviewer preflight timed out.') },
+      { name: 'missing executable', diagnostic: 'Could not start pi-watch:', result: failedPreflight('Could not start pi-watch: missing') },
+      {
+        name: 'unknown provider',
+        diagnostic: 'unknown provider family mystery',
+        result: failedPreflight('Reviewer preflight resolved unknown provider family mystery.', 'identity-mismatch', { provider: 'mystery', model: 'fixture-vision' })
+      },
+      {
+        name: 'same family',
+        diagnostic: 'matches author family google',
+        result: failedPreflight('Resolved reviewer family google matches author family google.', 'identity-mismatch', { provider: 'google', model: 'fixture-vision', family: 'google' })
+      },
+      { name: 'abort', diagnostic: 'was aborted', result: failedPreflight('Reviewer preflight was aborted.', 'aborted') },
+      { name: 'usage limit', diagnostic: 'usage limit reached', result: failedPreflight('Reviewer usage limit reached.', 'usage-limit') },
+      { name: 'output limit', diagnostic: 'output exceeded', result: failedPreflight('Reviewer preflight output exceeded the bounded output limit.') },
+      { name: 'identity', diagnostic: 'did not report a resolved', result: failedPreflight('Reviewer preflight did not report a resolved provider/model identity.', 'identity-mismatch') },
+      { name: 'thrown rejection', diagnostic: 'preflight rejected unexpectedly', rejection: new Error('preflight rejected unexpectedly') }
+    ]
+
+    for (const mode of ['full', 'plugin'] as const) {
+      const source = inventory()
+      const pluginId = source.plugins[0]!.id
+      const scopedTargets = mode === 'plugin'
+        ? source.targets.filter((target) => target.plugin === pluginId)
+        : source.targets
+      for (const failure of failures) {
+        const visualOptions = { ...options(), ...(mode === 'plugin' ? { plugin: pluginId } : {}) }
+        let preflightCalls = 0
+        let captureCalls = 0
+        let reviewCalls = 0
+        const result = await measureVisuals(source, visualOptions, {
+          preflight: async () => {
+            preflightCalls++
+            if (failure.rejection) throw failure.rejection
+            return failure.result!
+          },
+          capture: async () => {
+            captureCalls++
+            return captureManifest(source)
+          },
+          review: async (manifest) => {
+            reviewCalls++
+            return reviewReport(manifest)
+          }
+        })
+
+        expect(preflightCalls).toBe(1)
+        expect(captureCalls).toBe(0)
+        expect(reviewCalls).toBe(0)
+        expect(result.operationalError).toBe(true)
+        expect(result.cells).toHaveLength(scopedTargets.length * THEMES.length)
+        expect(result.cells.every((visual) => visual.status === 'fail' && visual.code === 'reviewer-preflight' &&
+          visual.score === null && visual.assessment === null && visual.image === null && visual.reference === null && visual.reviewer === null)).toBe(true)
+        expect(result.failures.some((entry) => entry.code === 'reviewer-preflight' && entry.message.includes(failure.diagnostic))).toBe(true)
+        expect(existsSync(join(visualOptions.outputDir, 'capture-manifest.json'))).toBe(false)
+        expect(existsSync(join(visualOptions.outputDir, 'reviews'))).toBe(false)
+      }
+    }
   })
 
   test('plugin measurement requires a filtered manifest with exactly its selector', async () => {
@@ -387,6 +489,60 @@ describe('visual scoreboard measurement', () => {
 
     expect(cell(result, firstTarget.id, 'dark')).toMatchObject({ status: 'pass', score: 99 })
     expect(cell(result, firstTarget.id, 'light')).toMatchObject({ status: 'fail', score: 84 })
+  })
+
+  const reviewerIdentityDrifts: Array<[string, keyof ReviewedCapture['reviewer'], string]> = [
+    ['provider', 'provider', 'alternate-provider'],
+    ['model', 'model', 'later-model'],
+    ['family', 'family', 'anthropic'],
+    ['sample alias', 'alias', 'other-alias']
+  ]
+  test.each(reviewerIdentityDrifts)('rejects a whole target when its later sample %s drifts from preflight', async (_name, field, value) => {
+    const source = inventory()
+    const firstTarget = [...source.targets].sort((left, right) => left.id.localeCompare(right.id))[0]!
+    const reviewedTargets: string[] = []
+    const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
+      capture: async () => captureManifest(source),
+      review: async (manifest) => {
+        reviewedTargets.push(manifest.targets[0]!.id)
+        const report = reviewReport(manifest)
+        Object.assign(report.captures.find((capture) => capture.theme === 'light')!.reviewer, { [field]: value })
+        return report
+      }
+    })
+
+    expect(reviewedTargets).toEqual([firstTarget.id])
+    expect(result.operationalError).toBe(true)
+    expect(result.failures.some((failure) => failure.code === 'review-error' && failure.targetId === firstTarget.id)).toBe(true)
+    for (const theme of THEMES) {
+      expect(cell(result, firstTarget.id, theme)).toMatchObject({
+        score: null,
+        assessment: null,
+        reviewer: null
+      })
+    }
+  })
+
+  test('rejects a consistent later model identity for the whole target before mapping evidence', async () => {
+    const source = inventory()
+    const firstTarget = [...source.targets].sort((left, right) => left.id.localeCompare(right.id))[0]!
+    const reviewedTargets: string[] = []
+    const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
+      capture: async () => captureManifest(source),
+      review: async (manifest) => {
+        reviewedTargets.push(manifest.targets[0]!.id)
+        const report = reviewReport(manifest)
+        for (const sample of report.captures) sample.reviewer.model = 'later-model'
+        return report
+      }
+    })
+
+    expect(reviewedTargets).toEqual([firstTarget.id])
+    expect(result.operationalError).toBe(true)
+    expect(result.failures.some((failure) => failure.code === 'review-error' && failure.targetId === firstTarget.id)).toBe(true)
+    expect(THEMES.every((theme) => cell(result, firstTarget.id, theme).score === null)).toBe(true)
   })
 
   test('retains the source inventory, missing surfaces, duplicate cells, and missing images as failed rows', async () => {
@@ -536,19 +692,26 @@ describe('visual scoreboard measurement', () => {
     writeFileSync(sourceFile, 'export const View = () => <div>dirty</div>\n')
     const dirty = collectInventory(dirtySnapshot.repoRoot)
     let captureStarted = false
+    let preflightStarted = false
     const dirtyResult = await measureVisuals(dirty, options(), {
+      preflight: async () => {
+        preflightStarted = true
+        return successfulPreflightResult
+      },
       capture: async () => {
         captureStarted = true
         return captureManifest(dirty)
       },
       review: async (manifest) => reviewReport(manifest)
     })
+    expect(preflightStarted).toBe(false)
     expect(captureStarted).toBe(false)
     expect(dirtyResult.failures.some((failure) => failure.code === 'dirty-source')).toBe(true)
 
     const snapshot = inventory()
     const manifest = captureManifest(snapshot)
     const staleResult = await measureVisuals(snapshot, options(), {
+      preflight: successfulPreflight,
       capture: async () => {
         writeFileSync(join(snapshot.repoRoot, snapshot.plugins[0]!.directory, 'src/ui.tsx'), 'export const View = () => <div>changed</div>\n')
         return manifest
@@ -562,6 +725,7 @@ describe('visual scoreboard measurement', () => {
   test('capture exceptions preserve the complete matrix as operational failures', async () => {
     const source = inventory()
     const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
       capture: async () => { throw new Error('Chromium unavailable') },
       review: async (manifest) => reviewReport(manifest)
     })
@@ -596,6 +760,7 @@ describe('visual scoreboard measurement', () => {
     }
     const reviewCalls: CaptureManifest[] = []
     const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
       capture: async () => manifest,
       review: async (filtered) => {
         reviewCalls.push(structuredClone(filtered))
@@ -678,6 +843,7 @@ describe('visual scoreboard measurement', () => {
     mutate(source, manifest, body, declaration)
     let reviewCalls = 0
     const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
       capture: async () => manifest,
       review: async (filtered) => {
         reviewCalls++
@@ -698,6 +864,7 @@ describe('visual scoreboard measurement', () => {
     const reviewedTargets: string[] = []
 
     const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
       capture: async () => manifest,
       review: async (filtered) => {
         reviewedTargets.push(filtered.targets[0]!.id)
@@ -729,6 +896,7 @@ describe('visual scoreboard measurement', () => {
     ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.declaredTargets.push(extra)
     let reviewCalls = 0
     const result = await measureVisuals(source, options(), {
+      preflight: successfulPreflight,
       capture: async () => manifest,
       review: async (filtered) => {
         reviewCalls++

@@ -776,6 +776,7 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.engines[0]?.calls.creates[0]).toEqual({
       lifetime: 'plugin',
       lifetimeKey: fixture.enrollment.watcherId,
+      background: true,
       worktree: 'id:worktree-1',
       agent: 'claude',
       prompt: createPrompt,

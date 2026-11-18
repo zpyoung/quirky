@@ -142,7 +142,7 @@ async function openComposer() {
     await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
   }
   await page.addScriptTag({ content: browserBundle })
-  await page.locator('textarea[placeholder^="Message"]').waitFor()
+  await page.getByRole('textbox', { name: 'Message' }).waitFor()
   await page.getByRole('button', { name: 'Show floating workspace' }).waitFor()
   return { context, page }
 }
@@ -168,7 +168,7 @@ async function assertComposerClearance() {
 
     const sendCenter = { x: sendBox.x + sendBox.width / 2, y: sendBox.y + sendBox.height / 2 }
     const hitTarget = await page.evaluate(({ x, y }) => {
-      return document.elementFromPoint(x, y)?.closest('button')?.textContent?.trim() ?? null
+      return document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label') ?? null
     }, sendCenter)
     expect(hitTarget).toBe('Send')
 

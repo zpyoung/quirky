@@ -5,6 +5,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSy
 import { join, resolve } from 'node:path'
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
+import { CLI_FILES_LIMITS } from './cli-files-limits'
 
 const root = resolve(import.meta.dir, '../..')
 function sourceOutputs(): unknown[] {
@@ -31,7 +32,7 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
   const sentinel = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { env, stdout: 'ignore', stderr: 'ignore' })
   const child = scope.spawn([process.execPath, 'scripts/parity/cli-files.ts', '--json'], { cwd: root, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
   // real subprocess watchdogs must fire even when the daemon or browser stops responding.
-  const watchdog = setTimeout(() => scope.killNow(), 370_000)
+  const watchdog = setTimeout(() => scope.killNow(), CLI_FILES_LIMITS.watchdogMs)
   try {
     const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
     console.info('cli-files timing:')
@@ -419,5 +420,5 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
       expect(sourceOutputs()).toEqual(before)
     }
   }
-}, 380_000)
+}, CLI_FILES_LIMITS.testMs)
 

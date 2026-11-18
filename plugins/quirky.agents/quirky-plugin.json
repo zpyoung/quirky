@@ -2057,6 +2057,7 @@
               "id": "effort",
               "label": "Effort",
               "type": "select",
+              "default": "high",
               "choices": [
                 {
                   "value": "low",
@@ -2131,6 +2132,7 @@
               "options": []
             }
           ],
+          "defaultModel": "opus",
           "unlisted": "accept",
           "unlistedOptions": [
             {
@@ -3234,7 +3236,29 @@
             ],
             "structured": "model"
           },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Thinking level",
+              "type": "select",
+              "choices": [
+                { "value": "off", "label": "Off" },
+                { "value": "minimal", "label": "Minimal" },
+                { "value": "low", "label": "Low" },
+                { "value": "medium", "label": "Medium" },
+                { "value": "high", "label": "High" },
+                { "value": "xhigh", "label": "Extra high" },
+                { "value": "max", "label": "Maximum" },
+                { "value": "auto", "label": "Auto" }
+              ],
+              "flag": ["--thinking", "{value}"],
+              "conflicts": [{ "flags": ["--thinking"] }],
+              "structured": "effort"
+            }
+          ],
           "models": [],
+          "unlisted": "accept",
+          "unlistedOptions": [{ "id": "effort" }],
           "extraArgs": {
             "allowed": [
               {

@@ -492,7 +492,7 @@ describe('new sessions', () => {
 
   test('Chat opens the agent picker, and picking an agent starts a structured chat that opens in the tab', async () => {
     start([shell1], {
-      'quirky.agents/options': () => ({ models: [{ id: 'opus', label: 'Opus' }] }),
+      'quirky.agents/options': () => ({ models: [{ id: 'opus', label: 'Opus' }], defaultModel: 'opus' }),
       'quirky.structured/create': () => session({ id: 'chat', kind: 'structured', agent: 'claude' })
     })
     const view = await open({ worktree: WORKTREE.id })
@@ -503,7 +503,7 @@ describe('new sessions', () => {
     expect(card.textContent).toContain('Opus \u00b7 ready')
     await view.click(card)
     await settle()
-    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: WORKTREE.id, deferStart: true })
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: WORKTREE.id, deferStart: true, model: 'opus' })
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'chat' } })
     expect(document.body.textContent).not.toContain('Pick an agent')
   })

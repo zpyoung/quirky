@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { isDeepStrictEqual } from 'node:util'
+import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
 import bundleSizeSpec from '../../plugins/quirky.view/test/fixtures/bundle-size.json'
+import { approvalSpec } from '../../plugins/quirky.structured/native-questions'
 
 const FIXTURE_FILES = {
   source: 'src/app.ts',
@@ -671,20 +672,29 @@ export async function createCaptureTerminalFixture(
   client: FixtureRpcClient,
   fixtures: RegisteredCaptureFixtures,
   options: FixtureOptions,
-  title = 'UI Review Fixture Shell'
+  title = 'UI Review Fixture Shell',
+  acquisition: { worktree?: Pick<FixtureWorktree, 'id' | 'path'>; onAcquired?: (terminal: CaptureTerminalFixture) => void } = {}
 ): Promise<CaptureTerminalFixture> {
-  const result = record(await callRpc(client, 'quirky.terminal/newTab', {
-    workspace: fixtures.primaryWorktree.id,
-    cwd: fixtures.primaryWorktree.path,
+  checkAbort(options.signal)
+  const worktree = acquisition.worktree ?? fixtures.primaryWorktree
+  const creating = client.callAny('quirky.terminal/newTab', {
+    workspace: worktree.id,
+    cwd: worktree.path,
     agent: 'shell',
     title,
     activate: true
-  }, options))
-  return {
-    sessionId: requiredString(result.session, 'quirky.terminal/newTab'),
-    tabId: requiredString(result.tab, 'quirky.terminal/newTab tab'),
-    paneId: requiredString(result.pane, 'quirky.terminal/newTab pane')
-  }
+  }, { timeoutMs: options.timeoutMs }).then((reply) => {
+    const result = record(reply)
+    const terminal = {
+      sessionId: requiredString(result.session, 'quirky.terminal/newTab'),
+      tabId: requiredString(result.tab, 'quirky.terminal/newTab tab'),
+      paneId: requiredString(result.pane, 'quirky.terminal/newTab pane')
+    }
+    acquisition.onAcquired?.(terminal)
+    return terminal
+  })
+  void creating.catch(() => undefined)
+  return await bounded(creating, options.timeoutMs, options.signal, 'quirky.terminal/newTab')
 }
 
 export async function closeCaptureTerminalFixture(
@@ -693,6 +703,87 @@ export async function closeCaptureTerminalFixture(
   options: FixtureOptions
 ): Promise<void> {
   await callRpc(client, 'quirky.terminal/closeTab', { tab: terminal.tabId, yes: true }, options)
+}
+
+export const CAPTURE_TERMINAL_READY_MARKER = 'UI review terminal ready'
+
+/** Proves that the owned shell has executed a marker before its renderer is admitted. */
+export async function prepareCaptureTerminalFixture(
+  client: FixtureRpcClient, terminal: CaptureTerminalFixture, options: FixtureOptions
+): Promise<void> {
+  const deadline = Date.now() + options.timeoutMs
+  const remaining = () => {
+    checkAbort(options.signal)
+    const timeoutMs = deadline - Date.now()
+    if (timeoutMs <= 0) throw new Error('terminal fixture readiness deadline exceeded')
+    return { ...options, timeoutMs }
+  }
+  let ready = false
+  while (Date.now() < deadline) {
+    const snapshot = record(await callRpc(client, 'quirky.terminal/snapshot', { session: terminal.sessionId }, remaining()))
+    if (snapshot.shellState === 'ready' || snapshot.shellState === 'unsupported') {
+      ready = true
+      break
+    }
+    if (snapshot.shellState === 'timed_out') throw new Error('terminal fixture shell timed out before readiness')
+    await bounded(Bun.sleep(Math.min(50, remaining().timeoutMs)), remaining().timeoutMs, options.signal, 'terminal fixture shell readiness')
+  }
+  if (!ready) throw new Error('terminal fixture shell did not become ready')
+  await callRpc(client, 'quirky.terminal/write', {
+    session: terminal.sessionId,
+    data: `printf '\\n${CAPTURE_TERMINAL_READY_MARKER}\\n'\n`
+  }, remaining())
+  while (Date.now() < deadline) {
+    const snapshot = record(await callRpc(client, 'quirky.terminal/snapshot', { session: terminal.sessionId }, remaining()))
+    if (typeof snapshot.ansi === 'string' && stripVTControlCharacters(snapshot.ansi).split(/\r?\n/)
+      .some((line) => line.trim() === CAPTURE_TERMINAL_READY_MARKER)) return
+    const history = record(await callRpc(client, 'quirky.terminal/history', { session: terminal.sessionId, lines: 100, format: 'text' }, remaining()))
+    if (Array.isArray(history.lines) && history.lines.some((line) =>
+      typeof line === 'string' && line.split(/\r?\n/).some((part) => part.trim() === CAPTURE_TERMINAL_READY_MARKER))) return
+    await bounded(Bun.sleep(Math.min(50, remaining().timeoutMs)), remaining().timeoutMs, options.signal, 'terminal fixture marker output')
+  }
+  throw new Error('terminal fixture did not produce the readiness marker')
+}
+
+export const ASK_CARD_FIXTURE_COMMAND = 'Bash: bun run build'
+export type AskCardFixture = { askId: string; command: string }
+
+/** Acquires an unscoped approval and hands off ownership before any fallible read-back. */
+export async function createAskCardFixture(
+  client: FixtureRpcClient, options: FixtureOptions, own: (fixture: AskCardFixture) => void
+): Promise<AskCardFixture> {
+  checkAbort(options.signal)
+  const spec = approvalSpec(ASK_CARD_FIXTURE_COMMAND)
+  const creating = client.callAny('quirky.ask/create', { spec }, { timeoutMs: options.timeoutMs }).then((reply) => {
+    const fixture = { askId: requiredString(record(reply).askId, 'quirky.ask/create askId'), command: ASK_CARD_FIXTURE_COMMAND }
+    own(fixture)
+    return fixture
+  })
+  void creating.catch(() => undefined)
+  const fixture = await bounded(creating, options.timeoutMs, options.signal, 'quirky.ask/create')
+  const rows = await callRpc(client, 'quirky.ask/list', { pendingOnly: false, askId: fixture.askId }, options)
+  const ask = Array.isArray(rows) ? rows.map(record).find((row) => row.id === fixture.askId) : undefined
+  if (!ask) throw new Error('Ask card fixture read-back did not return the owned ask')
+  if (record(ask.envelope).status !== 'pending') throw new Error('Ask card fixture is not pending')
+  if (ask.queued !== false) throw new Error('Ask card fixture is queued')
+  if (ask.sessionId !== null || ask.worktreeId !== null) throw new Error('Ask card fixture is scoped to a session or worktree')
+  if (!isDeepStrictEqual(ask.spec, spec)) throw new Error('Ask card fixture spec does not match the approval command')
+  return fixture
+}
+
+/** Cancels the owned approval durably; renderer effects remain the capture's responsibility. */
+export async function closeAskCardFixture(
+  client: FixtureRpcClient, fixture: AskCardFixture, options: FixtureOptions
+): Promise<void> {
+  const cleanup = { timeoutMs: options.timeoutMs }
+  await callRpc(client, 'quirky.ask/cancel', { askId: fixture.askId }, cleanup)
+  const rows = await callRpc(client, 'quirky.ask/list', { pendingOnly: false, askId: fixture.askId }, cleanup)
+  if (!Array.isArray(rows)) throw new Error('Ask card fixture cancellation read-back was not a list')
+  const ask = rows.map(record).find((row) => row.id === fixture.askId)
+  if (!ask) throw new Error('Ask card fixture cancellation read-back did not return the owned ask')
+  if (record(ask.envelope).status === 'pending') {
+    throw new Error('Ask card fixture is still pending after cancellation')
+  }
 }
 
 export type TranscriptFixture = { sessionId: string; transcriptPath: string }

@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
+import { CLI_FILES_TEST_FILE } from '../parity/cli-files-limits'
 import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
 import { runCi } from '../speed/ci'
 import { type Context, runCli } from './cli'
@@ -165,19 +166,20 @@ function writePlan(dir: string, plan: Plan, baseline?: Baseline) {
 
 const reportOf = (args: string[]) => args.find((arg) => arg.startsWith('--reporter-outfile='))!.slice('--reporter-outfile='.length)
 
-type Calls = { files: string[]; active: number; maxActive: number }
+type Calls = { files: string[]; active: number; maxActive: number; limits?: Array<{ file: string; limitMs: number }> }
 type FakeStatus = 'pass' | 'fail' | 'skip'
 
 /** A fake `bun test`: each file's attempts are consumed in order, the last one repeating. */
 function fakeRun(script: Record<string, Record<string, FakeStatus>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
   const used: Record<string, number> = {}
-  return async (_cwd, args) => {
+  return async (_cwd, args, limitMs) => {
     const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
     const attempts = script[file]
     if (!attempts) throw new Error(`unexpected file ${file}`)
     const tests = attempts[Math.min(used[file] ?? 0, attempts.length - 1)]
     used[file] = (used[file] ?? 0) + 1
     calls.files.push(file)
+    calls.limits?.push({ file, limitMs })
     calls.active++
     calls.maxActive = Math.max(calls.maxActive, calls.active)
     await Bun.sleep(15)
@@ -542,6 +544,30 @@ describe('run-shard', () => {
     expect(results[0].rerun?.tests[0].status).toBe('passed')
     expect(results[1].rerun).toBeUndefined()
     expect(calls.files.filter((f) => f === 'm1.test.ts')).toHaveLength(2)
+  })
+
+  test('run-shard applies the CLI-files timeout to the selected macOS file and its rerun', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const ordinaryFile = 'macos-ordinary.test.ts'
+    writePlan(planDir, planOf({ macos: [CLI_FILES_TEST_FILE, ordinaryFile] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0, limits: [] }
+    const run = fakeRun({
+      [CLI_FILES_TEST_FILE]: [{ selected: 'fail' }, { selected: 'pass' }],
+      [ordinaryFile]: [{ ordinary: 'pass' }]
+    }, calls)
+    const out = join(dirOf('out'), 'macos-limits.json')
+    const { ctx } = harness(cwd, { run })
+
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+    const results = readJson<FileResult[]>(out)
+    expect(results.map((result) => result.file)).toEqual([CLI_FILES_TEST_FILE, ordinaryFile])
+    expect(results[0].platform).toBe('macos')
+    expect(results[0].first.tests[0].status).toBe('failed')
+    expect(results[0].rerun?.tests[0].status).toBe('passed')
+    expect(results[1].rerun).toBeUndefined()
+    expect(calls.limits?.filter((call) => call.file === CLI_FILES_TEST_FILE).map((call) => call.limitMs)).toEqual([840_000, 840_000])
+    expect(calls.limits?.filter((call) => call.file === ordinaryFile).map((call) => call.limitMs)).toEqual([600_000])
   })
 
   test('run-shard applies test-alone entries to both macOS and Linux jobs', async () => {
@@ -1153,7 +1179,7 @@ describe('verdict without bun install', () => {
 
   test('cli.ts statically imports only node built-ins and dependency-free modules', () => {
     const specs = staticImports(readFileSync(join(HERE, 'cli.ts'), 'utf8'))
-    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true }
+    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true, '../parity/cli-files-limits': true }
     for (const spec of specs) expect(spec.startsWith('node:') || allowed[spec] === true).toBe(true)
     expect(specs).not.toContain('./runner')
     expect(specs).not.toContain('./graph')
@@ -1176,6 +1202,9 @@ describe('verdict without bun install', () => {
     const speedLib = join(lib, '..', 'speed')
     mkdirSync(speedLib)
     for (const name of ['ci', 'contracts', 'report']) copyFileSync(join(HERE, '..', 'speed', `${name}.ts`), join(speedLib, `${name}.ts`))
+    const parityLib = join(lib, '..', 'parity')
+    mkdirSync(parityLib)
+    copyFileSync(join(HERE, '../parity/cli-files-limits.ts'), join(parityLib, 'cli-files-limits.ts'))
     const planDir = dirOf('plan')
     const inDir = dirOf('in')
     const outDir = join(dirOf('o'), 'verdict')

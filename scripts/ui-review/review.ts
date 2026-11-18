@@ -64,7 +64,7 @@ type SavedContractContext = {
   evidence: LoadedImage
 }
 type CollectedOutput = { text: string; bytes: number; truncated: boolean; error?: string }
-type ReviewerProcessResult = {
+export type ReviewerProcessResult = {
   exitCode?: number
   stdout: CollectedOutput
   stderr: CollectedOutput
@@ -72,9 +72,15 @@ type ReviewerProcessResult = {
   aborted: boolean
   startError?: string
 }
-type ResolvedModel = { provider: string; model: string; family?: ModelFamily }
+export type ResolvedModel = { provider: string; model: string; family?: ModelFamily }
 type ProcessOutcome = { kind: 'exit'; result: ReviewerProcessResult } | { kind: 'timeout' } | { kind: 'abort' }
 type OutputCollector = { done: Promise<void>; result: () => CollectedOutput }
+
+export type ReviewerPreflightOptions = Pick<ReviewOptions,
+  'reviewerAlias' | 'authorFamily' | 'timeoutMs' | 'reviewerExecutable' | 'signal'>
+export type ReviewerPreflightResult =
+  | { ok: true; resolved: Pick<ReviewerIdentity, 'provider' | 'model' | 'family'>; process: ReviewerProcessResult }
+  | { ok: false; resolved?: ResolvedModel; process: ReviewerProcessResult; issue: Pick<ReviewIssue, 'code' | 'message'> }
 
 class ReviewValidationError extends Error {}
 
@@ -766,13 +772,17 @@ function processLog(result: ReviewerProcessResult, preflight: ResolvedModel | un
   }
 }
 
-function validateOptions(options: ReviewOptions): void {
-  if (!safeText(options.outputDir, 4096)) fail('Review output directory is missing or malformed.')
+function validatePreflightOptions(options: ReviewerPreflightOptions): void {
   if (!safeText(options.reviewerAlias, 128) || !/^[A-Za-z0-9_-]+$/.test(options.reviewerAlias)) fail('Reviewer alias must be a single pi-watch alias name.')
   if (!isModelFamily(options.authorFamily)) fail('Author model family is unknown.')
-  if (typeof options.threshold !== 'number' || !Number.isFinite(options.threshold) || options.threshold < 0 || options.threshold > 100) fail('Review threshold must be a finite number from 0 to 100.')
   if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > MAX_TIMEOUT_MS) fail(`Reviewer timeout must be an integer from 1 to ${MAX_TIMEOUT_MS} milliseconds.`)
   if (options.reviewerExecutable !== undefined && !safeText(options.reviewerExecutable, 4096)) fail('Reviewer executable override is malformed.')
+}
+
+function validateOptions(options: ReviewOptions): void {
+  if (!safeText(options.outputDir, 4096)) fail('Review output directory is missing or malformed.')
+  validatePreflightOptions(options)
+  if (typeof options.threshold !== 'number' || !Number.isFinite(options.threshold) || options.threshold < 0 || options.threshold > 100) fail('Review threshold must be a finite number from 0 to 100.')
 }
 
 function reviewCellKey(targetId: string, theme: CaptureTheme): string {
@@ -881,6 +891,34 @@ function preflightFailureMessage(result: ReviewerProcessResult, resolved?: Resol
   if (!resolved) return 'Reviewer preflight did not report a resolved provider/model identity.'
   if (!resolved.family) return `Reviewer preflight resolved unknown provider family ${resolved.provider}.`
   return undefined
+}
+
+/** Resolves an independent reviewer without capture evidence or artifact writes. */
+export async function preflightReviewer(options: ReviewerPreflightOptions): Promise<ReviewerPreflightResult> {
+  validatePreflightOptions(options)
+  const process = await runReviewerProcess(
+    [options.reviewerExecutable ?? 'pi-watch', '--check', options.reviewerAlias],
+    options.timeoutMs,
+    options.signal,
+    resolve(fileURLToPath(new URL('../..', import.meta.url)))
+  )
+  const resolved = process.startError ? undefined : parseResolvedModel(process.stdout.text, process.stderr.text)
+  const failure = preflightFailureMessage(process, resolved) ??
+    (resolved?.family === options.authorFamily
+      ? `Resolved reviewer family ${resolved.family} matches author family ${options.authorFamily}.`
+      : undefined)
+  if (failure || !resolved?.family) {
+    return {
+      ok: false,
+      ...(resolved ? { resolved } : {}),
+      process,
+      issue: {
+        code: processFailureCode(process, resolved, undefined, options.authorFamily) ?? 'identity-mismatch',
+        message: failure ?? 'Reviewer preflight did not report a resolved provider/model identity.'
+      }
+    }
+  }
+  return { ok: true, resolved: { provider: resolved.provider, model: resolved.model, family: resolved.family }, process }
 }
 
 function reviewFailureMessage(result: ReviewerProcessResult, identity?: ResolvedModel): string | undefined {
@@ -1038,20 +1076,12 @@ export async function reviewManifest(manifest: CaptureManifest, options: ReviewO
   let preflightIdentity: ResolvedModel | undefined
   let preflightFailed = false
   if (reviewCells.length > 0) {
-    const preflightResult = await runReviewerProcess(
-      [executable, '--check', options.reviewerAlias],
-      options.timeoutMs,
-      options.signal,
-      cwd
-    )
-    preflightIdentity = preflightResult.startError ? undefined : parseResolvedModel(preflightResult.stdout.text, preflightResult.stderr.text)
-    const preflightFailure = preflightFailureMessage(preflightResult, preflightIdentity) ??
-      (preflightIdentity?.family === options.authorFamily
-        ? `Resolved reviewer family ${preflightIdentity.family} matches author family ${options.authorFamily}.`
-        : undefined)
-    if (preflightFailure) {
+    const preflight = await preflightReviewer(options)
+    const preflightResult = preflight.process
+    preflightIdentity = preflight.resolved
+    if (!preflight.ok) {
       preflightFailed = true
-      const code = processFailureCode(preflightResult, preflightIdentity, undefined, options.authorFamily) ?? 'identity-mismatch'
+      const { code, message: preflightFailure } = preflight.issue
       for (const cell of reviewCells) {
         const saved = contexts.get(reviewCellKey(cell.target.id, cell.capture.theme))!
         const logFailure = await saveAttempt(
