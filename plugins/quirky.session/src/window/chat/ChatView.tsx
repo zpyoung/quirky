@@ -287,7 +287,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
       <PlanPanel
         key={shown.version}
         context={context}
-        sessionId={session.id}
+        session={session}
         version={shown}
         isNewest={shown.version === newest?.version}
         onClose={closePanel}

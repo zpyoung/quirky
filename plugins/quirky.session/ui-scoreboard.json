@@ -572,7 +572,7 @@
       "state": "empty",
       "site": {
         "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-        "quote": "{version.empty === true ? <EmptyState message=\"Claude sent an empty plan\" /> : <Prose context={context} text={version.text} />}"
+        "quote": "{version.empty === true ? <EmptyState message=\"Claude sent an empty plan\" /> : <Prose context={context} session={session} text={version.text} />}"
       },
       "anchor": "version.empty === true ?",
       "render": {
@@ -2950,13 +2950,13 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-          "quote": "context.call('quirky.structured/send', { session: sessionId, text: PRESENT_AGAIN })"
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN })"
         },
         "target": "quirky.structured/send",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-            "quote": "const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: sessionId, text: PRESENT_AGAIN }))"
+            "quote": "const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN }))"
           }
         ]
       }

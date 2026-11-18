@@ -1322,7 +1322,7 @@ describe('the plan panel in a narrow chat', () => {
   type Observer = { callback: () => void }
   let observers: Observer[] = []
   const original = (globalThis as { ResizeObserver?: unknown }).ResizeObserver
-  const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!
+  const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!.parentElement!
   const resize = async (width: number) => {
     const element = bodyOf()
     element.getBoundingClientRect = () => ({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) })
