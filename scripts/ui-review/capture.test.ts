@@ -1,14 +1,17 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { chromium, type Locator } from 'playwright'
-import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
+import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, inspectSurface, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
 import { CAPTURE_BROWSER_CANDIDATES, captureBrowserExecutable } from './browser'
-import { goldenFor } from './goldens'
+import { goldenFor, SCREENSHOT_SIZE } from './goldens'
+import { PALETTE_SEARCH_LABEL } from '../../packages/ui/src/plugins/palette'
 import { newSceneState, seedRows, type SceneRuntime } from './shell-scenes'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { UiModel, UiSlotEntry, UiToolEntry } from '@quirky/protocol'
 import type { CaptureEvidence, CaptureTarget, CaptureTheme } from './contracts'
+import { createIsolatedRuntimeEnvironment } from './fixtures'
 
 const slot = (id: string, plugin: string, title = id): UiSlotEntry => ({
   id, plugin, title, kind: id.slice(0, id.indexOf(':')) as UiSlotEntry['kind'],
@@ -139,6 +142,363 @@ function toolModel(): UiModel {
 }
 
 const target = (id: string, plugin: string, kind: CaptureTarget['kind']): CaptureTarget => ({ id, plugin, title: id, kind })
+const dirtyCloseTarget = target('overlay:quirky.editor/close', 'quirky.editor', 'overlay')
+
+function deferred<T>() {
+  return Promise.withResolvers<T>()
+}
+
+type DirtyCloseHarnessSettings = {
+  screenshotGate?: Promise<void>
+  wrongPath?: boolean
+  wrongTab?: boolean
+  wrongCommandTarget?: boolean
+  commandPresent?: boolean
+  commandRefused?: boolean
+  opensDialog?: boolean
+  dialogTitle?: string
+  dialogDocument?: string
+  duplicateDialogs?: number
+  missingControls?: readonly string[]
+  disabledControls?: readonly string[]
+  autoResolveExternalOnCancel?: boolean
+  cancelFailure?: boolean
+  cancelClickFailure?: boolean
+  draftReplyFailure?: boolean
+  draftRefusedBeforeApply?: boolean
+  restoreFailure?: boolean
+}
+
+function buildDirtyCloseRuntime(settings: DirtyCloseHarnessSettings = {}) {
+  const outputDir = mkdtempSync(join(tmpdir(), 'capture-editor-close-'))
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'capture-editor-fixture-'))
+  const sourcePath = join(fixtureRoot, 'src', 'app.ts')
+  mkdirSync(join(fixtureRoot, 'src'), { recursive: true })
+  const originalContents = 'export const appFixture = true\n'
+  writeFileSync(sourcePath, originalContents)
+  const document = {
+    id: 'buffer-app',
+    tabId: 'tab-app',
+    path: sourcePath,
+    relativePath: 'src/app.ts',
+    worktreeId: 'worktree-1',
+    content: originalContents,
+    contentRevision: 1,
+    dirty: false
+  }
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = []
+  const draftContents: string[] = []
+  const commandSelections: string[] = []
+  const routeDecision = deferred<unknown>()
+  const screenshotStarted = deferred<void>()
+  let routeActive = false
+  let externalCloseCommands = 0
+  let viewOpenId = ''
+  let paletteVisible = false
+  let documentFocused = false
+  let documentClosed = false
+  let paletteQuery = ''
+  let dialogVisible = false
+  let screenshotCount = 0
+  let currentTheme: CaptureTheme = 'dark'
+  let closeRequest: { bufferId: string; tabId: string; dirty: boolean } | null = null
+  let dialogTitle = settings.dialogTitle ?? 'Unsaved Changes'
+  let dialogDocument = settings.dialogDocument ?? 'app.ts'
+  const screenshotBytes = Buffer.alloc(24)
+  screenshotBytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  screenshotBytes.writeUInt32BE(SCREENSHOT_SIZE.width, 16)
+  screenshotBytes.writeUInt32BE(SCREENSHOT_SIZE.height, 20)
+  const controls = ['Cancel', "Don't Save", 'Save']
+  const invokeLocalClose = () => {
+    if (!documentFocused) throw new Error('There is no active editor document to close.')
+    paletteVisible = false
+    if (settings.commandRefused) throw new Error('renderer refused command selection')
+    closeRequest = {
+      bufferId: settings.wrongCommandTarget ? 'buffer-other' : document.id,
+      tabId: settings.wrongCommandTarget ? 'tab-other' : document.tabId,
+      dirty: true
+    }
+    dialogVisible = settings.opensDialog !== false
+  }
+  const stateSnapshot = () => {
+    const stateBuffer = {
+      id: document.id,
+      path: settings.wrongPath ? `${document.path}.other` : document.path,
+      relativePath: settings.wrongPath ? 'src/other.ts' : document.relativePath,
+      worktreeId: document.worktreeId,
+      name: 'app.ts',
+      tabId: document.tabId,
+      mode: 'source',
+      contentRevision: document.contentRevision,
+      content: document.content,
+      dirty: document.dirty
+    }
+    return {
+      buffers: documentClosed ? [] : [stateBuffer],
+      tabs: documentClosed ? [] : [{ tabId: settings.wrongTab ? 'tab-other' : document.tabId, bufferId: document.id, mode: 'edit' }],
+      closeRequests: closeRequest ? [{ ...closeRequest }] : []
+    }
+  }
+  const unsavedDialogCount = () => dialogVisible && dialogTitle === 'Unsaved Changes'
+    ? 1 + (settings.duplicateDialogs ?? 0)
+    : 0
+  const count = (selector: string): number => {
+    if (selector.includes('[role="dialog"]') && selector.includes('Command palette')) return paletteVisible ? 1 : 0
+    if (selector.includes('[role="dialog"]') && selector.includes('Unsaved Changes')) return unsavedDialogCount()
+    if (selector.includes('[role="textbox"]') && selector.includes(PALETTE_SEARCH_LABEL)) return paletteVisible ? 1 : 0
+    if (selector.includes('[role="option"]')) {
+      const matchesQuery = paletteQuery === 'Close Editor Tab'
+      return paletteVisible && matchesQuery && settings.commandPresent !== false ? 1 : 0
+    }
+    if (selector.includes('[role="button"]')) {
+      const label = controls.find((control) => selector.includes(control))
+      if (!label || !dialogVisible || dialogTitle !== 'Unsaved Changes') return 0
+      return settings.missingControls?.includes(label) ? 0 : 1
+    }
+    if (selector.includes('.qe-close-dialog')) return dialogVisible ? 1 : 0
+    if (selector.includes('.ui-dialog__title') || selector.includes('.overlay-layer .ui-dialog-backdrop')) {
+      return unsavedDialogCount() + (paletteVisible ? 1 : 0) + (dialogVisible && dialogTitle !== 'Unsaved Changes' ? 1 : 0)
+    }
+    if (selector.includes('[data-plugin-overlay="overlay:quirky.editor/close"]')) return dialogVisible ? 1 : 0
+    if (selector.includes('[data-plugin-slot="view:quirky.editor/document"]')) {
+      return viewOpenId === 'view:quirky.editor/document' ? 1 : 0
+    }
+    if (selector.includes('.tool-shell__stripe') || selector.includes('.shell-workspace')) return 1
+    if (selector.includes('data-plugin-slot')) return 1
+    if (selector.includes('.qe-quick-open') || selector.includes('.tasks-composer')) return 0
+    return 0
+  }
+  const locator = (selector = '') => {
+    const item = {
+      first: () => item,
+      locator: (child: string) => locator(`${selector} ${child}`),
+      async waitFor(options: { state?: string } = {}) {
+        const present = count(selector) > 0
+        if (options.state === 'detached' ? present : !present) {
+          throw new Error(`${selector || 'element'} ${options.state ?? 'visible'} condition was not met`)
+        }
+      },
+      async count() {
+        return count(selector)
+      },
+      async isVisible() {
+        return count(selector) > 0
+      },
+      async isEnabled() {
+        const label = controls.find((control) => selector.includes(control))
+        return label !== undefined && dialogVisible && dialogTitle === 'Unsaved Changes' &&
+          !settings.missingControls?.includes(label) && !settings.disabledControls?.includes(label)
+      },
+      async click() {
+        if (selector.includes('.cm-content')) {
+          documentFocused = true
+          return
+        }
+        if (selector.includes('[role="button"]') && selector.includes('Cancel') && selector.includes('Unsaved Changes')) {
+          if (settings.cancelClickFailure) throw new Error('renderer Cancel control failed')
+          dialogVisible = false
+          if (routeActive && settings.autoResolveExternalOnCancel !== false) {
+            routeActive = false
+            routeDecision.resolve({ closed: false })
+          }
+          return
+        }
+        if (selector.includes('[role="option"]') || selector.includes('text:Close Editor Tab')) {
+          if (!paletteVisible || settings.commandPresent === false) throw new Error('Close Editor Tab is unavailable')
+          commandSelections.push('Close Editor Tab')
+          invokeLocalClose()
+        }
+      },
+      async fill(value: string) {
+        if (selector.includes('[role="textbox"]') && selector.includes(PALETTE_SEARCH_LABEL)) paletteQuery = value
+      },
+      async scrollIntoViewIfNeeded() {},
+      getByRole: (role: string, options?: { name?: string }) => locator(`${selector} [role="${role}"] ${options?.name ?? ''}`),
+      getByText: (text: string | RegExp) => locator(`${selector} text:${String(text)}`),
+      filter: () => item,
+      async evaluate() {
+        return {
+          text: dialogVisible ? `${dialogDocument} has unsaved changes. Do you want to save before closing?` : 'fixture document',
+          error: '',
+          busy: false,
+          visible: true,
+          content: true
+        }
+      },
+      async innerText() {
+        return dialogVisible ? `${dialogDocument} has unsaved changes. Do you want to save before closing?` : ''
+      },
+      async allTextContents() {
+        if (!selector.includes('.ui-dialog__title')) return []
+        return [
+          ...(dialogVisible ? [dialogTitle, ...Array.from({ length: settings.duplicateDialogs ?? 0 }, () => 'Unsaved Changes')] : []),
+          ...(paletteVisible ? ['Command palette'] : [])
+        ]
+      }
+    }
+    return item
+  }
+  const themes = [
+    { id: 'dark', title: 'Dark', plugin: null, appearance: 'dark', colors: { bg: '#111111' } },
+    { id: 'light', title: 'Light', plugin: null, appearance: 'light', colors: { bg: '#eeeeee' } }
+  ]
+  const client = {
+    async callAny(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method === 'ui.state') return {
+        windows: [{ id: 'window-1' }],
+        slots: viewOpenId ? [{ id: viewOpenId, shown: true }] : []
+      }
+      if (method === 'ui.view.open') {
+        viewOpenId = String(params.id)
+        return {}
+      }
+      if (method === 'ui.view.close') {
+        viewOpenId = ''
+        return {}
+      }
+      if (method === 'ui.palette.set') {
+        paletteVisible = params.open === true
+        return {}
+      }
+      if (method === 'theme.list') return { themes, chosen: currentTheme, active: currentTheme }
+      if (method === 'theme.set') {
+        currentTheme = String(params.id) as CaptureTheme
+        return { chosen: currentTheme, active: currentTheme }
+      }
+      if (method === 'quirky.editor/state') return stateSnapshot()
+      if (method === 'quirky.editor/draft') {
+        const content = String(params.content)
+        draftContents.push(content)
+        if (settings.draftRefusedBeforeApply && content !== originalContents) throw new Error('fixture draft was refused')
+        if (settings.restoreFailure && content === originalContents) throw new Error('fixture draft restoration failed')
+        if (params.expectedRevision !== document.contentRevision) throw new Error('fixture editor revision changed')
+        document.content = content
+        document.dirty = content !== originalContents
+        document.contentRevision += 1
+        if (settings.draftReplyFailure && content !== originalContents) throw new Error('fixture draft reply was lost')
+        return { dirty: document.dirty, contentRevision: document.contentRevision }
+      }
+      if (method === 'quirky.editor/close' && params.choice === 'cancel') {
+        if (settings.cancelFailure) throw new Error('daemon Cancel request failed')
+        if (!document.dirty) {
+          documentClosed = true
+          return { closed: true }
+        }
+        closeRequest = null
+        dialogVisible = false
+        return { closed: false }
+      }
+      if (method === 'ui.command.run' && params.id === 'command:quirky.editor/close') {
+        externalCloseCommands += 1
+        routeActive = true
+        closeRequest = { bufferId: document.id, tabId: document.tabId, dirty: true }
+        dialogVisible = true
+        return routeDecision.promise
+      }
+      if (method === 'status.get') return { ok: true }
+      return {}
+    },
+    close() {}
+  }
+  const page = {
+    locator,
+    getByRole: (role: string, options?: { name?: string }) => locator(`[role="${role}"] ${options?.name ?? ''}`),
+    getByLabel: (label: string) => locator(`[aria-label="${label}"]`),
+    keyboard: { async press() {} },
+    async waitForFunction() { return true },
+    async evaluate() { return currentTheme === 'light' ? '#eeeeee' : '#111111' },
+    async screenshot(options: { path?: string }) {
+      screenshotCount += 1
+      if (screenshotCount === 1) {
+        screenshotStarted.resolve()
+        await settings.screenshotGate
+      }
+      if (options.path) writeFileSync(options.path, screenshotBytes)
+      return new Uint8Array(screenshotBytes)
+    },
+    async reload() {},
+    isClosed: () => false,
+    context: () => ({ browser: () => ({ isConnected: () => true }) })
+  }
+  const image = { path: '/fixture/golden.png', sha256: 'a'.repeat(64) }
+  const editorBuffer = {
+    id: document.id,
+    tabId: document.tabId,
+    mode: 'source' as const,
+    path: sourcePath,
+    contentRevision: document.contentRevision
+  }
+  const modelWithEditor = {
+    ...toolModel(),
+    views: [
+      ...toolModel().views,
+      slot('view:quirky.editor/document', 'quirky.editor', 'Editor document')
+    ]
+  } as UiModel
+  const runtime = {
+    options: { timeoutMs: 1_000, overlayOpenMs: 20 },
+    outputDir,
+    client,
+    page,
+    model: modelWithEditor,
+    themes: Object.fromEntries(themes.map((entry) => [entry.appearance, entry])),
+    references: { shell: { dark: image, light: image }, plugin: { dark: image, light: image } },
+    fixtures: {
+      home: fixtureRoot,
+      repo: { id: 'repo-1' },
+      primaryWorktree: { id: 'worktree-1', path: fixtureRoot, repoId: 'repo-1', name: 'main' },
+      worktrees: [],
+      files: { source: sourcePath }
+    },
+    editorBuffer,
+    terminalFixture: null,
+    cellTerminalFixture: null,
+    structuredSessionId: null,
+    dirtyCloseFixture: null,
+    cellAskFixture: null,
+    ownedAskFixtures: new Map(),
+    askAcquisitionUncertain: false,
+    ownedTerminalFixtures: new Map(),
+    terminalAcquisitionUncertain: false,
+    cellTerminalWorktreeId: null,
+    scene: newSceneState(),
+    manifest: { failures: [], captures: [] },
+    secrets: [],
+    pageErrors: [],
+    fixtureInputErrors: new Map()
+  } as unknown as CaptureRuntime
+  return {
+    runtime,
+    externalCloseCommands: () => externalCloseCommands,
+    calls,
+    makeDirty() {
+      document.content = `${originalContents}\n// Unsaved review draft\n`
+      document.dirty = true
+      document.contentRevision += 1
+      closeRequest = { bufferId: document.id, tabId: document.tabId, dirty: true }
+      dialogVisible = true
+    },
+    draftContents,
+    commandSelections,
+    screenshotStarted: screenshotStarted.promise,
+    expireRoutedCommand() {
+      if (!routeActive) return
+      routeActive = false
+      routeDecision.reject(new Error('the window did not answer'))
+    },
+    snapshot() {
+      return { ...document, closeRequests: closeRequest ? [{ ...closeRequest }] : [], dialogVisible }
+    },
+    capturePath(theme: CaptureTheme = 'dark') {
+      return join(outputDir, 'captures', theme, `${encodeURIComponent(dirtyCloseTarget.id)}.png`)
+    },
+    cleanup() {
+      rmSync(outputDir, { recursive: true, force: true })
+      rmSync(fixtureRoot, { recursive: true, force: true })
+    }
+  }
+}
 
 describe('capture target DOM selectors', () => {
   test('uses mounted portal roots for feedback and floating overlays', () => {
@@ -187,12 +547,19 @@ type FakeCaptureRuntimeOptions = {
   escapeSchedulesQuickOpenClose?: boolean
   composerVisible?: boolean
   escapeClosesComposer?: boolean
+  askObservationFailure?: boolean
   rpcFailures?: Record<string, string>
 }
 
 function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
   const calls: Array<{ method: string; params?: Record<string, unknown> }> = []
   const targetId = { value: '' }
+  const terminalContext = { session: '', pane: '' }
+  const terminalLines = new Map<string, string[]>()
+  let activeAskId: string | null = null
+  let askPending = false
+  const askDrain = Promise.withResolvers<void>()
+  let askSpec: unknown = null
   const outputDir = mkdtempSync(join(tmpdir(), 'capture-runtime-test-'))
   const theme: { value: CaptureTheme } = { value: 'dark' }
   const themes = [
@@ -212,6 +579,15 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
     const item = {
       first: () => item,
       locator: (child: string) => locator(`${selector} ${child}`),
+      async evaluateHandle() {
+        if (settings.askObservationFailure) throw new Error('Ask flash observer could not attach')
+        return {
+          async evaluate(callback: (state: { done: Promise<void>; sameRoot(): boolean; stop(): void }) => unknown) {
+            return await callback({ done: askDrain.promise, sameRoot: () => true, stop() {} })
+          },
+          async dispose() {}
+        }
+      },
       async waitFor() {
         if (settings.overlayFailure && selector.includes('switch-dialog')) throw new Error(settings.overlayFailure)
         if (settings.slotFailure && selector.includes('data-plugin-slot') &&
@@ -221,6 +597,8 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
         if (selector.includes('overlay:quirky.tasks/workspace-composer') && composerVisible) throw new Error('Tasks composer remains open')
       },
       async count() {
+        if (selector.includes('data-ask-card')) return askPending ? 1 : 0
+        if (selector.includes('data-ask-result')) return 0
         if (selector.includes('.tasks-composer') || selector.includes('overlay:quirky.tasks/workspace-composer')) return composerVisible ? 1 : 0
         if (selector.includes('overlay:quirky.editor/quick-open')) return quickOpenVisible ? 1 : 0
         if (selector.includes('.qe-quick-open')) return quickOpenVisible ? 1 : 0
@@ -263,12 +641,54 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       calls.push({ method, params })
       const failure = settings.rpcFailures?.[method]
       if (failure) throw new Error(failure)
-      if (method === 'ui.state') return {
-        windows: Array.from({ length: settings.windows ?? 1 }, (_, index) => ({ id: `window-${index}` })),
-        slots: targetId.value ? [{ id: targetId.value, shown: true }] : []
+      if (method === 'ui.state') {
+        const report = targetId.value === 'view:quirky.session/worktree'
+          ? {
+              worktree: 'worktree-1',
+              active: terminalContext.session,
+              focusedPane: terminalContext.pane,
+              visibleSessions: terminalContext.session ? [terminalContext.session] : [],
+              panes: [{ pane: terminalContext.pane, session: terminalContext.session }]
+            }
+          : targetId.value === 'panel:quirky.ask/questions'
+            ? { pending: askPending && activeAskId ? [{ askId: activeAskId }] : [] }
+            : undefined
+        return {
+          windows: Array.from({ length: settings.windows ?? 1 }, (_, index) => ({ id: `window-${index}` })),
+          slots: targetId.value ? [{ id: targetId.value, shown: true, ...(report ? { report } : {}) }] : []
+        }
       }
       if (method === 'ui.view.open' || method === 'ui.panel.open' || method === 'ui.tool.open') {
         targetId.value = String(params.id ?? '')
+        const input = params.input && typeof params.input === 'object' ? params.input as Record<string, unknown> : {}
+        terminalContext.session = String(input.session ?? input.sessionId ?? '')
+        terminalContext.pane = String(input.pane ?? input.paneId ?? '')
+      }
+      if (method === 'ui.panel.close') {
+        targetId.value = ''
+        return {}
+      }
+      if (method === 'quirky.ask/create') {
+        activeAskId = 'ask-created-1'
+        askPending = true
+        askSpec = params.spec
+        return { askId: activeAskId }
+      }
+      if (method === 'quirky.ask/list') {
+        if (!activeAskId || params.askId !== activeAskId || (params.pendingOnly === true && !askPending)) return []
+        return [{
+          id: activeAskId,
+          spec: askSpec,
+          envelope: { status: askPending ? 'pending' : 'declined' },
+          queued: false,
+          sessionId: null,
+          worktreeId: null
+        }]
+      }
+      if (method === 'quirky.ask/cancel') {
+        askPending = false
+        askDrain.resolve()
+        return { ok: true }
       }
       if (method === 'theme.list') return { themes, chosen: theme.value, active: theme.value }
       if (method === 'theme.set') {
@@ -277,12 +697,21 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       }
       if (method === 'quirky.terminal/newTab') {
         terminalCount += 1
-        return { session: `cell-session-${terminalCount}`, tab: `cell-tab-${terminalCount}`, pane: `cell-pane-${terminalCount}` }
+        const session = `cell-session-${terminalCount}`
+        terminalLines.set(session, [])
+        return { session, tab: `cell-tab-${terminalCount}`, pane: `cell-pane-${terminalCount}` }
+      }
+      if (method === 'quirky.terminal/snapshot') return { shellState: 'ready', rows: 24 }
+      if (method === 'quirky.terminal/history') return { lines: terminalLines.get(String(params.session)) ?? [] }
+      if (method === 'quirky.terminal/write') {
+        const lines = terminalLines.get(String(params.session)) ?? []
+        lines.push('UI review terminal ready')
+        terminalLines.set(String(params.session), lines)
+        return { ok: true }
       }
       if (method === 'quirky.accounts/list') return {
         accounts: [{ id: `account-${String(params.provider)}`, provider: params.provider }]
       }
-      return {}
     },
     close() {}
   }
@@ -339,7 +768,13 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
     terminalFixture: { sessionId: 'shared-session', tabId: 'shared-tab', paneId: 'shared-pane' },
     cellTerminalFixture: null,
     structuredSessionId: null,
-    pendingUiCommand: null,
+    dirtyCloseFixture: null,
+    cellAskFixture: null,
+    ownedAskFixtures: new Map(),
+    askAcquisitionUncertain: false,
+    ownedTerminalFixtures: new Map(),
+    terminalAcquisitionUncertain: false,
+    cellTerminalWorktreeId: null,
     scene: newSceneState(),
     manifest: { failures: [], captures: [] },
     secrets: [],
@@ -351,6 +786,10 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
     calls,
     page,
     reloadCount: () => reloadCount,
+    setAskFixture(fixture: { askId: string }) {
+      activeAskId = fixture.askId
+      askPending = true
+    },
     cleanup: () => rmSync(outputDir, { recursive: true, force: true })
   }
 }
@@ -657,6 +1096,75 @@ test('reports the slot state when content readiness times out', async () => {
   }
 })
 
+test('Git admission requires rendered code in every expanded diff', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'capture-git-admission-'))
+  try {
+    const environment = createIsolatedRuntimeEnvironment(home)
+    mkdirSync(environment.TMPDIR!, { recursive: true })
+    mkdirSync(environment.XDG_RUNTIME_DIR!, { recursive: true })
+    const browser = await chromium.launch({
+      executablePath: captureBrowserExecutable(),
+      headless: true,
+      env: environment
+    })
+    try {
+      const page = await browser.newPage({ viewport: { width: 1400, height: 880 }, deviceScaleFactor: 2 })
+      const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+      const cases = [
+        { name: 'folded loading remains admissible' },
+        { name: 'transparent code leaves', transparentLeaves: true },
+        { name: 'empty expanded editor', empty: true },
+        { name: 'hidden expanded content', hidden: true },
+        { name: 'hidden code leaves', hiddenLeaves: true },
+        { name: 'marker outside the expanded code', misplaced: true },
+        { name: 'visible loading', loading: true },
+        { name: 'visible progress', busy: true },
+        { name: 'visible error', error: true }
+      ]
+      for (const fault of cases) {
+        const fake = buildFakeCaptureRuntime()
+        fake.runtime.page = page
+        fake.runtime.options.timeoutMs = 5_000
+        try {
+          await page.setContent(`<style>
+            :root { --bg: #111111 }
+            [data-review-body] { margin: 8px; }
+            .cm-editor { width: 500px; height: 80px; border: 1px solid; }
+            .cm-content, .cm-line { min-height: 20px; }
+            ${fault.hidden ? '.cm-content { visibility: hidden }' : ''}
+            ${fault.hiddenLeaves ? '.cm-line span { visibility: hidden }' : ''}
+            ${fault.transparentLeaves ? '.cm-line span { opacity: 0 }' : ''}
+          </style>
+          <div data-plugin-slot="${git.id}" class="plugin-slot"><div class="plugin-slot-body">
+            <section data-path="src/app.ts"><header>src/app.ts Reviewed</header>
+              <div data-review-body hidden>Loading diff...</div></section>
+            <section data-path="src/local-review-fixture.ts"><header>${fault.misplaced ? 'export const localReviewFixture = true' : 'local-review-fixture.ts'}</header>
+              <div data-review-body><div class="cm-editor"><div class="cm-content"><div class="cm-line"><span>${fault.misplaced ? 'export const unrelated = true' : 'export const localReviewFixture = true'}</span></div></div></div></div></section>
+            <section data-path="src/review-note.ts"><header>review-note.ts</header><div data-review-body>
+              <p class="git-review__since">Showing changes since you reviewed</p>
+              ${fault.loading ? '<p>Loading diff...</p>' : ''}
+              ${fault.busy ? '<p role="progressbar">Loading</p>' : ''}
+              ${fault.error ? '<p role="alert">Error loading diff: fixture failure</p>' : ''}
+              <div class="cm-editor"><div class="cm-content"><div class="cm-line"><span>${fault.empty ? '' : 'export const reviewedAt = "before the last edit"'}</span></div></div></div>
+            </div></section>
+          </div></div>`)
+          if (fault.name === 'folded loading remains admissible') {
+            fake.runtime.options.timeoutMs = 10_000
+            const result = await captureTargetCell(fake.runtime, git, 'dark')
+            expect(result.capture.status, result.capture.error).toBe('captured')
+            expect(result.isolation).toEqual({ ready: true })
+            const image = result.capture.image!
+            expect(createHash('sha256').update(readFileSync(image.path)).digest('hex')).toBe(image.sha256)
+          } else {
+            await fake.runtime.client.callAny('ui.view.open', { id: git.id })
+            await expect(inspectSurface(fake.runtime, git), fault.name).rejects.toThrow(/content exceeded|reported an error/)
+          }
+        } finally { fake.cleanup() }
+      }
+    } finally { await browser.close() }
+  } finally { rmSync(home, { recursive: true, force: true }) }
+}, 120_000)
+
 describe('opening the tool that hosts a target', () => {
   test('a sidebar section is hosted by the tool that lists it as its body or an alias', () => {
     const m = toolModel()
@@ -771,6 +1279,14 @@ describe('review fixtures', () => {
     expect(structured).toMatchObject({ session: 'structured-1' })
     expect(structured).not.toHaveProperty('sessionId')
     expect(worktree).toMatchObject({ session: 'shell-1', sessionId: 'shell-1', paneId: 'pane-1' })
+  })
+  test('Ask-card view input contains only the current owned ask ID', () => {
+    const fixtures = { primaryWorktree: { id: 'wt-1' }, repo: { id: 'repo-1' } } as Parameters<typeof fixtureViewInput>[0]
+    const askTarget = { id: 'view:quirky.ask/card', plugin: 'quirky.ask', kind: 'view', title: 'Ask card' } as CaptureTarget
+    const ask = { askId: 'ask-fixture-1', command: 'Bash: bun run build' }
+
+    expect(fixtureViewInput(fixtures, askTarget, null, null, null, { ask } as never)).toEqual({ askId: 'ask-fixture-1' })
+    expect(() => fixtureViewInput(fixtures, askTarget, null, null)).toThrow('an ask fixture is required')
   })
 
   test.each(['ready', 'unsupported'])('Handoff seeds scrollback with a POSIX shell whose integration is %s', async (shellState) => {
@@ -1161,7 +1677,7 @@ mock.module('playwright', () => ({
         async evaluate() { return current.activeTheme === 'light' ? '#eeeeee' : '#111111' },
         async screenshot(options) {
           const bytes = new Uint8Array([1, 2, 3, 4])
-          writeFileSync(options.path, bytes)
+          if (options.path) writeFileSync(options.path, bytes)
           return bytes
         },
         isClosed: () => false,
@@ -1558,3 +2074,380 @@ test('capture lifecycle preserves output and evidence around runtime asset failu
     rmSync(home, { recursive: true, force: true })
   }
 }, 120_000)
+
+describe('dirty Editor close ownership', () => {
+  test('focuses the validated document before selecting the argument-free close command', async () => {
+    const fake = buildDirtyCloseRuntime()
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+      expect(result.capture.status, result.capture.error).toBe('captured')
+      expect(fake.snapshot()).toMatchObject({ dirty: false, tabId: 'tab-app', dialogVisible: false })
+    } finally { fake.cleanup() }
+  })
+
+  test('recognizes the same fixture document through a filesystem path alias', async () => {
+    const fake = buildDirtyCloseRuntime()
+    const buffer = fake.runtime.editorBuffer!
+    const alias = `${buffer.path}.alias`
+    symlinkSync(buffer.path, alias)
+    buffer.path = alias
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+      expect(result.capture.status, result.capture.error).toBe('captured')
+      expect(result.isolation).toEqual({ ready: true })
+      expect(fake.snapshot()).toMatchObject({ dirty: false, tabId: 'tab-app' })
+    } finally { fake.cleanup() }
+  })
+
+  test('preserves a clean fixture tab when the draft is refused before applying', async () => {
+    const fake = buildDirtyCloseRuntime({ draftRefusedBeforeApply: true })
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+      const state = await fake.runtime.client.callAny('quirky.editor/state', { bufferId: 'buffer-app' }) as { buffers: unknown[]; tabs: unknown[] }
+      expect(result.capture.status).toBe('failed')
+      expect(result.isolation).toEqual({ ready: true })
+      expect(state.buffers).toMatchObject([{ id: 'buffer-app', dirty: false }])
+      expect(state.tabs).toMatchObject([{ bufferId: 'buffer-app', tabId: 'tab-app' }])
+    } finally { fake.cleanup() }
+  })
+
+  test('keeps the unsaved-close decision in the renderer while a screenshot crosses the routed deadline', async () => {
+    const screenshotGate = deferred<void>()
+    const fake = buildDirtyCloseRuntime({ screenshotGate: screenshotGate.promise })
+    const pendingCapture = captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+    try {
+      await fake.screenshotStarted
+      fake.expireRoutedCommand()
+      screenshotGate.resolve()
+      const result = await pendingCapture
+
+      expect(result.capture.status).toBe('captured')
+      expect(result.capture.image).not.toBeNull()
+      expect(fake.externalCloseCommands()).toBe(0)
+      expect(fake.commandSelections).toEqual(['Close Editor Tab'])
+      expect(fake.calls.some((call) => call.method === 'ui.command.run' &&
+        call.params.id === 'command:quirky.editor/close')).toBe(false)
+      expect(fake.snapshot()).toMatchObject({
+        id: 'buffer-app',
+        tabId: 'tab-app',
+        dirty: false,
+        closeRequests: [],
+        dialogVisible: false
+      })
+      expect(fake.draftContents.at(-1)).toBe('export const appFixture = true\n')
+      expect(result.isolation).toEqual({ ready: true })
+    } finally {
+      fake.expireRoutedCommand()
+      screenshotGate.resolve()
+      await pendingCapture.catch(() => undefined)
+      fake.cleanup()
+    }
+  })
+
+  for (const mismatch of [
+    { name: 'the source path', settings: { wrongPath: true } },
+    { name: 'the tab identity', settings: { wrongTab: true } }
+  ]) {
+    test(`refuses to dirty the fixture when Editor state identifies a different ${mismatch.name}`, async () => {
+      const fake = buildDirtyCloseRuntime(mismatch.settings)
+      try {
+        const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+
+        expect(result.capture.status).toBe('failed')
+        expect(fake.draftContents).toEqual([])
+        expect(fake.commandSelections).toEqual([])
+        expect(fake.externalCloseCommands()).toBe(0)
+        expect(fake.snapshot().dirty).toBe(false)
+      } finally {
+        fake.cleanup()
+      }
+    })
+  }
+
+  for (const [name, settings] of [
+    ['missing palette command', { commandPresent: false }],
+    ['refused palette command', { commandRefused: true }],
+    ['missing Unsaved Changes dialog', { opensDialog: false }],
+    ['wrong dialog title', { dialogTitle: 'Close Editor Tabs?' }],
+    ['duplicate Unsaved Changes dialogs', { duplicateDialogs: 1 }],
+    ['wrong fixture document in dialog', { dialogDocument: 'other.ts' }],
+    ['wrong close request identity', { wrongCommandTarget: true }],
+    ['missing Cancel control', { missingControls: ['Cancel'] }],
+    ['disabled Don’t Save control', { disabledControls: ["Don't Save"] }],
+    ['disabled Save control', { disabledControls: ['Save'] }]
+  ] as const) {
+    test(`rejects dirty-close evidence with ${name}`, async () => {
+      const fake = buildDirtyCloseRuntime(settings)
+      try {
+        const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+
+        expect(result.capture.status).toBe('failed')
+        expect(result.capture.image).not.toBeNull()
+        expect(fake.snapshot().dirty).toBe(false)
+        const requests = fake.snapshot().closeRequests
+        expect(requests.filter((request) => request.bufferId === 'buffer-app' || request.tabId === 'tab-app')).toEqual([])
+        if ('wrongCommandTarget' in settings) {
+          expect(requests).toEqual([{ bufferId: 'buffer-other', tabId: 'tab-other', dirty: true }])
+          expect(fake.calls.some((call) => call.method === 'quirky.editor/close' && call.params.bufferId === 'buffer-other')).toBe(false)
+        }
+        expect(fake.snapshot().dialogVisible).toBe(false)
+      } finally {
+        fake.cleanup()
+      }
+    })
+  }
+
+  test('restores a draft whose first mutation applied but whose reply was lost', async () => {
+    const fake = buildDirtyCloseRuntime({ draftReplyFailure: true })
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+
+      expect(result.capture.status).toBe('failed')
+      expect(fake.draftContents).toEqual([
+        'export const appFixture = true\n\n// Unsaved review draft\n',
+        'export const appFixture = true\n'
+      ])
+      expect(fake.snapshot()).toMatchObject({ dirty: false, closeRequests: [], dialogVisible: false })
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('keeps aborted screenshot evidence failed while cleaning the renderer independently of the capture signal', async () => {
+    const screenshotGate = deferred<void>()
+    const controller = new AbortController()
+    const fake = buildDirtyCloseRuntime({ screenshotGate: screenshotGate.promise })
+    fake.runtime.options.signal = controller.signal
+    const pendingCapture = captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+    try {
+      await fake.screenshotStarted
+      controller.abort(new Error('controlled screenshot abort'))
+      screenshotGate.resolve()
+      const result = await pendingCapture
+
+      expect(result.capture.status).toBe('failed')
+      expect(result.capture.image).not.toBeNull()
+      expect(result.isolation).toEqual({ ready: true })
+      expect(fake.snapshot()).toMatchObject({ dirty: false, closeRequests: [], dialogVisible: false })
+    } finally {
+      screenshotGate.resolve()
+      await pendingCapture.catch(() => undefined)
+      fake.cleanup()
+    }
+  })
+
+  test('attempts draft restoration and terminal isolation after Cancel fails under abort', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('capture aborted'))
+    const fake = buildDirtyCloseRuntime({ cancelFailure: true, cancelClickFailure: true })
+    fake.makeDirty()
+    fake.runtime.options.signal = controller.signal
+    Object.assign(fake.runtime, {
+      dirtyCloseFixture: { bufferId: 'buffer-app', tabId: 'tab-app', originalContents: 'export const appFixture = true\n' },
+      cellTerminalFixture: { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    })
+    try {
+      await isolateCell(fake.runtime, dirtyCloseTarget, 'dark', true)
+
+      expect(fake.draftContents).toContain('export const appFixture = true\n')
+      expect(fake.calls.some((call) => call.method === 'quirky.terminal/closeTab' && call.params.tab === 'cell-tab')).toBe(true)
+      expect(fake.runtime.cellTerminalFixture).toBeNull()
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('preserves the screenshot and its hash when fixture restoration fails', async () => {
+    const fake = buildDirtyCloseRuntime({ restoreFailure: true })
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+      const image = result.capture.image
+
+      expect(result.capture.status).toBe('failed')
+      expect(image).not.toBeNull()
+      expect(readFileSync(image!.path)).toHaveLength(24)
+      expect(createHash('sha256').update(readFileSync(image!.path)).digest('hex')).toBe(image!.sha256)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('an aborted late screenshot cannot overwrite retained diagnostic image bytes', async () => {
+    const gate = deferred<void>()
+    const lateFinished = deferred<void>()
+    const fake = buildDirtyCloseRuntime({ screenshotGate: gate.promise })
+    const controller = new AbortController()
+    fake.runtime.options.signal = controller.signal
+    const screenshot = fake.runtime.page.screenshot.bind(fake.runtime.page)
+    let calls = 0
+    fake.runtime.page.screenshot = async (options = {}) => {
+      const first = ++calls === 1
+      try {
+        const bytes = await screenshot(options)
+        if (!first) return bytes
+        const lateBytes = Buffer.concat([bytes, Buffer.from([1])])
+        if (options.path) writeFileSync(options.path, lateBytes)
+        return lateBytes
+      } finally {
+        if (first) lateFinished.resolve()
+      }
+    }
+    const capturing = captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+    try {
+      await fake.screenshotStarted
+      controller.abort(new Error('abort while imaging'))
+      const result = await capturing
+      expect(result.capture.status).toBe('failed')
+      expect(result.capture.error).toContain('abort while imaging')
+      expect(result.isolation).toEqual({ ready: true })
+      const image = result.capture.image!
+      const retained = readFileSync(image.path)
+      gate.resolve()
+      await lateFinished.promise
+      expect(readFileSync(image.path)).toEqual(retained)
+      expect(createHash('sha256').update(readFileSync(image.path)).digest('hex')).toBe(image.sha256)
+      expect(fake.snapshot()).toMatchObject({ dirty: false, tabId: 'tab-app', dialogVisible: false })
+    } finally {
+      gate.resolve()
+      await capturing.catch(() => undefined)
+      await lateFinished.promise
+      fake.cleanup()
+    }
+  })
+
+  test('never overwrites image evidence that already exists for the cell', async () => {
+    const fake = buildDirtyCloseRuntime()
+    const path = fake.capturePath()
+    const originalImage = Buffer.from('pre-existing diagnostic evidence')
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, originalImage)
+    try {
+      const result = await captureTargetCell(fake.runtime, dirtyCloseTarget, 'dark')
+
+      expect(result.capture.status).toBe('failed')
+      expect(result.capture.image?.path).toBe(path)
+      expect(result.capture.image?.sha256).toBe(createHash('sha256').update(originalImage).digest('hex'))
+      expect(existsSync(path)).toBe(true)
+      expect(readFileSync(path)).toEqual(originalImage)
+    } finally {
+      fake.cleanup()
+    }
+  })
+})
+
+describe('cell-owned terminal and Ask isolation', () => {
+  test('releases a cell terminal only after its owned tab closes', async () => {
+    const fake = buildFakeCaptureRuntime()
+    const terminal = { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    const owned = fake.runtime.ownedTerminalFixtures
+    owned.set(terminal.tabId, terminal)
+    Object.assign(fake.runtime, { cellTerminalFixture: terminal, cellTerminalWorktreeId: 'worktree-1' })
+    try {
+      const result = await isolateCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark', false)
+
+      expect(result).toEqual({ ready: true })
+      expect(fake.calls.some((call) => call.method === 'quirky.terminal/closeTab' && call.params?.tab === terminal.tabId)).toBe(true)
+      expect(owned.has(terminal.tabId)).toBe(false)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('retains a cell terminal owner when its close request fails', async () => {
+    const fake = buildFakeCaptureRuntime({ rpcFailures: { 'quirky.terminal/closeTab': 'terminal close failed' } })
+    const terminal = { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    const owned = fake.runtime.ownedTerminalFixtures
+    owned.set(terminal.tabId, terminal)
+    Object.assign(fake.runtime, { cellTerminalFixture: terminal, cellTerminalWorktreeId: 'worktree-1' })
+    try {
+      const result = await isolateCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark', true)
+
+      expect(result.ready).toBe(false)
+      expect(owned.get(terminal.tabId)).toEqual(terminal)
+      expect(fake.calls.some((call) => call.method === 'quirky.terminal/closeTab' && call.params?.tab === terminal.tabId)).toBe(true)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('releases an Ask owner only after cancellation and Questions-panel drain', async () => {
+    const fake = buildFakeCaptureRuntime()
+    const ask = { askId: 'ask-owned', command: 'Bash: bun run build' }
+    fake.setAskFixture(ask)
+    fake.runtime.ownedAskFixtures.set(ask.askId, ask)
+    fake.runtime.cellAskFixture = ask
+    try {
+      const result = await isolateCell(fake.runtime, target('view:quirky.ask/card', 'quirky.ask', 'view'), 'dark', true)
+
+      expect(result, fake.runtime.manifest.failures.join('\n')).toEqual({ ready: true })
+      expect(fake.calls.some((call) => call.method === 'quirky.ask/cancel' && call.params?.askId === ask.askId)).toBe(true)
+      expect(fake.calls.filter((call) => call.method === 'ui.panel.open' && call.params?.id === 'panel:quirky.ask/questions')).toHaveLength(2)
+      expect(fake.runtime.ownedAskFixtures.has(ask.askId)).toBe(false)
+      expect(fake.runtime.cellAskFixture).toBeNull()
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('charges a transient cancellation failure but releases ownership after one proved recovery', async () => {
+    const fake = buildFakeCaptureRuntime()
+    const ask = { askId: 'ask-owned', command: 'Bash: bun run build' }
+    fake.setAskFixture(ask)
+    fake.runtime.ownedAskFixtures.set(ask.askId, ask)
+    fake.runtime.cellAskFixture = ask
+    const forward = fake.runtime.client.callAny.bind(fake.runtime.client)
+    let attempts = 0
+    fake.runtime.client.callAny = async (method, params, options) => {
+      if (method === 'quirky.ask/cancel' && ++attempts === 1) throw new Error('first cancel reply was lost')
+      return await forward(method, params, options)
+    }
+    try {
+      const result = await isolateCell(fake.runtime, target('view:quirky.ask/card', 'quirky.ask', 'view'), 'dark', true)
+      expect(result, fake.runtime.manifest.failures.join('\n')).toEqual({ ready: true })
+      expect(attempts).toBe(2)
+      expect(fake.runtime.ownedAskFixtures.has(ask.askId)).toBe(false)
+      expect(fake.runtime.manifest.failures.some((failure) => failure.includes('first cancel reply was lost'))).toBe(true)
+    } finally { fake.cleanup() }
+  })
+
+  test('blocks the next cell after unclosed cancellation while independently closing its terminal', async () => {
+    const fake = buildFakeCaptureRuntime({ rpcFailures: { 'quirky.ask/cancel': 'cancel unavailable' } })
+    const ask = { askId: 'ask-owned', command: 'Bash: bun run build' }
+    const terminal = { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    fake.setAskFixture(ask)
+    fake.runtime.ownedAskFixtures.set(ask.askId, ask)
+    fake.runtime.cellAskFixture = ask
+    fake.runtime.ownedTerminalFixtures.set(terminal.tabId, terminal)
+    fake.runtime.cellTerminalFixture = terminal
+    try {
+      const isolated = await isolateCell(fake.runtime, target('view:quirky.ask/card', 'quirky.ask', 'view'), 'dark', true)
+      expect(isolated.ready).toBe(false)
+      expect(fake.runtime.ownedAskFixtures.has(ask.askId)).toBe(true)
+      expect(fake.runtime.ownedTerminalFixtures.size).toBe(0)
+      expect(fake.reloadCount()).toBe(0)
+      const next = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+      expect(next.capture.status).toBe('failed')
+      expect(next.isolation.ready).toBe(false)
+    } finally { fake.cleanup() }
+  })
+
+  test('retains an Ask owner when its renderer drain cannot be observed and still closes terminals', async () => {
+    const fake = buildFakeCaptureRuntime({ askObservationFailure: true })
+    const ask = { askId: 'ask-owned', command: 'Bash: bun run build' }
+    const terminal = { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    fake.setAskFixture(ask)
+    fake.runtime.ownedAskFixtures.set(ask.askId, ask)
+    fake.runtime.cellAskFixture = ask
+    fake.runtime.ownedTerminalFixtures.set(terminal.tabId, terminal)
+    fake.runtime.cellTerminalFixture = terminal
+    try {
+      const result = await isolateCell(fake.runtime, target('view:quirky.ask/card', 'quirky.ask', 'view'), 'dark', true)
+
+      expect(result.ready).toBe(false)
+      expect(fake.runtime.ownedAskFixtures.get(ask.askId)).toEqual(ask)
+      expect(fake.calls.some((call) => call.method === 'quirky.terminal/closeTab' && call.params?.tab === terminal.tabId)).toBe(true)
+    } finally {
+      fake.cleanup()
+    }
+  })
+})

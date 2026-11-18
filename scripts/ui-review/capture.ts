@@ -6,6 +6,8 @@ import { type UiModel, type UiToolEntry, type ThemeInfo } from '@quirky/protocol
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
 import {
+  closeAskCardFixture,
+  createAskCardFixture,
   closeCaptureTerminalFixture,
   createCaptureTerminalFixture,
   createLoopFixture,
@@ -14,8 +16,10 @@ import {
   createViewFixture,
   openFixtureEditorBuffer,
   prepareCaptureFixtureHome,
+  prepareCaptureTerminalFixture,
   registerCaptureFixtures,
   seedWorktreeStatuses,
+  type AskCardFixture,
   type CaptureTerminalFixture,
   type EditorFixtureBuffer,
   type FixtureRpcClient,
@@ -77,6 +81,9 @@ function namedOverlayTrigger(command: string, trigger: Promise<unknown>): Promis
 }
 
 const CELL_TERMINAL_TARGETS: ReadonlySet<string> = new Set([
+  'view:quirky.session/worktree',
+  'status-bar:quirky.git/ahead-behind',
+  'status-bar:quirky.reviews/checks',
   'view:quirky.accounts/session-accessory',
   'overlay:quirky.accounts/switch-dialog',
   'overlay:quirky.handoff/dialog'
@@ -110,12 +117,18 @@ export type CaptureRuntime = {
   editorBuffer: EditorFixtureBuffer | null
   terminalFixture: CaptureTerminalFixture | null
   cellTerminalFixture: CaptureTerminalFixture | null
+  cellTerminalWorktreeId: string | null
+  ownedTerminalFixtures: Map<string, CaptureTerminalFixture>
+  terminalAcquisitionUncertain: boolean
+  cellAskFixture: AskCardFixture | null
+  ownedAskFixtures: Map<string, AskCardFixture>
+  askAcquisitionUncertain: boolean
   transcriptFixture: TranscriptFixture | null
   loopFixture: LoopFixture | null
   remoteFixtures: RemoteFixtures | null
   viewFixture?: ViewFixture | null
   structuredSessionId: string | null
-  pendingUiCommand: Promise<unknown> | null
+  dirtyCloseFixture: { bufferId: string; tabId: string; originalContents: string } | null
   scene: SceneState
   manifest: CaptureManifest
   secrets: string[]
@@ -433,7 +446,7 @@ async function openLocalWorktreeContext(
       transcript: runtime.transcriptFixture,
       loop: runtime.loopFixture,
       remote: runtime.remoteFixtures,
-      cellTerminal: usePrimarySession ? runtime.cellTerminalFixture : null,
+      cellTerminal: runtime.cellTerminalFixture,
       view: runtime.viewFixture
     }
   )
@@ -516,9 +529,18 @@ export function targetSlotSelector(target: CaptureTarget): string {
   return target.kind === 'overlay' ? `[data-plugin-overlay=${attr}]` : `[data-plugin-slot=${attr}]`
 }
 
+async function closeNewChatDialog(runtime: CaptureRuntime): Promise<void> {
+  const selector = '[data-plugin-overlay="overlay:quirky.session/chat-dialogs"] [role="dialog"]'
+  await runtime.page.evaluate((dialogSelector) => {
+    document.querySelector(dialogSelector)?.querySelector<HTMLButtonElement>('button[aria-label="Close dialog"]')?.click()
+  }, selector)
+  await bounded(runtime.page.locator(selector).waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }),
+    runtime.options.timeoutMs, undefined, 'close New chat dialog')
+}
+
 async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
   await clearScene(runtime)
-  await resolveUnsavedCloseOverlay(runtime)
+  await closeNewChatDialog(runtime)
   const settings = runtime.page.getByRole('dialog', { name: 'Settings', exact: true })
   if (await settings.count() > 0 && await settings.isVisible()) {
     const cancel = settings.getByRole('button', { name: 'Cancel', exact: true })
@@ -624,8 +646,13 @@ export function fixtureViewInput(
     remote?: RemoteFixtures | null
     cellTerminal?: CaptureTerminalFixture | null
     view?: ViewFixture | null
+    ask?: AskCardFixture | null
   }
 ): Record<string, unknown> {
+  if (target.id === 'view:quirky.ask/card') {
+    if (!extra?.ask) throw new Error('an ask fixture is required for the Ask card view')
+    return { askId: extra.ask.askId }
+  }
   const worktree = fixtures.primaryWorktree
   const input: Record<string, unknown> = {
     worktree: worktree.id,
@@ -752,68 +779,107 @@ export async function waitForOverlay(
 
 async function openUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void> {
   const buffer = runtime.editorBuffer
-  if (!buffer || !buffer.tabId) throw new Error('the fixture editor tab is unavailable for unsaved-close capture')
+  if (!buffer?.tabId) throw new Error('the fixture editor tab is unavailable for unsaved-close capture')
   await openWorktreeContext(runtime)
-  const content = `${readFileSync(buffer.path, 'utf8')}\n// Unsaved review draft\n`
+  const state = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: buffer.id }, runtime.options.timeoutMs, runtime.options.signal))
+  const current = Array.isArray(state.buffers) ? state.buffers.map(record).find((entry) => entry.id === buffer.id) : undefined
+  const tab = Array.isArray(state.tabs) ? state.tabs.map(record).find((entry) => entry.tabId === buffer.tabId && entry.bufferId === buffer.id) : undefined
+  const sameSource = current?.path === buffer.path || (typeof current?.path === 'string' &&
+    realpathSync(current.path) === realpathSync(buffer.path))
+  if (!current || !tab || !sameSource || current.dirty !== false || typeof current.contentRevision !== 'number') {
+    throw new Error(`the mounted fixture editor document did not identify the expected clean app.ts buffer and tab; ${JSON.stringify({
+      requested: { bufferId: buffer.id, tabId: buffer.tabId, path: buffer.path },
+      actual: { bufferId: current?.id, path: current?.path, dirty: current?.dirty, revision: current?.contentRevision, tab }
+    })}`)
+  }
+  const originalContents = readFileSync(buffer.path, 'utf8')
+  runtime.dirtyCloseFixture = { bufferId: buffer.id, tabId: buffer.tabId, originalContents }
   const draft = record(await rpc(runtime.client, 'quirky.editor/draft', {
     bufferId: buffer.id,
-    content,
-    expectedRevision: buffer.contentRevision
+    content: `${originalContents}\n// Unsaved review draft\n`,
+    expectedRevision: current.contentRevision
   }, runtime.options.timeoutMs, runtime.options.signal))
   if (draft.dirty !== true || typeof draft.contentRevision !== 'number') throw new Error('the editor fixture draft did not become dirty')
   buffer.contentRevision = draft.contentRevision
-  const pending = namedOverlayTrigger('command:quirky.editor/close', rpc(runtime.client, 'ui.command.run', {
-    id: 'command:quirky.editor/close',
-    args: { bufferId: buffer.id, tabId: buffer.tabId }
-  }, runtime.options.timeoutMs, runtime.options.signal))
-  runtime.pendingUiCommand = pending
-  void pending.catch(() => undefined)
-  await waitForOverlay(runtime, runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true }), 'Unsaved Changes', pending)
+  const documentContent = runtime.page.locator('[data-plugin-slot="view:quirky.editor/document"] .qe-document-content .cm-content')
+  await documentContent.filter({ hasText: '// Unsaved review draft' }).waitFor({
+    state: 'visible', timeout: Math.min(10_000, runtime.options.timeoutMs)
+  })
+  await documentContent.click({ timeout: runtime.options.timeoutMs })
+  await rpc(runtime.client, 'ui.palette.set', { open: true }, runtime.options.timeoutMs, runtime.options.signal)
+  const palette = runtime.page.getByRole('dialog', { name: 'Command palette', exact: true })
+  await palette.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+  await palette.getByRole('tab', { name: 'Commands', exact: true }).click({ timeout: runtime.options.timeoutMs })
+  await palette.getByRole('textbox', { name: PALETTE_SEARCH_LABEL, exact: true }).fill('Close Editor Tab', { timeout: runtime.options.timeoutMs })
+  const command = palette.getByRole('option').filter({
+    has: runtime.page.locator('.shell-palette__entry-name').filter({ hasText: /^Close Editor Tab$/ })
+  })
+  await command.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+  if (await command.count() !== 1) throw new Error('the exact Close Editor Tab command is unavailable')
+  await command.click({ timeout: runtime.options.timeoutMs })
+  await palette.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs })
+  const dialog = runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true })
+  await waitForOverlay(runtime, dialog, 'Unsaved Changes')
+  if (await dialog.count() !== 1 || !/(?:^|[“"'\s])app\.ts(?:[”"'\s]|$)/.test(await dialog.innerText())) {
+    throw new Error('Unsaved Changes did not identify exactly the fixture app.ts document')
+  }
+  for (const name of ['Cancel', "Don't Save", 'Save']) {
+    const button = dialog.getByRole('button', { name, exact: true })
+    if (await button.count() !== 1 || !await button.isVisible() || !await button.isEnabled()) {
+      throw new Error(`Unsaved Changes ${name} control is unavailable or disabled`)
+    }
+  }
+  const openedState = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: buffer.id }, runtime.options.timeoutMs, runtime.options.signal))
+  const requests = Array.isArray(openedState.closeRequests) ? openedState.closeRequests.map(record) : []
+  if (requests.some((request) => request.bufferId !== buffer.id || request.tabId !== buffer.tabId)) {
+    throw new Error('the editor close request did not identify the owned fixture buffer and tab')
+  }
 }
 
 async function resolveUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void> {
-  const pending = runtime.pendingUiCommand
-  if (!pending) return
+  const owned = runtime.dirtyCloseFixture
+  if (!owned) return
+  const { timeoutMs } = runtime.options
+  const dialog = runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true })
   let failure: unknown
   try {
-    const dialog = runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true })
-    if (await dialog.count() > 0 && await dialog.isVisible()) {
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: runtime.options.timeoutMs })
+    if (await dialog.count() === 1 && await dialog.isVisible()) {
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click({ timeout: timeoutMs })
     }
-    await bounded(pending, runtime.options.timeoutMs, undefined, 'editor close decision')
-  } catch (error) {
-    failure = error
-  }
+  } catch (error) { failure = error }
   try {
-    const buffer = runtime.editorBuffer
-    if (buffer) {
-      const state = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: buffer.id }, runtime.options.timeoutMs))
-      const requests = Array.isArray(state.closeRequests) ? state.closeRequests.map(record) : []
-      if (buffer.tabId && requests.some((request) => request.tabId === buffer.tabId)) {
-        await bounded(runtime.client.callAny('quirky.editor/close', {
-          bufferId: buffer.id,
-          tabId: buffer.tabId,
-          choice: 'cancel'
-        }, { timeoutMs: runtime.options.timeoutMs }), runtime.options.timeoutMs, undefined, 'clear editor close request')
-      }
-      const current = Array.isArray(state.buffers) ? state.buffers.map(record).find((entry) => entry.id === buffer.id) : undefined
-      if (current?.dirty === true && typeof current.contentRevision === 'number') {
-        const clean = await rpc(runtime.client, 'quirky.editor/draft', {
-          bufferId: buffer.id,
-          content: readFileSync(buffer.path, 'utf8'),
-          expectedRevision: current.contentRevision
-        }, runtime.options.timeoutMs)
-        const revision = record(clean).contentRevision
-        if (typeof revision === 'number') buffer.contentRevision = revision
-      } else if (typeof current?.contentRevision === 'number') {
-        buffer.contentRevision = current.contentRevision
-      }
+    const state = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: owned.bufferId }, timeoutMs))
+    const current = Array.isArray(state.buffers) ? state.buffers.map(record).find((entry) => entry.id === owned.bufferId) : undefined
+    const requests = Array.isArray(state.closeRequests) ? state.closeRequests.map(record) : []
+    if (requests.some((request) => request.bufferId === owned.bufferId && request.tabId === owned.tabId)) {
+      if (current?.dirty !== true) throw new Error('owned editor close request became clean before it could be safely cancelled')
+      await rpc(runtime.client, 'quirky.editor/close', { bufferId: owned.bufferId, tabId: owned.tabId, choice: 'cancel' }, timeoutMs)
     }
-  } catch (error) {
-    failure ??= error
-  } finally {
-    runtime.pendingUiCommand = null
-  }
+  } catch (error) { failure ??= error }
+  try {
+    const state = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: owned.bufferId }, timeoutMs))
+    const current = Array.isArray(state.buffers) ? state.buffers.map(record).find((entry) => entry.id === owned.bufferId) : undefined
+    if (!current || typeof current.contentRevision !== 'number') throw new Error('owned editor buffer disappeared during cleanup')
+    if (current.dirty === true) {
+      await rpc(runtime.client, 'quirky.editor/draft', {
+        bufferId: owned.bufferId, content: owned.originalContents, expectedRevision: current.contentRevision
+      }, timeoutMs)
+    }
+  } catch (error) { failure ??= error }
+  try {
+    const state = record(await rpc(runtime.client, 'quirky.editor/state', { bufferId: owned.bufferId }, timeoutMs))
+    const current = Array.isArray(state.buffers) ? state.buffers.map(record).find((entry) => entry.id === owned.bufferId) : undefined
+    const tab = Array.isArray(state.tabs) ? state.tabs.map(record).find((entry) => entry.tabId === owned.tabId && entry.bufferId === owned.bufferId) : undefined
+    const requests = Array.isArray(state.closeRequests) ? state.closeRequests.map(record) : []
+    if (!current || !tab || current.dirty !== false || requests.some((request) => request.bufferId === owned.bufferId || request.tabId === owned.tabId)) {
+      throw new Error('owned editor buffer, tab, or close request did not settle after cancellation')
+    }
+    await dialog.waitFor({ state: 'detached', timeout: timeoutMs })
+    if (runtime.editorBuffer?.id === owned.bufferId && typeof current.contentRevision === 'number') {
+      runtime.editorBuffer.contentRevision = current.contentRevision
+    }
+    runtime.dirtyCloseFixture = null
+  } catch (error) { failure ??= error }
   if (failure) throw failure
 }
 
@@ -908,7 +974,8 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
         loop: runtime.loopFixture,
         remote: runtime.remoteFixtures,
         cellTerminal: runtime.cellTerminalFixture,
-        view: runtime.viewFixture
+        view: runtime.viewFixture,
+        ask: runtime.cellAskFixture
       })
       if (target.id === 'view:quirky.browser/page') {
         const pane = record(await rpc(runtime.client, 'quirky.browser/paneOpen', {
@@ -942,6 +1009,14 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
           runtime.page.locator('[data-plugin-overlay="overlay:quirky.accounts/switch-dialog"] [role="dialog"]'),
           'Accounts switch dialog'
         )
+      } else if (target.id === 'overlay:quirky.session/chat-dialogs') {
+        const trigger = namedOverlayTrigger('command:quirky.session/new-chat', rpc(runtime.client, 'ui.command.run', {
+          id: 'command:quirky.session/new-chat',
+          args: { workspace: runtime.fixtures.primaryWorktree.id }
+        }, runtime.options.timeoutMs, runtime.options.signal))
+        await waitForOverlay(runtime,
+          runtime.page.locator('[data-plugin-overlay="overlay:quirky.session/chat-dialogs"]').getByRole('dialog', { name: 'New chat', exact: true }),
+          'New chat', trigger)
       } else if (target.id === 'overlay:quirky.editor/quick-open') {
         await openWorktreeContext(runtime)
         const trigger = namedOverlayTrigger('command:quirky.editor/quick-open', rpc(
@@ -1106,7 +1181,8 @@ export async function paletteFieldMounted(page: Page): Promise<boolean> {
     .getByRole('textbox', { name: PALETTE_SEARCH_LABEL, exact: true }).count() > 0
 }
 
-async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
+/** Admits only the live mounted content required by a production screenshot cell. */
+export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   const aliases = runtime.manifest.contributionInventory?.toolAliases.filter((alias) => alias.renderedTarget.id === target.id) ?? []
   const toolId = aliases[0]?.toolId ?? (target.kind === 'sidebar-section' ? hostingToolFor(runtime.model, target) : null)
   await waitForStateShown(runtime, target, toolId)
@@ -1152,12 +1228,42 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     }
   }
   const readinessTimeout = Math.min(target.kind === 'overlay' ? 1_500 : 10_000, runtime.options.timeoutMs)
+  const contentStarted = Date.now()
+  const terminal = target.id === 'view:quirky.session/worktree' ? runtime.cellTerminalFixture : null
+  if (terminal) {
+    let report: Record<string, unknown> = {}
+    while (Date.now() - contentStarted < readinessTimeout) {
+      const remaining = readinessTimeout - (Date.now() - contentStarted)
+      const state = record(await rpc(runtime.client, 'ui.state', {}, Math.max(1, remaining), runtime.options.signal))
+      const slots = Array.isArray(state.slots) ? state.slots.map(record) : []
+      report = record(slots.find((slot) => slot.id === target.id)?.report)
+      if (report.worktree === runtime.cellTerminalWorktreeId && report.active === terminal.sessionId &&
+        report.focusedPane === terminal.paneId && Array.isArray(report.visibleSessions) &&
+        report.visibleSessions.includes(terminal.sessionId) && Array.isArray(report.panes) &&
+        report.panes.map(record).some((pane) => pane.pane === terminal.paneId && pane.session === terminal.sessionId)) break
+      await bounded(Bun.sleep(Math.min(50, Math.max(1, remaining))), Math.max(1, remaining), runtime.options.signal, 'terminal slot report')
+    }
+    if (report.worktree !== runtime.cellTerminalWorktreeId || report.active !== terminal.sessionId ||
+      report.focusedPane !== terminal.paneId || !Array.isArray(report.visibleSessions) || !report.visibleSessions.includes(terminal.sessionId) ||
+      !Array.isArray(report.panes) || !report.panes.map(record).some((pane) => pane.pane === terminal.paneId && pane.session === terminal.sessionId)) {
+      throw new Error(`terminal slot report did not identify requested worktree/session/pane ${JSON.stringify({
+        worktree: runtime.cellTerminalWorktreeId, ...terminal, report, elapsedMs: Date.now() - contentStarted
+      })}`)
+    }
+  }
+  const remainingContentMs = Math.max(1, readinessTimeout - (Date.now() - contentStarted))
   try {
-    await bounded(runtime.page.waitForFunction((slotSelector) => {
+    await bounded(runtime.page.waitForFunction(({ slotSelector, targetId, ask, terminal }) => {
       const node = document.querySelector(slotSelector)
       if (!node) return false
       const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
       const element = body ?? node
+      const visible = (child: Element | null): child is Element => {
+        if (!child) return false
+        const style = getComputedStyle(child)
+        const rect = child.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
       const style = getComputedStyle(element)
       const rect = element.getBoundingClientRect()
       const ownVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
@@ -1178,21 +1284,101 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
       if (node.querySelector('[role=\"alert\"], .plugin-slot-error')) return true
       const text = (element.textContent ?? '').trim()
       if (/^loading\b/i.test(text)) return false
+      if (targetId === 'view:quirky.ask/card') {
+        const cards = [...element.querySelectorAll('[data-approval-card]')].filter(visible)
+        const card = cards[0]
+        if (!ask || cards.length !== 1 || card?.getAttribute('data-approval-card') !== ask.askId ||
+          card.querySelector('[data-approval-command]')?.textContent?.trim() !== ask.command) return false
+        return ['Allow once', 'Allow for this session', 'Deny'].every((label) =>
+          [...card.querySelectorAll<HTMLButtonElement>('button')].some((button) =>
+            button.textContent?.trim() === label && !button.disabled && visible(button)))
+      }
+      if (targetId === 'overlay:quirky.session/chat-dialogs') {
+        const dialog = element.querySelector('[role="dialog"]')
+        const group = dialog?.querySelector('[role="group"][aria-label="Agents"]')
+        const buttons = group ? [...group.querySelectorAll<HTMLButtonElement>('button')] : []
+        return visible(dialog ?? null) && visible(group ?? null) && buttons.length === 4 &&
+          buttons.every((button) => visible(button) && (!button.disabled ||
+            Boolean(button.title.trim() && button.querySelector('span')?.textContent?.trim())))
+      }
+      if (targetId === 'overlay:quirky.editor/quick-open') {
+        const input = element.querySelector<HTMLInputElement>('input[aria-label="Go to file"]')
+        return input?.value === 'app.ts' && !/Searching files|Opening file/.test(text) &&
+          [...element.querySelectorAll<HTMLButtonElement>('[role="option"]')].some((option) =>
+            !option.disabled && visible(option) && option.querySelector('small')?.textContent?.trim() === 'src/app.ts')
+      }
+      if (targetId === 'view:quirky.git/diff') {
+        const reviewed = element.querySelector('section[data-path="src/app.ts"]')
+        const expanded = [...element.querySelectorAll<HTMLElement>('[data-review-body]')].filter((body) => !body.hidden)
+        const textRange = document.createRange()
+        const renderedText = (line: HTMLElement) => {
+          const parts: string[] = []
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+          for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            const parent = text.parentElement
+            if (!visible(parent) || !parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue
+            textRange.selectNodeContents(text)
+            const rect = textRange.getBoundingClientRect()
+            if (rect.width > 0 && rect.height > 0) parts.push(text.textContent ?? '')
+          }
+          return parts.join('')
+        }
+        const diffs = expanded.map((body) => ({
+          body,
+          path: body.closest('section[data-path]')?.getAttribute('data-path'),
+          code: [...body.querySelectorAll<HTMLElement>('.cm-editor .cm-content')]
+            .filter((content) => visible(content.closest('.cm-editor')) && visible(content) &&
+              content.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+            .flatMap((content) => [...content.querySelectorAll<HTMLElement>('.cm-line')])
+            .filter((line) => visible(line) && line.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+            .map(renderedText).join('\n').trim()
+        }))
+        const local = diffs.find((diff) => diff.path === 'src/local-review-fixture.ts')
+        const since = diffs.find((diff) => diff.path === 'src/review-note.ts')?.body.querySelector<HTMLElement>('.git-review__since')
+        return visible(reviewed?.querySelector('header') ?? null) &&
+          reviewed?.querySelector<HTMLElement>('[data-review-body]')?.hidden === true && diffs.length === 2 &&
+          diffs.every((diff) => visible(diff.body) && diff.code.length > 0) &&
+          local?.code.includes('export const localReviewFixture = true') === true &&
+          visible(since ?? null) && since?.innerText.includes('Showing changes since you reviewed') === true
+      }
+      if (targetId === 'view:quirky.session/worktree') {
+        if (!terminal) return false
+        const pane = [...element.querySelectorAll('.qt-pane')].find((pane) =>
+          pane.getAttribute('data-session') === terminal.sessionId && pane.getAttribute('data-pane') === terminal.paneId)
+        return visible(pane ?? null) && visible(pane?.querySelector('.terminal-pane-screen .xterm-screen') ?? null) &&
+          !pane?.querySelector('[data-terminal-connection-state], [role="alert"], [aria-busy="true"], [role="progressbar"]')
+      }
       return text.length > 0 || visibleChild
-    }, mountSelector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
+    }, { slotSelector: mountSelector, targetId: target.id, ask: runtime.cellAskFixture, terminal },
+    { timeout: remainingContentMs }), remainingContentMs, runtime.options.signal, `slot ${target.id} content`)
   } catch (error) {
     const timeoutMessage = `slot ${target.id} content exceeded ${readinessTimeout}ms`
     if (runtime.options.signal?.aborted ||
-      (!errorMessage(error).includes(timeoutMessage) && !/Timeout.*exceeded/i.test(errorMessage(error)))) throw error
+      (!/content exceeded \d+ms/.test(errorMessage(error)) && !/Timeout.*exceeded/i.test(errorMessage(error)))) throw error
     const details = await root.evaluate((node) => {
       const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
       const element = body ?? node
       return {
         text: (element.textContent ?? '').trim(),
-        busy: node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]') !== null
+        busy: node.querySelector('[aria-busy="true"], [role="progressbar"]') !== null,
+        nodes: [...element.querySelectorAll('*')].filter((child) =>
+          child.matches('[aria-busy="true"], [role="progressbar"], [role="alert"], [data-terminal-connection-state], [data-review-body], [data-approval-card], [role="option"], .cm-content') ||
+          (child.children.length === 0 && /^(loading|searching|connecting)\b/i.test(child.textContent?.trim() ?? ''))
+        ).slice(0, 8).map((child) => ({
+          tag: child.tagName, class: child.className, text: child.textContent?.trim().slice(0, 120),
+          rect: child.getBoundingClientRect().toJSON(),
+          display: getComputedStyle(child).display, visibility: getComputedStyle(child).visibility,
+          ancestors: [child.parentElement, child.parentElement?.parentElement].filter((parent) => parent !== null && parent !== undefined)
+            .map((parent) => ({ tag: parent.tagName, hidden: parent.hidden, display: getComputedStyle(parent).display, rect: parent.getBoundingClientRect().toJSON() }))
+        }))
       }
     })
-    throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))})`)
+    const requirement = target.id === 'view:quirky.ask/card' ? 'Ask card approval card (owned ID, command, enabled approval controls)' :
+      target.id === 'view:quirky.session/worktree' ? 'requested attached terminal surface' :
+      target.id === 'view:quirky.git/diff' ? 'reviewed header and visible code in both expanded fixture diffs' :
+      target.id === 'overlay:quirky.editor/quick-open' ? 'current src/app.ts quick-open result' :
+      target.id === 'overlay:quirky.session/chat-dialogs' ? 'New chat Agents group with four choices' : ''
+    throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))})${requirement ? `; ${requirement}; phase=content; elapsed=${Date.now() - contentStarted}ms; nodes=${JSON.stringify(details.nodes)}` : ''}`)
   }
   const details = await root.evaluate((node) => {
     const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
@@ -1213,7 +1399,7 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
       content: (element.textContent ?? '').trim().length > 0 || visibleChild
     }
   })
-  if (details.error) throw new Error(`slot ${target.id} reported an error: ${details.error}`)
+  if (details.error) throw new Error(`${target.id === 'view:quirky.ask/card' ? 'Ask card approval card' : `slot ${target.id}`} reported an error: ${details.error}`)
   if (!details.visible) throw new Error(`slot ${target.id} is hidden or has zero size`)
   if (!details.content) throw new Error(`slot ${target.id} is empty`)
   if (details.busy || /^loading\b/i.test(details.text)) throw new Error(`slot ${target.id} is still loading`)
@@ -1236,7 +1422,6 @@ async function screenshot(runtime: CaptureRuntime, path: string, diagnostic = fa
   if (existsSync(path)) throw new Error(`refusing to overwrite existing capture evidence: ${path}`)
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   const bytes = await bounded(runtime.page.screenshot({
-    path,
     type: 'png',
     fullPage: false,
     animations: 'disabled',
@@ -1246,6 +1431,7 @@ async function screenshot(runtime: CaptureRuntime, path: string, diagnostic = fa
   if (!dimensions || dimensions.width !== SCREENSHOT_SIZE.width || dimensions.height !== SCREENSHOT_SIZE.height) {
     throw new Error(`renderer screenshot was not ${SCREENSHOT_SIZE.width}x${SCREENSHOT_SIZE.height}`)
   }
+  writeFileSync(path, bytes, { flag: 'wx', mode: 0o600 })
   return evidence(path, bytes)
 }
 
@@ -1409,11 +1595,6 @@ async function captureOne(runtime: CaptureRuntime, target: CaptureTarget, theme:
     } else if (!image && existsSync(path)) {
       try { image = evidence(path, readFileSync(path)) } catch { image = null }
     }
-    if (runtime.pendingUiCommand) {
-      try { await resolveUnsavedCloseOverlay(runtime) } catch (closeError) {
-        runtime.manifest.failures.push(`editor close overlay cleanup: ${sanitizedError(closeError, runtime.secrets)}`)
-      }
-    }
     runtime.manifest.failures.push(`${target.id} (${theme}): ${message}`)
     return { ...cell, image, reference, status: 'failed', error: message }
   }
@@ -1439,30 +1620,153 @@ export function fillBlockedCells(
   }
 }
 
+async function drainAskFixture(runtime: CaptureRuntime, fixture: AskCardFixture): Promise<void> {
+  const { timeoutMs } = runtime.options
+  const selector = '[data-plugin-slot="panel:quirky.ask/questions"]'
+  const pendingSelector = `[data-ask-card=${JSON.stringify(fixture.askId)}]`
+  const resultSelector = `[data-ask-result=${JSON.stringify(fixture.askId)}]`
+  const observation = await (async () => {
+    await rpc(runtime.client, 'ui.view.close', {}, timeoutMs)
+    await rpc(runtime.client, 'ui.panel.open', { id: 'panel:quirky.ask/questions' }, timeoutMs)
+    const root = runtime.page.locator(selector)
+    await root.waitFor({ state: 'attached', timeout: timeoutMs })
+    return await root.evaluateHandle((node, args) => {
+      const body = node.querySelector('.plugin-slot-body') ?? node
+      let seen = false
+      let settled = false
+      let timer: ReturnType<typeof setTimeout>
+      let observer: MutationObserver
+      const sameRoot = () => node.isConnected && document.querySelector(args.selector) === node &&
+        (node.querySelector('.plugin-slot-body') ?? node) === body
+      const { promise: done, resolve, reject } = Promise.withResolvers<void>()
+      const finish = (error?: Error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        observer?.disconnect()
+        if (error) reject(error)
+        else resolve()
+      }
+      void done.catch(() => undefined)
+      const inspect = () => {
+        if (!sameRoot()) return finish(new Error('owned Ask observation root was remounted'))
+        if (body.querySelector(args.resultSelector)) seen = true
+        if (seen && !body.querySelector(args.resultSelector) && !body.querySelector(args.pendingSelector)) finish()
+      }
+      observer = new MutationObserver(inspect)
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true })
+      timer = setTimeout(() => finish(new Error('owned Ask resolution flash did not appear and detach naturally')), args.timeoutMs)
+      inspect()
+      return { done, sameRoot, stop: () => finish(new Error('owned Ask observation stopped')) }
+    }, { selector, pendingSelector, resultSelector, timeoutMs })
+  })().then((handle) => ({ handle }), (error: unknown) => ({ error }))
+
+  let pendingFailure: unknown
+  if ('handle' in observation) {
+    try {
+      await runtime.page.locator(`${selector} ${pendingSelector}`).waitFor({ state: 'visible', timeout: Math.min(2_000, timeoutMs) })
+    } catch (error) {
+      pendingFailure = error
+    }
+  }
+  let cancelFailure: unknown
+  try {
+    await closeAskCardFixture(runtime.client, fixture, { timeoutMs })
+  } catch (error) {
+    cancelFailure = error
+    runtime.manifest.failures.push(`owned Ask cancellation: ${sanitizedError(error, runtime.secrets)}`)
+    try {
+      await closeAskCardFixture(runtime.client, fixture, { timeoutMs })
+      cancelFailure = undefined
+    } catch {}
+  }
+  if (!('handle' in observation)) throw observation.error
+  const { handle } = observation
+  const verifyPendingReport = async () => {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const remaining = Math.max(1, deadline - Date.now())
+      const state = record(await rpc(runtime.client, 'ui.state', {}, remaining))
+      const slots = Array.isArray(state.slots) ? state.slots.map(record) : []
+      const report = record(slots.find((slot) => slot.id === 'panel:quirky.ask/questions')?.report)
+      if (Array.isArray(report.pending) && !report.pending.map(record).some((ask) => ask.askId === fixture.askId)) return
+      await Bun.sleep(Math.min(25, remaining))
+    }
+    throw new Error('owned Ask pending report did not settle')
+  }
+  try {
+    if (cancelFailure) throw cancelFailure
+    await bounded(handle.evaluate((state) => state.done), timeoutMs, undefined, 'owned Ask renderer drain')
+    if (pendingFailure) {
+      runtime.manifest.failures.push(`owned Ask pending observation recovered: ${sanitizedError(pendingFailure, runtime.secrets)}`)
+    }
+    await verifyPendingReport()
+    if (!await handle.evaluate((state) => state.sameRoot())) {
+      throw new Error('owned Ask pending report or observation root did not settle')
+    }
+    await rpc(runtime.client, 'ui.panel.close', {}, timeoutMs)
+    await rpc(runtime.client, 'ui.panel.open', { id: 'panel:quirky.ask/questions' }, timeoutMs)
+    await runtime.page.locator(`${selector} .plugin-slot-body`).waitFor({ state: 'attached', timeout: timeoutMs })
+    await verifyPendingReport()
+    if (await runtime.page.locator(`${selector} ${pendingSelector}, ${selector} ${resultSelector}`).count() !== 0) {
+      throw new Error('owned Ask effects returned after reopening Questions')
+    }
+    await rpc(runtime.client, 'ui.panel.close', {}, timeoutMs)
+    runtime.ownedAskFixtures.delete(fixture.askId)
+    if (runtime.cellAskFixture?.askId === fixture.askId) runtime.cellAskFixture = null
+  } finally {
+    await handle.evaluate((state) => state.stop()).catch(() => undefined)
+    await handle.dispose()
+  }
+}
+
 export async function isolateCell(
   runtime: CaptureRuntime,
   target: CaptureTarget,
   theme: CaptureTheme,
   failed: boolean
 ): Promise<{ ready: true } | { ready: false; blocker: string }> {
+  const options = runtime.options
+  runtime.options = { ...options, signal: undefined }
+  try {
+    return await isolateOwnedCell(runtime, target, theme, failed)
+  } finally {
+    runtime.options = options
+  }
+}
+
+async function isolateOwnedCell(
+  runtime: CaptureRuntime, target: CaptureTarget, theme: CaptureTheme, failed: boolean
+): Promise<{ ready: true } | { ready: false; blocker: string }> {
   const cell = `${target.id} (${theme})`
   const recordCleanupFailure = (error: unknown) => {
     runtime.manifest.failures.push(`${cell} cleanup: ${sanitizedError(error, runtime.secrets)}`)
+  }
+  for (const cleanup of [resolveUnsavedCloseOverlay, closeNewChatDialog]) {
+    try { await cleanup(runtime) } catch (error) { recordCleanupFailure(error) }
   }
   try {
     await closeCurrentSurface(runtime)
   } catch (error) {
     recordCleanupFailure(error)
   }
-  const terminal = runtime.cellTerminalFixture
-  if (terminal) {
+  if (runtime.cellTerminalFixture) runtime.ownedTerminalFixtures.set(runtime.cellTerminalFixture.tabId, runtime.cellTerminalFixture)
+  for (const [tabId, terminal] of runtime.ownedTerminalFixtures) {
     try {
       await closeCaptureTerminalFixture(runtime.client, terminal, runtime.options)
+      runtime.ownedTerminalFixtures.delete(tabId)
+      if (runtime.cellTerminalFixture?.tabId === tabId) runtime.cellTerminalFixture = null
     } catch (error) {
       recordCleanupFailure(error)
-    } finally {
-      runtime.cellTerminalFixture = null
     }
+  }
+  for (const ask of runtime.ownedAskFixtures.values()) {
+    try { await drainAskFixture(runtime, ask) } catch (error) { recordCleanupFailure(error) }
+  }
+  if (runtime.ownedAskFixtures.size || runtime.askAcquisitionUncertain ||
+    runtime.ownedTerminalFixtures.size || runtime.terminalAcquisitionUncertain || runtime.dirtyCloseFixture) {
+    recordCleanupFailure(new Error('owned fixture acquisition or renderer cleanup remains uncertain'))
+    return { ready: false, blocker: `${cell}: owned fixture cleanup is unproved` }
   }
 
   let dialogs: string[]
@@ -1532,23 +1836,48 @@ export async function captureTargetCell(
   isolation: { ready: true } | { ready: false; blocker: string }
 }> {
   const cell = { targetId: target.id, theme }
+  if (runtime.ownedAskFixtures.size || runtime.askAcquisitionUncertain ||
+    runtime.ownedTerminalFixtures.size || runtime.terminalAcquisitionUncertain || runtime.dirtyCloseFixture) {
+    const blocker = 'previous cell still owns unresolved fixture resources'
+    return { capture: failedCell(cell, runtime.references, blocker), isolation: { ready: false, blocker } }
+  }
   runtime.cellTerminalFixture = null
-  let terminalFailure: string | null = null
-  if (CELL_TERMINAL_TARGETS.has(target.id)) {
-    try {
-      runtime.cellTerminalFixture = await createCaptureTerminalFixture(
-        runtime.client,
-        runtime.fixtures,
-        runtime.options,
-        target.title
-      )
-    } catch (error) {
-      terminalFailure = `terminal fixture input: ${sanitizedError(error, runtime.secrets)}`
-      runtime.manifest.failures.push(terminalFailure)
+  runtime.cellTerminalWorktreeId = null
+  runtime.cellAskFixture = null
+  let preparationFailure: string | null = null
+  try {
+    throwIfAborted(runtime.options.signal)
+    if (CELL_TERMINAL_TARGETS.has(target.id)) {
+      const worktree = target.id === 'status-bar:quirky.reviews/checks'
+        ? runtime.fixtures.worktrees.find((entry) => entry.repoId === runtime.fixtures.repo.id && entry.name === CHECKS_FIXTURE_BRANCH)
+        : runtime.fixtures.primaryWorktree
+      if (!worktree) throw new Error('the Reviews checks fixture worktree is unavailable')
+      runtime.cellTerminalWorktreeId = worktree.id
+      runtime.terminalAcquisitionUncertain = true
+      const terminal = await createCaptureTerminalFixture(runtime.client, runtime.fixtures, runtime.options, target.title, {
+        worktree,
+        onAcquired: (owned) => {
+          runtime.ownedTerminalFixtures.set(owned.tabId, owned)
+          runtime.cellTerminalFixture = owned
+          runtime.terminalAcquisitionUncertain = false
+        }
+      })
+      await prepareCaptureTerminalFixture(runtime.client, terminal, runtime.options)
     }
+    if (target.id === 'view:quirky.ask/card') {
+      runtime.askAcquisitionUncertain = true
+      runtime.cellAskFixture = await createAskCardFixture(runtime.client, runtime.options, (owned) => {
+        runtime.ownedAskFixtures.set(owned.askId, owned)
+        runtime.cellAskFixture = owned
+        runtime.askAcquisitionUncertain = false
+      })
+    }
+  } catch (error) {
+    preparationFailure = `${target.id === 'view:quirky.ask/card' ? 'Ask' : 'terminal'} fixture input: ${sanitizedError(error, runtime.secrets)}`
+    runtime.manifest.failures.push(preparationFailure)
   }
 
-  const fixtureFailure = terminalFailure ?? runtime.fixtureInputErrors.get(target.id)
+  const fixtureFailure = preparationFailure ?? runtime.fixtureInputErrors.get(target.id)
   let capture: CaptureEvidence
   if (fixtureFailure) {
     capture = failedCell(cell, runtime.references, fixtureFailure)
@@ -1560,7 +1889,11 @@ export async function captureTargetCell(
       throw error
     }
   }
+  const cleanupStart = runtime.manifest.failures.length
   const isolation = await isolateCell(runtime, target, theme, capture.status === 'failed')
+  if (capture.status === 'captured' && (runtime.manifest.failures.length > cleanupStart || !isolation.ready)) {
+    capture = { ...capture, status: 'failed', error: runtime.manifest.failures.slice(cleanupStart).join('; ') || 'cell isolation was not ready' }
+  }
   return { capture, isolation }
 }
 
@@ -1606,6 +1939,15 @@ function assertBrowserExecutable(executable: string): void {
 
 /** Starts the real app in a disposable home, captures every selected contribution, and cleans all owned processes. */
 export async function captureApplication(options: CaptureOptions): Promise<CaptureManifest> {
+  return await runCaptureApplication(options)
+}
+
+/** Exercises production capture surfaces while retaining the private runtime's resource ownership. */
+export async function withCaptureRuntime(options: CaptureOptions, scenario: (runtime: CaptureRuntime) => Promise<void>): Promise<void> {
+  await runCaptureApplication(options, scenario)
+}
+
+async function runCaptureApplication(options: CaptureOptions, scenario?: (runtime: CaptureRuntime) => Promise<void>): Promise<CaptureManifest> {
   const { repoRoot, outputDir } = validateOptions(options)
   const selectedThemes = options.themes ?? THEMES
   const references = loadGoldenReferences(repoRoot)
@@ -1894,12 +2236,18 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       editorBuffer,
       terminalFixture,
       cellTerminalFixture: null,
+      cellTerminalWorktreeId: null,
+      ownedTerminalFixtures: new Map(),
+      terminalAcquisitionUncertain: false,
+      cellAskFixture: null,
+      ownedAskFixtures: new Map(),
+      askAcquisitionUncertain: false,
       transcriptFixture,
       loopFixture,
       remoteFixtures,
       viewFixture,
       structuredSessionId,
-      pendingUiCommand: null,
+      dirtyCloseFixture: null,
       scene: newSceneState(),
       manifest,
       secrets,
@@ -1922,52 +2270,54 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         state: 'visible', timeout: options.timeoutMs
       })
     )), options.timeoutMs, options.signal, 'fixture worktree rows')
-
-    const markAborted = () => {
-      const message = sanitizedError(options.signal ? abortError(options.signal) : new Error('capture was aborted'), secrets)
-      for (const cell of cells) {
-        const key = `${cell.targetId}\0${cell.theme}`
-        if (!results.has(key)) results.set(key, failedCell(cell, references, message))
+    if (scenario) await scenario(captureRuntime)
+    if (!scenario) {
+      const markAborted = () => {
+        const message = sanitizedError(options.signal ? abortError(options.signal) : new Error('capture was aborted'), secrets)
+        for (const cell of cells) {
+          const key = `${cell.targetId}\0${cell.theme}`
+          if (!results.has(key)) results.set(key, failedCell(cell, references, message))
+        }
+        manifest!.failures.push('capture aborted by caller signal')
+        syncProgress()
       }
-      manifest!.failures.push('capture aborted by caller signal')
+
+      captureThemes: for (const theme of selectedThemes) {
+        if (options.signal?.aborted) {
+          markAborted()
+          break
+        }
+        try {
+          await applyTheme(captureRuntime, themes[theme])
+        } catch (error) {
+          if (options.signal?.aborted) {
+            markAborted()
+            break
+          }
+          throw error
+        }
+        for (const target of targets) {
+          if (options.signal?.aborted) {
+            markAborted()
+            break
+          }
+          const cell = { targetId: target.id, theme }
+          const key = `${cell.targetId}\0${cell.theme}`
+          const result = await captureTargetCell(captureRuntime, target, theme)
+          results.set(key, result.capture)
+          syncProgress()
+          if (!result.isolation.ready) {
+            fillBlockedCells(cells, cell, references, results, result.isolation.blocker)
+            syncProgress()
+            break captureThemes
+          }
+        }
+        if (options.signal?.aborted) break
+      }
+
+      fillMissingCells('capture cell was not attempted')
       syncProgress()
     }
-
-    captureThemes: for (const theme of selectedThemes) {
-      if (options.signal?.aborted) {
-        markAborted()
-        break
-      }
-      try {
-        await applyTheme(captureRuntime, themes[theme])
-      } catch (error) {
-        if (options.signal?.aborted) {
-          markAborted()
-          break
-        }
-        throw error
-      }
-      for (const target of targets) {
-        if (options.signal?.aborted) {
-          markAborted()
-          break
-        }
-        const cell = { targetId: target.id, theme }
-        const key = `${cell.targetId}\0${cell.theme}`
-        const result = await captureTargetCell(captureRuntime, target, theme)
-        results.set(key, result.capture)
-        syncProgress()
-        if (!result.isolation.ready) {
-          fillBlockedCells(cells, cell, references, results, result.isolation.blocker)
-          syncProgress()
-          break captureThemes
-        }
-      }
-      if (options.signal?.aborted) break
-    }
-
-    fillMissingCells('capture cell was not attempted')
-    syncProgress()
     if (!options.signal?.aborted) {
       await verifyRuntimeAssets(assets, assetSnapshot, model, {
         port: runtime.port,
