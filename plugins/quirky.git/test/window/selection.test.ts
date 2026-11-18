@@ -17,13 +17,13 @@ test('SC-15 and SC-18: a click selects and opens the one Review tab, and the key
   const selection = async () => (await w.report()).selection
 
   await click(rowOf('a.ts'))
-  expect(selectedPaths()).toEqual(['a.ts'])
+  await w.win.waitFor(() => selectedPaths().join() === 'a.ts')
   await w.win.waitFor(async () => (await openView(w))?.id === DIFF_VIEW)
   expect((await openView(w))!.input).toMatchObject({ mode: 'review', reveal: 'a.ts', worktree: w.feat.id })
   await w.win.waitFor(async () => (await selection()).join() === 'a.ts')
 
   await press(listbox()!, 'ArrowDown')
-  expect(selectedPaths()).toEqual(['b.ts'])
+  await w.win.waitFor(() => selectedPaths().join() === 'b.ts')
   await w.win.waitFor(async () => (await selection()).join() === 'b.ts')
 
   await press(listbox()!, ' ')
@@ -33,7 +33,7 @@ test('SC-15 and SC-18: a click selects and opens the one Review tab, and the key
   expect(rowPaths()).toEqual(['a.ts', 'b.ts', 'c.ts', 'd.ts'])
 
   await press(listbox()!, 'Escape')
-  expect(selectedPaths()).toEqual([])
+  await w.win.waitFor(() => selectedPaths().length === 0)
   await w.win.waitFor(async () => (await selection()).length === 0)
 }, SLOW)
 
@@ -49,7 +49,7 @@ test('SC-4: unmarking with Space keeps the selection, and a marked file survives
   await click(rowOf('a.ts'))
   await press(listbox()!, ' ')
   await w.win.waitFor(() => countLine() === '0 of 2 reviewed · 2 uncommitted')
-  expect(selectedPaths()).toEqual(['a.ts'])
+  await w.win.waitFor(() => selectedPaths().join() === 'a.ts')
   await press(listbox()!, ' ')
   await w.win.waitFor(() => countLine() === '1 of 2 reviewed · 2 uncommitted')
   w.git('add', '-A')

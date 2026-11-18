@@ -55,6 +55,17 @@ function realProcessRunner(): OwnedProcessRunner {
   return runner
 }
 
+/** Waits for a complete pid: the shell creates the file before it writes, and `process.kill(0)` signals the runner's own group. */
+async function readChildPid(path: string): Promise<number> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const text = existsSync(path) ? readFileSync(path, 'utf8').trim() : ''
+    if (/^\d+$/.test(text) && Number(text) > 1) return Number(text)
+    if (Date.now() > deadline) throw new Error(`no child pid in ${path}`)
+    await Bun.sleep(10)
+  }
+}
+
 afterEach(async () => {
   await Promise.all(engines.splice(0).map((engine) => engine.shutdown()))
   await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
@@ -506,7 +517,7 @@ wait
     try {
       if (existsSync(pidFile)) ready.resolve()
       await ready.promise
-      const childPid = Number(readFileSync(join(root, 'child.pid'), 'utf8'))
+      const childPid = await readChildPid(pidFile)
       ownedPids.add(childPid)
       controller.abort()
       const result = await gathering
@@ -1261,7 +1272,7 @@ wait "$child"
       const readyDeadline = Date.now() + 3000
       while (!existsSync(readyPath) && Date.now() < readyDeadline) await Bun.sleep(10)
       expect(existsSync(readyPath)).toBe(true)
-      const childPid = Number(readFileSync(childPidPath, 'utf8'))
+      const childPid = await readChildPid(childPidPath)
       ownedPids.add(childPid)
       const abortedAt = Date.now()
       controller.abort()
@@ -1321,7 +1332,7 @@ wait "$child"
     try {
       if (existsSync(readyPath)) ready.resolve()
       await ready.promise
-      const childPid = Number(readFileSync(childPidPath, 'utf8'))
+      const childPid = await readChildPid(childPidPath)
       ownedPids.add(childPid)
       expect(await snapshot).toBeNull()
       const childExitDeadline = Date.now() + 3000
