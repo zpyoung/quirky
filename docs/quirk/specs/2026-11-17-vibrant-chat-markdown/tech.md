@@ -43,7 +43,7 @@ Modify:
 
 - `packages/ui/package.json`:
   - add `"./markdown": "./src/markdown/index.ts"` to `exports`;
-  - add the dependencies `streamdown@^2.8.0`, `@streamdown/code@^2.0.1`, `@streamdown/math@^1.0.4`, `shiki@^4.6.0` (for `createCssVariablesTheme`), `mermaid@^11.12.0`, `dompurify@^3.3.0`, `remark-gfm@^4.0.1`, `remark-breaks@^4.0.0`, `remark-math@^6.0.0`, `rehype-raw@^7.0.0`, `rehype-sanitize@^6.0.0` and `unist-util-visit@^5.0.0`, `remark-gemoji` for emoji shortcodes, and the dev dependencies `@types/mdast` and `@types/hast`;
+  - add the dependencies `streamdown@^2.8.0`, `@streamdown/code@^2.0.1`, `@streamdown/math@^1.0.4`, `shiki@^4.6.0` (for `createCssVariablesTheme`), `mermaid@^11.12.0`, `dompurify@^3.3.0`, `remark-gfm@^4.0.1`, `remark-breaks@^4.0.0`, `remark-math@^6.0.0`, `rehype-raw@^7.0.0`, `rehype-sanitize@^6.0.0`, `unist-util-visit@^5.0.0` and `mdast-util-from-markdown@^2.0.0` (parse-based open-fence detection, path candidates and dollar eligibility), `remark-gemoji` for emoji shortcodes, and the dev dependencies `@types/mdast` and `@types/hast`;
   - update `bun.lock` with `bun install`.
 - `packages/ui/src/design-system/styles.css`: add `@import './markdown.css';` beside the existing `editor-markdown.css` import.
 - `packages/ui/src/design-system/tokens.css`: the new tokens, in both theme blocks.
@@ -150,7 +150,7 @@ Postconditions and invariants:
 - **`chart`:** parsed by `parseChartSpec`. It draws SVG bars or a line using only `--ui-*` colours, with a `Source` toggle.
 - **On a parse failure,** the block renders as an ordinary code block with a `RenderError` above it, reading `Couldn't read this <lang> block: <message>`.
 
-**Math** (SC-10). `remarkLooseDollars` runs first in both profiles, never inserts or removes characters, and so keeps every mdast position mapped to the original source. The editor's search-match plugin depends on that. It works on parsed code boundaries, so code at any nesting is untouched. It does three things:
+**Math** (SC-10). `remarkLooseDollars` runs first in both profiles, never inserts or removes characters, and so keeps every mdast position mapped to the original source. The editor's search-match plugin depends on that. It decides eligibility from a first parse without math (`mdast-util-from-markdown` with the renderer's gfm extensions): only characters inside `text` nodes may change, so code, link and image destinations, titles, definitions and HTML are never touched at any nesting. It does three things:
 
 - Rewrites `\(x\)` to ` $x$ ` and `\[x\]` to `$$x$$`. Both rewrites keep the same length.
 - Leaves `$$…$$` unchanged.
