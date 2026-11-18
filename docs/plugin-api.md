@@ -13,6 +13,7 @@ The freeze covers the public declarations and their referenced contract types, i
 - [`CliContext` and `CliModule`](../packages/protocol/src/cli.ts): module-backed CLI command handlers.
 - [`ApiDescription` and CLI catalog entries](../packages/protocol/src/catalog.ts): published daemon API and command metadata.
 - [`PLUGIN_API_VERSION` and compatibility rules](../packages/protocol/src/plugin-api.ts): the host API release and stable-floor comparison.
+- [`ProcessRunner`, `ProcessSpawner`, `RunOptions`, `RunResult`, `SpawnOptions`, `SpawnedProcess`, `SpawnExit` and `StopOptions`](../packages/protocol/src/process.ts): daemon plugin subprocess capabilities, options and outcomes.
 - [Protocol JSON schemas and daemon manifest parsing](../packages/protocol/src/kernel-schemas.ts)
   and [the manifest parser](../packages/daemon/src/plugins/manifest.ts): accepted manifest and contribution data.
 
@@ -47,10 +48,108 @@ another key or event type.
 `worktree` names a key path containing the worktree ID; a non-empty string there is copied to the
 event envelope's `worktreeId` without changing which clients receive it. Held events are dropped
 when their plugin unloads. A plugin that uses either field declares `"apiVersion": "1.3.0"`.
+A held event keeps a reference to the emitted payload; a plugin must not mutate it after `emit`.
 
-`quirky.session-info/changed` opts into coalescing. `quirky.editor/changed` and
-`quirky.editor/explorerChanged` are not coalesced, so editor refresh listeners receive every
-emit immediately. `quirky.editor/explorerChanged` still carries its worktree tag.
+`quirky.session-info/changed`, `quirky.git/changed`, `quirky.git/reviewChanged` and
+`quirky.git/notesChanged` coalesce. `quirky.editor/changed` coalesces with one key for the
+daemon, and `quirky.editor/explorerChanged` coalesces per worktree and still carries its
+worktree tag. Editor clients refresh after their own actions rather than waiting for an event.
+`quirky.terminal/title` and `quirky.terminal/cwd` coalesce per `sessionId`; a listener that needs
+every title reads `context.pty.onFact`. `quirky.session/changed`, `quirky.agent-status/changed`
+and `quirky.agent-status/settled` carry a worktree tag and are not coalesced, because daemon
+listeners act on the states in between.
+
+`quirky.reviews/changed` carries a worktree tag for updates confined to one Checks entry and its
+Checks dialog. Shared updates and evictions remain untagged. It is not coalesced because draft
+fields consume daemon echoes.
+
+### API 1.4: Process runner
+
+API 1.4 adds `context.process` to daemon plugin contexts. `context.process.run(argv, options)`
+resolves with a `RunResult` for any exit code, including nonzero, and when a command is stopped
+by timeout, abort or output overflow, or cannot start (reported in `spawnError`). It rejects for
+bad arguments, a disposed runner, output that never ends after the command exits, or unexpected
+pipe/child-exit failures. For those unexpected failures, it kills the process group and rejects
+with the original error.
+
+`cwd` defaults to the daemon's working directory. `env` is the whole child environment: it
+defaults to `process.env` at call time, and a supplied value is not merged with it. The deadline
+defaults to 30 seconds. The host kills the plugin's remaining children when its activation ends.
+`deactivate` may still call `context.process.run`; the runner is disposed when deactivation
+finishes. In API 1.4, the object exposes only `run`; `spawn` was added in API 1.6.
+
+### API 1.5: Scoped UI subscriptions
+
+API 1.5 adds `UiPluginContext.subscribe(listener, { worktreeId })`. A string leaves out plugin
+events tagged with another worktree; `null` leaves out every tagged plugin event. Omitting the
+option delivers every event. Untagged plugin events and all kernel events are always delivered,
+even when their payload or a kernel event names another worktree. The scope is fixed at subscribe
+time. A plugin that uses the option declares `"apiVersion": "1.5.0"`.
+
+### API 1.6: Streaming and session-length processes
+
+API 1.6 adds `context.process.spawn(argv, options): SpawnedProcess` to daemon plugins.
+Use `run` for aggregated command output and `spawn` for streaming or session-length children.
+Plugins using `spawn` declare `"apiVersion": "1.6.0"` or later. The manifest is a compatibility
+floor, not a member switch: a supported older manifest gets both methods on a 1.6 host.
+
+Import the types from root `@quirky/protocol`. The context's frozen `process` object supplies
+`ProcessRunner & ProcessSpawner`, exposing exactly `run` and `spawn`, without `owner`, `live`
+or `dispose`. A helper needing only spawning can accept `ProcessSpawner`; run-only helpers
+can continue accepting `ProcessRunner`. See the [process declarations](../packages/protocol/src/process.ts)
+for every option and handle member.
+
+#### Deadlines and streams belong to the caller
+
+`spawn` returns a handle synchronously, not a Promise. Its `stdout` is a demand-driven
+`ReadableStream<Uint8Array>`; chunks are bytes, not lines or frames. Drain stdout or stop the child.
+`stderrTail()` reads a bounded, automatically drained tail, final when `exited` resolves.
+`write` preserves call order and resolves whether bytes reached the pipe, not whether the child
+consumed them. `write` and `closeInput` do not reject for a dead or closed pipe.
+
+These defaults apply:
+
+- `timeoutMs` is required: a positive finite number, or `null` for no deadline. Spawn has no
+  implicit 30-second deadline.
+- `cwd` is the daemon's working directory. `env` is `process.env` at call time; a supplied
+  environment replaces it rather than merging.
+- Stdin is `'ignore'`, stdout is `'pipe'`, stderr is `'tail'`, the stderr tail is 16,384 bytes,
+  and kill grace is 2,000 ms.
+
+`stop()` sends SIGTERM to the process group and escalates to SIGKILL after the grace period;
+`stop({ signal: 'SIGKILL' })` skips the grace. Stopping ends stdout and discards unread output.
+`stop` resolves to the same exit object as `exited`. Cancelling stdout alone does not stop the child.
+
+#### Start failures resolve; bad calls throw
+
+Bad arguments/options and a disposed runner throw synchronously before returning a handle.
+A command that cannot start instead returns an inactive handle with `pid: null`, closed stdout,
+an empty stderr tail, writes resolving `false`, and `spawnError` in its resolved exit.
+An already-aborted signal returns an inactive handle whose exit is marked `stopped: 'aborted'`.
+`exited` resolves for nonzero exits, explicit stop, timeout, abort and start failure; it does not
+reject for those outcomes. A post-exit stdout stall errors the stream with `ProcessStalledError`
+after the existing 1,000 ms stall wait, without rerunning the command.
+
+#### Activation ownership covers both methods
+
+Run and spawn share one runner owned by the plugin ID for each activation attempt.
+Both remain usable during `deactivate` and the activation disposer. Unload, disable,
+replacement/reload and failed activation dispose that runner, immediately SIGKILL its remaining
+process groups and await cleanup. A running child's exit is marked `aborted` unless an earlier
+stop reason won; completed exits stay unchanged. After disposal, stale `spawn` throws
+`ProcessRunnerDisposedError` synchronously, while stale `run` rejects. Re-enabling creates a
+fresh runner and does not revive stale contexts. One plugin's disposal cannot stop another's children.
+
+Normal daemon shutdown stops all shared-runner children, including kernel-owned children,
+even if plugin deactivation throws. A natural leader exit also kills remaining members of its
+process group. Ownership does not cover descendants that deliberately start a separate session;
+daemon crashes or SIGKILL do not guarantee cleanup.
+
+Spawn does not split shell strings, parse lines/frames, retry, deduplicate, cache, restart,
+impose concurrency limits or apply run's total-output cap. It does not bound arbitrarily many
+unawaited writes. Callers own their result/frame limits and must stop abandoned children.
+There is no raw Bun subprocess, stderr stream, IPC, PTY, inherited stdio, arbitrary-signal API,
+sandbox or detached/outliving option. Plugin code must use its context, never import `@quirky/process`.
 
 ## Manifest declaration
 
@@ -164,6 +263,18 @@ Use SemVer for future Plugin API releases: increment the **major** for incompati
   250 ms window; held emits can arrive after events from other keys, and are dropped when the plugin
   unloads. A declared worktree path with a non-empty string is copied to the event's `worktreeId`.
   A plugin that uses either field declares `apiVersion` 1.3.0.
+- **1.4.0** adds `context.process.run(argv, options)` for daemon plugins. It resolves for any exit
+  code, including nonzero, timeout, abort, output overflow and spawn errors. It rejects bad
+  arguments, a disposed runner, stalled output after exit, and unexpected pipe/child-exit
+  failures. Defaults are the daemon's working directory, `process.env` at call time (a supplied
+  environment replaces it) and a 30-second deadline. Children are killed when activation ends;
+  `deactivate` may still call `run`. API 1.4 exposes only `run`; API 1.6 adds `spawn`.
+  A plugin that uses it declares `apiVersion` 1.4.0.
+- **1.5.0** adds optional worktree scoping to `UiPluginContext.subscribe`. Untagged plugin events
+  and kernel events remain unfiltered. A plugin that uses the option declares `apiVersion` 1.5.0.
+- **1.6.0** adds [`context.process.spawn`](#api-16-streaming-and-session-length-processes) for
+  streaming and session-length daemon children under the same activation owner as `run`.
+  A plugin that uses it declares `apiVersion` 1.6.0 or later.
 
 ## Example
 

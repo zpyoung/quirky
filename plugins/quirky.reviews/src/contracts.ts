@@ -96,8 +96,8 @@ export type ReviewsEnv = {
    * synchronously with the entry write that follows `claimed`.
    */
   claimRefresh(worktree: string, ticket: number): 'claimed' | 'stale' | 'busy'
-  /** Atomic, synchronous: increment revision, persist durable defaults/links/suppression and emit changed. Evicts least recently used Checks entries beyond the cap. */
-  update(change: (state: ReviewsStore) => void): ReviewsStore
+  /** Atomic, synchronous update: increments revision, persists durable defaults/links/suppression, emits changed and evicts least-recently-used Checks entries beyond the cap. Callers may pass a worktree only for changes confined to that worktree's Checks entry and its Checks dialog; any eviction forces a global event. */
+  update(change: (state: ReviewsStore) => void, checksWorktree?: string): ReviewsStore
   /** Resolve through quirky.worktree/resolve, preserving caller cwd/worktree selection. */
   resolve(params: JsonRecord, caller: PluginCaller): Promise<Worktree>
   /** Safe classified RPC error with data.reason; never return upstream secrets. */

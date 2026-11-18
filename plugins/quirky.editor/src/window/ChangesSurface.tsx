@@ -142,7 +142,7 @@ export function ChangesSurface(props: ChangesSurfaceProps): ReactElement {
     void refreshDiff()
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.git/changed') void refreshDiff()
-    })
+    }, { worktreeId: buffer.worktreeId })
     return () => {
       requestId.current += 1
       unsubscribe()

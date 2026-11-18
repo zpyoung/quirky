@@ -1,6 +1,6 @@
 {
   "id": "quirky.reviews",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.5.0",
   "name": "Hosting reviews",
   "version": "0.1.0",
   "description": "Pull-request review, workspace Checks, creation and hosting settings over public hosting APIs.",
@@ -4582,11 +4582,16 @@
     "event": [
       {
         "id": "changed",
+        "description": "Review state changed; refetch. Carries a worktree when only that worktree's Checks entry changed.",
+        "worktree": "worktree",
         "data": {
           "type": "object",
           "properties": {
             "revision": {
               "type": "integer"
+            },
+            "worktree": {
+              "type": "string"
             }
           },
           "required": [

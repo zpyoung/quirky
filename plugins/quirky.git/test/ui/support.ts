@@ -31,6 +31,7 @@ export type Fake = {
   layout: UiLayout
   emit(event: QuirkyEvent): void
   listeners(): number
+  scopes(): string[]
   callsTo(method: string): Call[]
   /** Runs `command:quirky.git/<id>` as the host would. */
   run(id: string, args?: unknown): Promise<unknown>
@@ -47,7 +48,7 @@ export function layoutFor(worktree: string | null): UiLayout {
 }
 
 export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
-  const listeners = new Set<(event: QuirkyEvent) => void>()
+  const listeners = new Map<(event: QuirkyEvent) => void | Promise<void>, string | null | undefined>()
   const fake: Fake = {
     calls: [],
     opened: [],
@@ -61,9 +62,17 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     provided: new Map(),
     layout,
     emit(event) {
-      for (const listener of [...listeners]) void listener(event)
+      const taggedWorktreeId =
+        event.type.includes('/') && 'worktreeId' in event && typeof event.worktreeId === 'string'
+          ? event.worktreeId
+          : undefined
+      for (const [listener, worktreeId] of [...listeners]) {
+        if (taggedWorktreeId !== undefined && (worktreeId === null || (typeof worktreeId === 'string' && worktreeId !== taggedWorktreeId))) continue
+        void listener(event)
+      }
     },
     listeners: () => listeners.size,
+    scopes: () => [...listeners.values()].filter((worktreeId): worktreeId is string => typeof worktreeId === 'string'),
     callsTo: (method) => fake.calls.filter((c) => c.method === method),
     run: async (id, args) => {
       const handler = fake.provided.get(`command:quirky.git/${id}`)
@@ -89,8 +98,8 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
         if (!handler) throw new Error(`unexpected call ${method}`)
         return handler(params)
       },
-      subscribe(listener) {
-        listeners.add(listener)
+      subscribe(listener, options?: { worktreeId?: string | null }) {
+        listeners.set(listener, options?.worktreeId)
         return () => listeners.delete(listener)
       },
       getSetting: (name) => fake.settings[name],

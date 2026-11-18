@@ -340,7 +340,8 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         catchUp(item.key)
       }
     },
-    null
+    null,
+    worktree
   )
 
   const loadNow = (key: string) => {

@@ -6,6 +6,16 @@ Plugin authors: read the [Plugin API 1.0 reference](../docs/plugin-api.md) for t
 manifest, import, compatibility and lifecycle contract. Its linked protocol declarations are the
 detailed type reference.
 
+If a daemon plugin needs a subprocess, use `context.process.run` for aggregated commands or
+`context.process.spawn` for streaming and session-length children. Spawn requires `apiVersion`
+1.6.0 or later. Plugin code must never import `@quirky/process` or spawn processes directly.
+See the [process runner](../docs/plugin-api.md#api-14-process-runner) and
+[spawn reference](../docs/plugin-api.md#api-16-streaming-and-session-length-processes).
+
+Avatar's Claude version probes and review diffs use `run` and require API 1.4.0.
+Structured Pi and Oh My Pi sessions require API 1.6.0: login-shell lookup uses `run`,
+and RPC children use `spawn` with process-group shutdown and a bounded stderr tail.
+
 ## Removing a project
 
 `quirky repo rm <selector>` forgets the selected project and its settings/group
@@ -217,6 +227,10 @@ See [the loop command and API guide](quirky.loops/README.md) for flags, evidence
 Plugin stores still refuse a schema newer than their migration list by default. A reader can opt
 in with `context.openStore(migrations, { newerVersion: 'read-only' })` and inspect `store.readOnly`;
 SQLite enforces read-only access, migrations do not run, and write/transaction methods refuse.
+
+Daemon and plugin SQLite connections wait up to five seconds for a busy database, including
+read-only plugin handles. Writable stores use WAL and `synchronous = NORMAL`; a plugin that needs
+stronger durability can set `PRAGMA synchronous = FULL` after opening its store.
 
 ## Orchestration
 

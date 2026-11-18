@@ -496,7 +496,8 @@ export function activate(context: PluginContext): void {
     },
     resolveClaudePath: () => resolveClaudeThroughLoginShell(context.launch.shell),
     resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell),
-    resolvePiPath: (agent) => resolvePiThroughLoginShell(context.launch.shell, agent)
+    resolvePiPath: (agent) => resolvePiThroughLoginShell(context.process, context.launch.shell, agent),
+    process: context.process
   }
 
   const injectedRunner = testRunnerFactory()?.(structuredContext)

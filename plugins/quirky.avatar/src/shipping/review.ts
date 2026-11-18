@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { QuirkyEvent } from '@quirky/protocol'
+import type { ProcessRunner, QuirkyEvent } from '@quirky/protocol'
 import type { AvatarApp, Finding, Mandate, NeedAction } from '../contracts'
 import { quoteAsData, sanitize } from '../sanitize'
 import { handoffEpoch, sendRefusal, type Outbox, readCompare, readHead } from './outbox'
@@ -52,34 +52,26 @@ export type GitRun = { ok: boolean; stdout: string; capped: boolean; error?: str
 /** Runs git in `cwd` and returns at most `maxChars` of stdout, with `capped` set when there was more. */
 export type GitRunner = (cwd: string, args: string[], maxChars: number) => Promise<GitRun>
 
-/** The default {@link GitRunner}: a direct `git` spawn, so the output is not cut to the checks tail. */
-const spawnGit: GitRunner = async (cwd, args, maxChars) => {
-  const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
-  const timer = setTimeout(() => proc.kill(), GIT_TIMEOUT_MS)
-  try {
-    const decoder = new TextDecoder()
-    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-    let stdout = ''
-    let capped = false
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      stdout += decoder.decode(value, { stream: true })
-      if (stdout.length > maxChars) {
-        capped = true
-        stdout = stdout.slice(0, maxChars)
-        proc.kill()
-        break
+/** Builds a bounded git reader with a deadline and a byte budget derived from its character limit. */
+export function createGitRunner(process: ProcessRunner, timeoutMs = GIT_TIMEOUT_MS): GitRunner {
+  return async (cwd, args, maxChars) => {
+    const maxOutputBytes = Math.max(4, maxChars * 3 + 4)
+    try {
+      const result = await process.run(['git', ...args], { cwd, timeoutMs, maxOutputBytes })
+      if (result.spawnError !== undefined) return { ok: false, stdout: '', capped: false, error: result.spawnError.message }
+      const stdout = result.stdoutText
+      if (
+        result.stopped === 'timeout' || result.stopped === 'aborted' ||
+        (result.stopped === 'overflow' && (result.stdout.byteLength !== maxOutputBytes || result.stderr !== '' || stdout.length <= maxChars)) ||
+        (result.stopped === undefined && result.exitCode !== 0)
+      ) {
+        return { ok: false, stdout, capped: false, error: result.stderr.trim().slice(-300) || `git exited with ${result.exitCode}` }
       }
+      const capped = stdout.length > maxChars
+      return { ok: true, stdout: capped ? stdout.slice(0, maxChars) : stdout, capped }
+    } catch (error) {
+      return { ok: false, stdout: '', capped: false, error: error instanceof Error ? error.message : String(error) }
     }
-    const stderr = capped ? '' : await new Response(proc.stderr as ReadableStream<Uint8Array>).text()
-    const code = await proc.exited
-    if (!capped && code !== 0) return { ok: false, stdout, capped, error: stderr.trim().slice(-300) || `git exited with ${code}` }
-    return { ok: true, stdout, capped }
-  } catch (error) {
-    return { ok: false, stdout: '', capped: false, error: error instanceof Error ? error.message : String(error) }
-  } finally {
-    clearTimeout(timer)
   }
 }
 
@@ -225,7 +217,7 @@ function reviewPrompt(mandate: Mandate, diff: ReviewDiff): string {
  * `outbox` carries the thread replies. `git` reads the diff directly, so a long diff reaches the
  * reviewer whole.
  */
-export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = spawnGit): Review {
+export function createReview(app: AvatarApp, outbox: Outbox, git: GitRunner = createGitRunner(app.context.process)): Review {
   const pending = new Map<string, Pending>()
   const call = (method: string, params: Record<string, unknown>): Promise<unknown> => app.context.call(method, params)
 

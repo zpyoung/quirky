@@ -1,6 +1,7 @@
 import type {
   AskEnvelope,
   AskSpec,
+  ProcessSpawner,
   Session,
   SessionProviderSession,
   SessionStatus,
@@ -33,6 +34,8 @@ export type StructuredContext = {
   resolveCodexPath(): Promise<string>
   /** The user's `pi` or `omp` executable, found through their login shell. */
   resolvePiPath?(agent: 'pi' | 'omp'): Promise<string>
+  /** Spawns long-lived provider subprocesses under the plugin's shared process runner. */
+  process?: ProcessSpawner
 }
 
 /** `deny-all` runs a session with no tools: every tool or approval request is refused without an ask. */

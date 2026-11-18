@@ -97,23 +97,26 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
     for (const [id, ticket] of [...refreshTickets]) if (ticket <= oldestLive) refreshTickets.delete(id)
   }
 
-  function evictChecks(): void {
+  function evictChecks(): boolean {
     const ids = Object.keys(state.checksByWorktree)
     for (const id of ids) if (!recency.has(id)) recency.set(id, ++tick)
     for (const id of [...recency.keys()]) if (!(id in state.checksByWorktree)) recency.delete(id)
     let count = ids.length
+    let removed = false
     while (count > MAX_CHECKS_ENTRIES) {
       let oldest: string | null = null
       for (const id of ids) {
         if (!(id in state.checksByWorktree) || state.checksByWorktree[id]!.loading) continue
         if (oldest === null || recency.get(id)! < recency.get(oldest)!) oldest = id
       }
-      if (oldest === null) return
+      if (oldest === null) return removed
       delete state.checksByWorktree[oldest]
       recency.delete(oldest)
       if (latestRefreshed === oldest) latestRefreshed = null
       count -= 1
+      removed = true
     }
+    return removed
   }
 
   const env: ActiveReviewsEnv = {
@@ -156,17 +159,17 @@ export function createReviewsEnv(context: PluginContext): ActiveReviewsEnv {
         }
       }
     },
-    update(change) {
+    update(change, checksWorktree) {
       if (disposed) throw context.error('conflict', 'The reviews plugin is inactive.')
       change(state)
-      evictChecks()
+      const evicted = evictChecks()
       state.revision += 1
       const durable = JSON.stringify({ defaults: state.defaults, repoDefaults: state.repoDefaults, botOverrides: state.botOverrides, links: state.links, suppressed: state.suppressed })
       if (durable !== saved) {
         store.run('INSERT INTO review_preferences(id, value) VALUES(1, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value', durable)
         saved = durable
       }
-      context.emit('changed', { revision: state.revision })
+      context.emit('changed', { revision: state.revision, ...(checksWorktree !== undefined && !evicted ? { worktree: checksWorktree } : {}) })
       return state
     },
     async resolve(params: JsonRecord, caller: PluginCaller) {

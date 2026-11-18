@@ -68,12 +68,12 @@ function isDirectory(path: string): boolean {
  */
 export async function resolveRepoRoot(path: string): Promise<string> {
   if (!isDirectory(path)) throw new NoSuchDirectoryError(path)
-  return (await git(path, ['rev-parse', '--show-toplevel'])).trim()
+  return (await git(path, ['rev-parse', '--show-toplevel'], { readOnly: true })).trim()
 }
 
 /** Every worktree of the repo at `repoPath`, main worktree first (`git worktree list --porcelain`). */
 export async function listWorktrees(repoPath: string): Promise<GitWorktreeInfo[]> {
-  const out = await git(repoPath, ['worktree', 'list', '--porcelain'])
+  const out = await git(repoPath, ['worktree', 'list', '--porcelain'], { readOnly: true })
   const result: GitWorktreeInfo[] = []
   let isFirst = true
   for (const block of out.split(/\n\n+/)) {
@@ -112,7 +112,7 @@ export async function addWorktree(
   baseRef?: string
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true })
-  const exists = (await runGit(repoPath, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])).exitCode === 0
+  const exists = (await runGit(repoPath, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { readOnly: true })).exitCode === 0
   if (!exists) {
     await git(repoPath, ['worktree', 'add', '-b', branch, path, baseRef ?? 'HEAD'])
     return
@@ -135,7 +135,7 @@ export async function removeWorktree(repoPath: string, path: string, force: bool
 }
 
 export async function status(cwd: string): Promise<GitStatusSummary> {
-  const out = await git(cwd, ['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'])
+  const out = await git(cwd, ['status', '--porcelain=v1', '-z', '--branch', '--untracked-files=all'], { readOnly: true })
   const entries = out.split('\0')
   const result: GitStatusSummary = { branch: null, upstream: null, ahead: 0, behind: 0, files: [] }
 
@@ -202,7 +202,7 @@ function decodeSide(bytes: Uint8Array): Side {
 }
 
 async function readBlob(cwd: string, spec: string): Promise<Side> {
-  const r = await runGit(cwd, ['show', spec])
+  const r = await runGit(cwd, ['show', spec], { readOnly: true })
   if (r.exitCode !== 0) return { text: '', binary: false }
   return decodeSide(r.stdout)
 }
@@ -238,7 +238,7 @@ export async function stage(cwd: string, paths: string[]): Promise<void> {
 /** Works in a repo with no commits yet (falls back to `git rm --cached`). */
 export async function unstage(cwd: string, paths: string[]): Promise<void> {
   if (paths.length === 0) return
-  const hasHead = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'])).exitCode === 0
+  const hasHead = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
   if (hasHead) {
     await git(cwd, ['--literal-pathspecs', 'restore', '--staged', '--', ...paths])
   } else {
@@ -249,7 +249,7 @@ export async function unstage(cwd: string, paths: string[]): Promise<void> {
 /** Commits what is staged and returns the new commit's full sha. */
 export async function commit(cwd: string, message: string): Promise<string> {
   await git(cwd, ['commit', '-m', message])
-  return (await git(cwd, ['rev-parse', 'HEAD'])).trim()
+  return (await git(cwd, ['rev-parse', 'HEAD'], { readOnly: true, share: false })).trim()
 }
 
 export * from './ops'

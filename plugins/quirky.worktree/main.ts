@@ -12,10 +12,10 @@ import {
   type Worktree
 } from '@quirky/protocol'
 import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
-import { SelectorSyntaxError, matchWorktrees, type CallerIdentity } from './selector'
+import { SelectorSyntaxError, matchWorktrees, selectedId, type CallerIdentity } from './selector'
 import { BranchCleaner } from './src/daemon/branches'
 import { createRemoteWorkspace, createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart, type RemoteCreateParams } from './src/daemon/create'
-import { groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
+import { findOwned, groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
@@ -527,7 +527,15 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     describeRemove: (params, caller) => describeRemove(removeEnv, params as RemoveParams, identityOf(caller)),
     deleteBranch: (params) => deleteBranch(removeEnv, params as DeleteBranchParams),
     async resolve(params, caller) {
-      return (await findWorktree(String(params.selector), identityOf(caller, params))).worktree
+      const selector = String(params.selector)
+      const identity = identityOf(caller, params)
+      const id = selectedId(selector, identity)
+      if (id !== null) {
+        await reconcileDeletedGroups()
+        const worktree = await findOwned(listEnv, await listRepos(), id)
+        if (worktree) return worktree
+      }
+      return (await findWorktree(selector, identity)).worktree
     },
     navigate: (params, caller) => navigate(navigationEnv, params as { worktree: string; target?: unknown; window?: unknown }, identityOf(caller)),
     openIn: (params, caller) => openIn(navigationEnv, params as { worktree: string; target: unknown; window?: unknown }, identityOf(caller)),

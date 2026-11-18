@@ -78,6 +78,7 @@
       "name": "@quirky/daemon",
       "version": "0.1.0",
       "dependencies": {
+        "@quirky/process": "workspace:*",
         "@quirky/protocol": "workspace:*",
       },
     },

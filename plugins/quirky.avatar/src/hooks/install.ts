@@ -2,7 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync
 import type { Stats } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
-import type { LaunchHook } from '@quirky/protocol'
+import type { LaunchHook, ProcessRunner } from '@quirky/protocol'
 import type { Level } from '../contracts'
 import { GATE_EXTENSION_FILE, GATE_EXTENSION_MARKER, gateExtensionSource } from './pi-extension'
 
@@ -213,21 +213,20 @@ export function claudeVersionAtLeast(version: string | null, minimum: string = M
   return true
 }
 
-/** Runs `<command> --version` and returns its output, or null on any failure or after five seconds. */
-export async function probeClaudeVersion(command = 'claude'): Promise<string | null> {
+/** Runs `<command> --version` through the shared runner, returning trimmed output or null on failure. */
+export async function probeClaudeVersion(process: ProcessRunner, command = 'claude'): Promise<string | null> {
   try {
-    const proc = Bun.spawn([command, '--version'], { stdout: 'pipe', stderr: 'ignore' })
-    const timer = setTimeout(() => proc.kill(), 5_000)
-    const text = (await new Response(proc.stdout).text()).trim()
-    clearTimeout(timer)
-    return text === '' ? null : text
+    const result = await process.run([command, '--version'], { timeoutMs: 5_000 })
+    if (result.spawnError !== undefined || result.stopped !== undefined) return null
+    return result.stdoutText.trim() || null
   } catch {
     return null
   }
 }
 
 /** A probe that remembers its answer for a minute. */
-export function cachedClaudeVersion(probe: () => Promise<string | null> = probeClaudeVersion, ttlMs = 60_000): () => Promise<string | null> {
+export function cachedClaudeVersion(probeOrProcess: ProcessRunner | (() => Promise<string | null>), ttlMs = 60_000): () => Promise<string | null> {
+  const probe = typeof probeOrProcess === 'function' ? probeOrProcess : () => probeClaudeVersion(probeOrProcess)
   let cached: { at: number; value: string | null } | null = null
   return async () => {
     if (cached !== null && Date.now() - cached.at < ttlMs) return cached.value

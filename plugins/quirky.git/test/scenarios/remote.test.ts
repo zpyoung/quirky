@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type GitStatus } from '@quirky/protocol'
+import { COALESCE_INTERVAL_MS } from '../../../../packages/daemon/src/plugins/coalesce'
 import { waitForAsync } from '../../../../packages/daemon/test/helpers'
 import { git } from '../../../quirky.repo/test/git-fixtures'
 import { makeOrigin } from '../../../quirky.worktree/test/fixtures/repos'
@@ -74,12 +75,12 @@ describe('push', () => {
     commitInFeat(s, { 'one.txt': '1\n' })
     const before = s.changedEvents()
     await s.api('push')
-    await Bun.sleep(80)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s.changedEvents()).toBe(before + 1)
 
     s.gitIn('checkout', '-q', '--detach')
     expect((await s.fails(s.api('push'))).data.reason).toBe('detached')
-    await Bun.sleep(80)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s.changedEvents()).toBe(before + 1)
   })
 
@@ -184,7 +185,7 @@ describe('pull', () => {
     expect(after.operation).toBe('merge')
     expect(after.entries.filter((entry) => entry.area === 'conflicts').map((entry) => entry.path)).toEqual(['math.ts'])
     expect(after.busy).toBeNull()
-    await Bun.sleep(80)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s!.changedEvents()).toBe(before + 1)
   })
 
@@ -437,7 +438,7 @@ describe('rebase from base', () => {
     expect(after.operation).toBe('rebase')
     expect(after.entries.filter((entry) => entry.area === 'conflicts').map((entry) => entry.path)).toEqual(['math.ts'])
     expect(s.gitIn('for-each-ref', 'refs/quirky')).toBe('')
-    await Bun.sleep(80)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(s.changedEvents()).toBe(before + 1)
   })
 
@@ -485,7 +486,7 @@ describe('locking', () => {
     expect((await slow).code).toBe(0)
     expect((await status()).busy).toBeNull()
     expect(await counts()).toEqual({ ahead: 0, behind: 0 })
-    await Bun.sleep(80)
+    await Bun.sleep(COALESCE_INTERVAL_MS + 60)
     expect(mine()).toBe(before + 1)
   })
 })

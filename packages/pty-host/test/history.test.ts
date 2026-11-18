@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import * as fs from 'node:fs'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { HistoryLog, LogReader, newestOffset, oldestOffset } from '../src/history/log'
-import { composeReplay, formatCursor, pageBefore, parseCursor, scratchControlRows, textLinesAbove } from '../src/history/reader'
+import { composeReplay, formatCursor, pageBefore, parseCursor, scratchControlRows, textLinesAbove, textRowsAbove } from '../src/history/reader'
 import { Screen } from '../src/screen'
 import { mouseEncoding, wheelUp } from './mouse'
 
@@ -809,6 +809,154 @@ describe('unreadable history', () => {
       expect(dec(replay)).toBe('live')
     } finally {
       LogReader.open = open
+    }
+  })
+})
+
+describe('writer-indexed history', () => {
+  test.each([40_000, 80_000])('attach reads fewer than 100 blocks from %i small records', async (count) => {
+    const log = HistoryLog.create(freshDir(), { cols: 80, rows: 24 })
+    try {
+      for (let i = 0; i < count; i++) log.appendOutput(enc(`line ${String(i).padStart(6, '0')} ${'x'.repeat(86)}\r\n`))
+      let calls = 0
+      mock.module('node:fs', () => ({
+        ...realFs,
+        readSync: (...args: Parameters<typeof fs.readSync>) => {
+          calls++
+          return realFs.readSync(...args)
+        }
+      }))
+      try {
+        const result = await composeReplay(log, {
+          historyLines: 100,
+          live: { ansi: 'live', cols: 80, rows: 24, cursor: { x: 0, y: 0 } }
+        })
+        expect(result.historyCursor).not.toBeNull()
+        expect(dec(result.replay)).toContain(`line ${String(count - 25).padStart(6, '0')}`)
+        expect(calls).toBeLessThan(100)
+      } finally {
+        mock.module('node:fs', () => realFs)
+      }
+    } finally {
+      log.close()
+    }
+  })
+
+  function contents(reader: LogReader) {
+    return {
+      unreadable: reader.unreadable,
+      segments: reader.segments.map((segment) => ({
+        path: segment.path,
+        startOffset: segment.startOffset,
+        endOffset: segment.endOffset,
+        output: Buffer.concat(segment.records.filter((record) => record.kind === 'output').map((record) =>
+          reader.readOutput(segment, record, 0, record.length)
+        )),
+        controls: segment.records.filter((record) => record.kind !== 'output').map(({ kind, offset, cols, rows }) =>
+          ({ kind, offset, cols, rows })
+        )
+      }))
+    }
+  }
+
+  test.each(Array.from({ length: 20 }, (_, i) => i + 1))('matches disk history through rotation for seed %i', async (seed) => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24, maxSegmentBytes: 300_000 })
+    let state = seed
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+      return state
+    }
+    try {
+      for (let i = 0; i < 80; i++) {
+        const length = i === 15 ? 200_000 : i === 40 || i === 65 ? 150_000 + random() % 50_001 : i === 0 ? 1 : 1 + random() % 6000
+        const line = `\x1b[${31 + random() % 6}mseed-${seed}-${i} ${'x'.repeat(random() % 100)}\x1b[0m\r\n`
+        log.appendOutput(enc(line.repeat(Math.ceil(length / line.length)).slice(0, length)))
+        if (i % 13 === 0) log.appendResize(40 + random() % 80, 20 + random() % 10)
+        if (i % 17 === 0) log.appendRestore()
+        if (seed % 2 === 0 && i === 50) log.appendClear()
+      }
+      const indexed = log.reader()
+      const disk = LogReader.open(dir)
+      try {
+        expect(indexed.segments).toHaveLength(2)
+        expect(contents(indexed)).toEqual(contents(disk))
+      } finally {
+        indexed.close()
+        disk.close()
+      }
+      const live = { ansi: 'live', cols: 80, rows: 24, cursor: { x: 0, y: 0 } }
+      for (const historyLines of [0, 10, 2000]) {
+        expect(await composeReplay(log, { historyLines, live })).toEqual(await composeReplay(dir, { historyLines, live }))
+      }
+      for (const format of ['text', 'ansi'] as const) {
+        let before: number | undefined
+        let pages = 0
+        for (;;) {
+          const options = { before, lines: 2000, format, screenRows: 24 }
+          const page = await pageBefore(log, options)
+          expect(page).toEqual(await pageBefore(dir, options))
+          if (page.cursor === null) break
+          const next = parseCursor(page.cursor)
+          if (before !== undefined) expect(next).toBeLessThan(before)
+          before = next
+          expect(++pages).toBeLessThan(100)
+        }
+      }
+      expect(await textRowsAbove(log, 50, 24)).toEqual(await textRowsAbove(dir, 50, 24))
+      expect(await textLinesAbove(log, 50, 24)).toEqual(await textLinesAbove(dir, 50, 24))
+    } finally {
+      log.close()
+    }
+  }, 60_000)
+
+  test.each(['truncate', 'delete'])('attach falls back to disk after external %s', async (change) => {
+    const dir = freshDir()
+    const log = HistoryLog.create(dir, { cols: 80, rows: 24 })
+    for (let i = 1; i <= 200; i++) log.appendOutput(enc(`h-${i}\r\n`))
+    const path = join(dir, 'output.log')
+    if (change === 'truncate') truncateSync(path, statSync(path).size - 3)
+    else rmSync(path)
+    const open = LogReader.open
+    let calls = 0
+    LogReader.open = (folder) => {
+      calls++
+      return open.call(LogReader, folder)
+    }
+    try {
+      const options = { historyLines: 100, live: { ansi: 'live', cols: 80, rows: 24, cursor: { x: 0, y: 0 } } }
+      const result = await composeReplay(log, options)
+      expect(calls).toBe(1)
+      expect(result).toEqual(await composeReplay(dir, options))
+    } finally {
+      LogReader.open = open
+      log.close()
+    }
+  })
+
+  test.each(['open', 'read'])('a failing log %s returns an empty page and the live screen', async (failure) => {
+    const log = HistoryLog.create(freshDir(), { cols: 80, rows: 24 })
+    log.appendOutput(enc(numbered('h', 1, 200)))
+    const original = log.reader.bind(log)
+    let calls = 0
+    log.reader = () => {
+      calls++
+      if (failure === 'open') throw Object.assign(new Error('EIO'), { code: 'EIO' })
+      const reader = original()
+      reader.readOutput = () => { throw Object.assign(new Error('EIO'), { code: 'EIO' }) }
+      return reader
+    }
+    try {
+      expect(await pageBefore(log, { lines: 10, format: 'text', screenRows: 24 })).toEqual({ lines: [], cursor: null })
+      const result = await composeReplay(log, {
+        historyLines: 100,
+        live: { ansi: 'live', cols: 80, rows: 24, cursor: { x: 0, y: 0 } }
+      })
+      expect(calls).toBe(2)
+      expect(result.historyCursor).toBeNull()
+      expect(dec(result.replay)).toBe('live')
+    } finally {
+      log.close()
     }
   })
 })

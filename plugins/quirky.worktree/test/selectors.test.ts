@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdirSync, realpathSync } from 'node:fs'
+import { mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { RpcError, RpcErrorCode, type QuirkyClient, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type ProjectGroup, type QuirkyClient, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { makeTempDir } from '../../../packages/daemon/test/plugins/fixtures'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import { addFakeRepo, fakeRegistrations } from './fixtures/fake-git'
@@ -36,6 +36,23 @@ async function apiRepo() {
   mkdirSync(join(fixLogin.path, 'src'), { recursive: true })
   const [main] = (await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]
   return { t, root, repo, apiDir, main: main!, fixLogin }
+}
+
+async function selectorFixture() {
+  const project = await apiRepo()
+  const webDir = addFakeRepo(project.t.git!, 'web')
+  const webRepo = (await call(project.t.client, 'quirky.repo/add', { path: webDir })) as Repo
+  const worktrees = (await call(project.t.client, 'quirky.worktree/list')) as Worktree[]
+  const fixLoginRecord = worktrees.find((worktree) => worktree.id === project.fixLogin.id)!
+  const webMain = worktrees.find((worktree) => worktree.repoId === webRepo.id)!
+  const mark = () => project.t.git!.calls.length
+  const listed = (from: number) =>
+    project.t.git!.calls
+      .slice(from)
+      .filter(({ fn }) => fn === 'listRegistrations')
+      .map(({ args }) => args[0] as string)
+      .sort()
+  return { ...project, webDir, webRepo, worktrees, fixLoginRecord, webMain, mark, listed }
 }
 
 describe('SC-7: a worktree selector resolves by each form', () => {
@@ -145,5 +162,179 @@ describe('SC-10: repo selectors', () => {
     }
     const missing = await failure(call(t.client, 'quirky.worktree/create', { repo: 'name:nope', name: 'x' }))
     expect(missing).toMatchObject({ code: RpcErrorCode.NotFound, message: 'no repo matches name:nope; use id:, name: or path:' })
+  })
+})
+
+describe('g2-34: resolve lists the owner of a known worktree ID', () => {
+  test('each ID-only selector lists only the owner project', async () => {
+    const { t, apiDir, fixLogin, fixLoginRecord, mark, listed } = await selectorFixture()
+    const session = await t.connectAs({ worktreeId: fixLogin.id, sessionId: 's_1' })
+    const calls: [QuirkyClient, Record<string, unknown>][] = [
+      [t.client, { selector: `id:${fixLogin.id}` }],
+      [t.client, { selector: ` id:${fixLogin.id} ` }],
+      [t.client, { selector: fixLogin.id }],
+      [t.client, { selector: 'current', worktreeId: fixLogin.id }],
+      [t.client, { selector: 'active', worktreeId: fixLogin.id }],
+      [session, { selector: 'current' }],
+      [session, { selector: 'active' }]
+    ]
+
+    for (const [client, params] of calls) {
+      const from = mark()
+      expect(await call(client, 'quirky.worktree/resolve', params)).toEqual(fixLoginRecord)
+      expect(listed(from)).toEqual([apiDir])
+    }
+  })
+
+  test('an ID is resolved through the project that owns its record', async () => {
+    const { t, webDir, webMain, mark, listed } = await selectorFixture()
+    const from = mark()
+    expect(await call(t.client, 'quirky.worktree/resolve', { selector: `id:${webMain.id}` })).toEqual(webMain)
+    expect(listed(from)).toEqual([webDir])
+  })
+
+  test('name, branch, path and cwd selectors search every project', async () => {
+    const { t, apiDir, webDir, fixLogin, mark, listed } = await selectorFixture()
+    const requests = [
+      { selector: 'name:fix-login' },
+      { selector: 'fix-login' },
+      { selector: 'branch:fix-login' },
+      { selector: `path:${fixLogin.path}` },
+      { selector: 'current', cwd: fixLogin.path }
+    ]
+
+    for (const params of requests) {
+      const from = mark()
+      expect((await call(t.client, 'quirky.worktree/resolve', params) as Worktree).id).toBe(fixLogin.id)
+      expect(listed(from)).toEqual([apiDir, webDir].sort())
+    }
+  })
+
+  test('name: never takes the short path, but a bare exact ID wins', async () => {
+    const { t, apiDir, webDir, main, fixLogin, mark, listed } = await selectorFixture()
+    await call(t.client, 'quirky.worktree/set', { worktree: main.id, displayName: fixLogin.id })
+
+    let from = mark()
+    expect((await call(t.client, 'quirky.worktree/resolve', { selector: `name:${fixLogin.id}` }) as Worktree).id).toBe(main.id)
+    expect(listed(from)).toEqual([apiDir, webDir].sort())
+
+    from = mark()
+    expect((await call(t.client, 'quirky.worktree/resolve', { selector: fixLogin.id }) as Worktree).id).toBe(fixLogin.id)
+    expect(listed(from)).toEqual([apiDir])
+  })
+
+  test('an unknown ID falls back to the full search and is NotFound', async () => {
+    const { t, apiDir, webDir, mark, listed } = await selectorFixture()
+    const missingId = 'wt_000000000000'
+
+    for (const selector of [`id:${missingId}`, missingId]) {
+      const from = mark()
+      expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector }))).toMatchObject({
+        code: RpcErrorCode.NotFound,
+        message: `no worktree matches ${selector}; use id:, name:, branch:, path: or current`
+      })
+      expect(listed(from)).toEqual([apiDir, webDir].sort())
+    }
+
+    const from = mark()
+    expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector: 'current', worktreeId: missingId }))).toMatchObject({
+      code: RpcErrorCode.NotFound,
+      message: 'no worktree matches current; use id:, name:, branch:, path: or current'
+    })
+    expect(listed(from)).toEqual([apiDir, webDir].sort())
+  })
+
+  test('ID values are not trimmed and an empty id: is InvalidParams', async () => {
+    const { t, fixLogin } = await selectorFixture()
+    const spaced = `id: ${fixLogin.id}`
+    expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector: spaced }))).toMatchObject({
+      code: RpcErrorCode.NotFound,
+      message: `no worktree matches ${spaced}; use id:, name:, branch:, path: or current`
+    })
+    expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector: 'id:' }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'id: needs a value'
+    })
+  })
+
+  test('a stale owner registration is NotFound and its record is pruned', async () => {
+    const { t, apiDir, repo, main, fixLogin } = await selectorFixture()
+    const registrations = t.git!.worktreesByRepo.get(apiDir)!
+    registrations.splice(registrations.findIndex((worktree) => worktree.path === fixLogin.path), 1)
+    rmSync(fixLogin.path, { recursive: true, force: true })
+
+    expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector: `id:${fixLogin.id}` }))).toMatchObject({
+      code: RpcErrorCode.NotFound,
+      message: `no worktree matches id:${fixLogin.id}; use id:, name:, branch:, path: or current`
+    })
+    expect(((await call(t.client, 'quirky.worktree/list', { repo: repo.id })) as Worktree[]).map((worktree) => worktree.id)).toEqual([main.id])
+  })
+
+  test('a worktree moved to another project resolves there after the full search', async () => {
+    const { t, apiDir, webDir, webRepo, fixLogin, mark, listed } = await selectorFixture()
+    const registrations = t.git!.worktreesByRepo.get(apiDir)!
+    const moved = registrations.splice(registrations.findIndex((worktree) => worktree.path === fixLogin.path), 1)[0]!
+    t.git!.worktreesByRepo.get(webDir)!.push(moved)
+
+    const from = mark()
+    expect(await call(t.client, 'quirky.worktree/resolve', { selector: `id:${fixLogin.id}` })).toMatchObject({
+      id: fixLogin.id,
+      repoId: webRepo.id,
+      path: fixLogin.path
+    })
+    expect(listed(from)).toEqual([apiDir, apiDir, webDir].sort())
+  })
+
+  test('a project that cannot list fails only for its own IDs', async () => {
+    const { t, apiDir, webDir, fixLogin, webMain, mark, listed } = await selectorFixture()
+    t.git!.worktreesByRepo.delete(apiDir)
+
+    expect(await failure(call(t.client, 'quirky.worktree/resolve', { selector: `id:${fixLogin.id}` }))).toMatchObject({
+      code: RpcErrorCode.NotFound,
+      message: `no worktree matches id:${fixLogin.id}; use id:, name:, branch:, path: or current`
+    })
+
+    const from = mark()
+    expect(await call(t.client, 'quirky.worktree/resolve', { selector: `id:${webMain.id}` })).toEqual(webMain)
+    expect(listed(from)).toEqual([webDir])
+  })
+
+  test('folder projects and group workspaces resolve without git', async () => {
+    const { t, mark, listed } = await selectorFixture()
+    const notesDir = realpathSync(makeTempDir('qs-notes-'))
+    const notes = (await call(t.client, 'quirky.repo/add', { path: notesDir, folder: true })) as Repo
+    const drafts = ((await call(t.client, 'quirky.worktree/create', { repo: notes.id, name: 'drafts' })) as WorktreeCreateResult).worktree
+    const appsDir = realpathSync(makeTempDir('qs-apps-'))
+    const apps = (await call(t.client, 'quirky.repo/groupCreate', { name: 'apps', parentPath: appsDir })) as ProjectGroup
+    const appsRoot = ((await call(t.client, 'quirky.worktree/create', { group: apps.id, name: 'apps-root' })) as WorktreeCreateResult).worktree
+    const worktrees = (await call(t.client, 'quirky.worktree/list')) as Worktree[]
+    const expected = [
+      worktrees.find((worktree) => worktree.repoId === notes.id && worktree.isMain)!,
+      worktrees.find((worktree) => worktree.id === drafts.id)!,
+      worktrees.find((worktree) => worktree.id === appsRoot.id)!
+    ]
+
+    for (const record of expected) {
+      const from = mark()
+      expect(await call(t.client, 'quirky.worktree/resolve', { selector: `id:${record.id}` })).toEqual(record)
+      expect(listed(from)).toEqual([])
+    }
+  })
+
+  test('two projects on the same repository keep the conflict', async () => {
+    const { t, apiDir, webDir, fixLogin, main, mark, listed } = await selectorFixture()
+    t.git!.worktreesByRepo.set(fixLogin.path, t.git!.worktreesByRepo.get(apiDir)!)
+    await call(t.client, 'quirky.repo/add', { path: fixLogin.path })
+
+    for (const id of [main.id, fixLogin.id]) {
+      const selector = `id:${id}`
+      const duplicate = `id:${id}`
+      const from = mark()
+      const result = await failure(call(t.client, 'quirky.worktree/resolve', { selector }))
+      expect(result.code).toBe(RpcErrorCode.Conflict)
+      expect(result.message).toBe(`${selector} matches 2 worktrees: ${duplicate}, ${duplicate}`)
+      expect(result.data).toMatchObject({ matches: [duplicate, duplicate] })
+      expect(listed(from)).toContain(webDir)
+    }
   })
 })

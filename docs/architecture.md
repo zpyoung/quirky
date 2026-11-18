@@ -121,6 +121,10 @@ Per session, `quirky-pty` keeps three things:
 1. **Raw output log on disk.** It is append-only and framed, with torn-tail detection like Orca's
    `output.log` (`src/main/daemon/terminal-history-log.ts`). It rotates at 16 MB per session and
    keeps two segments, so history survives restarts and crashes.
+   The writer keeps a compact in-memory index, grouping consecutive output records smaller than
+   4 KiB into roughly 64 KiB file spans. Live attach, history pages and reads use that index rather
+   than walking both segments. Reopened logs index the older segment once on first read; stored
+   sessions still scan from disk. Missing or truncated indexed files fall back to a disk scan.
 2. **Screen state in memory.** An emulator holds the visible screen and modes (alternate screen,
    cursor, bracketed paste, mouse) with no scrollback. That costs well under 1 MB per session, and
    it lets any client get an exact repaint without replaying bytes. A checkpoint (the serialized
@@ -133,6 +137,12 @@ When a pane attaches, it gets the screen snapshot, then the last N lines of hist
 more from the log on request. The renderer never holds more than its window, and a pane that isn't
 visible is unmounted: its xterm.js instance is disposed and reattaches from the PTY host when shown.
 The mobile app and the CLI use the same snapshot and history calls.
+
+Each `pty.sock` connection holds at most 256 MiB of encoded output across its socket queue and
+pending subscribe output. Exceeding that cap disconnects the peer, removes its subscriptions and
+clears queued bytes immediately. Unsubscribe and session removal or termination reclaim unstarted
+frames for that session; a partially written frame finishes so other sessions and RPC replies
+remain decodable. Custom non-terminating signals do not reclaim output.
 
 The screen emulator is where the stacks differ. On Bun it is `@xterm/headless` with `scrollback: 0`.
 In Go, terminal emulation libraries are young (tuios.dev/vt, vt-go), so the fallback is to record

@@ -108,7 +108,7 @@ function readPayload(payload: unknown): { toolName: string; toolInput: unknown; 
 export function register(app: AvatarApp, deps: GateDeps = {}): () => void {
   const agentEnv = deps.agentEnv ?? processAgentEnv()
   const quirkyHome = app.context.home
-  const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion()
+  const claudeVersion = deps.claudeVersion ?? cachedClaudeVersion(app.context.process)
   const hooks = createAgentHooks({ app, agentEnv })
   void hooks.sync()
   const checker: GateChecker = createGateChecker({ app, agentEnv, claudeVersion, graceMs: deps.graceMs, prepare: () => hooks.sync() })

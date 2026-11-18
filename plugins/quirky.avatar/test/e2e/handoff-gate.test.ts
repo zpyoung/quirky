@@ -216,7 +216,7 @@ describe('the brain is not ready (SC-12)', () => {
     const { promise: holdStaticCheck, resolve: releaseStaticCheck } = Promise.withResolvers<void>()
     const patchedSpawn = Bun.spawn
     Bun.spawn = ((cmd: unknown, ...rest: unknown[]) => {
-      const proc = (patchedSpawn as (...args: unknown[]) => { kill: () => void; stdout: ReadableStream<Uint8Array> })(
+      const proc = (patchedSpawn as (...args: unknown[]) => { stdout: ReadableStream<Uint8Array> })(
         cmd,
         ...rest,
       )
@@ -229,7 +229,7 @@ describe('the brain is not ready (SC-12)', () => {
           controller.close()
         },
       })
-      return { kill: () => proc.kill(), stdout }
+      return new Proxy(proc, { get: (target, key) => (key === 'stdout' ? stdout : Reflect.get(target, key, target)) })
     }) as typeof Bun.spawn
 
     let decision: ToolGateDecision

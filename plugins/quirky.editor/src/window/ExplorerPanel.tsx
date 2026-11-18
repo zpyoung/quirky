@@ -501,7 +501,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       loaded++
       void loadDirectory(path, false)
     }
-  }, [loadDirectory, resolvedWorktreeId, rootListing, state?.explorer?.expanded, state?.explorer?.worktreeId, worktreeRoot])
+  }, [loadDirectory, resolvedWorktreeId, rootListing !== null, state?.explorer?.expanded, state?.explorer?.worktreeId, worktreeRoot])
 
   const rows = useMemo(() => {
     if (searchMode === 'names' && query.trim() !== '' && filterResult) return filterResult.entries.map((entry) => ({ entry, depth: 0 }))
@@ -839,6 +839,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
   ): Promise<ExplorerInteractionResult> => {
     const result = await context.call('quirky.editor/explorer', { worktree: requestedWorktree, ...params }) as ExplorerInteractionResult
     if (currentWorktree.current !== requestedWorktree || (isCurrent !== undefined && !isCurrent())) return result
+    refreshEditorState()
     setError(null)
     if (result.interaction !== undefined) {
       selectedPathsRef.current = result.interaction.selectedPaths
@@ -863,7 +864,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       }
     }
     return result
-  }, [context, loadDirectory, resolveWorktreeRoot])
+  }, [context, loadDirectory, refreshEditorState, resolveWorktreeRoot])
 
   const enqueueInteraction = useCallback((params: Record<string, unknown>, isCurrent?: () => boolean) => {
     const requestedWorktree = worktree

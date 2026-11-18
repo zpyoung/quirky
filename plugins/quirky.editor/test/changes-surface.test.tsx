@@ -8,12 +8,18 @@ import type { EditorSurfaceBuffer } from '../src/types'
 import type { ChangesSurfaceProps } from '../src/window/ChangesSurface'
 
 const WORKTREE = 'wt-editor-changes'
+type KeptSubscription = {
+  listener: (event: { type: string; data?: unknown; worktreeId?: string }) => void | Promise<void>
+  options?: { worktreeId?: string | null }
+}
 type Mounted = {
   element: HTMLElement
   isResourceLive(url: string): boolean
   liveResourceCount(): number
   pendingLeaseIds(): string[]
   resolvePending(leaseId: string): void
+  subscriptions: KeptSubscription[]
+  diffCallCount(): number
   update(buffer: EditorSurfaceBuffer): Promise<void>
   unmount(): Promise<void>
 }
@@ -77,6 +83,8 @@ async function renderChanges(
   diff?: { original: string; modified: string },
   options: FixtureOptions = {}
 ): Promise<Mounted> {
+  const subscriptions: KeptSubscription[] = []
+  let diffCalls = 0
   const activeLeases = new Set<string>()
   const resources = new Map<string, string>()
   const pending = new Map<string, () => void>()
@@ -97,6 +105,7 @@ async function renderChanges(
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
       if (method === 'quirky.git/diff') {
+        diffCalls += 1
         return {
           path: buffer.relativePath,
           source: 'unstaged',
@@ -135,7 +144,10 @@ async function renderChanges(
       }
       return {}
     },
-    subscribe() { return () => {} },
+    subscribe(listener: KeptSubscription['listener'], options?: KeptSubscription['options']) {
+      subscriptions.push({ listener, options })
+      return () => {}
+    },
     setContext() {},
     toast() {}
   } as unknown as UiPluginContext
@@ -162,6 +174,8 @@ async function renderChanges(
   await act(async () => root.render(<ChangesSurface {...props} />))
   let unmounted = false
   const surface: Mounted = {
+    subscriptions,
+    diffCallCount: () => diffCalls,
     element,
     isResourceLive: (url) => resources.has(url),
     liveResourceCount: () => resources.size,
@@ -534,4 +548,23 @@ test('Changes makes a clean HEAD comparison explicit', async () => {
   const surface = await renderChanges(makeBuffer('text', source, null), { original: source, modified: source })
   await flush()
   expect(surface.element.textContent).toContain('No uncommitted changes')
+})
+
+test('Changes scopes git change subscriptions to the buffer worktree and refreshes on change', async () => {
+  const surface = await renderChanges(makeBuffer('text', 'Working version\n', null))
+  await flush()
+
+  expect(surface.subscriptions).toHaveLength(1)
+  expect(surface.subscriptions[0]?.options).toEqual({ worktreeId: WORKTREE })
+  const diffCalls = surface.diffCallCount()
+
+  await act(async () => {
+    await surface.subscriptions[0]!.listener({
+      type: 'quirky.git/changed',
+      data: { worktreeId: WORKTREE },
+      worktreeId: WORKTREE
+    })
+  })
+
+  expect(surface.diffCallCount()).toBe(diffCalls + 1)
 })

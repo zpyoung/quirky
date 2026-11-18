@@ -17,6 +17,7 @@ import {
   type UiPluginContext,
   type UiPluginModule,
   type UiSlotEntry,
+  type UiSubscribeOptions,
   type UiState,
   type UiToolPlacement,
   type UiToolResize,
@@ -94,7 +95,7 @@ type Session = {
   readonly pluginId: string
   readonly allowed: ReadonlySet<string>
   readonly provided: Map<string, unknown>
-  readonly listeners: Set<(event: QuirkyEvent) => void | Promise<void>>
+  readonly listeners: Map<(event: QuirkyEvent) => void | Promise<void>, string | null | undefined>
   /** Undo for everything the session registered outside itself (stream, layout and connection listeners, badges). */
   readonly cleanups: Set<() => void>
   activating: boolean
@@ -799,7 +800,7 @@ export class WindowPluginHost {
       pluginId,
       allowed: new Set(declared.provides),
       provided: new Map(),
-      listeners: new Set(),
+      listeners: new Map(),
       cleanups: new Set(),
       activating: false,
       violation: null,
@@ -1002,8 +1003,15 @@ export class WindowPluginHost {
         if (!this.deps.nativeDropPaths) return null
         return this.deps.nativeDropPaths(Array.from(files, (file) => file.name))
       }),
-      subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>) => {
-        session.listeners.add(listener)
+      subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>, options?: UiSubscribeOptions) => {
+        if (options !== undefined && (options === null || typeof options !== 'object')) {
+          throw new Error('subscribe: options must be an object')
+        }
+        const worktreeId = options?.worktreeId
+        if (worktreeId !== undefined && worktreeId !== null && typeof worktreeId !== 'string') {
+          throw new Error('subscribe: worktreeId must be a string or null')
+        }
+        session.listeners.set(listener, worktreeId)
         return () => {
           session.listeners.delete(listener)
         }
@@ -1308,7 +1316,12 @@ export class WindowPluginHost {
     for (const runtime of this.runtimes.values()) {
       const session = runtime.session ?? runtime.pending
       if (!session) continue
-      for (const listener of [...session.listeners]) void this.notify(session, listener, event)
+      for (const [listener, worktreeId] of [...session.listeners]) {
+        if (worktreeId !== undefined && event.type.includes('/') &&
+          'worktreeId' in event && typeof event.worktreeId === 'string' &&
+          event.worktreeId !== worktreeId) continue
+        void this.notify(session, listener, event)
+      }
     }
   }
 

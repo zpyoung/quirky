@@ -37,7 +37,7 @@ export type ShipStepKind =
 
 export type ShipStep = { kind: ShipStepKind; label: string; enabled: boolean; reason?: string }
 
-/** The caret entries, which `ShipBar` hands to the split button as their ids. */
+/** The caret entries whose ids the panel dispatches to ship actions. */
 export type ShipMenuId =
   | 'commit-all'
   | 'commit-selected'

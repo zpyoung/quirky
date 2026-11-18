@@ -4,6 +4,10 @@ import { parseManifest } from '../../src/plugins/manifest'
 
 const base = { id: 'acme', name: 'Acme', version: '1.0.0', apiVersion: PLUGIN_API_VERSION }
 
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
+const NEXT_API_PATCH_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1]}.${apiVersionParts[2] + 1}`
+
 function parse(manifest: unknown, at: { dirName?: string; dir?: string; source?: PluginSource } = {}) {
   const text = typeof manifest === 'string' ? manifest : JSON.stringify(manifest)
   const id = (manifest as { id?: string } | null)?.id ?? 'acme'
@@ -83,7 +87,7 @@ describe('parseManifest', () => {
   })
 
   test('rejects unsupported future releases and different major versions', () => {
-    for (const apiVersion of ['1.3.1', '1.4.0', '2.0.0']) {
+    for (const apiVersion of [NEXT_API_PATCH_VERSION, NEXT_API_MINOR_VERSION, '2.0.0']) {
       const errors = errorsOf({ ...base, apiVersion }).join('\n')
       expect(errors).toContain(apiVersion)
       expect(errors).toContain(PLUGIN_API_VERSION)

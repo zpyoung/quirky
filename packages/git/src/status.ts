@@ -1,5 +1,5 @@
 import { lstat, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { resolve, join } from 'node:path'
 import type {
   GitArea,
   GitChangeStatus,
@@ -10,7 +10,15 @@ import type {
   GitStatusEntry
 } from '@quirky/protocol'
 import { GitError } from './index'
-import { drainText, gitEnv, readChunk, retryStalled, runGit } from './run'
+import {
+  drainText,
+  gitEnv,
+  readChunk,
+  retryStalled,
+  runGit,
+  shareGitRead,
+  withGitReadSlot
+} from './run'
 import { effectiveUpstream } from './upstream'
 
 /** The most entries a status returns before it stops reading and reports `capped`. */
@@ -189,49 +197,61 @@ async function readPorcelainOnce(
   limit: number,
   dropUntracked: (path: string) => Promise<boolean>
 ): Promise<Snapshot> {
-  const args = ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all']
-  let proc: ReturnType<typeof Bun.spawn>
-  try {
-    proc = Bun.spawn(['git', ...args], {
-      cwd,
-      env: await gitEnv(cwd, { readOnly: true }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-  } catch (err) {
-    throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-  }
-  const stderr = drainText(proc)
-  const reader = new PorcelainReader(limit, dropUntracked)
-  const decoder = new TextDecoder()
-  let carry = ''
-  let stopped = false
-  try {
-    const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-    read: for (;;) {
-      const { done, value } = await readChunk(stdout, proc.exited)
-      if (done) break
-      carry += decoder.decode(value, { stream: true })
-      const records = carry.split('\0')
-      carry = records.pop() ?? ''
-      for (const record of records) {
-        if (await reader.record(record)) {
-          stopped = true
-          break read
+  const env = await gitEnv(cwd, { readOnly: true })
+  return withGitReadSlot(async () => {
+    const args = ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all']
+    let proc: ReturnType<typeof Bun.spawn>
+    try {
+      proc = Bun.spawn(['git', ...args], {
+        cwd,
+        env,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe'
+      })
+    } catch (err) {
+      throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
+    }
+    let stopped = false
+    let exited = false
+    try {
+      const stderr = drainText(proc)
+      const reader = new PorcelainReader(limit, dropUntracked)
+      const decoder = new TextDecoder()
+      let carry = ''
+      const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
+      read: for (;;) {
+        const { done, value } = await readChunk(stdout, proc.exited)
+        if (done) break
+        carry += decoder.decode(value, { stream: true })
+        const records = carry.split('\0')
+        carry = records.pop() ?? ''
+        for (const record of records) {
+          if (await reader.record(record)) {
+            stopped = true
+            break read
+          }
+        }
+      }
+      if (!stopped && carry.length > 0) await reader.record(carry)
+      if (stopped) proc.kill()
+      const exitCode = await proc.exited
+      exited = true
+      const errText = await stderr
+      if (!stopped && exitCode !== 0) {
+        throw new GitError(`git status failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
+      }
+      return reader.snapshot
+    } finally {
+      if (!exited) {
+        try {
+          proc.kill()
+        } finally {
+          await proc.exited
         }
       }
     }
-    if (!stopped && carry.length > 0) await reader.record(carry)
-  } finally {
-    if (stopped) proc.kill()
-  }
-  const exitCode = await proc.exited
-  const errText = await stderr
-  if (!stopped && exitCode !== 0) {
-    throw new GitError(`git status failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
-  }
-  return reader.snapshot
+  })
 }
 
 type LineCount = { added: number; removed: number } | { binary: true }
@@ -313,9 +333,25 @@ async function addLineCounts(cwd: string, entries: GitStatusEntry[]): Promise<vo
  * conflicts first, then by path in natural order. `busy` is always null and no `resolved_locally`
  * conflicts are produced; the daemon adds both. Throws `GitError` when git fails.
  */
-export async function statusV2(
+export function statusV2(
   cwd: string,
   options: { limit?: number; sharedSymlinks?: string[] } = {}
+): Promise<GitStatus> {
+  const limit = options.limit ?? STATUS_ENTRY_LIMIT
+  const sharedSymlinks = [...new Set(options.sharedSymlinks ?? [])].sort()
+  const key = JSON.stringify([
+    'statusV2',
+    resolve(cwd),
+    limit,
+    sharedSymlinks,
+    process.env.PATH ?? ''
+  ])
+  return shareGitRead(key, () => statusV2Once(cwd, { limit, sharedSymlinks }), (value) => structuredClone(value))
+}
+
+async function statusV2Once(
+  cwd: string,
+  options: { limit?: number; sharedSymlinks?: string[] }
 ): Promise<GitStatus> {
   const shared = new Set(options.sharedSymlinks ?? [])
   const dropUntracked = async (path: string): Promise<boolean> => {

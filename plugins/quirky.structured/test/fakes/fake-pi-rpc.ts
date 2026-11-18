@@ -17,7 +17,7 @@ export type FakePiRpcFixture = {
  * `[no-agent]` sends an omp result without starting an agent; `[handled]` handles a pi prompt;
  * `[queued]` responds queued; `[zero-last]` follows usage with a zero-token error; `[big]` sends a
  * 6 MiB agent_end; `[crlf]` ends frames with CRLF and adds a blank CRLF line; `[flood]` writes 2 MiB without a newline while
- * its process group ignores EOF and SIGTERM; `[unreadable]` writes malformed JSON, an empty line and non-object JSON.
+ * its process group ignores EOF, closed stdout and SIGTERM; `[unreadable]` writes malformed JSON, an empty line and non-object JSON.
  * `[settled-result]` delays omp settlement after an invoked prompt_result with sessionSettled true.
  * SIGUSR1 emits stale settle/result frames for an idle-session check.
  * SIGUSR2 emits an independent assistant message with usage and the flavor's settle frame.
@@ -211,6 +211,7 @@ function runPrompt(text) {
   }
   if (text.includes('[flood]')) {
     stubborn = true
+    process.stdout.on('error', (error) => { if (error.code !== 'EPIPE') throw error })
     process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'parent\\n'))
     const descendant = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(`const fs = require('node:fs'); process.on('SIGTERM', () => fs.appendFileSync(${JSON.stringify(join(home, 'flood-signals'))}, 'child\\n')); setInterval(() => {}, 1000); process.send('ready')`)}], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
     descendant.once('message', () => {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
-import { ConnectionLost } from '@quirky/protocol'
+import { readRuntime } from '@quirky/protocol/node'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
-import type { ProbeRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import type { Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
 import { startFault, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
@@ -40,6 +40,18 @@ async function commit(repoRoot: string): Promise<string> {
   const [text, , code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
   if (code !== 0) throw new Error('could not read the checkout commit')
   return text.trim()
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ESRCH') return false
+    if (code === 'EPERM') return true
+    throw error
+  }
 }
 
 /** Runs an isolated real-daemon soak and returns its verdict or harness exit code. */
@@ -92,49 +104,18 @@ export async function main(argv: string[]): Promise<number> {
     const startedIso = new Date().toISOString()
     let samplingStopped = false
     let daemonMissing = false
-    const failedConnectionProbes: ProbeRecord[] = []
-    let connectionLagMs = 0
-    let nextConnectionTick = performance.now() + 50
-    const connectionTimer = setInterval(() => {
-      const now = performance.now()
-      connectionLagMs = Math.max(connectionLagMs, now - nextConnectionTick)
-      nextConnectionTick = now + 50
-    }, 50)
-    try {
-      probe = await startProbe({
-        home: world.home,
-        startedAt,
-        signal: setupAbort.signal,
-        onDaemonLost: () => {
-          samplingStopped = true
-          runAbort.abort()
-        },
-        onPtyHostPid: (pid) => world!.updatePtyHostPid(pid)
-      })
-    } catch (error) {
-      if (interrupted) throw error
-      let daemonAlive = true
-      try {
-        process.kill(world.daemonPid, 0)
-      } catch (pidError) {
-        if ((pidError as NodeJS.ErrnoException).code !== 'ESRCH') throw pidError
-        daemonAlive = false
-      }
-      if (error instanceof ConnectionLost || world.control.isClosed || !daemonAlive) {
-        daemonMissing = true
-      } else {
-        const now = performance.now()
-        failedConnectionProbes.push({
-          at: 0,
-          ms: Number(Math.min(30_000, now - startedAt).toFixed(3)),
-          ownLagMs: Number(Math.max(connectionLagMs, now - nextConnectionTick, 0).toFixed(3)),
-          timedOut: true
-        })
-      }
-      samplingStopped = true
-    } finally {
-      clearInterval(connectionTimer)
-    }
+    probe = startProbe({
+      home: world.home,
+      startedAt,
+      signal: runAbort.signal,
+      maxStallMs: config.limits.maxStallMs,
+      isDaemonDead: () => daemonMissing || world!.control.isClosed || readRuntime(world!.home) === null || !isPidAlive(world!.daemonPid),
+      onDaemonLost: () => {
+        samplingStopped = true
+        runAbort.abort()
+      },
+      onPtyHostPid: (pid) => world!.updatePtyHostPid(pid)
+    })
     if (config.fault) {
       fault = startFault({ kind: config.fault, home: world.home, control: world.control, runSeconds: config.minutes * 60, startedAt, signal: runAbort.signal })
     }
@@ -172,7 +153,8 @@ export async function main(argv: string[]): Promise<number> {
       await pause(Math.min(sampleStart + 1000, deadline) - performance.now(), runAbort.signal)
     }
     if (interrupted) return interrupted
-    probe?.stop()
+    if (!samplingStopped && !daemonMissing) probe.finish()
+    else probe.stop()
     const durationSeconds = Number(elapsed().toFixed(3))
     if (attemptedSamples > 0 && skippedSamples / attemptedSamples > 0.1) {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
@@ -186,10 +168,10 @@ export async function main(argv: string[]): Promise<number> {
       windows: windowEvidence.records.filter(windowAlive).length,
       windowBeats: windowEvidence.records,
       samples,
-      events: probe?.events ?? [],
-      probes: probe?.probes ?? failedConnectionProbes,
+      events: probe.events,
+      probes: probe.probes,
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
-      daemonExited: daemonMissing || (probe?.daemonExited() ?? false)
+      daemonExited: daemonMissing || probe.daemonExited()
     }
     const judged = judge(evidence, config)
     const rss = samples.flatMap(({ daemonRssKb }) => daemonRssKb === null ? [] : [daemonRssKb])
