@@ -1,0 +1,166 @@
+import { Children, Fragment, createContext, isValidElement, useContext } from 'react'
+import type { ComponentProps, MouseEvent, ReactElement, ReactNode } from 'react'
+import type { Components, CustomRenderer, ExtraProps } from 'streamdown'
+import { useIsCodeFenceIncomplete } from 'streamdown'
+import { Blockquote } from './blocks/Alert'
+import { CodeBlock } from './blocks/CodeBlock'
+import { ChartFence, JsonFence, TableFence } from './blocks/DataBlocks'
+import { MermaidFence } from './blocks/MermaidBlock'
+import { PathChip } from './blocks/PathChip'
+import { RemoteImageChip } from './blocks/RemoteImageChip'
+import { RenderError } from './blocks/RenderError'
+import { explainMath, readMathFailure } from './math-errors'
+import { isPathCandidate } from './remark-path-candidates'
+import { FilesContext, ImagesContext, RuntimeContext } from './runtime'
+
+export const BUILT_IN_RENDERERS: CustomRenderer[] = [
+  { language: 'mermaid', component: MermaidFence },
+  { language: ['csv', 'tsv'], component: TableFence },
+  { language: 'json', component: JsonFence },
+  { language: 'chart', component: ChartFence }
+]
+
+/** The fence renderers in priority order: the caller's first, then the built-ins. */
+export const RenderersContext = createContext<CustomRenderer[]>(BUILT_IN_RENDERERS)
+
+export function textOf(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join('')
+  if (isValidElement(node)) return textOf((node as ReactElement<{ children?: ReactNode }>).props.children)
+  return ''
+}
+
+function jumpToFragment(event: MouseEvent<HTMLAnchorElement>, href: string) {
+  event.preventDefault()
+  let id = href.slice(1)
+  try {
+    id = decodeURIComponent(id)
+  } catch {
+    // keep the raw fragment
+  }
+  const root = event.currentTarget.closest('.qmd')
+  const target = Array.from(root?.querySelectorAll('[id]') ?? []).find((element) => element.id === id)
+  target?.scrollIntoView?.({ block: 'nearest' })
+}
+
+/** The id and aria attributes a footnote reference or backref needs to be reachable from the other end. */
+function anchorAttributes(props: Record<string, unknown>): Record<string, unknown> {
+  const kept: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(props)) {
+    if (name === 'id' || name.startsWith('aria-')) kept[name] = value
+  }
+  return kept
+}
+
+/** Only http and https become links, and a click goes to the caller instead of navigating. */
+function Link({ href, children, node: _node, ...rest }: ComponentProps<'a'> & ExtraProps) {
+  const runtime = useContext(RuntimeContext)
+  if (typeof href === 'string' && /^https?:\/\//i.test(href)) {
+    const open = (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault()
+      runtime.current.onOpenLink(href)
+    }
+    return <a data-streamdown="link" href={href} rel="noreferrer" onClick={open} onAuxClick={open}>{children}</a>
+  }
+  if (typeof href === 'string' && href.length > 1 && href.startsWith('#')) {
+    return <a data-streamdown="link" href={href} {...anchorAttributes(rest)} onClick={(event) => jumpToFragment(event, href)}>{children}</a>
+  }
+  return <>{children}</>
+}
+
+const REMOTE_SRC = /^(?:https?:)?\/\//i
+const OTHER_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+function Image({ src, alt }: ComponentProps<'img'> & ExtraProps) {
+  const images = useContext(ImagesContext)
+  if (typeof src !== 'string' || src === '') return <>{alt ?? ''}</>
+  if (REMOTE_SRC.test(src)) return <RemoteImageChip src={src} alt={alt} />
+  if (OTHER_SCHEME.test(src)) return <>{alt ?? ''}</>
+  const url = images[src]
+  if (!url) return <>{alt ?? ''}</>
+  return (
+    <figure className="qmd-figure" data-streamdown="image-wrapper">
+      <img src={url} alt={alt ?? ''} loading="lazy" />
+      <figcaption>{src}</figcaption>
+    </figure>
+  )
+}
+
+/** A paragraph holding an image is a div, because a local image renders as a figure and a figure cannot sit in a p. */
+function Paragraph({ children, node, ...rest }: ComponentProps<'p'> & ExtraProps) {
+  const holdsImage = node?.children?.some((child) => child.type === 'element' && child.tagName === 'img') ?? false
+  if (!holdsImage) return <p {...rest}>{children}</p>
+  const meaningful = Children.toArray(children).filter((child) => !(typeof child === 'string' && child.trim() === ''))
+  if (meaningful.length === 1) return <Fragment>{children}</Fragment>
+  return <div className="qmd-p" {...(rest as ComponentProps<'div'>)}>{children}</div>
+}
+
+function katexMessage(title: string | undefined): string {
+  const message = (title ?? 'invalid math').replace(/^ParseError:\s*/, '').replace(/^KaTeX parse error:\s*/, '')
+  return message.replace(/\s+at position \d+:[\s\S]*$/, '').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * KaTeX never throws here: a bad formula comes out as red text inside `.katex`, or as a `katex-error`
+ * span. Both become the shared error note with the source underneath.
+ */
+function Span({ children, node, ...rest }: ComponentProps<'span'> & ExtraProps) {
+  const classes = typeof rest.className === 'string' ? rest.className.split(/\s+/) : []
+  if (classes.includes('katex-error')) {
+    return (
+      <RenderError inline message={`Couldn't typeset: ${katexMessage(rest.title)}`}>
+        <span className="qmd-source">{textOf(children)}</span>
+      </RenderError>
+    )
+  }
+  const failure = classes.includes('katex') ? readMathFailure(node as never) : null
+  if (failure) {
+    return (
+      <RenderError inline message={`Couldn't typeset: ${explainMath(failure.tex)}`}>
+        <span className="qmd-source">{failure.tex}</span>
+      </RenderError>
+    )
+  }
+  return <span {...rest}>{children}</span>
+}
+
+function InlineCode({ children, ...rest }: ComponentProps<'code'> & ExtraProps) {
+  const files = useContext(FilesContext)
+  const text = textOf(children)
+  const marked = (rest as Record<string, unknown>)['data-path-candidate']
+  const candidate = typeof marked === 'string' ? marked : isPathCandidate(text) ? text : undefined
+  const resolved = candidate ? files[candidate] : undefined
+  if (candidate && resolved) return <PathChip candidate={candidate} line={resolved.line} />
+  return <code data-streamdown="inline-code">{children}</code>
+}
+
+function FenceCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
+  const renderers = useContext(RenderersContext)
+  const isIncomplete = useIsCodeFenceIncomplete()
+  const language = /language-([^\s]+)/.exec(className ?? '')?.[1]?.toLowerCase() ?? ''
+  const metaValue = node?.properties?.metastring
+  const meta = typeof metaValue === 'string' ? metaValue : undefined
+  const code = textOf(children).replace(/\n$/, '')
+  const renderer = language === '' ? undefined : renderers.find((entry) => (Array.isArray(entry.language) ? entry.language.includes(language) : entry.language === language))
+  if (renderer) {
+    const Component = renderer.component
+    return <Component code={code} isIncomplete={isIncomplete} language={language} meta={meta} />
+  }
+  return <CodeBlock code={code} language={language} meta={meta} isIncomplete={isIncomplete} />
+}
+
+function Code(props: ComponentProps<'code'> & ExtraProps) {
+  return 'data-block' in (props as object) ? <FenceCode {...props} /> : <InlineCode {...props} />
+}
+
+/** The Streamdown component overrides that carry quirky's rules. Module-level so the map keeps one identity. */
+export const QUIRKY_COMPONENTS = {
+  a: Link,
+  img: Image,
+  p: Paragraph,
+  blockquote: Blockquote,
+  span: Span,
+  code: Code
+  // streamdown types its props against a second copy of @types/react, so the map crosses that boundary here
+} as unknown as Partial<Components>
