@@ -1,5 +1,5 @@
 import { useId, useState, type CSSProperties } from 'react'
-import type { UiPluginContext } from '@quirky/protocol'
+import type { Session, UiPluginContext } from '@quirky/protocol'
 import { Button, ControlIcon, EmptyState, IconButton, InlineError, NoticeLine, TextArea } from '@quirky/ui'
 import { planMarker, type PlanVersion } from './plan'
 import { Prose } from './Prose'
@@ -47,14 +47,14 @@ const buttons = { display: 'flex', gap: 'var(--ui-space-6)' } satisfies CSSPrope
  */
 export function PlanPanel({
   context,
-  sessionId,
+  session,
   version,
   isNewest,
   onClose,
   framed = true
 }: {
   context: UiPluginContext
-  sessionId: string
+  session: Session
   version: PlanVersion
   isNewest: boolean
   onClose: () => void
@@ -90,7 +90,7 @@ export function PlanPanel({
       })
     )
 
-  const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: sessionId, text: PRESENT_AGAIN }))
+  const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN }))
 
   const openFile = (path: string) => {
     void context
@@ -125,7 +125,7 @@ export function PlanPanel({
             Quirky restarted before you answered. Claude is no longer waiting on this plan.
           </NoticeLine>
         )}
-        {version.empty === true ? <EmptyState message="Claude sent an empty plan" /> : <Prose context={context} text={version.text} />}
+        {version.empty === true ? <EmptyState message="Claude sent an empty plan" /> : <Prose context={context} session={session} text={version.text} />}
         {version.filePath !== undefined && (
           <div style={file}>
             <Button onClick={() => openFile(version.filePath!)}>Open plan file</Button>

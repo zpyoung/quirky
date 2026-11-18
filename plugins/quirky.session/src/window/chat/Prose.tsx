@@ -1,5 +1,6 @@
 import { cloneElement, createElement, isValidElement, useMemo, type CSSProperties, type ReactNode } from 'react'
-import type { UiPluginContext } from '@quirky/protocol'
+import type { Session, UiPluginContext } from '@quirky/protocol'
+import { QuirkyMarkdown, type MarkdownAssets } from '@quirky/ui/markdown'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkBreaks from 'remark-breaks'
@@ -45,7 +46,6 @@ const styles: Record<string, CSSProperties> = {
 }
 const inlineCode = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)' } satisfies CSSProperties
 const root = { minWidth: 0, overflowWrap: 'anywhere' } satisfies CSSProperties
-const caret = { color: 'var(--ui-accent)' } satisfies CSSProperties
 
 const mention = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)' } satisfies CSSProperties
 const MENTION = /(^|\s)@(\S+)/g
@@ -94,12 +94,6 @@ function toReact(node: HastNode, key: number, inPre: boolean, openLink: (href: s
   return createElement(tag, props, ...(children ?? []))
 }
 
-/** The sanitized React tree for `markdown`: only the allowed tags, links as http(s), nothing from raw html. */
-export function renderMarkdown(markdown: string, openLink: (href: string) => void): ReactNode[] {
-  const tree = PROCESSOR.runSync(PROCESSOR.parse(markdown)) as HastNode
-  return (tree.children ?? []).map((child, index) => toReact(child, index, false, openLink))
-}
-
 /**
  * The sanitized tree for a message the user sent: the same GFM subset as agent prose, with `@path`
  * tokens shown as file-name spans. Links are inert because nothing here opens them.
@@ -113,22 +107,56 @@ export function renderUserMarkdown(text: string): ReactNode {
   return blocks.map((block, index) => index === last && isValidElement<{ style?: CSSProperties }>(block) ? cloneElement(block, { style: { ...block.props.style, margin: 0 } }) : block)
 }
 
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+const withoutLine = (candidate: string) => candidate.replace(/:\d+(?::\d+)?$/, '')
+
+type AssetsReply = { files?: Record<string, { path: string; line?: number } | null>; images?: Record<string, string | null> }
+
+/** Resolves the paths and worktree images an agent's reply mentions through the daemon, and opens files in the editor. */
+function useWorktreeAssets(context: UiPluginContext, sessionId: string, worktreeId: string): MarkdownAssets {
+  return useMemo(() => {
+    // the renderer hands openFile the path as written, which may differ from the worktree-relative one the daemon found
+    const resolved = new Map<string, string>()
+    return {
+      async resolveFiles(candidates) {
+        const reply = (await context.call('quirky.session/markdownAssets', { session: sessionId, files: candidates })) as AssetsReply
+        return Object.fromEntries(
+          candidates.map((candidate): [string, { line?: number } | null] => {
+            const hit = reply.files?.[candidate]
+            if (!hit) return [candidate, null]
+            resolved.set(withoutLine(candidate), hit.path)
+            return [candidate, hit.line === undefined ? {} : { line: hit.line }]
+          })
+        )
+      },
+      async resolveImages(srcs) {
+        const reply = (await context.call('quirky.session/markdownAssets', { session: sessionId, images: srcs })) as AssetsReply
+        return Object.fromEntries(srcs.map((src) => [src, reply.images?.[src] ?? null]))
+      },
+      openFile(path, line) {
+        context
+          .call('quirky.editor/open', { worktree: worktreeId, path: resolved.get(path) ?? path, ...(line === undefined ? {} : { line }), focus: true })
+          .catch((error) => context.toast('Could not open file in editor', messageOf(error)))
+      }
+    }
+  }, [context, sessionId, worktreeId])
+}
+
 /**
- * An agent's markdown. Links ask before opening because the text is untrusted, and a stream that
- * is still running ends in a caret.
+ * An agent's markdown on the shared renderer. Links ask before opening because the text is untrusted,
+ * and files and images named in it resolve against the session's worktree once the reply has finished.
  */
-export function Prose({ context, text, streaming = false }: { context: UiPluginContext; text: string; streaming?: boolean }) {
+export function Prose({ context, session, text, streaming = false }: { context: UiPluginContext; session: Session; text: string; streaming?: boolean }) {
+  const assets = useWorktreeAssets(context, session.id, session.worktreeId)
   const openLink = (href: string) => {
     void context
       .confirm({ title: 'Open link', body: href, confirmLabel: 'Open' })
       .then((ok) => (ok ? context.call('quirky.terminal/openExternal', { target: href }) : undefined))
-      .catch((error) => context.toast('Could not open link', error instanceof Error ? error.message : String(error)))
+      .catch((error) => context.toast('Could not open link', messageOf(error)))
   }
-  const content = useMemo(() => renderMarkdown(text, openLink), [text, context])
   return (
     <div style={root}>
-      {content}
-      {streaming && <span style={caret} aria-hidden="true">{'▍'}</span>}
+      <QuirkyMarkdown text={text} profile="untrusted" streaming={streaming} onOpenLink={openLink} assets={assets} />
     </div>
   )
 }

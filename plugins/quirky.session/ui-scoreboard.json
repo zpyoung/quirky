@@ -404,14 +404,30 @@
       "state": "error",
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
-        "quote": "context.toast('Could not open link', error instanceof Error ? error.message : String(error))"
+        "quote": "context.toast('Could not open link', messageOf(error))"
       },
       "anchor": "context.toast(",
       "render": {
         "component": "toast",
         "call": {
           "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
-          "quote": "context.toast('Could not open link', error instanceof Error ? error.message : String(error))"
+          "quote": "context.toast('Could not open link', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "context.toast('Could not open file in editor', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+          "quote": "context.toast('Could not open file in editor', messageOf(error))"
         }
       }
     },
@@ -556,7 +572,7 @@
       "state": "empty",
       "site": {
         "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-        "quote": "{version.empty === true ? <EmptyState message=\"Claude sent an empty plan\" /> : <Prose context={context} text={version.text} />}"
+        "quote": "{version.empty === true ? <EmptyState message=\"Claude sent an empty plan\" /> : <Prose context={context} session={session} text={version.text} />}"
       },
       "anchor": "version.empty === true ?",
       "render": {
@@ -853,11 +869,11 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
-        "quote": "{streaming && <span style={caret} aria-hidden=\"true\">{'▍'}</span>}"
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{behind && ("
       },
-      "anchor": "streaming &&",
-      "reason": "Shows the typing caret only while the agent's text is still streaming."
+      "anchor": "behind &&",
+      "reason": "Shows the Jump to latest pill only while the reader is scrolled away from the end; it is a scroll affordance, not loading, empty or failed content."
     },
     {
       "site": {
@@ -1862,11 +1878,40 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "onScroll={(event) => {"
+        "quote": "aria-label=\"Transcript\" onScroll={(event) =>"
       },
       "anchor": "onScroll",
       "transient": "draft",
       "reason": "Tracks only whether the transcript follows new content; no data is read or written."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<button type=\"button\" style={jump} aria-label=\"Jump to latest\" onClick={onJumpToLatest}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onJumpToLatest, which only scrolls the transcript to its end and resumes following; no data is read or written."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "onOpenLink={openLink}"
+      },
+      "anchor": "onOpenLink",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+          "quote": "context.call('quirky.terminal/openExternal', { target: href })"
+        },
+        "target": "quirky.terminal/openExternal",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+            "quote": "const openLink = (href: string) => {\n    void context\n      .confirm({ title: 'Open link', body: href, confirmLabel: 'Open' })\n      .then((ok) => (ok ? context.call('quirky.terminal/openExternal', { target: href }) : undefined))\n      .catch((error) => context.toast('Could not open link', messageOf(error)))\n  }"
+          }
+        ]
+      }
     },
     {
       "site": {
@@ -2905,13 +2950,13 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-          "quote": "context.call('quirky.structured/send', { session: sessionId, text: PRESENT_AGAIN })"
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN })"
         },
         "target": "quirky.structured/send",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
-            "quote": "const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: sessionId, text: PRESENT_AGAIN }))"
+            "quote": "const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN }))"
           }
         ]
       }

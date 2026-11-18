@@ -80,7 +80,7 @@ function BlockView({
 }) {
   switch (block.kind) {
     case 'prose':
-      return <Prose context={context} text={block.text} streaming={block.streaming} />
+      return <Prose context={context} session={session} text={block.text} streaming={block.streaming} />
     case 'activity':
       return <Activity calls={block.calls} />
     case 'file-change':

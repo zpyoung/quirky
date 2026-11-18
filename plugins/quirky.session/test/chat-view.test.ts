@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
@@ -582,14 +582,15 @@ describe('the cards', () => {
 })
 
 describe('markdown prose', () => {
-  test('renders markdown and drops raw html, scripts and unsafe links', async () => {
+  test('renders markdown, shows raw html as text, and drops unsafe links', async () => {
     const body = ['**bold** and `code`', '', '<script>alert(1)</script>', '', '<img src="x" onerror="alert(1)">', '', '[site](https://example.com) [bad](javascript:alert(1))'].join('\n')
     await mountChat({ messages: [user(1, 'go'), prose(2, body)] })
-    expect(host!.querySelector('strong')!.textContent).toBe('bold')
+    expect(host!.querySelector('[data-streamdown="strong"]')!.textContent).toBe('bold')
     expect(host!.querySelector('code')!.textContent).toBe('code')
     expect(host!.querySelector('script')).toBeNull()
     expect(host!.querySelector('[role="log"] img')).toBeNull()
-    expect(text()).not.toContain('alert(1)</script>')
+    expect(host!.querySelector('[onerror]')).toBeNull()
+    expect(text()).toContain('<script>alert(1)</script>')
     const links = [...host!.querySelectorAll('a')]
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['https://example.com'])
   })
@@ -614,7 +615,87 @@ describe('markdown prose', () => {
 
   test('a streaming reply ends in a caret', async () => {
     await mountChat({ messages: [user(1, 'go'), prose(2, 'partial', true)] })
-    expect(text()).toContain('partial▍')
+    expect(text()).toContain('partial')
+    expect(text()).toContain('▍')
+    expect(host!.querySelector('.qmd-caret')!.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  test('a file that exists becomes a chip that opens the editor at its line, and one that does not stays code', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), prose(2, 'See `chat/turns.ts:119` and `src/missing.ts`.')],
+      handlers: {
+        'quirky.session/markdownAssets': () => ({
+          files: { 'chat/turns.ts:119': { path: 'plugins/quirky.session/src/window/chat/turns.ts', line: 119 }, 'src/missing.ts': null },
+          images: {}
+        }),
+        'quirky.editor/open': () => ({ ok: true })
+      }
+    })
+    await settle()
+    expect(fake.callsTo('quirky.session/markdownAssets').map((call) => call.params)).toEqual([{ session: 'chat', files: ['chat/turns.ts:119', 'src/missing.ts'] }])
+    const chips = [...host!.querySelectorAll<HTMLElement>('[data-path-chip]')]
+    expect(chips).toHaveLength(1)
+    expect(host!.querySelector('code')!.textContent).toBe('src/missing.ts')
+    await click(chips[0])
+    expect(fake.callsTo('quirky.editor/open').map((call) => call.params)).toEqual([
+      { worktree: 'wt-main', path: 'plugins/quirky.session/src/window/chat/turns.ts', line: 119, focus: true }
+    ])
+  })
+
+  test('a chip opens the worktree-relative path the daemon answered, not the path as written', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), prose(2, 'See `src/markdown/index.ts:8`.')],
+      handlers: {
+        'quirky.session/markdownAssets': () => ({ files: { 'src/markdown/index.ts:8': { path: 'packages/ui/src/markdown/index.ts', line: 8 } }, images: {} }),
+        'quirky.editor/open': () => ({ ok: true })
+      }
+    })
+    await settle()
+    await click(host!.querySelector('[data-path-chip]'))
+    expect(fake.callsTo('quirky.editor/open').map((call) => call.params)).toEqual([
+      { worktree: 'wt-main', path: 'packages/ui/src/markdown/index.ts', line: 8, focus: true }
+    ])
+  })
+
+  test('a chip says so when the editor cannot open the file', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), prose(2, 'See `src/a.ts`.')],
+      handlers: {
+        'quirky.session/markdownAssets': () => ({ files: { 'src/a.ts': { path: 'src/a.ts' } }, images: {} }),
+        'quirky.editor/open': () => {
+          throw new Error('no editor')
+        }
+      }
+    })
+    await settle()
+    await click(host!.querySelector('[data-path-chip]'))
+    await settle()
+    expect(fake.toasts).toEqual([{ title: 'Could not open file in editor', body: 'no editor' }])
+  })
+
+  test('asks for no paths while the reply is still streaming', async () => {
+    await mountChat({ messages: [user(1, 'go'), prose(2, 'See `src/a.ts`', true)], handlers: { 'quirky.session/markdownAssets': () => ({ files: {}, images: {} }) } })
+    await settle()
+    expect(fake.callsTo('quirky.session/markdownAssets')).toEqual([])
+  })
+
+  test('a worktree image shows with its path and a remote one never loads', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), prose(2, '![shot](docs/shot.png)\n\n![track](https://x.io/p.gif)')],
+      handlers: { 'quirky.session/markdownAssets': () => ({ files: {}, images: { 'docs/shot.png': '/resource/1' } }) }
+    })
+    await settle()
+    expect(fake.callsTo('quirky.session/markdownAssets').map((call) => call.params)).toEqual([{ session: 'chat', images: ['docs/shot.png'] }])
+    expect([...host!.querySelectorAll('[role="log"] img')].map((image) => image.getAttribute('src'))).toEqual(['/resource/1'])
+    expect(host!.querySelector('figcaption')!.textContent).toBe('docs/shot.png')
+  })
+
+  test('the reply still renders when the daemon has no markdownAssets', async () => {
+    await mountChat({ messages: [user(1, 'go'), prose(2, 'See `src/a.ts` **now**')] })
+    await settle()
+    expect(host!.querySelector('[data-streamdown="strong"]')!.textContent).toBe('now')
+    expect(host!.querySelector('[data-path-chip]')).toBeNull()
+    expect(host!.querySelector('code')!.textContent).toBe('src/a.ts')
   })
 })
 
@@ -781,6 +862,159 @@ describe('auto-scroll', () => {
     geometry.height = 1500
     await push(prose(4, 'back at the bottom'))
     expect(geometry.top).toBe(1500)
+  })
+
+  describe('as the content resizes', () => {
+    type Observer = { callback: () => void; targets: Element[] }
+    let observers: Observer[]
+    let original: typeof ResizeObserver
+    beforeEach(() => {
+      observers = []
+      original = globalThis.ResizeObserver
+      globalThis.ResizeObserver = class {
+        entry: Observer
+        constructor(callback: () => void) {
+          this.entry = { callback, targets: [] }
+          observers.push(this.entry)
+        }
+        observe(target: Element) {
+          this.entry.targets.push(target)
+        }
+        unobserve() {}
+        disconnect() {
+          this.entry.targets = []
+        }
+      } as unknown as typeof ResizeObserver
+    })
+    afterEach(() => {
+      globalThis.ResizeObserver = original
+    })
+    const resized = () => act(async () => void observers.forEach((observer) => observer.targets.length > 0 && observer.callback()))
+    const rect = (top: number, bottom: number) => () => ({ top, bottom, left: 0, right: 0, width: 0, height: bottom - top, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+
+    test('stays at the bottom while a block grows and nothing was pushed', async () => {
+      await mountChat({ messages: [user(1, 'go'), prose(2, 'one')] })
+      const log = host!.querySelector<HTMLElement>('[role="log"]')!
+      const geometry: Geometry = { height: 1000, top: 800, client: 200 }
+      pretend(log, geometry)
+      await scrolled(log)
+      geometry.height = 1240
+      await resized()
+      expect(geometry.top).toBe(1240)
+    })
+
+    test('holds the reading position when a block above it grows', async () => {
+      await mountChat({ messages: [user(1, 'a'), prose(2, 'one'), user(3, 'b'), prose(4, 'two')] })
+      const log = host!.querySelector<HTMLElement>('[role="log"]')!
+      const turns = [...host!.querySelectorAll<HTMLElement>('section')]
+      expect(turns).toHaveLength(2)
+      const geometry: Geometry = { height: 1200, top: 700, client: 200 }
+      const content = { second: 600 }
+      pretend(log, geometry)
+      log.getBoundingClientRect = rect(0, 200)
+      turns[0]!.getBoundingClientRect = () => rect(-geometry.top, content.second - geometry.top)()
+      turns[1]!.getBoundingClientRect = () => rect(content.second - geometry.top, 1200 - geometry.top)()
+      geometry.top = 1000
+      await scrolled(log)
+      geometry.top = 700
+      await scrolled(log)
+
+      content.second = 680
+      geometry.height = 1280
+      await resized()
+      expect(geometry.top).toBe(780)
+
+      content.second = 660
+      geometry.height = 1260
+      await resized()
+      expect(geometry.top).toBe(760)
+    })
+
+    test('does not move a reader who is following when the content above resizes', async () => {
+      await mountChat({ messages: [user(1, 'a'), prose(2, 'one'), user(3, 'b'), prose(4, 'two')] })
+      const log = host!.querySelector<HTMLElement>('[role="log"]')!
+      const geometry: Geometry = { height: 1200, top: 1000, client: 200 }
+      pretend(log, geometry)
+      await scrolled(log)
+      geometry.height = 1300
+      await resized()
+      expect(geometry.top).toBe(1300)
+    })
+
+    test('observes the transcript column', async () => {
+      await mountChat({ messages: [user(1, 'go')] })
+      const targets = observers.flatMap((observer) => observer.targets)
+      expect(targets.some((target) => target.closest('[role="log"]') !== null)).toBe(true)
+    })
+  })
+
+  describe('the Jump to latest pill', () => {
+    const geometry: Geometry = { height: 1000, top: 800, client: 200 }
+    async function mountScrolled(top: number) {
+      Object.assign(geometry, { height: 1000, top: 800, client: 200 })
+      await mountChat({ messages: [user(1, 'go'), prose(2, 'one')] })
+      const log = host!.querySelector<HTMLElement>('[role="log"]')!
+      pretend(log, geometry)
+      log.scrollTo = ((options: ScrollToOptions) => {
+        geometry.top = options.top ?? geometry.top
+        scrollTo.push(options)
+      }) as typeof log.scrollTo
+      await scrolled(log)
+      geometry.top = top
+      await scrolled(log)
+      return log
+    }
+    const scrollTo: ScrollToOptions[] = []
+    beforeEach(() => void (scrollTo.length = 0))
+
+    test('is hidden while the transcript is at the bottom', async () => {
+      await mountScrolled(800)
+      expect(byLabel('Jump to latest')).toBeNull()
+    })
+
+    test('appears once scrolled up, and a click scrolls smoothly to the end and hides it', async () => {
+      const log = await mountScrolled(100)
+      const pill = byLabel('Jump to latest')
+      expect(pill).not.toBeNull()
+      expect(pill!.tagName).toBe('BUTTON')
+      expect(pill!.textContent).toBe('Jump to latest')
+      await click(pill)
+      expect(scrollTo).toEqual([{ top: 1000, behavior: 'smooth' }])
+      expect(geometry.top).toBe(1000)
+      await scrolled(log)
+      expect(byLabel('Jump to latest')).toBeNull()
+
+      geometry.height = 1200
+      await push(prose(3, 'follows again'))
+      expect(geometry.top).toBe(1200)
+    })
+
+    test('the smooth scroll passing through the middle does not bring the pill back', async () => {
+      const log = await mountScrolled(100)
+      await click(byLabel('Jump to latest'))
+      geometry.top = 500
+      await scrolled(log)
+      expect(byLabel('Jump to latest')).toBeNull()
+      geometry.top = 800
+      await scrolled(log)
+      expect(byLabel('Jump to latest')).toBeNull()
+    })
+
+    test('goes away when the reader scrolls back to the bottom by hand', async () => {
+      const log = await mountScrolled(100)
+      expect(byLabel('Jump to latest')).not.toBeNull()
+      geometry.top = 790
+      await scrolled(log)
+      expect(byLabel('Jump to latest')).toBeNull()
+    })
+
+    test('stays while new text arrives and the reader is scrolled up', async () => {
+      await mountScrolled(100)
+      geometry.height = 1400
+      await push(prose(3, 'more'))
+      expect(byLabel('Jump to latest')).not.toBeNull()
+      expect(geometry.top).toBe(100)
+    })
   })
 })
 
@@ -1088,7 +1322,7 @@ describe('the plan panel in a narrow chat', () => {
   type Observer = { callback: () => void }
   let observers: Observer[] = []
   const original = (globalThis as { ResizeObserver?: unknown }).ResizeObserver
-  const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!
+  const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!.parentElement!
   const resize = async (width: number) => {
     const element = bodyOf()
     element.getBoundingClientRect = () => ({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) })

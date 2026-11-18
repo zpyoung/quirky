@@ -1,5 +1,6 @@
 import type { PluginCaller, PluginContext, Session } from '@quirky/protocol'
 import { ComposerDrafts } from './src/drafts'
+import { createMarkdownAssets } from './src/markdownAssets'
 import { SessionRecords, sessionMigrations } from './src/records'
 import { SessionService } from './src/sessions'
 
@@ -20,12 +21,15 @@ export async function activate(context: PluginContext): Promise<void> {
   const drafts = new ComposerDrafts(store, context.dataDir, (id) => records.get(id) !== null, (kind, message) => context.error(kind, message))
   const sessions = new SessionService(context, records)
 
+  const markdownAssets = createMarkdownAssets({ context, sessionOf: (ref) => sessions.get({ session: ref }) })
+
   const methods = {
     list: (params: Record<string, unknown>, caller: PluginCaller) => {
       const result = sessions.list(params, caller)
       return caller.role === 'mobile' ? result.then((rows) => rows.map(withoutLaunch)) : result
     },
     get: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.get(params), caller),
+    markdownAssets,
     identity: sessions.identity,
     pointer: sessions.pointer,
     create: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.create(params, caller), caller),
