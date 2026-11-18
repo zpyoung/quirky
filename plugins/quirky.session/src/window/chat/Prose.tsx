@@ -120,17 +120,14 @@ function useWorktreeAssets(context: UiPluginContext, sessionId: string, worktree
     return {
       async resolveFiles(candidates) {
         const reply = (await context.call('quirky.session/markdownAssets', { session: sessionId, files: candidates })) as AssetsReply
-        const answers: Record<string, { line?: number } | null> = {}
-        for (const candidate of candidates) {
-          const hit = reply.files?.[candidate]
-          if (!hit) {
-            answers[candidate] = null
-            continue
-          }
-          resolved.set(withoutLine(candidate), hit.path)
-          answers[candidate] = hit.line === undefined ? {} : { line: hit.line }
-        }
-        return answers
+        return Object.fromEntries(
+          candidates.map((candidate): [string, { line?: number } | null] => {
+            const hit = reply.files?.[candidate]
+            if (!hit) return [candidate, null]
+            resolved.set(withoutLine(candidate), hit.path)
+            return [candidate, hit.line === undefined ? {} : { line: hit.line }]
+          })
+        )
       },
       async resolveImages(srcs) {
         const reply = (await context.call('quirky.session/markdownAssets', { session: sessionId, images: srcs })) as AssetsReply

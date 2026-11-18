@@ -1,8 +1,33 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
+import type { BunPlugin } from 'bun'
 import type { PluginInfo, UiModel } from '@quirky/protocol'
 import type { Harness } from '../../../packages/daemon/test/helpers'
 import { SESSION_PLUGINS, startPluginHarness } from './support'
+
+const UI_PACKAGE_DIR = join(import.meta.dir, '..', '..', '..', 'packages', 'ui')
+
+/**
+ * Pins the ui package's own dependencies to where the package resolves them. Under `bun test`,
+ * Bun.build looks for them from the plugin and misses those installed only in packages/ui/node_modules.
+ */
+function resolveUiPackageDependencies(): BunPlugin {
+  const { dependencies } = require(join(UI_PACKAGE_DIR, 'package.json')) as { dependencies: Record<string, string> }
+  const pinned = new Map<string, string>()
+  for (const name of Object.keys(dependencies)) {
+    if (name.startsWith('@quirky/') || name === 'react' || name === 'react-dom') continue
+    pinned.set(name, Bun.resolveSync(name, join(UI_PACKAGE_DIR, 'src', 'markdown')))
+  }
+  return {
+    name: 'resolve-ui-package-dependencies',
+    setup(build) {
+      build.onResolve({ filter: /^[^./]/ }, ({ path }) => {
+        const found = pinned.get(path)
+        return found === undefined ? undefined : { path: found }
+      })
+    }
+  }
+}
 
 let h: Harness | null = null
 afterEach(async () => {
@@ -16,7 +41,8 @@ describe('the session plugin in the window', () => {
       entrypoints: [join(import.meta.dir, '..', 'src', 'ui.tsx')],
       target: 'browser',
       external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
-      define: { 'process.env.NODE_ENV': '"production"' }
+      define: { 'process.env.NODE_ENV': '"production"' },
+      plugins: [resolveUiPackageDependencies()]
     })
     expect(result.logs.filter((log) => log.level === 'error')).toEqual([])
     expect(result.success).toBe(true)
