@@ -1173,7 +1173,6 @@
           "quirky.avatar/resolveNeed"
         ]
       },
-
       {
         "id": "log",
         "words": "log",
@@ -1215,13 +1214,6 @@
         "methods": [
           "quirky.avatar/takeBack"
         ]
-      }
-    ],
-    "window-bar-item": [
-      {
-        "id": "pill",
-        "title": "Avatar",
-        "description": "Shows how many worktrees the avatar supervises and how many wait on you."
       }
     ],
     "panel": [
