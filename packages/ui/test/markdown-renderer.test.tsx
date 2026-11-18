@@ -768,6 +768,53 @@ describe('profiles', () => {
   })
 })
 
+describe('fenced code text', () => {
+  const fileRehype = () => [rehypeRaw, [rehypeSanitize, defaultSchema]] as Props['rehypePlugins']
+  const fence = '```ts\nconst a = 1\n\n\nconst b = 2\n\n```\n'
+
+  test('keeps every blank line the fence holds, in both profiles', async () => {
+    const expected = 'const a = 1\n\n\nconst b = 2\n\n'
+    const untrusted = await mount({ text: fence })
+    expect(one(untrusted.container, 'pre code').textContent).toBe(expected)
+    const file = await mount({ text: fence, profile: 'file', rehypePlugins: fileRehype() })
+    expect(one(file.container, 'pre code').textContent).toBe(expected)
+  })
+
+  test('a plain fence reads as its lines each ending in a newline', async () => {
+    const { container } = await mount({ text: '```\none\ntwo\n```\n' })
+    expect(one(container, 'pre code').textContent).toBe('one\ntwo\n')
+    expect(all(container, '.qmd-line').length).toBe(2)
+  })
+
+  test('markup a caller plugin put inside the fence survives, without changing the text', async () => {
+    const markNeedle = () => (tree: { children: Array<Record<string, unknown>> }) => {
+      tree.children = tree.children.map((child) => {
+        if (child.type !== 'code') return child
+        const value = String(child.value)
+        const at = value.indexOf('needle')
+        return {
+          type: 'markedCode',
+          data: { hName: 'pre' },
+          children: [{
+            type: 'markedCodeContent',
+            data: { hName: 'code', hProperties: { className: ['language-ts'] } },
+            children: [
+              { type: 'text', value: `${value.slice(0, at)}` },
+              { type: 'marked', data: { hName: 'em' }, children: [{ type: 'text', value: 'needle' }] },
+              { type: 'text', value: `${value.slice(at + 6)}\n` }
+            ]
+          }]
+        }
+      })
+    }
+    const text = '```ts\nconst needle = 1\n\n```\n'
+    const { container } = await mount({ text, profile: 'file', rehypePlugins: fileRehype(), remarkPlugins: [markNeedle] as Props['remarkPlugins'] })
+    expect(one(container, 'pre code em').textContent).toBe('needle')
+    expect(one(container, 'pre code').textContent).toBe('const needle = 1\n\n')
+    expect(all(container, '.qmd-line').length).toBe(2)
+  })
+})
+
 describe('PATH_CANDIDATE', () => {
   const found = (text: string) => Array.from(text.matchAll(PATH_CANDIDATE), (match) => match[0])
 

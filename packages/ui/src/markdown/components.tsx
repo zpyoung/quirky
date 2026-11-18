@@ -1,4 +1,4 @@
-import { Children, Fragment, createContext, isValidElement, useContext } from 'react'
+import { Children, Fragment, cloneElement, createContext, isValidElement, useContext } from 'react'
 import type { ComponentProps, MouseEvent, ReactElement, ReactNode } from 'react'
 import type { Components, CustomRenderer, ExtraProps } from 'streamdown'
 import { useIsCodeFenceIncomplete } from 'streamdown'
@@ -137,6 +137,42 @@ function InlineCode({ children, ...rest }: ComponentProps<'code'> & ExtraProps) 
   return <code data-streamdown="inline-code">{children}</code>
 }
 
+function hasElement(node: ReactNode): boolean {
+  if (Array.isArray(node)) return node.some(hasElement)
+  return isValidElement(node)
+}
+
+/** Splits rendered code children at newlines, repeating an element that spans a break on each line it covers. */
+function splitLines(node: ReactNode): ReactNode[][] {
+  if (node === null || node === undefined || typeof node === 'boolean') return [[]]
+  if (typeof node === 'string' || typeof node === 'number') return String(node).split('\n').map((part) => [part])
+  if (Array.isArray(node)) {
+    const lines: ReactNode[][] = [[]]
+    for (const child of node) {
+      const [first = [], ...rest] = splitLines(child)
+      lines[lines.length - 1]!.push(...first)
+      lines.push(...rest)
+    }
+    return lines
+  }
+  if (isValidElement(node)) {
+    const element = node as ReactElement<{ children?: ReactNode }>
+    return splitLines(element.props.children).map((line, index) => [cloneElement(element, { key: index }, ...line)])
+  }
+  return [[]]
+}
+
+/**
+ * The per-line markup of a fence whose children a plugin marked up (an element among the text), or
+ * undefined for plain text. The hast text of a fence ends in the newline markdown adds, which is dropped.
+ */
+function markedLines(children: ReactNode): ReactNode[] | undefined {
+  if (!hasElement(children)) return undefined
+  const lines = splitLines(children)
+  if (textOf(lines[lines.length - 1]) === '') lines.pop()
+  return lines.map((line, index) => <Fragment key={index}>{line}</Fragment>)
+}
+
 function FenceCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
   const renderers = useContext(RenderersContext)
   const isIncomplete = useIsCodeFenceIncomplete()
@@ -149,7 +185,7 @@ function FenceCode({ node, className, children }: ComponentProps<'code'> & Extra
     const Component = renderer.component
     return <Component code={code} isIncomplete={isIncomplete} language={language} meta={meta} />
   }
-  return <CodeBlock code={code} language={language} meta={meta} isIncomplete={isIncomplete} />
+  return <CodeBlock code={code} language={language} meta={meta} isIncomplete={isIncomplete} lineNodes={markedLines(children)} />
 }
 
 function Code(props: ComponentProps<'code'> & ExtraProps) {

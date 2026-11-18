@@ -130,16 +130,18 @@ export interface CodeBlockProps {
   language: string
   meta?: string | undefined
   isIncomplete: boolean
+  /** One entry per line of `code`, already marked up by a remark or rehype plugin. They replace the Shiki tokens so the markup survives. */
+  lineNodes?: ReactNode[] | undefined
 }
 
 /**
  * A fenced code block with a header, Copy, line numbers past 8 lines and a collapse past 20. While the
  * fence is open it is plain text with a caret; Shiki runs once it closes, in the same line boxes.
  */
-export function CodeBlock({ code, language, meta, isIncomplete }: CodeBlockProps) {
+export function CodeBlock({ code, language, meta, isIncomplete, lineNodes }: CodeBlockProps) {
   const lines = useMemo(() => code.split('\n'), [code])
   const diff = language === 'diff'
-  const highlightable = !isIncomplete && !diff && language !== '' && codePlugin.supportsLanguage(language as BundledLanguage)
+  const highlightable = !lineNodes && !isIncomplete && !diff && language !== '' && codePlugin.supportsLanguage(language as BundledLanguage)
   const highlighted = useHighlighted(code, language, highlightable)
   const [expanded, setExpanded] = useState(false)
   const collapsible = !isIncomplete && lines.length > COLLAPSE_THRESHOLD
@@ -166,10 +168,12 @@ export function CodeBlock({ code, language, meta, isIncomplete }: CodeBlockProps
               const tokens = highlighted?.tokens[index]
               return (
                 <span key={index} className="qmd-line" data-diff={diff ? diffKind(line) : undefined}>
-                  {tokens?.length
-                    ? tokens.map((token, position) => <span key={position} style={tokenStyle(token)}>{token.content}</span>)
-                    : line === '' && !caret ? '\n' : line}
-                  {caret ? <span className="qmd-caret" aria-hidden="true">{'\u258D'}</span> : null}
+                  {lineNodes
+                    ? lineNodes[index]
+                    : tokens?.length
+                      ? tokens.map((token, position) => <span key={position} style={tokenStyle(token)}>{token.content}</span>)
+                      : line}
+                  {caret ? <span className="qmd-caret" aria-hidden="true">{'\u258D'}</span> : '\n'}
                 </span>
               )
             })}
