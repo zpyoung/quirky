@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-**Status:** Approved
+**Status:** Approved. Tech spec: tech.md (complexity gate: crosses the session, view, editor and ui subsystems).
 
 **Amendments:** none yet.
 
