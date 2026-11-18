@@ -6,6 +6,8 @@ import type { BrowserChild, BrowserDependencies } from './dependencies'
 import { stopOwned } from './process'
 import { createChromeProcessAccess, type ChromeProcessAccess, type ChromeProcessIdentity } from './chrome-processes'
 
+const SNAPSHOT_ATTEMPTS = 4
+
 function profileInUse(): Error {
   return fault('browser_unavailable', 'the owned browser profile is in use; its process could not be safely reclaimed')
 }
@@ -129,12 +131,24 @@ async function waitForDisappearance(access: ChromeProcessAccess, identity: Chrom
   }
 }
 
+/** A Chrome that is mid-exec or mid-exit can fail one inspection, so a refusal needs several consecutive failures. */
+async function snapshotHolders(access: ChromeProcessAccess, directory: string): Promise<ChromeProcessIdentity[]> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return (await access.snapshot()).filter(identity => selectsDirectory(identity, directory))
+    } catch (error) {
+      if (attempt === SNAPSHOT_ATTEMPTS) throw error
+      await Bun.sleep(100)
+    }
+  }
+}
+
 async function reclaimProfile(directory: string, executablePath: string, dependencies: BrowserDependencies): Promise<void> {
   const access = dependencies.chromeProcesses ?? createChromeProcessAccess(dependencies.process, {
     executablePath,
     resolvedExecutablePath: canonicalPath(executablePath)
   })
-  const holders = (await access.snapshot()).filter(identity => selectsDirectory(identity, directory))
+  const holders = await snapshotHolders(access, directory)
   if (holders.some(identity => !isOwnedOrphan(identity, directory, executablePath))) throw profileInUse()
   const remaining: ChromeProcessIdentity[] = []
   for (const identity of holders) {
