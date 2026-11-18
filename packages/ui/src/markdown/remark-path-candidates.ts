@@ -1,3 +1,4 @@
+import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { InlineCode, Parent, PhrasingContent, Root, Text } from 'mdast'
 
 /**
@@ -20,28 +21,23 @@ export function splitPathCandidate(candidate: string): { path: string; line?: nu
   return match?.[2] ? { path, line: Number(match[2]) } : { path }
 }
 
-function withoutFencedCode(markdown: string): string {
-  const kept: string[] = []
-  let marker: string | null = null
-  for (const line of markdown.split('\n')) {
-    const fence = /^ {0,3}(`{3,}|~{3,})/.exec(line)
-    if (marker === null) {
-      if (fence) marker = fence[1]
-      else kept.push(line)
-    } else if (fence && fence[1][0] === marker[0] && fence[1].length >= marker.length && line.trim() === fence[1]) marker = null
+const SKIPPED_PARENTS = new Set(['link', 'linkReference', 'definition', 'footnoteDefinition'])
+
+function collect(parent: Parent, found: Set<string>) {
+  for (const child of parent.children) {
+    if (child.type === 'text') for (const match of child.value.matchAll(PATH_CANDIDATE)) found.add(match[0])
+    else if (child.type === 'inlineCode') {
+      if (isPathCandidate(child.value)) found.add(child.value)
+    } else if ('children' in child && !SKIPPED_PARENTS.has(child.type)) collect(child as Parent, found)
   }
-  return kept.join('\n')
 }
 
-/** Every distinct candidate written in `markdown` outside fenced code, link labels and link targets, in the order first seen. */
+/** Every distinct candidate written in `markdown` outside fenced code, link labels and link targets of any link form, in the order first seen. */
 export function collectPathCandidates(markdown: string): string[] {
   const found = new Set<string>()
-  const prose = withoutFencedCode(markdown).replace(/\[[^\]\n]*\]\([^)\n]*\)/g, '')
-  for (const match of prose.matchAll(PATH_CANDIDATE)) found.add(match[0])
+  collect(fromMarkdown(markdown), found)
   return [...found]
 }
-
-const SKIPPED_PARENTS = new Set(['link', 'linkReference', 'definition', 'footnoteDefinition'])
 
 function split(node: Text): PhrasingContent[] | null {
   const parts: PhrasingContent[] = []

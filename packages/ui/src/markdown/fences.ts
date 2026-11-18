@@ -1,3 +1,5 @@
+import type { Code, Parent } from 'mdast'
+import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { ChartSources } from './runtime'
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/
@@ -66,11 +68,31 @@ function* fences(markdown: string): Generator<Fence> {
   if (open) yield closeFence(open, false)
 }
 
-/** The fenced code block the text ends inside, when it has no closing fence yet, at any blockquote or list nesting. */
-export function openFenceAtEnd(markdown: string): { language: string; code: string } | null {
-  let last: Fence | null = null
-  for (const fence of fences(markdown)) last = fence
-  return last !== null && !last.closed ? { language: last.language, code: last.code } : null
+export type OpenFenceAtEnd = { language: string; code: string; extent: number }
+
+function lastCode(node: Parent): Code | null {
+  for (let index = node.children.length - 1; index >= 0; index--) {
+    const child = node.children[index]
+    const found = child.type === 'code' ? child : 'children' in child ? lastCode(child as Parent) : null
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * The fenced code block the text ends inside, when it has no closing fence yet, at any blockquote or list
+ * nesting. `extent` is the source length from the fence's start to the end of the text, which the rendered
+ * block of that fence has too and an earlier, finished block with the same content does not.
+ */
+export function openFenceAtEnd(markdown: string): OpenFenceAtEnd | null {
+  if (!markdown.includes('```') && !markdown.includes('~~~')) return null
+  const block = lastCode(fromMarkdown(markdown))
+  const { start, end } = block?.position ?? {}
+  if (!block || start?.offset === undefined || end?.offset === undefined || end.offset < markdown.trimEnd().length) return null
+  // a closed fence spans its content plus an opening and a closing line, an open one only the opening line
+  const lines = markdown.slice(start.offset, end.offset).replace(/\n$/, '').split('\n').length
+  const contentLines = block.value === '' ? 0 : block.value.split('\n').length
+  return lines === contentLines + 1 ? { language: (block.lang ?? '').toLowerCase(), code: block.value, extent: end.offset - start.offset } : null
 }
 
 /** True when the text ends inside a fenced code block that has no closing fence yet. */
