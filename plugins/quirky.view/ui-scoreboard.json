@@ -250,34 +250,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "  if (node.type === 'text') {"
-      },
-      "reason": "Sanitized markdown node dispatch and link-safety rendering; not a view read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "  if (node.type !== 'element' || node.tagName === undefined) return null"
-      },
-      "reason": "Sanitized markdown node dispatch and link-safety rendering; not a view read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "  if (tag === 'a') {"
-      },
-      "reason": "Sanitized markdown node dispatch and link-safety rendering; not a view read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "    if (typeof href !== 'string' || !ABSOLUTE_WEB_URL.test(href)) return createElement('span', { key }, ...children)"
-      },
-      "reason": "Sanitized markdown node dispatch and link-safety rendering; not a view read state."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.view/src/render/RenderNode.tsx",
         "quote": "    case 'stack':"
       },
@@ -621,54 +593,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "    return createElement('a', { key, href, style: TAG_STYLES.a, rel: 'noreferrer noopener', onClick: open, onAuxClick: open }, ...children)"
-      },
-      "anchor": "onClick",
-      "route": {
-        "target": "command:quirky.view/control",
-        "invoke": {
-          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-preview', viewId, href }, { activateOwner: false })"
-        },
-        "via": [
-          {
-            "file": "plugins/quirky.view/src/markdown.ts",
-            "quote": "open = (event: MouseEvent) => {\n      event.preventDefault()\n      onLink(href)\n    }"
-          },
-          {
-            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-            "quote": "onLink: ViewRuntime['openLink'] = (href) => {\n      void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-preview', viewId, href }, { activateOwner: false }).catch((error: unknown) => {\n        context.toast('Could not open link', errorText(error))\n      })\n    }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/markdown.ts",
-        "quote": "    return createElement('a', { key, href, style: TAG_STYLES.a, rel: 'noreferrer noopener', onClick: open, onAuxClick: open }, ...children)"
-      },
-      "anchor": "onAuxClick",
-      "route": {
-        "target": "command:quirky.view/control",
-        "invoke": {
-          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-preview', viewId, href }, { activateOwner: false })"
-        },
-        "via": [
-          {
-            "file": "plugins/quirky.view/src/markdown.ts",
-            "quote": "open = (event: MouseEvent) => {\n      event.preventDefault()\n      onLink(href)\n    }"
-          },
-          {
-            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-            "quote": "onLink: ViewRuntime['openLink'] = (href) => {\n      void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'link-preview', viewId, href }, { activateOwner: false }).catch((error: unknown) => {\n        context.toast('Could not open link', errorText(error))\n      })\n    }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
         "file": "plugins/quirky.view/src/render/ViewCard.tsx",
         "quote": "        <NoticeLine actions={[{ label: 'Move inline', disabled: moving, onAction: () => void move() }]}>"
       },
@@ -911,6 +835,15 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/Markdown.tsx",
+        "quote": "      <QuirkyMarkdown text={asString(props.text)} profile=\"untrusted\" onOpenLink={onLink} />"
+      },
+      "anchor": "onOpenLink",
+      "notAction": "forwarded",
+      "reason": "Hands link activation to the runtime openLink, whose ViewCard onLink routes link-preview through quirky.view/control."
     }
   ]
 }

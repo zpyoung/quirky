@@ -1,12 +1,13 @@
-import { useMemo } from 'react'
-import { renderMarkdown } from '../markdown'
+import { QuirkyMarkdown } from '@quirky/ui/markdown'
 import { asString, type Props } from './props'
 import { useRuntime } from './runtime'
 import { COLUMN } from './styles'
 
 export function Markdown({ props }: { props: Props }) {
-  const { openLink } = useRuntime()
-  const text = asString(props.text)
-  const body = useMemo(() => renderMarkdown(text, openLink), [text, openLink])
-  return <div data-view-node="markdown" style={{ ...COLUMN, gap: 'var(--ui-space-8)', overflowWrap: 'anywhere' }}>{body}</div>
+  const { openLink: onLink } = useRuntime()
+  return (
+    <div data-view-node="markdown" style={{ ...COLUMN, gap: 'var(--ui-space-8)', overflowWrap: 'anywhere' }}>
+      <QuirkyMarkdown text={asString(props.text)} profile="untrusted" onOpenLink={onLink} />
+    </div>
+  )
 }
