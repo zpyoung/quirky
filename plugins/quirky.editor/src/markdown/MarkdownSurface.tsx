@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
 import { CHORD_PLATFORM, RpcErrorCode } from '@quirky/protocol'
 import { Button, Dialog, EmptyState, InlineError, NoticeLine, TextField } from '@quirky/ui'
+import { QuirkyMarkdown } from '@quirky/ui/markdown'
+import type { QuirkyMarkdownProps } from '@quirky/ui/markdown'
 import type { SurfaceProps } from '../types'
 import type { MarkdownHeading } from './source'
 import type { MarkdownReviewNote } from './note-store'
@@ -485,6 +484,15 @@ function remarkPreviewSearchMatch(match: { from: number; to: number } | null, ma
   }
 }
 
+function PreviewMermaid({ code }: { code: string }): React.JSX.Element {
+  return <MermaidDiagram source={code.replace(/\n$/, '')} />
+}
+
+const PREVIEW_RENDERERS: NonNullable<QuirkyMarkdownProps['renderers']> = [{ language: 'mermaid', component: PreviewMermaid }]
+
+// the preview's own `a` override handles every click, so the renderer's link callback is never reached
+function onRendererLink(): void {}
+
 function MarkdownPreview({
   source,
   sourceOffset,
@@ -527,31 +535,37 @@ function MarkdownPreview({
     onView({ markdownAnchor: null })
   }, [articleRef, markdownAnchor, onMissingAnchor, onView, source])
 
+  const remarkPlugins = useMemo(
+    () => [remarkPreviewSearchMatch(expandedMatch, expandedSource.markdown)],
+    [expandedMatch, expandedSource.markdown]
+  )
+  // the parent passes a fresh handler each render; a changing `components` identity would remount the whole preview
+  const latestOpenLink = useRef(onOpenLink)
+  latestOpenLink.current = onOpenLink
+  const onOpenPreviewLink = useCallback((href: string, event: React.MouseEvent<HTMLAnchorElement>) => latestOpenLink.current(href, event), [])
+  const components = useMemo<NonNullable<QuirkyMarkdownProps['components']>>(() => ({
+    a({ href, children }) {
+      return isSafePreviewHref(href)
+        ? <a href={href.startsWith('#') ? `#${previewHeadingId(source, href.slice(1)) ?? href.slice(1)}` : href} rel="noopener noreferrer" onClick={(event) => onOpenPreviewLink(href, event)}>{children}</a>
+        : <span>{children}</span>
+    },
+    img({ src, alt }) {
+      const resource = typeof src === 'string' ? imageUrls[src] : undefined
+      return resource ? <img src={resource} alt={alt ?? ''} loading="lazy" /> : alt ? <span>{alt}</span> : null
+    }
+  }), [onOpenPreviewLink, imageUrls, source])
+
   return (
     <article ref={articleRef} className="markdown-body markdown-body--editor markdown-preview-body">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkPreviewSearchMatch(expandedMatch, expandedSource.markdown)]}
+      <QuirkyMarkdown
+        profile="file"
+        text={expandedSource.markdown}
+        onOpenLink={onRendererLink}
+        remarkPlugins={remarkPlugins}
         rehypePlugins={MARKDOWN_PREVIEW_REHYPE_PLUGINS}
-        components={{
-          a({ href, children }) {
-            return isSafePreviewHref(href)
-              ? <a href={href.startsWith('#') ? `#${previewHeadingId(source, href.slice(1)) ?? href.slice(1)}` : href} rel="noopener noreferrer" onClick={(event) => onOpenLink(href, event)}>{children}</a>
-              : <span>{children}</span>
-          },
-          img({ src, alt }) {
-            const resource = src ? imageUrls[src] : undefined
-            return resource ? <img src={resource} alt={alt ?? ''} loading="lazy" /> : alt ? <span>{alt}</span> : null
-          },
-          code({ className, children, ...props }) {
-            if (className?.includes('language-mermaid')) {
-              return <MermaidDiagram source={String(children).replace(/\n$/, '')} />
-            }
-            return <code className={className} {...props}>{children}</code>
-          }
-        }}
-      >
-        {expandedSource.markdown}
-      </ReactMarkdown>
+        components={components}
+        renderers={PREVIEW_RENDERERS}
+      />
     </article>
   )
 }
