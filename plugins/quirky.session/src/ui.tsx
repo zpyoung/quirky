@@ -12,6 +12,7 @@ import {
   WorktreeSessions
 } from './window/model'
 import { ChatView } from './window/chat/ChatView'
+import { chatHandler } from './window/chat/controls'
 import { newChatCommand, resetNewChatDialog } from './window/chat/newChat'
 import { NewChatOverlay } from './window/chat/NewChatOverlay'
 import { WorktreeView } from './window/WorktreeView'
@@ -20,6 +21,8 @@ const PLUGIN_ID = 'quirky.session'
 const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
 const CHAT_OVERLAY_ID = `overlay:${PLUGIN_ID}/chat-dialogs`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+const ELEMENT_KEY = /^[a-z0-9][a-z0-9._:-]{0,79}$/
+const MAX_LABEL_CHARS = 120
 
 /** The selected worktree, if any. */
 function layoutWorktree(context: UiPluginContext): string | null {
@@ -49,6 +52,8 @@ function touches(event: QuirkyEvent, id: string): boolean {
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+const isVersion = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1
 
 type Loaded =
   | { status: 'loading' }
@@ -196,6 +201,27 @@ export function activate(context: UiPluginContext): void {
     const session = (await context.call('quirky.session/get', { session: sessionId })) as Session
     rememberShowAllEvents(session, enabled)
     return { session: sessionId, enabled }
+  })
+  context.provide(`command:${PLUGIN_ID}/chat-point`, async (args?: unknown) => {
+    const { session, viewId, version, element, label } = (args ?? {}) as Record<string, unknown>
+    if (typeof session !== 'string' || session === '') throw new Error('session must be a non-empty string')
+    if (typeof viewId !== 'string' || viewId === '') throw new Error('viewId must be a non-empty string')
+    if (!isVersion(version)) throw new Error('version must be a positive integer')
+    if (typeof element !== 'string' || !ELEMENT_KEY.test(element)) throw new Error('element must be 1 to 80 lowercase letters, digits, dots, colons or dashes')
+    if (typeof label !== 'string' || label.length > MAX_LABEL_CHARS) throw new Error(`label must be a string of at most ${MAX_LABEL_CHARS} characters`)
+    const point = chatHandler(session, 'point')
+    if (!point) throw new Error(`the chat of session ${session} is not open`)
+    const record = (await context.call('quirky.view/get', { viewId, version }).catch(() => null)) as { title?: unknown } | null
+    point({ viewId, version, element }, { title: typeof record?.title === 'string' ? record.title : 'Visual', label })
+  })
+  context.provide(`command:${PLUGIN_ID}/chat-expand-visual`, (args?: unknown) => {
+    const { session, viewId, version } = (args ?? {}) as Record<string, unknown>
+    if (typeof session !== 'string' || session === '') throw new Error('session must be a non-empty string')
+    if (typeof viewId !== 'string' || viewId === '') throw new Error('viewId must be a non-empty string')
+    if (version !== undefined && !isVersion(version)) throw new Error('version must be a positive integer')
+    const expand = chatHandler(session, 'expand')
+    if (!expand) throw new Error(`the chat of session ${session} is not open`)
+    expand(viewId, version)
   })
   context.provide(RUN_BADGE_COMMAND, async (args?: unknown) => {
     const { session: sessionId, badge: badgeKey } = args as { session: string; badge: string }

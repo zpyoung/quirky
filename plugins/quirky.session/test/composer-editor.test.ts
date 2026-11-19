@@ -10,6 +10,8 @@ let ComposerEditor: typeof import('../src/window/chat/editor/ComposerEditor').Co
 let CMView: typeof import('@codemirror/view').EditorView
 let commands: typeof import('@codemirror/commands')
 let pillRanges: typeof import('../src/window/chat/editor/pills').pillRanges
+let parsePills: typeof import('../src/window/chat/editor/pills').parsePills
+let rememberVisualLabel: typeof import('../src/window/chat/editor/types').rememberVisualLabel
 let root: Root | null = null
 
 beforeAll(async () => {
@@ -19,7 +21,8 @@ beforeAll(async () => {
   ;({ ComposerEditor } = await import('../src/window/chat/editor/ComposerEditor'))
   ;({ EditorView: CMView } = await import('@codemirror/view'))
   commands = await import('@codemirror/commands')
-  ;({ pillRanges } = await import('../src/window/chat/editor/pills'))
+  ;({ pillRanges, parsePills } = await import('../src/window/chat/editor/pills'))
+  ;({ rememberVisualLabel } = await import('../src/window/chat/editor/types'))
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -198,6 +201,62 @@ describe('pills', () => {
     expect(pillRanges(view.state).length).toBe(1)
     expect(spy.changes).toEqual([])
     expect(host).toBeDefined()
+  })
+})
+
+describe('visual reference pills', () => {
+  const REF = '@view:view_0123456789ab/v2/dg:daemon '
+
+  test('parsePills reads a reference ahead of the @path branch, with its version and element', () => {
+    expect(parsePills(`${REF}why?`)).toEqual([
+      { from: 0, to: REF.length, pill: { kind: 'visual', viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon' } }
+    ])
+  })
+
+  test('a reference sits among file and command pills in text order', () => {
+    const found = parsePills(`/review @a.ts ${REF}end`)
+    expect(found.map((entry) => entry.pill.kind)).toEqual(['command', 'file', 'visual'])
+  })
+
+  test('a malformed reference falls back to a file pill instead of vanishing', () => {
+    expect(parsePills('@view:view_short/v1/x ').map((entry) => entry.pill.kind)).toEqual(['file'])
+    expect(parsePills('@view:view_0123456789ab/v1/Upper ').map((entry) => entry.pill.kind)).toEqual(['file'])
+  })
+
+  test('a reference needs its trailing space and a start or whitespace before it', () => {
+    expect(parsePills('@view:view_0123456789ab/v2/dg:daemon')).toEqual([])
+    expect(parsePills('x@view:view_0123456789ab/v2/dg:daemon ')).toEqual([])
+  })
+
+  test('the element may hold the 80 characters the pattern allows and no more', () => {
+    const long = `a${'b'.repeat(79)}`
+    expect(parsePills(`@view:view_0123456789ab/v1/${long} `).map((entry) => entry.pill.kind)).toEqual(['visual'])
+    expect(parsePills(`@view:view_0123456789ab/v1/${long}c `).map((entry) => entry.pill.kind)).toEqual(['file'])
+  })
+
+  test('the widget reads as the visual and the element and serialises back to the reference text', async () => {
+    rememberVisualLabel({ viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon' }, { title: 'Auth flow', label: 'Daemon' })
+    const { ref, view } = await mount()
+    await act(async () => ref.current!.insertPill({ kind: 'visual', viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon' }, { from: 0, to: 0 }))
+    expect(view.state.doc.toString()).toBe(REF)
+    expect(pillRanges(view.state)).toEqual([{ from: 0, to: REF.length, text: REF }])
+    const el = view.contentDOM.querySelector('.cm-composer-pill-visual') as HTMLElement
+    expect(el.textContent).toBe('◈ Auth flow › Daemon')
+  })
+
+  test('until the label is known the chip names the element, then updates in place', async () => {
+    const { view } = await mount({ value: '@view:view_bbbbbbbbbbbb/v1/row:2 ' })
+    const el = view.contentDOM.querySelector('.cm-composer-pill-visual') as HTMLElement
+    expect(el.textContent).toBe('◈ row:2')
+    rememberVisualLabel({ viewId: 'view_bbbbbbbbbbbb', version: 1, element: 'row:2' }, { title: 'Costs', label: 'Row 2' })
+    expect(el.textContent).toBe('◈ Costs › Row 2')
+  })
+
+  test('Backspace after a reference deletes all of it', async () => {
+    const { view } = await mount({ value: REF })
+    await act(async () => view.dispatch({ selection: { anchor: REF.length } }))
+    await act(async () => void commands.deleteCharBackward(view))
+    expect(view.state.doc.toString()).toBe('')
   })
 })
 

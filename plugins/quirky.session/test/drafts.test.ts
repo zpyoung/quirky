@@ -65,6 +65,25 @@ describe('composer drafts', () => {
     expect(drafts.draft({ session: 's_1' })?.picks).toEqual({ model: 'opus', effort: null, mode: 'acceptEdits' })
   })
 
+  test('a visualLevel pick is accepted and stored; old drafts without it keep loading', () => {
+    const drafts = make()
+    const picks = { model: null, effort: null, mode: null, visualLevel: 'balanced' as const }
+    expect(drafts.saveDraft({ session: 's_1', draft: { ...draft, picks } })).toEqual({ ok: true })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual(picks)
+    drafts.saveDraft({ session: 's_1', draft })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual(draft.picks)
+    const withPlan = { model: null, effort: null, mode: null, plan: true, visualLevel: 'off' }
+    drafts.saveDraft({ session: 's_1', draft: { ...draft, picks: withPlan } })
+    expect(drafts.draft({ session: 's_1' })?.picks).toEqual({ model: null, effort: null, mode: 'plan', visualLevel: 'off' })
+  })
+
+  test('a visualLevel that is not off, balanced or visual-first is refused', () => {
+    const drafts = make()
+    for (const visualLevel of ['loud', 3, null]) {
+      expect(kindOf(() => drafts.saveDraft({ session: 's_1', draft: { ...draft, picks: { ...draft.picks, visualLevel } } }))).toBe('invalid-params')
+    }
+  })
+
   test('a draft stored before the change reads back with three-key picks', () => {
     const store = memoryStore()
     const drafts = make(store)

@@ -1,4 +1,4 @@
-import { cloneElement, createElement, isValidElement, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { cloneElement, createElement, isValidElement, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { QuirkyMarkdown, type MarkdownAssets } from '@quirky/ui/markdown'
 import { unified } from 'unified'
@@ -7,6 +7,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
+import { peekVisualLabel, visualPillLabel, watchVisualLabel, type VisualRef } from './editor/types'
 
 const TAGS = [
   'a', 'blockquote', 'br', 'code', 'del', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'li', 'ol', 'p', 'pre',
@@ -48,16 +49,42 @@ const inlineCode = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(-
 const root = { minWidth: 0, overflowWrap: 'anywhere' } satisfies CSSProperties
 
 const mention = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)' } satisfies CSSProperties
+const visualPill = { padding: '0 var(--ui-space-4)', color: 'var(--ui-accent)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)', whiteSpace: 'nowrap' } satisfies CSSProperties
 const MENTION = /(^|\s)@(\S+)/g
+const VISUAL_MENTION = /^view:(view_[0-9a-f]{12})\/v(\d+)\/([a-z0-9][a-z0-9._:-]{0,79})$/
+const LEVEL_MARKER = /^\[quirky visual level: (?:off|balanced|visual-first)\]\r?\n/
 const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path
+
+/** A reference to part of a visual, as `◈ <title> › <label>` once the visual is known and `◈ <element>` until then. */
+function VisualPill({ reference }: { reference: VisualRef }) {
+  const { viewId, version, element } = reference
+  const [label, setLabel] = useState(() => peekVisualLabel(reference))
+  useEffect(() => {
+    const watch = watchVisualLabel({ viewId, version, element }, setLabel)
+    setLabel(watch.label)
+    return watch.stop
+  }, [viewId, version, element])
+  return (
+    <span style={visualPill} title={`${viewId} v${version}`}>
+      {visualPillLabel(reference, label)}
+    </span>
+  )
+}
 
 function withMentions(text: string): ReactNode {
   const parts: ReactNode[] = []
   let last = 0
   for (const match of text.matchAll(MENTION)) {
+    const start = match.index! + match[1]!.length
+    const visual = VISUAL_MENTION.exec(match[2]!)
+    if (visual) {
+      if (start > last) parts.push(text.slice(last, start))
+      parts.push(<VisualPill key={start} reference={{ viewId: visual[1]!, version: Number(visual[2]), element: visual[3]! }} />)
+      last = start + 1 + match[2]!.length
+      continue
+    }
     const path = match[2]!.replace(/[.,;:!?)]+$/, '')
     if (!path) continue
-    const start = match.index! + match[1]!.length
     if (start > last) parts.push(text.slice(last, start))
     parts.push(<span key={start} style={mention} title={path}>{basename(path)}</span>)
     last = start + 1 + path.length
@@ -96,10 +123,12 @@ function toReact(node: HastNode, key: number, inPre: boolean, openLink: (href: s
 
 /**
  * The sanitized tree for a message the user sent: the same GFM subset as agent prose, with `@path`
- * tokens shown as file-name spans. Links are inert because nothing here opens them.
+ * tokens shown as file-name spans and visual references as `◈ <title> › <label>` chips. A leading
+ * visual level marker line is the agent's, never the user's, so it is dropped. Links are inert
+ * because nothing here opens them.
  */
 export function renderUserMarkdown(text: string): ReactNode {
-  const tree = PROCESSOR.runSync(PROCESSOR.parse(text)) as HastNode
+  const tree = PROCESSOR.runSync(PROCESSOR.parse(text.replace(LEVEL_MARKER, ''))) as HastNode
   const noop = () => {}
   const blocks = (tree.children ?? []).map((child, index) => toReact(child, index, false, noop, true))
   const last = blocks.length - 1
