@@ -9,6 +9,7 @@ export type CallItem = Extract<ChatItem, { kind: 'activity' | 'file-change' | 't
 type ToolEntry = { name: string; input: Record<string, unknown> }
 
 const SUMMARY_LIMIT = 160
+const CALL_TEXT_LIMIT = 2000
 const DETAIL_LIMIT = 4000
 const TAIL_LINES = 8
 const TAIL_LIMIT = 800
@@ -27,13 +28,13 @@ export function oneLine(text: string, limit = SUMMARY_LIMIT): string {
 }
 
 /** The most telling field of a tool's input as one line, for activity summaries. */
-export function summarizeInput(input: Record<string, unknown> | undefined): string {
+export function summarizeInput(input: Record<string, unknown> | undefined, limit = SUMMARY_LIMIT): string {
   if (!input) return ''
   for (const key of ['command', 'file_path', 'path', 'pattern', 'url', 'query', 'description']) {
     const value = input[key]
-    if (typeof value === 'string' && value) return oneLine(value)
+    if (typeof value === 'string' && value) return oneLine(value, limit)
   }
-  return oneLine(JSON.stringify(input) ?? '')
+  return oneLine(JSON.stringify(input) ?? '', limit)
 }
 
 /** True when a shell command runs a test suite. */
@@ -239,7 +240,7 @@ function claudeToolItem(callId: string, name: string, input: Record<string, unkn
     return {
       kind: 'tests',
       callId,
-      command: oneLine(command, 400),
+      command: oneLine(command, CALL_TEXT_LIMIT),
       ...(output === undefined ? {} : parseTestCounts(output)),
       state,
       ...(output === undefined || tailOf(output) === undefined ? {} : { tail: tailOf(output) })
@@ -249,7 +250,7 @@ function claudeToolItem(callId: string, name: string, input: Record<string, unkn
     kind: 'activity',
     callId,
     tool: name,
-    summary: summarizeInput(input),
+    summary: summarizeInput(input, CALL_TEXT_LIMIT),
     state,
     ...(output ? { detail: capped(output) } : {})
   }
@@ -487,7 +488,7 @@ function codexEntriesUnchecked(item: Record<string, unknown>, phase: CodexPhase,
         ? {
             kind: 'tests',
             callId: id,
-            command: oneLine(command, 400),
+            command: oneLine(command, CALL_TEXT_LIMIT),
             ...(phase === 'completed' ? parseTestCounts(text) : {}),
             state,
             ...(phase === 'completed' && tailOf(text) !== undefined ? { tail: tailOf(text) } : {})
@@ -496,7 +497,7 @@ function codexEntriesUnchecked(item: Record<string, unknown>, phase: CodexPhase,
             kind: 'activity',
             callId: id,
             tool: 'Command',
-            summary: oneLine(command),
+            summary: oneLine(command, CALL_TEXT_LIMIT),
             state,
             ...(phase === 'completed' && text ? { detail: capped(text) } : {})
           }
@@ -542,12 +543,12 @@ function codexEntriesUnchecked(item: Record<string, unknown>, phase: CodexPhase,
     }
     case 'mcpToolCall': {
       const tool = [item.server, item.tool].filter((part) => typeof part === 'string' && part).join('/') || 'mcp'
-      const entry: ChatItem = { kind: 'activity', callId: id, tool, summary: summarizeInput(record(item.arguments) ?? undefined), state }
+      const entry: ChatItem = { kind: 'activity', callId: id, tool, summary: summarizeInput(record(item.arguments) ?? undefined, CALL_TEXT_LIMIT), state }
       calls.track(entry)
       return [{ role: 'tool', text: `Codex ${type}`, data: item, item: entry }]
     }
     case 'webSearch': {
-      const entry: ChatItem = { kind: 'activity', callId: id, tool: 'Web search', summary: oneLine(typeof item.query === 'string' ? item.query : ''), state: phase === 'started' ? 'running' : 'done' }
+      const entry: ChatItem = { kind: 'activity', callId: id, tool: 'Web search', summary: oneLine(typeof item.query === 'string' ? item.query : '', CALL_TEXT_LIMIT), state: phase === 'started' ? 'running' : 'done' }
       calls.track(entry)
       return [{ role: 'tool', text: `Codex ${type}`, data: item, item: entry }]
     }
@@ -650,13 +651,13 @@ function piToolItem(callId: string, name: string, args: Record<string, unknown>,
     return {
       kind: 'tests',
       callId,
-      command: oneLine(command, 400),
+      command: oneLine(command, CALL_TEXT_LIMIT),
       ...(output === undefined ? {} : parseTestCounts(output)),
       state,
       ...(output === undefined || tailOf(output) === undefined ? {} : { tail: tailOf(output) })
     }
   }
-  return { kind: 'activity', callId, tool: name, summary: summarizeInput(args), state, ...(output ? { detail: capped(output) } : {}) }
+  return { kind: 'activity', callId, tool: name, summary: summarizeInput(args, CALL_TEXT_LIMIT), state, ...(output ? { detail: capped(output) } : {}) }
 }
 
 /**

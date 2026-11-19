@@ -447,6 +447,14 @@
       },
       "anchor": "if (!input)",
       "reason": "Refuses an unusable mount input before any UI renders; no read has happened."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (!open && !clipped) return textSpan"
+      },
+      "anchor": "if (!open && !clipped)",
+      "reason": "Leaves a record that fits on its line as plain text instead of a disclosure button."
     }
   ],
   "actions": [
@@ -760,6 +768,15 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<button type=\"button\" style={RECORD_TOGGLE_STYLE} aria-expanded={open} onClick={onToggle}>"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the click to the onToggle handler, which only expands or collapses a cut-off answer record.",
+      "notAction": "forwarded"
     }
   ]
 }

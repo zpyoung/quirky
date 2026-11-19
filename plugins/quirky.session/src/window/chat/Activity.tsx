@@ -1,5 +1,5 @@
 import { useState, type CSSProperties } from 'react'
-import { CallDot, mono, muted } from './cards/Card'
+import { CallDot, CommandLine, mono, muted } from './cards/Card'
 import { summarizeActivity, type ActivityCall } from './turns'
 
 const summary = {
@@ -19,10 +19,15 @@ const list = {
   listStyle: 'none',
   borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
 } satisfies CSSProperties
-const row = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-6)', minWidth: 0 } satisfies CSSProperties
-const detail = { ...mono, ...muted, margin: 'var(--ui-space-2) 0 0', whiteSpace: 'pre-wrap' } satisfies CSSProperties
+const detail = {
+  ...mono,
+  ...muted,
+  margin: 'var(--ui-space-2) 0 0',
+  paddingInlineStart: 'calc(var(--ui-status-dot-size) + var(--ui-space-6))',
+  whiteSpace: 'pre-wrap'
+} satisfies CSSProperties
 
-/** A run of read-only tool calls folded into one line that expands to one row per call. */
+/** A run of read-only tool calls folded into one line that expands to one single-line row per call; each row opens to its full command and output. */
 export function Activity({ calls }: { calls: ActivityCall[] }) {
   const running = calls.some((call) => call.item.state === 'running')
   const [open, setOpen] = useState(running)
@@ -34,15 +39,12 @@ export function Activity({ calls }: { calls: ActivityCall[] }) {
       </summary>
       <ul style={list}>
         {calls.map((call) => (
-          <li key={call.seq} style={row} data-call-state={call.item.state}>
-            <CallDot state={call.item.state} />
-            <span>{call.item.summary}</span>
-            {call.item.detail && (
-              <details>
-                <summary style={muted}>Details</summary>
-                <pre style={detail}>{call.item.detail}</pre>
-              </details>
-            )}
+          <li key={call.seq} data-call-state={call.item.state}>
+            <CommandLine
+              text={call.item.summary}
+              lead={<CallDot state={call.item.state} />}
+              more={call.item.detail ? <pre style={detail}>{call.item.detail}</pre> : undefined}
+            />
           </li>
         ))}
       </ul>

@@ -343,6 +343,23 @@ function pageOf(all: StructuredMessage[], params: Record<string, any>): Structur
   return params.tail ? inRange.slice(-params.limit) : inRange.slice(0, params.limit)
 }
 
+/** happy-dom has no layout, so every element measures wider than its box while `mount` runs; the clipped state sticks after. */
+async function withClippedLines(mount: () => Promise<void>) {
+  const proto = HTMLElement.prototype
+  const own = { scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth') }
+  Object.defineProperty(proto, 'scrollWidth', { configurable: true, get: () => 500 })
+  Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => 100 })
+  try {
+    await mount()
+  } finally {
+    for (const key of ['scrollWidth', 'clientWidth'] as const) {
+      const descriptor = own[key]
+      if (descriptor) Object.defineProperty(proto, key, descriptor)
+      else delete (proto as unknown as Record<string, unknown>)[key]
+    }
+  }
+}
+
 async function mountChat({ messages = [], capabilities = CLAUDE, session: over = {}, handlers = {} }: Mount = {}) {
   fake = fakeContext({
     'quirky.structured/messages': () => messages,
@@ -653,6 +670,22 @@ describe('the cards', () => {
     expect(byLabel('Tests: pytest')!.textContent).toContain('Running tests')
   })
 
+  test('a test card keeps a long command on one clipped line and expands it', async () => {
+    const command = `bun test ${'test/long-path/'.repeat(30)}a.test.ts`
+    await withClippedLines(async () => {
+      await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'tests', callId: 't', command, state: 'running' })] })
+    })
+    const card = byLabel(`Tests: ${command}`)!
+    const text = card.querySelector<HTMLElement>('[data-command-text]')!
+    expect(text.style.whiteSpace).toBe('nowrap')
+    expect(text.style.textOverflow).toBe('ellipsis')
+    expect(card.querySelector<HTMLElement>('div')!.style.flexWrap).toBe('')
+    const toggle = card.querySelector('button')!
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(text.style.whiteSpace).toBe('pre-wrap')
+  })
+
   test('a steps card lists each step with its state and how many are done', async () => {
     await mountChat({
       messages: [
@@ -722,6 +755,58 @@ describe('the cards', () => {
       group.dispatchEvent(new Event('toggle'))
     })
     expect(group.open).toBe(true)
+  })
+
+  test('an activity row keeps the dot and the command on one clipped line, with the full command as its hover title', async () => {
+    const command = `rg -n ${'x'.repeat(300)}`
+    await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Bash', command, 'running')] })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    const text = row.querySelector<HTMLElement>('[data-command-text]')!
+    expect(text.getAttribute('title')).toBe(command)
+    expect(text.style.whiteSpace).toBe('nowrap')
+    expect(text.style.overflow).toBe('hidden')
+    expect(text.style.textOverflow).toBe('ellipsis')
+    const line = text.closest('button')?.parentElement ?? text.parentElement!
+    expect(line.style.display).toBe('flex')
+    expect(line.style.flexWrap).toBe('')
+    expect(line.querySelector('[aria-label="Running"]')).not.toBeNull()
+  })
+
+  test('a short activity row with no output has nothing to expand', async () => {
+    await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Read', 'Read src/a.ts', 'running')] })
+    expect(byLabel('Tool activity')!.querySelector('li button')).toBeNull()
+  })
+
+  test('a clipped activity row expands in place to the whole command and collapses again', async () => {
+    const command = `rg -n ${'x'.repeat(300)}`
+    await withClippedLines(async () => {
+      await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Bash', command, 'running')] })
+    })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    const toggle = row.querySelector('button')!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => toggle.click())
+    const text = row.querySelector<HTMLElement>('[data-command-text]')!
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(text.textContent).toBe(command)
+    expect(text.style.whiteSpace).toBe('pre-wrap')
+    expect(text.hasAttribute('title')).toBe(false)
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(text.style.whiteSpace).toBe('nowrap')
+  })
+
+  test('an activity row with output opens to the full command and the output together', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), msg(2, { kind: 'activity', callId: 'a', tool: 'Bash', summary: 'git status', state: 'done', detail: 'nothing to commit' })]
+    })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    expect(row.querySelector('pre')).toBeNull()
+    const toggle = row.querySelector('button')!
+    expect(toggle.textContent).toBe('git status')
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(row.querySelector('pre')!.textContent).toBe('nothing to commit')
   })
 
   test('an activity group with a running call starts open', async () => {

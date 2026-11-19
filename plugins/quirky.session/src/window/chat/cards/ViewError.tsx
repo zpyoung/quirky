@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Badge } from '@quirky/ui'
-import { Card, grow, mono, muted } from './Card'
+import { Card, clipped, grow, mono, muted } from './Card'
 
 const errors = { margin: 0, paddingInlineStart: 'var(--ui-space-16)' } satisfies CSSProperties
 const source = {
@@ -21,7 +21,7 @@ export function ViewError({ title, errors: messages, source: spec, agent }: { ti
       tone="failing"
       header={
         <>
-          <strong>{title}</strong>
+          <strong style={clipped} title={title}>{title}</strong>
           {agent && <Badge>{`by ${agent}`}</Badge>}
           <span style={grow} />
           <Badge tone="failing">{"couldn't show"}</Badge>
