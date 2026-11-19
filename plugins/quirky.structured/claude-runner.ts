@@ -439,7 +439,7 @@ class ClaudeRunner implements StructuredRunner {
           includePartialMessages: true,
           canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
           ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
-          ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
+          env: environmentOf({ ...launchOptions.env, CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1' }),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
         }
@@ -976,8 +976,39 @@ class ClaudeRunner implements StructuredRunner {
     this.context.reportUsage?.(sessionId, { cache: { callStartedAt: run.callStartedAt, wrote5m, wrote1h, read } })
   }
 
+  /**
+   * Keeps the session status in step with turns Claude runs on its own: a background task or
+   * subagent finishing, a hook or a scheduled wakeup can start a turn with no send from Quirky.
+   * Top-level model output reopens the turn; Claude's idle signal is the authoritative turn end.
+   */
+  private trackTurn(sessionId: string, run: Running, msg: any): void {
+    if (msg?.type === 'system' && msg.subtype === 'session_state_changed') {
+      if (msg.state === 'running') this.openTurn(sessionId, run)
+      else if (msg.state === 'idle' && (run.turnStartedAt !== null || run.openTurns > 0)) {
+        // claude can fold a queued message into the running turn, leaving one result for two sends
+        run.turnStartedAt = null
+        run.openTurns = 0
+        run.stream.reset()
+        this.context.setStatus(sessionId, 'done')
+      }
+      return
+    }
+    const topLevel = msg?.parent_tool_use_id === null || msg?.parent_tool_use_id === undefined
+    if ((msg?.type === 'assistant' || msg?.type === 'stream_event') && topLevel) this.openTurn(sessionId, run)
+  }
+
+  private openTurn(sessionId: string, run: Running): void {
+    // echoes of an interrupted turn arrive before its result and must not reopen it
+    if (run.turnStartedAt !== null || run.interrupted) return
+    run.turnStartedAt = Date.now()
+    run.openTurns = Math.max(run.openTurns, 1)
+    this.context.setStatus(sessionId, 'working')
+  }
+
   private async journal(sessionId: string, msg: any): Promise<void> {
     const run = this.running.get(sessionId)
+    if (run) this.trackTurn(sessionId, run, msg)
+    if (msg?.type === 'system' && msg.subtype === 'session_state_changed') return
     const delta = claudeTextDelta(msg)
     if (delta !== null) {
       const item = run?.stream.push('assistant', delta, Date.now())
@@ -1056,7 +1087,7 @@ class ClaudeRunner implements StructuredRunner {
       }
       this.context.setStatus(sessionId, 'exited')
     } else {
-      this.context.setStatus(sessionId, 'done')
+      this.context.setStatus(sessionId, run !== undefined && run.openTurns > 0 ? 'working' : 'done')
     }
   }
 }

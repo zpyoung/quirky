@@ -815,7 +815,12 @@ class CodexRunner implements StructuredRunner {
         const turn = params.turn
         if (typeof turn !== 'object' || turn === null || Array.isArray(turn)) return
         const id = (turn as Record<string, unknown>).id
-        if (typeof id === 'string' && id.length > 0) run.activeTurnId = id
+        if (typeof id !== 'string' || id.length === 0 || id === run.interruptedTurnId) return
+        run.activeTurnId = id
+        if (run.turnStartedAt === null) {
+          run.turnStartedAt = Date.now()
+          if (run.pendingApprovalCount === 0) this.context.setStatus(run.sessionId, 'working')
+        }
         return
       }
       case 'turn/completed': {

@@ -436,6 +436,87 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
+  const success = { type: 'result', subtype: 'success', result: 'ok', is_error: false }
+  const turnEnds = () => messages.filter((m) => (m.item as any)?.kind === 'turn-end')
+
+  test('a queued second send keeps the session working after the first result', async () => {
+    const query = await begin()
+    await runner.send('s_1', 'and then this')
+    query.emit(assistantText('first'))
+    query.emit(success)
+    await until(() => turnEnds().length === 1)
+    expect(statuses.at(-1)).toBe('working')
+    expect(statuses).not.toContain('done')
+    query.emit(assistantText('second'))
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    expect(turnEnds()).toHaveLength(2)
+  })
+
+  test('a turn Claude starts by itself after a result shows working until its own result', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    // a background task finishing re-invokes the model with no send from Quirky
+    query.emit({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'message_start' } })
+    query.emit({ type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id: 't9', name: 'Bash', input: { command: 'ls' } }] } })
+    await until(() => statuses.at(-1) === 'working')
+    query.emit({ ...success, duration_ms: 1200 })
+    await until(() => statuses.at(-1) === 'done')
+    expect(statuses).toEqual(['working', 'done', 'working', 'done'])
+    expect(turnEnds()).toHaveLength(2)
+    expect(messages.find((m) => (m.item as any)?.callId === 't9' && (m.item as any)?.state === 'done')).toBeDefined()
+  })
+
+  test('a self-started turn can be interrupted', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit(assistantText('on my own'))
+    await until(() => statuses.at(-1) === 'working')
+    await runner.interrupt('s_1')
+    expect(query.interrupted).toBe(1)
+    expect(statuses.at(-1)).toBe('done')
+    expect((turnEnds().at(-1)?.item as any)?.state).toBe('stopped')
+  })
+
+  test('subagent output after a result does not reopen the turn', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit({ ...assistantText('sub'), parent_tool_use_id: 'task_1' })
+    await tick()
+    expect(statuses.at(-1)).toBe('done')
+  })
+
+  test("Claude's running and idle signals open and close the turn", async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'running' })
+    await until(() => statuses.at(-1) === 'working')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle' })
+    await until(() => statuses.at(-1) === 'done')
+    expect(messages.some((m) => m.text.includes('session_state_changed'))).toBe(false)
+  })
+
+  test('idle ends the wait when Claude folded a queued send into the running turn', async () => {
+    const query = await begin()
+    await runner.send('s_1', 'steer')
+    query.emit(success)
+    await until(() => turnEnds().length === 1)
+    expect(statuses.at(-1)).toBe('working')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle' })
+    await until(() => statuses.at(-1) === 'done')
+    await runner.interrupt('s_1')
+    expect(query.interrupted).toBe(0)
+  })
+
+  test('asks Claude to report its running and idle state', async () => {
+    await begin()
+    expect(queries[0]?.params.options?.env?.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS).toBe('1')
+  })
+
 
   test('failed results journal the error, tear down the query, and exit without publishing done', async () => {
     const query = await begin()
