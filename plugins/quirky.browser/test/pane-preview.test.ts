@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { run } from '../../../packages/cli/src/main'
@@ -177,6 +177,31 @@ test('the browser pane preview CLI command converts through the same API', async
     const converted = JSON.parse(result.stdout) as PaneTab
     expect(converted.document?.path).toBe(join(root, 'site', 'index.html'))
     expect(converted.convertedFrom).toEqual({ kind: 'url', url: 'about:blank' })
+  } finally {
+    await h.cleanup()
+  }
+}, 30_000)
+
+test('passive previews open a single regular file outside the worktree', async () => {
+  const h = await startBrowserHarness()
+  try {
+    const worktree = await h.addFolderWorktree('preview-outside')
+    const scratch = join(realpathSync(h.home), 'scratchpad', 'project')
+    mkdirSync(scratch, { recursive: true })
+    const canvas = join(scratch, 'canvas.json')
+    writeFileSync(canvas, '{"nodes":[]}')
+    const opened = await call(h, 'paneOpen', { worktree: `id:${worktree}`, url: canvas })
+    expect(opened.preview?.path).toBe(canvas)
+    expect(opened.url.startsWith('http://127.0.0.1:')).toBe(true)
+    expect(opened.sourcePath).toBeUndefined()
+
+    const navigated = await call(h, 'paneNavigate', { pane: opened.id, input: canvas })
+    expect(navigated.preview?.path).toBe(canvas)
+
+    // a symlink is canonicalized to its target, so only a link to a non-file is refused
+    const folderLink = join(scratch, 'folder-link.json')
+    symlinkSync(scratch, folderLink)
+    await expect(call(h, 'paneOpen', { worktree: `id:${worktree}`, url: folderLink })).rejects.toThrow('regular file')
   } finally {
     await h.cleanup()
   }
