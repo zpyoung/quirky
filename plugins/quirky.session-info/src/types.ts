@@ -10,7 +10,7 @@ export type PanelState = {
 
 export type SessionInfo = {
   identity: Identity
-  liveActivity: LiveActivity
+  liveActivity?: LiveActivity
   usage?: Usage
   context?: Context
   filesTouched?: FilesTouched

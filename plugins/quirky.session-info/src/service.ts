@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
-import type { PluginContext, PluginStore, QuirkyEvent } from '@quirky/protocol'
+import type { PluginContext, PluginStore, QuirkyEvent, UsageResult } from '@quirky/protocol'
 import { isRecord } from './json'
 import { inspectMcp, type McpInspectionResult } from './mcp-inspector'
 import { scanClaudeUsage } from './usage-scanner'
@@ -294,6 +294,7 @@ export class SessionInfoService {
     const openSections = this.openSections()
     const focused = typeof params.session === 'string' ? null : await this.focusedSession()
     const session = typeof params.session === 'string' ? await this.requireSession(params.session) : focused?.session ?? null
+    if (session?.kind === 'structured') return this.structuredState(session, openSections)
     if (!session || session.kind !== 'terminal' || session.agent === 'shell') return makeEmpty(openSections)
     const location = typeof params.session === 'string' ? await this.locationForSession(session) : focused?.location ?? null
     const snapshot = this.snapshotFor(session)
@@ -307,6 +308,52 @@ export class SessionInfoService {
     }
 
   }
+
+  /**
+   * The projection of a native chat: identity plus the conversation usage the chat header shows.
+   * Terminal-only sections stay absent, and a failing usage call degrades to an errored section.
+   */
+  private async structuredState(session: SessionRecord, openSections: SectionId[]): Promise<PanelState> {
+    const providerSessionId = sessionProviderId(session)
+    const identity: Identity = {
+      agent: session.agent,
+      sessionId: session.id,
+      providerSessionId,
+      pane: null,
+      worktreeId: session.worktreeId,
+      cwd: session.cwd,
+      startedAt: session.createdAt,
+      updatedAt: session.lastActivityAt
+    }
+    return {
+      session: session.id,
+      pane: null,
+      workspace: session.worktreeId,
+      openSections,
+      info: { identity, usage: await this.structuredUsage(session.id) }
+    }
+  }
+
+  private async structuredUsage(sessionId: string): Promise<Usage> {
+    try {
+      const result = (await this.context.call('quirky.structured/usage', { session: sessionId })) as UsageResult | null
+      const totals = result?.conversation
+      if (!totals) return { status: 'waiting' }
+      return {
+        status: 'ready',
+        freshness: 'fresh',
+        totalTokens: totals.total,
+        input: totals.input,
+        output: totals.output,
+        cacheRead: totals.cacheRead,
+        cacheWrite: totals.cacheWrite,
+        updatedAt: Date.now()
+      }
+    } catch (error) {
+      return { status: 'waiting', error: boundedError(error) }
+    }
+  }
+
   sections(params: Record<string, unknown>): { open: SectionId[] } {
     if (!Object.hasOwn(params, 'open')) return { open: this.openSections() }
     if (!Array.isArray(params.open) || params.open.some((id) => typeof id !== 'string' || !Object.hasOwn(SECTION_SET, id))) {
@@ -562,6 +609,11 @@ export class SessionInfoService {
         else if (this.activeKeys.has(session.id)) this.snapshotFor(session)
         this.emitChanged(session.id)
       }
+      return
+    }
+    if (event.type === 'quirky.structured/usageChanged') {
+      const data = event.data as { sessionId?: unknown }
+      if (typeof data?.sessionId === 'string') this.emitChanged(data.sessionId)
       return
     }
     if (event.type === 'quirky.agent-status/changed') {

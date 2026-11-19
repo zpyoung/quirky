@@ -5,6 +5,7 @@ import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } f
 import type { Context as ContextInfo, FilesTouched, Inspection, LiveActivity, PanelState, PlanWindow, SectionId, Usage } from '../types'
 import { contextThreshold, formatCount, formatPercentage, formatTimestamp } from './format'
 import { subscribeCopyFeedback, type CopyFeedback } from './feedback'
+import { pinnedSession, setPinnedSession, subscribePinnedSession } from './pinned'
 type Props = { context: UiPluginContext; report?(state: unknown): void }
 type EnableTelemetryResult = { statusline?: Inspection['statusline']; nextLaunchEffect: string }
 type Section = { id: SectionId; title: string }
@@ -361,7 +362,8 @@ export function SessionInfoPanel({ context, report }: Props) {
     setLoadError(null)
     clock.lastStartedAt = Date.now()
     try {
-      const fetched = await context.call('quirky.session-info/get', {}) as PanelState
+      const pin = pinnedSession()
+      const fetched = await context.call('quirky.session-info/get', pin ? { session: pin } : {}) as PanelState
       if (!aliveRef.current || request !== requestRef.current) return
       if (connection.current.status === undefined) connection.current.status = 'connected'
       let next = fetched
@@ -418,6 +420,10 @@ export function SessionInfoPanel({ context, report }: Props) {
     connection.current.failed = false
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.terminal/focusContextChanged') {
+        if (pinnedSession() !== null) {
+          setPinnedSession(null)
+          return
+        }
         const workspace = eventWorkspace(event)
         if (workspace !== undefined && workspace !== clock.focusWorkspace) {
           clock.focusWorkspace = workspace
@@ -437,8 +443,10 @@ export function SessionInfoPanel({ context, report }: Props) {
       connection.current.status = status
       if (reconnected) void reload(true)
     })
+    const unsubscribePinned = subscribePinnedSession(() => void reload(true))
     invalidateAutomatically()
     return () => {
+      unsubscribePinned()
       aliveRef.current = false
       automaticDirtyRef.current = false
       clearAutomaticTimer()
@@ -465,7 +473,7 @@ export function SessionInfoPanel({ context, report }: Props) {
   const info = projection?.info ?? null
   const openSections = projection?.openSections ?? ['liveActivity']
   const showHooks = projection !== null && projection.workspace !== null
-  const hasHooksSection = showHooks && !!info
+  const hasHooksSection = showHooks && !!info?.liveActivity
   const hooksOpen = openSections.includes('hooksAndMcp')
 
   useEffect(() => {
@@ -574,7 +582,8 @@ export function SessionInfoPanel({ context, report }: Props) {
           {projection && info && <div style={BODY_STYLE}>
             {actionError && <InlineError message={actionError} />}
             {CORE_SECTIONS.filter(({ id }) => {
-              if (id === 'identity' || id === 'liveActivity') return true
+              if (id === 'identity') return true
+              if (id === 'liveActivity') return info?.liveActivity !== undefined
               if (id === 'usage') return info?.usage !== undefined
               if (id === 'context') return info?.context !== undefined
               if (id === 'filesTouched') return info?.filesTouched !== undefined
@@ -582,7 +591,7 @@ export function SessionInfoPanel({ context, report }: Props) {
             }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>
               {id === 'identity' && <IdentityContent state={projection} copied={copied} context={context} track={track} />}
               {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}
-              {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}
+              {id === 'liveActivity' && info.liveActivity && <LiveActivityContent activity={info.liveActivity} />}
               {id === 'context' && info.context && <ContextContent detail={info.context} />}
               {id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />}
               {id === 'hooksAndMcp' && <InspectionContent inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)} />}

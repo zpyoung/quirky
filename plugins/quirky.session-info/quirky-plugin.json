@@ -98,7 +98,7 @@
       { "id": "transcript", "title": "Session Transcript" }
     ],
     "command": [
-      { "id": "open", "title": "Open Session Info", "description": "Open the Session Info panel." },
+      { "id": "open", "title": "Open Session Info", "description": "Open the Session Info panel, optionally focused on one session until terminal focus moves.", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
       { "id": "copy-id", "title": "Copy Provider Session ID", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
       { "id": "open-history", "title": "Open Session History", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
       { "id": "focus-pane", "title": "Focus Agent Pane", "args": { "type": "object", "properties": { "session": { "type": "string" } } } },
