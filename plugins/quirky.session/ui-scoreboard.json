@@ -3431,6 +3431,42 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onPointerEnter={() => setDividerHover(true)}"
+      },
+      "anchor": "onPointerEnter",
+      "transient": "hover",
+      "reason": "Lights the divider line while the pointer is over it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onPointerLeave={() => setDividerHover(false)}"
+      },
+      "anchor": "onPointerLeave",
+      "transient": "hover",
+      "reason": "Clears the divider's hover light."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onFocus={(event) => setDividerFocus(focusVisible(event.currentTarget))}"
+      },
+      "anchor": "onFocus",
+      "transient": "hover",
+      "reason": "Lights the divider line when it has keyboard focus."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onBlur={() => setDividerFocus(false)}"
+      },
+      "anchor": "onBlur",
+      "transient": "hover",
+      "reason": "Clears the divider's focus light."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
         "quote": "onKeyDown={onDividerKey}"
       },
       "anchor": "onKeyDown",

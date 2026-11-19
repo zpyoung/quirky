@@ -133,15 +133,29 @@ export function useBodyMetrics(ref: RefObject<HTMLElement | null>): { width: num
 const clampRatio = (ratio: number) => Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
 
 const divider = {
+  display: 'flex',
+  justifyContent: 'center',
   flex: '0 0 auto',
   alignSelf: 'stretch',
-  width: 'var(--ui-space-4)',
+  width: 'var(--ui-space-12)',
   cursor: 'col-resize',
   touchAction: 'none',
-  background: 'var(--ui-transparent)',
-  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
+  outline: 'none',
+  background: 'var(--ui-transparent)'
 } satisfies CSSProperties
-const dividerActive = { ...divider, borderInlineStart: 'var(--ui-border-width) solid var(--ui-accent)' } satisfies CSSProperties
+/** Whether `element` got focus from the keyboard; the lit line stands in for the outline, so a click must not leave it lit. */
+const focusVisible = (element: HTMLElement): boolean => {
+  try {
+    return element.matches(':focus-visible')
+  } catch {
+    return true
+  }
+}
+const dividerLine = (lit: boolean): CSSProperties => ({
+  width: lit ? 'var(--ui-space-2)' : 'var(--ui-border-width)',
+  background: lit ? 'var(--ui-accent)' : 'var(--ui-border)',
+  pointerEvents: 'none'
+})
 const rail = {
   display: 'flex',
   flex: '0 0 auto',
@@ -256,6 +270,9 @@ export function VisualPanel({
 }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO)
   const [dragging, setDragging] = useState(false)
+  const [dividerHover, setDividerHover] = useState(false)
+  const [dividerFocus, setDividerFocus] = useState(false)
+  const dividerLit = dragging || dividerHover || dividerFocus
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [pinned, setPinned] = useState<Record<string, number>>({})
@@ -441,10 +458,17 @@ export function VisualPanel({
         aria-valuemax={Math.round(MAX_RATIO * 100)}
         aria-valuenow={Math.round(ratio * 100)}
         tabIndex={0}
-        style={dragging ? dividerActive : divider}
+        data-lit={dividerLit ? 'true' : undefined}
+        style={divider}
         onPointerDown={onStartDrag}
+        onPointerEnter={() => setDividerHover(true)}
+        onPointerLeave={() => setDividerHover(false)}
+        onFocus={(event) => setDividerFocus(focusVisible(event.currentTarget))}
+        onBlur={() => setDividerFocus(false)}
         onKeyDown={onDividerKey}
-      />
+      >
+        <span style={dividerLine(dividerLit)} />
+      </div>
       <aside style={panel(ratio)} aria-label="Visual panel">
         <header style={header}>
           <h3 style={heading}>Visuals</h3>

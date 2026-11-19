@@ -2111,6 +2111,21 @@ describe('the visual panel', () => {
     expect(separator()!.getAttribute('aria-valuenow')).toBe('30')
   })
 
+  test('the divider has a 12px grab area and lights up on hover and while dragging', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    expect(separator()!.style.width).toBe('var(--ui-space-12)')
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+    // react derives pointerenter/leave from pointerover/out, so those are what the test dispatches
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })))
+    expect(separator()!.getAttribute('data-lit')).toBe('true')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })))
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    expect(separator()!.getAttribute('data-lit')).toBe('true')
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+  })
+
   test('a drag cannot take the panel under 20% or over 80% of the chat', async () => {
     await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
     await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
