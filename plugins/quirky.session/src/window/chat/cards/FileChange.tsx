@@ -1,5 +1,5 @@
 import type { FileChangeItem } from '../turns'
-import { callStateLabel, Card, CallDot, Delta, grow, mono } from './Card'
+import { callStateLabel, Card, CallDot, clipped, Delta, grow, mono } from './Card'
 
 /** `path` relative to `root` when it lies inside it, else unchanged. */
 export function displayPath(path: string, root: string): string {
@@ -18,7 +18,7 @@ export function FileChange({ item, root }: { item: FileChangeItem; root: string 
       tone={item.state === 'failed' ? 'failing' : 'neutral'}
       header={
         <>
-          <span style={mono} title={item.path}>{shown}</span>
+          <span style={{ ...mono, ...clipped }} title={item.path}>{shown}</span>
           <Delta added={item.added} removed={item.removed} />
           <span style={grow} />
           {item.state !== 'done' && (

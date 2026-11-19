@@ -292,6 +292,48 @@ describe('the ask card view', () => {
     expect(second.querySelector('[data-approval-record]')?.textContent).toBe(`Expired: ${COMMAND}`)
   })
 
+  test('an approval record stays on one clipped line and expands to the whole command when it is cut off', async () => {
+    const always = resolvedAsk(approvalAsk('ask_s'), {
+      status: 'answered',
+      askId: 'ask_s',
+      answers: { decision: { value: 'always', label: 'Allow for this session', source: 'option' } },
+      skipped: ['reason'],
+      summary: ''
+    })
+    const fake = fakeContext([always])
+    // happy-dom has no layout, so make the record measure wider than its box while it mounts
+    const proto = HTMLElement.prototype
+    const own = { scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth') }
+    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get: () => 500 })
+    Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => 100 })
+    let element: HTMLElement
+    try {
+      element = await mountCard(fake, { askId: 'ask_s' })
+    } finally {
+      for (const key of ['scrollWidth', 'clientWidth'] as const) {
+        const descriptor = own[key]
+        if (descriptor) Object.defineProperty(proto, key, descriptor)
+        else delete (proto as unknown as Record<string, unknown>)[key]
+      }
+    }
+    const record = element.querySelector('[data-approval-record]')!
+    const text = record.querySelector<HTMLElement>('span[title]')!
+    expect(text.style.whiteSpace).toBe('nowrap')
+    expect(text.style.textOverflow).toBe('ellipsis')
+    const toggle = record.querySelector('button')!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(record.textContent).toBe(`Allowed for this session: ${COMMAND}`)
+    expect(record.querySelector<HTMLElement>('span')!.style.whiteSpace).toBe('pre-wrap')
+  })
+
+  test('an approval record that fits has nothing to expand', async () => {
+    const expired = resolvedAsk(approvalAsk('ask_e'), { status: 'timed_out', askId: 'ask_e', answers: {}, skipped: [], summary: '' })
+    const element = await mountCard(fakeContext([expired]), { askId: 'ask_e' })
+    expect(element.querySelector('[data-approval-record] button')).toBeNull()
+  })
+
   test('an answered ordinary ask renders a record with its summary', async () => {
     const answered = resolvedAsk(ordinaryAsk(), {
       status: 'answered',

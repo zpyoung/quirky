@@ -108,6 +108,7 @@ function isModeName(value: unknown): value is PermissionModeName {
 type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' } | { kind: 'superseded' }
 
 type PendingPlan = {
+  version: number
   askId: string | null
   /** Set by whoever claims the plan first: an answer, feedback, a mode switch or a stop. */
   settled: boolean
@@ -235,6 +236,8 @@ type Running = {
   planArrivals: number
   /** ExitPlanMode calls received and not yet finished. */
   planInFlight: number
+  /** Bumped by each interrupt or stop, so a queued call can tell the turn it arrived in was cut short. */
+  planCancels: number
   /** The mode an approval asked Claude to switch to, until the turn's result confirms it. */
   pendingApprovalTarget: 'auto' | 'acceptEdits' | 'default' | null
   approvedVersion: number | null
@@ -413,6 +416,7 @@ class ClaudeRunner implements StructuredRunner {
       planQueue: Promise.resolve(),
       planArrivals: 0,
       planInFlight: 0,
+      planCancels: 0,
       pendingApprovalTarget: null,
       approvedVersion: null,
       slashCommands: null,
@@ -583,6 +587,7 @@ class ClaudeRunner implements StructuredRunner {
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended || run.turnStartedAt === null) return
+    run.planCancels++
     this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
     run.interrupted = true
@@ -605,6 +610,7 @@ class ClaudeRunner implements StructuredRunner {
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
+    run.planCancels++
     this.running.delete(sessionId)
     this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
@@ -680,6 +686,7 @@ class ClaudeRunner implements StructuredRunner {
    */
   private async exitPlanMode(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
     const arrival = ++run.planArrivals
+    const cancels = run.planCancels
     const previous = run.planInFlight === 0 ? null : run.planQueue
     run.planInFlight++
     const turn = Promise.withResolvers<void>()
@@ -688,6 +695,10 @@ class ClaudeRunner implements StructuredRunner {
     this.settlePlan(run, { kind: 'superseded' })
     try {
       if (previous) await previous
+      if (cancels !== run.planCancels || run.stopped || run.ended) {
+        this.closeSupersededPlans(sessionId, run)
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
       // only the newest call may install a live ask; a call overtaken while queued is denied unseen
       if (arrival !== run.planArrivals) return { behavior: 'deny', message: SUPERSEDED_PLAN }
       return await this.presentPlan(sessionId, run, input)
@@ -717,6 +728,7 @@ class ClaudeRunner implements StructuredRunner {
       ...(unchanged ? { unchanged: true } : {})
     }
     const pending: PendingPlan = {
+      version,
       askId: null,
       settled: false,
       interrupt: Promise.withResolvers<PlanInterrupt>(),
@@ -783,6 +795,17 @@ class ClaudeRunner implements StructuredRunner {
       if (run.pendingPlan === pending) run.pendingPlan = null
       pending.settled = true
       pending.done.resolve()
+    }
+  }
+
+  /**
+   * Journals as not answered, reason stopped, every version left waiting with no live ask: a plan
+   * superseded by a call that was then cancelled before it could present. The one place that happens.
+   */
+  private closeSupersededPlans(sessionId: string, run: Running): void {
+    for (const item of [...run.plans.values()]) {
+      if (item.status !== 'waiting' || item.version === run.pendingPlan?.version) continue
+      this.appendPlan(sessionId, run, { ...withoutAsk(item), status: 'not-answered', reason: 'stopped' })
     }
   }
 

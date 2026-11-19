@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { TestsItem } from '../turns'
-import { callStateLabel, Card, CallDot, grow, mono, muted } from './Card'
+import { callStateLabel, Card, CallDot, CommandLine, grow, mono, muted } from './Card'
 
 const counts = { display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 'var(--ui-space-12)' } satisfies CSSProperties
 const big = { fontSize: 'var(--ui-font-title)', fontWeight: 600 } satisfies CSSProperties
@@ -26,8 +26,7 @@ export function TestResults({ item }: { item: TestsItem }) {
       tone={failing ? 'failing' : 'neutral'}
       header={
         <>
-          <span style={mono}>{item.command}</span>
-          <span style={grow} />
+          <CommandLine text={item.command} textStyle={mono} style={grow} />
           {item.state !== 'done' && (
             <>
               <CallDot state={item.state} />

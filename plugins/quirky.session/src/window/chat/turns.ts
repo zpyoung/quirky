@@ -64,11 +64,12 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
 
 /**
  * `messages` (in journal order) as turns. A `user` item starts a turn, and a message before the
- * first one goes in a turn with no user message; a `user` item the agent injected itself is
- * dropped. Of the items sharing a `callId` only the last counts, shown where the first appeared, and
- * the same holds for the `plan` items of one version across turns. `mode` items only feed the
- * composer and never render. Messages with no `item` stay as `legacy` blocks, and `status` items and
- * diagnostics are left out unless `showAll`.
+ * first one goes in a turn with no user message, except a `turn-end` or a `plan` that nothing else
+ * shows up beside, such as what a resumed chat journals before its first message; a `user` item the
+ * agent injected itself is dropped. Of the items sharing a `callId` only the last counts, shown
+ * where the first appeared, and the same holds for the `plan` items of one version across turns.
+ * `mode` items only feed the composer and never render. Messages with no `item` stay as `legacy`
+ * blocks, and `status` items and diagnostics are left out unless `showAll`.
  */
 export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean } = {}): Turn[] {
   return groupChatTurns([messages], options)[0] ?? []
@@ -88,8 +89,16 @@ export function groupChatTurns(chats: StructuredMessage[][], { showAll = false }
 function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<number, PlainEntry>): Draft[] {
   const drafts: Draft[] = []
   const calls = new Map<string, CallEntry>()
+  let unplaced: { message: StructuredMessage; version: number; entry: PlainEntry }[] = []
+  const dropUnplaced = () => {
+    for (const { version } of unplaced) plans.delete(version)
+    unplaced = []
+  }
   const open = (message: StructuredMessage, user: Turn['user']): Draft => {
-    const draft: Draft = { turn: { key: `turn-${message.seq}`, at: message.at, user, blocks: [], end: null }, entries: [] }
+    if (user !== null) dropUnplaced()
+    const first = unplaced[0]?.message ?? message
+    const draft: Draft = { turn: { key: `turn-${first.seq}`, at: first.at, user, blocks: [], end: null }, entries: unplaced.map(({ entry }) => entry) }
+    unplaced = []
     drafts.push(draft)
     return draft
   }
@@ -109,11 +118,25 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
     }
     if (item.kind === 'status' && !showAll) continue
     if (item.kind === 'mode') continue
-    const draft = drafts[drafts.length - 1] ?? open(message, null)
     if (item.kind === 'turn-end') {
-      draft.turn.end = { state: item.state, ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }) }
+      const ended = drafts[drafts.length - 1]
+      if (ended) ended.turn.end = { state: item.state, ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }) }
       continue
     }
+    if (item.kind === 'plan') {
+      const existing = plans.get(item.version)
+      if (existing) {
+        existing.item = item
+        continue
+      }
+      const entry: PlainEntry = { kind: 'plain', seq: message.seq, item }
+      plans.set(item.version, entry)
+      const current = drafts[drafts.length - 1]
+      if (current) current.entries.push(entry)
+      else unplaced.push({ message, version: item.version, entry })
+      continue
+    }
+    const draft = drafts[drafts.length - 1] ?? open(message, null)
     if (isCall(item)) {
       const existing = calls.get(callIdOf(item))
       if (existing) {
@@ -126,20 +149,10 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
       draft.entries.push(entry)
       continue
     }
-    if (item.kind === 'plan') {
-      const existing = plans.get(item.version)
-      if (existing) {
-        existing.item = item
-        continue
-      }
-      const entry: PlainEntry = { kind: 'plain', seq: message.seq, item }
-      plans.set(item.version, entry)
-      draft.entries.push(entry)
-      continue
-    }
     draft.entries.push({ kind: 'plain', seq: message.seq, item })
   }
 
+  dropUnplaced()
   return drafts
 }
 
