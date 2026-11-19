@@ -280,7 +280,7 @@ describe('the chat transcript header', () => {
     const { context, page } = await openComposer()
     try {
       const trigger = page.getByRole('button', { name: 'More actions' })
-      const title = page.getByRole('heading', { name: 'Claude', exact: true })
+      const title = page.getByRole('heading', { name: 'Rename chat: Claude', exact: true })
       const triggerBox = await trigger.boundingBox()
       const titleBox = await title.boundingBox()
       const headerBox = await page.locator('#structured-view header').boundingBox()
