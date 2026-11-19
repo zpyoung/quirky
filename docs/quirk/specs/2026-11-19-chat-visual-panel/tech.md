@@ -214,9 +214,10 @@ A click outlines the element and runs C8 `chat-point`.
   - Claude: `options.systemPrompt = {type: 'preset', preset: 'claude_code', append}`
   - Codex: `developerInstructions` on `thread/start` and `thread/resume`
   - pi and omp: `--append-system-prompt <text>` in `piLaunchArgs`
-- The per-turn marker carries the current level.
+- The starting level travels with the guidance. `appendInstructions` is `visualGuidance()` followed by the line `This chat's visual level is <level>.`, built from the chat's level at start or resume time. That counts as the level being announced.
+- A mid-chat change is carried by a per-turn marker.
   - CONFIG: the marker is the first line `[quirky visual level: <level>]` followed by `\n`.
-  - Structured prepends it to the outgoing user text when the chat's level differs from the last level it announced (persisted per session), and on the first message of a session or resume.
+  - Structured prepends it to the outgoing user text only when the chat's level differs from the last level announced, whether announced by the guidance or by an earlier marker. A session that never changes level never carries a marker, so existing exact-text expectations hold.
   - The marker is part of the agent-visible text and must never render in the transcript (C14).
 
 ### C13. Reference pill text form (SC-11)
