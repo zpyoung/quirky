@@ -249,7 +249,7 @@ export class WorktreeSessions {
     }
     if (this.stopped) return
     const byId = new Map(sessions.map((session) => [session.id, session]))
-    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id)
+    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id, true)
     const loadedSessions = [...byId.values()]
     pruneShowAllEvents(worktree.id, loadedSessions)
     this.commit({
@@ -276,10 +276,13 @@ export class WorktreeSessions {
     if (this.applyToMap(byId, event, worktree.id)) this.commit({ sessions: [...byId.values()] })
   }
 
-  private applyToMap(byId: Map<string, Session>, event: QuirkyEvent, worktreeId: string): boolean {
+  /** Applies one session event; a replayed event older than the record it would replace is dropped. */
+  private applyToMap(byId: Map<string, Session>, event: QuirkyEvent, worktreeId: string, replay = false): boolean {
     const data = (event as { data?: unknown }).data as { session?: Session; sessionId?: string } | undefined
     if (event.type === 'quirky.session/changed' && data?.session) {
       if (data.session.worktreeId !== worktreeId) return false
+      const loaded = byId.get(data.session.id)
+      if (replay && loaded !== undefined && data.session.lastActivityAt < loaded.lastActivityAt) return false
       byId.set(data.session.id, data.session)
       return true
     }
