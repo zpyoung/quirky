@@ -487,7 +487,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, IconButton, InlineError, ScopeChip } from '@quirky/ui'"
         }
       }
     },
@@ -1266,15 +1266,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{working && (\n              <span style={running} role=\"timer\" aria-label=\"Elapsed time\">"
-      },
-      "anchor": "working &&",
-      "reason": "Shows the pulsing dot and elapsed time only while the agent works."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{working && (\n              <IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
+        "quote": "{working && (\n                <IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
       },
       "anchor": "working &&",
       "reason": "Shows Stop only while the agent works."
