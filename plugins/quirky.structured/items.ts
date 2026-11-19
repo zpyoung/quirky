@@ -1,4 +1,4 @@
-import type { CallState, ChatItem, StructuredRole } from '@quirky/protocol'
+import type { CallState, ChatItem, StructuredRole, UsageTotals } from '@quirky/protocol'
 
 /** One journal entry a normalizer derives from an agent event: the legacy role, text and raw data plus the typed item. */
 export type ItemEntry = { role: StructuredRole; text: string; data: unknown; item: ChatItem }
@@ -699,4 +699,32 @@ function piEntriesUnchecked(event: Record<string, unknown>, calls: CallTracker):
   const item = piToolItem(callId, name, input, state, output, details)
   calls.track(item)
   return [{ role: 'tool', text: output || `${name}: ${summarizeInput(input)}`.trim(), data: event, item }]
+}
+
+function nonNegative(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+/**
+ * The token totals a Claude `result` message carries: `modelUsage` summed across models, falling back to
+ * the top-level `usage`. The SDK reports them cumulatively for the whole conversation, resumed history
+ * included. Null when the message has neither.
+ */
+export function claudeResultTotals(msg: any): Omit<UsageTotals, 'total'> | null {
+  const sum = (entries: any[], keys: [string, string, string, string]): Omit<UsageTotals, 'total'> => {
+    const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+    for (const entry of entries) {
+      totals.input += nonNegative(entry?.[keys[0]])
+      totals.output += nonNegative(entry?.[keys[1]])
+      totals.cacheRead += nonNegative(entry?.[keys[2]])
+      totals.cacheWrite += nonNegative(entry?.[keys[3]])
+    }
+    return totals
+  }
+  const byModel = typeof msg?.modelUsage === 'object' && msg.modelUsage !== null ? Object.values<any>(msg.modelUsage) : []
+  if (byModel.length > 0) return sum(byModel, ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens'])
+  if (typeof msg?.usage === 'object' && msg.usage !== null) {
+    return sum([msg.usage], ['input_tokens', 'output_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens'])
+  }
+  return null
 }

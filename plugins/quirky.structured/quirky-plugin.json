@@ -347,6 +347,42 @@
         }
       },
       {
+        "id": "usage",
+        "description": "A chat's token usage: its own totals, the whole conversation's across resumes (a fork starts at zero), and the prompt-cache tiers it holds. Each is null when nothing was reported. An unknown session fails with invalid-params.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "own": {
+              "description": "{input, output, cacheRead, cacheWrite, total} token counts, or null"
+            },
+            "conversation": {
+              "description": "{input, output, cacheRead, cacheWrite, total} token counts, or null"
+            },
+            "cache": {
+              "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
+            }
+          },
+          "required": [
+            "own",
+            "conversation",
+            "cache"
+          ]
+        }
+      },
+      {
         "id": "models",
         "description": "The models a running session's agent offers, as ids `configure` accepts, with the model the session launched with. Runners without a live list return an empty list; a session that is not running fails with conflict.",
         "readOnly": true,
@@ -504,6 +540,73 @@
             "commands": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } }, "required": ["name", "kind"] } }
           },
           "required": ["sessionId", "commands"]
+        }
+      },
+      {
+        "id": "usageChanged",
+        "description": "A structured session's usage summary changed; query usage for the conversation total.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "own": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "cacheRead": {
+                      "type": "number"
+                    },
+                    "cacheWrite": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output",
+                    "cacheRead",
+                    "cacheWrite",
+                    "total"
+                  ]
+                },
+                "turns": {
+                  "type": "number"
+                },
+                "cache": {
+                  "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
+                },
+                "updatedAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sessionId",
+                "own",
+                "turns",
+                "cache",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "summary"
+          ]
         }
       },
       {

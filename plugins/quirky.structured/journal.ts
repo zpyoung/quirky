@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ChatItem, PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import type { CacheState, ChatItem, PluginStore, StoreMigration, StructuredMessage, StructuredRole, UsageSummary } from '@quirky/protocol'
 import { CREATE_QUEUE_TABLE } from './queue'
 
 type Row = {
@@ -51,6 +51,29 @@ const CREATE_TABLE = `
     PRIMARY KEY (session_id, seq)
   )`
 
+const CREATE_USAGE_TABLE = `
+  CREATE TABLE IF NOT EXISTS structured_usage (
+    session_id TEXT PRIMARY KEY,
+    input INTEGER,
+    output INTEGER,
+    cache_read INTEGER,
+    cache_write INTEGER,
+    turns INTEGER,
+    cache TEXT,
+    updated_at INTEGER
+  )`
+
+type UsageRow = {
+  session_id: string
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  turns: number
+  cache: string | null
+  updated_at: number
+}
+
 const INSERT_ROW =
   'INSERT INTO structured_messages (session_id, seq, role, text, data, item, at) VALUES (?, ?, ?, ?, ?, ?, ?)'
 const IMPORT_ROW = 'INSERT OR IGNORE INTO structured_messages (session_id, seq, role, text, data, at) VALUES (?, ?, ?, ?, ?, ?)'
@@ -83,7 +106,8 @@ export function journalMigrations(home: string): StoreMigration[] {
     createAndImportV1(home),
     (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE),
     (store) => store.exec('ALTER TABLE structured_messages ADD COLUMN item TEXT'),
-    (store) => store.exec(CREATE_QUEUE_TABLE)
+    (store) => store.exec(CREATE_QUEUE_TABLE),
+    (store) => store.exec(CREATE_USAGE_TABLE)
   ]
 }
 
@@ -218,11 +242,41 @@ export class Journal {
     })
   }
 
+  /** The session's stored usage summary, or null when nothing was ever reported for it. */
+  usage(sessionId: string): UsageSummary | null {
+    const row = this.store.get<UsageRow>('SELECT * FROM structured_usage WHERE session_id = ?', sessionId)
+    if (!row) return null
+    return {
+      sessionId: row.session_id,
+      own: { input: row.input, output: row.output, cacheRead: row.cache_read, cacheWrite: row.cache_write, total: row.input + row.output + row.cache_read + row.cache_write },
+      turns: row.turns,
+      cache: row.cache === null ? null : (JSON.parse(row.cache) as CacheState),
+      updatedAt: row.updated_at
+    }
+  }
+
+  /** Stores the session's usage summary, replacing the previous one. */
+  saveUsage(summary: UsageSummary): void {
+    this.store.run(
+      `INSERT OR REPLACE INTO structured_usage (session_id, input, output, cache_read, cache_write, turns, cache, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      summary.sessionId,
+      summary.own.input,
+      summary.own.output,
+      summary.own.cacheRead,
+      summary.own.cacheWrite,
+      summary.turns,
+      summary.cache === null ? null : JSON.stringify(summary.cache),
+      summary.updatedAt
+    )
+  }
+
   /** Drops the session's messages and send receipts atomically. */
   remove(sessionId: string): void {
     this.store.transaction(() => {
       this.store.run('DELETE FROM structured_messages WHERE session_id = ?', sessionId)
       this.store.run('DELETE FROM structured_send_receipts WHERE session_id = ?', sessionId)
+      this.store.run('DELETE FROM structured_usage WHERE session_id = ?', sessionId)
     })
   }
 }

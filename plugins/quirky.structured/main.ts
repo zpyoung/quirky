@@ -15,6 +15,10 @@ import type {
   SessionProviderSession,
   SessionStatus,
   StructuredMessage,
+  UsageReport,
+  UsageResult,
+  UsageSummary,
+  UsageTotals,
   Worktree
 } from '@quirky/protocol'
 import { QuirkyClient, RpcError, RpcErrorCode, type AskRegistration } from '@quirky/protocol'
@@ -28,7 +32,7 @@ import { resolvePiThroughLoginShell } from './pi-path'
 import { createPiRunner } from './pi-runner'
 import { harnessDefaults, systemHarnessDeps } from './harness-defaults'
 import { Journal, journalMigrations } from './journal'
-import { errorItem, statusItem, stderrLines, userItem } from './items'
+import { claudeResultTotals, errorItem, statusItem, stderrLines, userItem } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
 import type {
   NewStructuredMessage,
@@ -683,7 +687,45 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  const emptyTotals = (): UsageTotals => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 })
+  const addTotals = (a: UsageTotals, b: Omit<UsageTotals, 'total'>): UsageTotals => {
+    const input = a.input + b.input
+    const output = a.output + b.output
+    const cacheRead = a.cacheRead + b.cacheRead
+    const cacheWrite = a.cacheWrite + b.cacheWrite
+    return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite }
+  }
+
+  /** Applies the cache tier rules: a write anchors its tier at the call start, a read refreshes every tier still warm then. */
+  const nextCache = (previous: UsageSummary['cache'], cache: NonNullable<UsageReport['cache']>): UsageSummary['cache'] => {
+    const anchors = new Map<300000 | 3600000, number>((previous?.tiers ?? []).map((tier) => [tier.ttlMs, tier.anchorAt]))
+    const warm = (ttlMs: 300000 | 3600000): boolean => {
+      const anchorAt = anchors.get(ttlMs)
+      return anchorAt !== undefined && cache.callStartedAt < anchorAt + ttlMs
+    }
+    const refreshed = cache.read > 0 ? ([300000, 3600000] as const).filter(warm) : []
+    for (const ttlMs of refreshed) anchors.set(ttlMs, cache.callStartedAt)
+    if (cache.wrote5m > 0) anchors.set(300000, cache.callStartedAt)
+    if (cache.wrote1h > 0) anchors.set(3600000, cache.callStartedAt)
+    const tiers = [...anchors].map(([ttlMs, anchorAt]) => ({ ttlMs, anchorAt })).sort((a, b) => a.ttlMs - b.ttlMs)
+    return tiers.length === 0 ? null : { tiers }
+  }
+
+  const reportUsage = (sessionId: string, report: UsageReport): void => {
+    const previous = journal.usage(sessionId)
+    const summary: UsageSummary = {
+      sessionId,
+      own: report.tokens ? addTotals(previous?.own ?? emptyTotals(), report.tokens) : (previous?.own ?? emptyTotals()),
+      turns: (previous?.turns ?? 0) + (report.turnEnded === true ? 1 : 0),
+      cache: report.cache ? nextCache(previous?.cache ?? null, report.cache) : (previous?.cache ?? null),
+      updatedAt: Date.now()
+    }
+    journal.saveUsage(summary)
+    context.emit('usageChanged', { sessionId, summary })
+  }
+
   const structuredContext: StructuredContext = {
+    reportUsage,
     process: context.process,
     appendMessage,
     setStatus,
@@ -1104,10 +1146,12 @@ export function activate(context: PluginContext): void {
    */
   const planStateOf = (oldSessionId: string, newSessionId: string): StructuredStartOptions => {
     let mode: ModeItem['mode'] | undefined
+    let usageBaseline: StructuredStartOptions['usageBaseline']
     const plans = new Map<number, PlanItem>()
     for (let after = 0; ; ) {
       const page = journal.list(oldSessionId, after, 500)
       for (const message of page) {
+        if (message.role === 'result') usageBaseline = claudeResultTotals(message.data) ?? usageBaseline
         if (message.item?.kind === 'mode') mode = message.item.mode
         else if (message.item?.kind === 'plan') plans.set(message.item.version, message.item)
       }
@@ -1125,6 +1169,7 @@ export function activate(context: PluginContext): void {
       appendMessage({ sessionId: newSessionId, role: 'system', text: `Plan v${highest}: ${lastPlan.status}`, item: lastPlan })
     }
     return {
+      ...(usageBaseline === undefined ? {} : { usageBaseline }),
       ...(mode === undefined ? {} : { permissionMode: mode }),
       ...(newest === undefined ? {} : { planVersion: highest, lastPlanText: newest.text, ...(lastPlan === undefined ? {} : { lastPlan }) })
     }
@@ -1622,6 +1667,35 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  /** A chat's own usage, the whole forked-from conversation's, and its cache state; null where nothing was reported. */
+  const usage: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured usage does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    let session: Session
+    try {
+      session = (await context.call('quirky.session/get', { session: params.session })) as Session
+    } catch {
+      throw context.error('invalid-params', `unknown session ${params.session}`)
+    }
+    const own = journal.usage(session.id)
+    let conversation: UsageTotals | null = null
+    const seen = new Set<string>()
+    for (let current: Session | null = session; current !== null && !seen.has(current.id); ) {
+      seen.add(current.id)
+      const summary = journal.usage(current.id)
+      if (summary) conversation = addTotals(conversation ?? emptyTotals(), summary.own)
+      if (current.forked === true || typeof current.resumedFrom !== 'string' || current.resumedFrom === '') break
+      try {
+        current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
+      } catch {
+        current = null
+      }
+    }
+    const result: UsageResult = { own: own?.own ?? null, conversation, cache: own?.cache ?? null }
+    return result
+  }
+
   const queuedRequest = (params: Record<string, unknown>, extra: string[] = []): { session: string; id?: string } => {
     const unsupported = Object.keys(params).find((key) => key !== 'session' && !extra.includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured queue does not support ${unsupported}`)
@@ -1915,6 +1989,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/settings', currentSettings)
   context.provide('method:quirky.structured/stop', stop)
   context.provide('method:quirky.structured/interrupt', interrupt)
+  context.provide('method:quirky.structured/usage', usage)
   context.provide('method:quirky.structured/stopOwned', stopOwned)
 
   context.subscribe((event) => {

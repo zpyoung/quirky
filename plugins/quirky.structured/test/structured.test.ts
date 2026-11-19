@@ -1126,7 +1126,7 @@ describe('v1 journal import', () => {
 })
 
 describe('structured journal store upgrades', () => {
-  test('preserves an existing v1 journal while appending the receipt, item and queue migrations', async () => {
+  test('preserves an existing v1 journal while appending the receipt, item, queue and usage migrations', async () => {
     const home = shortHome()
     const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
     mkdirSync(dirname(storePath), { recursive: true })
@@ -1157,7 +1157,7 @@ describe('structured journal store upgrades', () => {
 
     const upgraded = new Database(storePath, { readonly: true })
     try {
-      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 5 })
       expect(
         upgraded
           .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
@@ -1166,6 +1166,9 @@ describe('structured journal store upgrades', () => {
       expect(
         upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_queue'").all()
       ).toEqual([{ name: 'structured_queue' }])
+      expect(
+        upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_usage'").all()
+      ).toEqual([{ name: 'structured_usage' }])
     } finally {
       upgraded.close()
     }

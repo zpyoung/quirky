@@ -232,6 +232,8 @@ type Running = {
   appliedPermissionMode: string
   totalTokenUsage: TokenCounts | null
   turnUsageBaseline: TokenCounts | null
+  /** The thread total the last usage report already covered, so a total-only update reports just its new spend. */
+  reportedTotal: TokenCounts | null
   activeTurnId: string | null
   pendingApprovalCount: number
   pendingCompletion: PendingCompletion | null
@@ -529,6 +531,7 @@ class CodexRunner implements StructuredRunner {
       permissionMode: DEFAULT_PERMISSION_MODE,
       appliedPermissionMode: DEFAULT_PERMISSION_MODE,
       totalTokenUsage: null,
+      reportedTotal: null,
       turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
       pendingApprovalCount: 0,
@@ -616,6 +619,7 @@ class CodexRunner implements StructuredRunner {
             expectedTurnId
           }
     if (run.totalTokenUsage !== null) run.turnUsageBaseline = { ...run.totalTokenUsage }
+    run.reportedTotal = null
     run.inputPending = true
     try {
       const response = await run.connection.request(method, params)
@@ -738,6 +742,19 @@ class CodexRunner implements StructuredRunner {
         if (total) run.totalTokenUsage = total
         const turnUsage = last ?? (total ? tokenUsageDelta(total, run.turnUsageBaseline) : null)
         run.turnUsage = turnContextUsage(usage, last, turnUsage) ?? run.turnUsage
+        const spent = last ?? (total ? tokenUsageDelta(total, run.reportedTotal ?? run.turnUsageBaseline) : null)
+        if (total) run.reportedTotal = total
+        if (spent) {
+          const cached = spent.cachedInputTokens ?? 0
+          this.context.reportUsage?.(run.sessionId, {
+            tokens: {
+              input: Math.max(0, (spent.inputTokens ?? 0) - cached),
+              output: (spent.outputTokens ?? 0) + (spent.reasoningOutputTokens ?? 0),
+              cacheRead: cached,
+              cacheWrite: 0
+            }
+          })
+        }
         this.context.appendMessage({
           sessionId: run.sessionId,
           role: 'system',
@@ -895,6 +912,7 @@ class CodexRunner implements StructuredRunner {
       item: turnEndItem('done', run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
     })
     run.turnStartedAt = null
+    this.context.reportUsage?.(run.sessionId, { turnEnded: true })
     this.context.setStatus(run.sessionId, 'done')
     run.stream.reset()
     run.assistantDeltas.clear()

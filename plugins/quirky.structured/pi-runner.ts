@@ -524,6 +524,7 @@ class PiRunner implements StructuredRunner {
     run.working = false
     run.turnStartedAt = null
     run.stream.reset()
+    if (state === 'done') this.context.reportUsage?.(run.sessionId, { turnEnded: true })
   }
 
   private async submit(run: Running, message: string, options: StructuredSendOptions): Promise<void> {
@@ -650,6 +651,12 @@ class PiRunner implements StructuredRunner {
         const message = record(frame.message)
         if (message?.role !== 'assistant') return
         if (run.working) run.lastContextTokens = contextTokensOf(message) ?? run.lastContextTokens
+        const spent = record(message.usage)
+        if (spent !== null) {
+          this.context.reportUsage?.(run.sessionId, {
+            tokens: { input: count(spent.input), output: count(spent.output), cacheRead: count(spent.cacheRead), cacheWrite: count(spent.cacheWrite) }
+          })
+        }
         run.stream.reset()
         const content = Array.isArray(message.content) ? message.content : []
         const body = content

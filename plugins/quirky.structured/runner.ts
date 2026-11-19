@@ -9,7 +9,9 @@ import type {
   SessionProviderSession,
   SessionStatus,
   StructuredMessage,
-  StructuredRole
+  StructuredRole,
+  UsageReport,
+  UsageTotals
 } from '@quirky/protocol'
 
 /** A message a runner journals; the plugin assigns `seq` and, unless given, `at`. */
@@ -46,6 +48,11 @@ export type StructuredContext = {
   setProviderSession(sessionId: string, providerSession: SessionProviderSession): Promise<void>
   /** Reports the slash commands and skills the agent offers; each call replaces the session's list. */
   reportCommands?(sessionId: string, commands: AgentCommand[]): void
+  /**
+   * Reports what a session spent since its previous report (deltas, never cumulative) and, for agents
+   * with a prompt cache, one call's cache activity. The plugin owns the stored summary; runners never write it.
+   */
+  reportUsage?(sessionId: string, report: UsageReport): void
   /** The user's `claude` executable, found through their login shell. */
   resolveClaudePath(): Promise<string>
   /** The user's `codex` executable, found through their login shell. */
@@ -77,6 +84,11 @@ export type StructuredStartOptions = StructuredLaunchOptions & {
   lastPlanText?: string
   /** The newest plan version as journaled for the resumed session, so the next version can mark it revised. */
   lastPlan?: PlanItem
+  /**
+   * What the resumed Claude conversation's last journaled result already counted, so the first result
+   * after a resume reports only this session's own spend.
+   */
+  usageBaseline?: Omit<UsageTotals, 'total'>
 }
 
 /** Extras of one message: absolute image paths the agent should see, and the queue entry the message came from. */
