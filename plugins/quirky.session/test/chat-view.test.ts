@@ -394,7 +394,10 @@ describe('the chat view', () => {
   test('Show all events reveals status items and diagnostics', async () => {
     await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'status', text: 'rate limit hit' })] })
     expect(text()).not.toContain('rate limit hit')
-    await click(host!.querySelector('input[type="checkbox"]'))
+    await click(byLabel('More actions'))
+    const item = [...host!.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((entry) => entry.textContent?.includes('Show all events'))!
+    expect(item.getAttribute('aria-checked')).toBe('false')
+    await click(item)
     expect(text()).toContain('rate limit hit')
   })
 
@@ -585,6 +588,7 @@ describe('the cards', () => {
     await mountChat({ session: { title: 'Claude 2' } })
     const heading = host!.querySelector('h2')!
     expect(heading.textContent).toBe('Claude 2')
+    expect(heading.querySelector('button')!.getAttribute('aria-label')).toBe('Rename chat: Claude 2')
     expect(heading.style.textTransform).toBe('')
   })
 

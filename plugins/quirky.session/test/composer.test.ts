@@ -9,6 +9,7 @@ import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 type Props = {
   capabilities?: AgentCapabilities | null
   working?: boolean
+  workStartedAt?: number | null
   agent?: string
   status?: 'starting' | 'running' | 'exited'
   settings?: Record<string, unknown>
@@ -121,6 +122,7 @@ const render = (props: Props) =>
         session: chat,
         capabilities,
         working: props.working ?? false,
+        workStartedAt: props.workStartedAt,
         reportedMode: props.reportedMode,
         autoAvailable: props.autoAvailable,
         previousMode: props.previousMode
@@ -329,6 +331,11 @@ describe('screens: working (SC-11, SC-12)', () => {
     await click(stop)
     expect(fake.callsTo('quirky.structured/interrupt')[0]!.params).toEqual({ session: 's1' })
     expect(fake.callsTo('quirky.structured/stop')).toEqual([])
+  })
+
+  test('the elapsed time counts from the start the header passes', async () => {
+    await mount({}, { working: true, workStartedAt: Date.now() - 72_000 })
+    expect(host!.querySelector('[role="timer"]')!.textContent).toBe('Working 1m 12s')
   })
 
   test('Esc in the editor stops the turn, and a Send arrow joins Stop once text is typed', async () => {

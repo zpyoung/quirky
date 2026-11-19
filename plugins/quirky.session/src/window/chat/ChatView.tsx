@@ -1,9 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
 import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
-import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
+import { showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
+import { ChatHeader } from './ChatHeader'
 import { Composer } from './Composer'
+import { newestUserAt } from './elapsed'
 import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
@@ -76,25 +78,6 @@ const plan = {
   minHeight: 0,
   minWidth: 0,
   borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
-} satisfies CSSProperties
-const headerEnd = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', flexShrink: 0 } satisfies CSSProperties
-const header = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 'var(--ui-space-8)',
-  minHeight: 'var(--ui-row-single)',
-  paddingInline: 'var(--ui-space-8)'
-} satisfies CSSProperties
-const heading = {
-  margin: 0,
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  color: 'var(--ui-text)',
-  fontSize: 'var(--ui-font-label)',
-  fontWeight: 700
 } satisfies CSSProperties
 
 /** Whether `element` is scrolled to its end, give or take a few lines. */
@@ -260,7 +243,6 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const anchor = useRef<{ element: Element; offset: number } | null>(null)
   const [behind, setBehind] = useState(false)
   const keepDistanceFromEnd = useRef<number | null>(null)
-  const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
   const paneViews = usePaneViews(context, session.id)
   const turns = useMemo(
@@ -511,10 +493,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
 
   return (
     <div style={layout}>
-      <header style={header}>
-        <h2 style={heading}>{session.title}</h2>
-        <div style={headerEnd}>
-          {newest && (
+      <ChatHeader
+        context={context}
+        session={session}
+        capabilities={capabilities}
+        messages={history}
+        showAll={showAll}
+        planChip={
+          newest && (
             <PlanChip
               newest={newest}
               open={panelOpen}
@@ -523,22 +509,9 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
                 setPanelOpen(!panelOpen)
               }}
             />
-          )}
-          <label className="ui-checkbox-label" htmlFor={showAllId}>
-            <input
-              id={showAllId}
-              type="checkbox"
-              checked={showAll}
-              onChange={(event) => {
-                const enabled = event.target.checked
-                rememberShowAllEvents(session, enabled)
-                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
-              }}
-            />
-            <span>Show all events</span>
-          </label>
-        </div>
-      </header>
+          )
+        }
+      />
       <div ref={bodyRef} style={body}>
         <div style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
@@ -599,6 +572,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         session={session}
         capabilities={capabilities}
         working={working}
+        workStartedAt={newestUserAt(history)}
         reportedMode={mode?.mode}
         autoAvailable={autoAvailable}
         previousMode={modeBeforePlan}

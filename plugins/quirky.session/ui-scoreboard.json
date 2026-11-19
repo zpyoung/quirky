@@ -606,6 +606,26 @@
           "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "{forkError !== null && <InlineError message={`Could not fork: ${forkError}`} action={{ label: 'Retry', onAction: () => void fork() }} />}"
+      },
+      "anchor": "forkError !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "<InlineError message={`Could not fork: ${forkError}`} action={{ label: 'Retry', onAction: () => void fork() }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "import { Badge, InlineError, Menu, StatusDot, TextField, type MenuEntry, type UiStatus } from '@quirky/ui'"
+        }
+      }
     }
   ],
   "notState": [
@@ -1410,7 +1430,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "{newest && ("
+        "quote": "newest && ("
       },
       "anchor": "newest &&",
       "reason": "Shows the Plan chip only once the chat has a plan version; it is a header control, not a read state."
@@ -1526,6 +1546,46 @@
       },
       "anchor": "older.loading ?",
       "reason": "Relabels the Load earlier messages button while its page is fetched; the transcript already shown stays, so this is a control label, not a loading state of the view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "editing ? ("
+      },
+      "anchor": "editing ?",
+      "reason": "Swaps the title for its rename field; it is edit mode, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "{shown.label && <span>{status.label}</span>}"
+      },
+      "anchor": "shown.label &&",
+      "reason": "Drops the status label when the pane is narrow; width selects layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "{shown.tokens && tokensText !== null && conversation !== null && ("
+      },
+      "anchor": "shown.tokens && tokensText !== null && conversation !== null &&",
+      "reason": "Shows the token total only when it fits and the agent has reported it; a header figure, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "{shown.cache && cache !== null && ("
+      },
+      "anchor": "shown.cache && cache !== null &&",
+      "reason": "Shows the cache timer only when it fits and the chat has cache tiers; a header figure, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "{cache.kind === 'cold' ? <Badge label=\"Cache cold\">Cache cold</Badge> : cache.text}"
+      },
+      "anchor": "cache.kind === 'cold' ?",
+      "reason": "Chooses between the cold chip and the countdown text; the cache clock selects content, not a read state."
     }
   ],
   "actions": [
@@ -1894,21 +1954,6 @@
             "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })) as Session\n}"
           }
         ]
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "onChange={(event) => {"
-      },
-      "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })"
-        },
-        "target": "command:quirky.session/show-all-events",
-        "via": []
       }
     },
     {
@@ -3101,6 +3146,134 @@
           {
             "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
             "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onAction: onRename"
+      },
+      "anchor": "onAction",
+      "reason": "Forwards the action to the rename handler, which only opens the title field; nothing is saved until the user confirms.",
+      "notAction": "forwarded"
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "description: forkReason }), onAction: () => void fork() }"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.call('quirky.structured/fork', { session: session.id })"
+        },
+        "target": "quirky.structured/fork",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+            "quote": "  const fork = async () => {\n    setForkError(null)\n    try {\n      const forked = (await context.call('quirky.structured/fork', { session: session.id })) as Session\n      context.openView(WORKTREE_VIEW_ID, { worktree: forked.worktreeId, session: forked.id })\n    } catch (error) {\n      setForkError(messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onAction: () => void context.executeCommand(SESSION_INFO_COMMAND, { session: session.id }) }"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.executeCommand(SESSION_INFO_COMMAND, { session: session.id })"
+        },
+        "target": "command:quirky.session-info/open",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onAction: () => {\n          rememberShowAllEvents"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled: !showAll }, { activateOwner: false })"
+        },
+        "target": "command:quirky.session/show-all-events",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onBlur={() => void saveRename()}"
+      },
+      "anchor": "onBlur",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.call('quirky.session/setTitle', { session: session.id, title: next })"
+        },
+        "target": "quirky.session/setTitle",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+            "quote": "  const saveRename = async () => {\n    if (cancelled.current || saving.current) return\n    const next = (input.current?.value ?? '').trim()\n    if (next === '' || next === title) {\n      closeRename()\n      return\n    }\n    saving.current = true\n    try {\n      const saved = (await context.call('quirky.session/setTitle', { session: session.id, title: next })) as Session | undefined\n      setSavedTitle(saved?.title ?? next)\n      closeRename()\n    } catch (error) {\n      setRenameError(messageOf(error))\n    } finally {\n      saving.current = false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onKeyDown={(event) => {"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.call('quirky.session/setTitle', { session: session.id, title: next })"
+        },
+        "target": "quirky.session/setTitle",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+            "quote": "  const saveRename = async () => {\n    if (cancelled.current || saving.current) return\n    const next = (input.current?.value ?? '').trim()\n    if (next === '' || next === title) {\n      closeRename()\n      return\n    }\n    saving.current = true\n    try {\n      const saved = (await context.call('quirky.session/setTitle', { session: session.id, title: next })) as Session | undefined\n      setSavedTitle(saved?.title ?? next)\n      closeRename()\n    } catch (error) {\n      setRenameError(messageOf(error))\n    } finally {\n      saving.current = false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onClick={onRename}"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the action to the rename handler, which only opens the title field; nothing is saved until the user confirms.",
+      "notAction": "forwarded"
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "action={{ label: 'Retry', onAction: () => void fork() }}"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.call('quirky.structured/fork', { session: session.id })"
+        },
+        "target": "quirky.structured/fork",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+            "quote": "  const fork = async () => {\n    setForkError(null)\n    try {\n      const forked = (await context.call('quirky.structured/fork', { session: session.id })) as Session\n      context.openView(WORKTREE_VIEW_ID, { worktree: forked.worktreeId, session: forked.id })\n    } catch (error) {\n      setForkError(messageOf(error))\n    }\n  }"
           }
         ]
       }
