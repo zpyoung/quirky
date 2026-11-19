@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
-import { Badge, FormRow, InlineAgentCard, SectionHeader } from '@quirky/ui'
+import { Badge, FormRow, InlineError, SectionHeader } from '@quirky/ui'
 
 const PLUGIN_ID = 'quirky.terminal-dock'
 
@@ -82,11 +82,7 @@ export function DockSettings({ context }: { context: UiPluginContext }) {
           </label>
         </FormRow>
       </div>
-      {error !== null && (
-        <div role="alert">
-          <InlineAgentCard title="Could not save Terminal dock settings" description={error} status="failing" />
-        </div>
-      )}
+      {error !== null && <InlineError message={`Could not save Terminal dock settings: ${error}`} />}
     </section>
   )
 }

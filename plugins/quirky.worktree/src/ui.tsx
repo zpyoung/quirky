@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { InlineError } from '@quirky/ui'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from './ui-control'
 import { createRequests } from './actions'
+import { startAttentionBadge } from './attention-badge'
 import { WorktreesSection } from './WorktreesSection'
 import { RemoteWorkspace } from './RemoteWorkspace'
 import { RemoteWorkspacesSection } from './RemoteWorkspacesSection'
@@ -8,12 +11,22 @@ import { VmEnvironments } from './VmEnvironments'
 
 const WORKTREES_TOOL = 'sidebar-section:quirky.worktree/worktrees'
 
+let stopAttentionBadge: (() => void) | undefined
+
+/** Stops the rail badge's timer and listeners before the host revokes the plugin context. */
+export function deactivate(): void {
+  stopAttentionBadge?.()
+  stopAttentionBadge = undefined
+}
+
 /**
  * Provides the workspace tree for the `worktrees` sidebar section and the `new-worktree` command,
  * which opens the create dialog on the project it names, the open worktree's, or the first, and the
  * `add-project` command, which shows the Worktrees tool and opens its Add project dialog.
  */
 export function activate(context: UiPluginContext): void {
+  stopAttentionBadge?.()
+  stopAttentionBadge = startAttentionBadge(context)
   const requests = createRequests()
   const addProjectRequests = createRequests()
 
@@ -30,7 +43,7 @@ export function activate(context: UiPluginContext): void {
     const root = createRoot(element)
     root.render(typeof workspace === 'string' && workspace !== ''
       ? <RemoteWorkspace context={context} workspace={workspace} />
-      : <p role="alert">Select an owner-bound remote workspace.</p>)
+      : <InlineError message="Select an owner-bound remote workspace." />)
     return () => root.unmount()
   }
   context.provide('view:quirky.worktree/remote', mountRemote)
@@ -46,6 +59,8 @@ export function activate(context: UiPluginContext): void {
     root.render(<RemoteWorkspacesSection context={context} />)
     return () => root.unmount()
   })
+
+  context.provide(UI_CONTROL_COMMAND, (args: unknown) => dispatchUiControl(context, args))
 
   context.provide('command:quirky.worktree/new-worktree', async (args?: unknown) => {
     const selector = (args as { repo?: unknown } | undefined)?.repo

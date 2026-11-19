@@ -196,6 +196,11 @@ describe('setting entries', () => {
     }
   })
 
+  test('hidden is an optional boolean', () => {
+    expect(accepts('setting', setting({ type: 'boolean', default: true, hidden: true }))).toBe(true)
+    expect(errorsFor('setting', setting({ type: 'boolean', default: true, hidden: 'yes' }))).toEqual(['setting s: hidden must be a boolean'])
+  })
+
   test('type must be one of the four', () => {
     const message = ['setting s: type must be boolean, number, string or enum']
     expect(errorsFor('setting', { id: 's', title: 'S', default: 1 })).toEqual(message)

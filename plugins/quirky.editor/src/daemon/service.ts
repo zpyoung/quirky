@@ -268,6 +268,11 @@ export class EditorDaemon {
     return state.buffer
   }
 
+  /**
+   * Open a file tab and navigate only an explicitly targeted live UI window.
+   * A window implies focus; unavailable or non-UI targets and focus false are refused before editor mutation.
+   * Omitting window never navigates. In-flight navigation failures retain the opened tab and position.
+   */
   async open(params: EditorOpenParams, caller: PluginCaller): Promise<EditorOpenData> {
     this.assertActive()
     if (typeof params.path !== 'string' || params.path.length === 0) throw this.context.error('invalid-params', 'path is required')
@@ -275,6 +280,9 @@ export class EditorDaemon {
     if (params.column !== undefined && (!Number.isSafeInteger(params.column) || params.column < 1)) throw this.context.error('invalid-params', 'column must be a positive integer')
     if (params.matchLength !== undefined && (!Number.isSafeInteger(params.matchLength) || params.matchLength < 0 || params.matchLength > MAX_TEXT_FILE_BYTES || params.line === undefined || params.column === undefined)) {
       throw this.context.error('invalid-params', 'matchLength requires a line and column and must be a bounded non-negative integer')
+    }
+    if (params.window !== undefined && params.focus === false) {
+      throw this.context.error('invalid-params', 'window cannot be combined with focus: false')
     }
     const worktree = await this.paths.resolve(params.worktree, caller)
     const target = await this.paths.path(worktree.id, params.path)
@@ -285,6 +293,7 @@ export class EditorDaemon {
       throw this.translateFsError(error, target.path)
     }
     if (info.isDirectory()) throw this.context.error('invalid-params', 'Choose a file rather than a directory.')
+    if (params.window !== undefined) await this.context.call('ui.window.state', { connId: params.window })
     const key = this.pathKey(worktree.id, target.path)
     let bufferId = this.pathIndex.get(key)
     let state = bufferId === undefined ? undefined : this.buffers.get(bufferId)
@@ -375,7 +384,7 @@ export class EditorDaemon {
         (params.group === undefined || tab.group === params.group)
       )
       : undefined
-    const focus = params.focus ?? caller.role === 'ui'
+    const focus = params.focus ?? (params.window !== undefined || caller.role === 'ui')
     const result = await this.context.call('quirky.terminal/openViewTab', {
       workspace: `id:${worktree.id}`,
       ...(params.group === undefined ? {} : { group: params.group }),
@@ -420,6 +429,13 @@ export class EditorDaemon {
     if (Object.keys(presentation).length > 0) await this.applyViewPatch(buffer.id, presentation, tabId)
     this.watcher.keep(worktree.id, worktree.path)
     await this.recordQuickOpen(worktree.id, buffer.relativePath)
+    if (params.window !== undefined) {
+      await this.context.call('quirky.worktree/navigate', {
+        worktree: `id:${worktree.id}`,
+        target: 'terminal',
+        window: params.window
+      })
+    }
     return { ...this.get(buffer.id), openedTabId: tabId }
   }
 
@@ -1438,7 +1454,7 @@ export class EditorDaemon {
         if (trigger !== 'overwrite' && currentBaseline === null) {
           throw this.context.error('conflict', 'Cannot save because this buffer has no verified disk baseline.')
         }
-        let writeResult: 'written' | 'changed' | 'missing'
+        let writeResult: 'written' | 'created' | 'changed' | 'missing'
         try {
           writeResult = trigger === 'overwrite'
             ? await this.forceWrite(savedPath, content)
@@ -1448,7 +1464,7 @@ export class EditorDaemon {
           if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') return { kind: 'permission-denied' }
           throw error
         }
-        if (writeResult !== 'written') {
+        if (writeResult !== 'written' && writeResult !== 'created') {
           return { kind: 'external', external: writeResult === 'missing' ? 'deleted' : 'changed' }
         }
         const hash = hashText(content)
@@ -1482,6 +1498,11 @@ export class EditorDaemon {
         latest.verified = true
         if (trigger === 'user' || trigger === 'overwrite') latest.autosaveHold = false
         this.persist(latest)
+        this.context.emit('saved', {
+          path: savedPath,
+          beforeHash: writeResult === 'written' && trigger !== 'overwrite' ? currentBaseline : null,
+          afterHash: hash
+        })
         this.emit()
         return { kind: 'saved', buffer: next }
       })

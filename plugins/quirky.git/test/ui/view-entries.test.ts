@@ -1,109 +1,59 @@
 import { describe, expect, test } from 'bun:test'
-import type { GitChange, GitStatusEntry } from '@quirky/protocol'
-import {
-  changeSections,
-  combinedTitle,
-  entrySignature,
-  loadMode,
-  statusSections,
-  uncommittedAreas,
-  type SectionEntry
-} from '../../src/view/entries'
+import type { GitChange, ReviewFile } from '@quirky/protocol'
+import { AUTO_LOAD_MAX_LINES, EAGER_SECTIONS } from '../../src/view/entries'
+import { itemFromChange, itemFromFile, loadModeOf } from '../../src/view/review-layout'
 
-const row = (overrides: Partial<GitStatusEntry> & Pick<GitStatusEntry, 'path' | 'area'>): GitStatusEntry => ({
-  status: 'modified',
-  added: 1,
-  removed: 1,
-  ...overrides
-})
-
-const entry = (overrides: Partial<SectionEntry> = {}): SectionEntry => ({
-  key: 'unstaged:a.ts',
+const file = (overrides: Partial<ReviewFile> = {}): ReviewFile => ({
   path: 'a.ts',
-  source: 'unstaged',
-  status: 'modified',
+  status: 'M',
   added: 1,
   removed: 1,
   binary: false,
-  submodule: false,
+  uncommitted: true,
+  staged: false,
+  mark: 'none',
+  notes: 0,
   ...overrides
 })
 
-describe('statusSections', () => {
-  const status = {
-    entries: [
-      row({ path: 'a.ts', area: 'unstaged' }),
-      row({ path: 'a.ts', area: 'staged' }),
-      row({ path: 'new.txt', area: 'untracked', status: 'untracked', added: 3, removed: 0 }),
-      row({ path: 'c.ts', area: 'conflicts', conflict: { kind: 'both_modified', state: 'unresolved' } }),
-      row({ path: 'd.ts', area: 'conflicts', conflict: { kind: 'both_modified', state: 'resolved_locally' } })
-    ]
-  }
-
-  test('SC-62: takes the areas asked for in order, with unstaged diffs read from the working file', () => {
-    const { entries } = statusSections(status, ['staged', 'unstaged', 'untracked'])
-    expect(entries.map((e) => `${e.source}:${e.path}`)).toEqual(['staged:a.ts', 'unstaged:a.ts', 'unstaged:new.txt'])
-    expect(new Set(entries.map((e) => e.key)).size).toBe(3)
-  })
-
-  test('SC-62: unresolved conflicts are counted as excluded, never listed', () => {
-    const { entries, excluded } = statusSections(status, ['unstaged'])
-    expect(excluded).toBe(1)
-    expect(entries.map((e) => e.path)).toEqual(['a.ts'])
-  })
-
-  test('counts that git did not give are null', () => {
-    const { entries } = statusSections({ entries: [{ path: 'x', area: 'unstaged', status: 'modified' }] }, ['unstaged'])
-    expect(entries[0]).toMatchObject({ added: null, removed: null, binary: false, submodule: false })
-  })
-})
-
-describe('changeSections', () => {
-  test('branch and commit diffs carry their source, and a commit its id', () => {
-    const changes: GitChange[] = [{ path: 'b.ts', oldPath: 'a.ts', status: 'renamed', added: 2, removed: 1, binary: false }]
-    expect(changeSections(changes, 'commit', 'c'.repeat(40))[0]).toMatchObject({
-      key: 'commit:b.ts',
-      oldPath: 'a.ts',
-      source: 'commit',
-      commit: 'c'.repeat(40)
-    })
-    expect(changeSections(changes, 'branch')[0].commit).toBeUndefined()
-  })
-})
-
-describe('loadMode', () => {
+describe('loadModeOf', () => {
   test('SC-62: small files load by themselves, large and unsized ones wait for a click', () => {
-    expect(loadMode(entry())).toBe('auto')
-    expect(loadMode(entry({ added: 6000, removed: 4000 }))).toBe('auto')
-    expect(loadMode(entry({ added: 12_000, removed: 0 }))).toBe('large')
-    expect(loadMode(entry({ added: null, removed: null }))).toBe('unknown')
+    expect(AUTO_LOAD_MAX_LINES).toBe(10_000)
+    expect(loadModeOf(itemFromFile(file()))).toBe('auto')
+    expect(loadModeOf(itemFromFile(file({ added: 6000, removed: 4000 })))).toBe('auto')
+    expect(loadModeOf(itemFromFile(file({ added: 12_000, removed: 0 })))).toBe('large')
+    expect(loadModeOf(itemFromFile(file({ added: null, removed: null })))).toBe('unknown')
   })
 
   test('binary files and submodules never wait', () => {
-    expect(loadMode(entry({ added: null, removed: null, binary: true }))).toBe('auto')
-    expect(loadMode(entry({ added: null, removed: null, submodule: true }))).toBe('auto')
+    expect(loadModeOf(itemFromFile(file({ added: null, removed: null, binary: true })))).toBe('auto')
+    expect(loadModeOf({ added: null, removed: null, binary: false, submodule: true })).toBe('auto')
+  })
+
+  test('the first cards load at once', () => {
+    expect(EAGER_SECTIONS).toBe(6)
   })
 })
 
-describe('combinedTitle and areas', () => {
-  const input = { worktree: 'w', mode: 'combined' as const }
-  test('SC-62: titles follow the area, and the branch title names its base', () => {
-    expect(combinedTitle(input, null, null)).toBe('Changes')
-    expect(combinedTitle({ ...input, area: 'staged' }, null, null)).toBe('Staged Changes')
-    expect(combinedTitle({ ...input, area: 'all' }, null, null)).toBe('All Changes')
-    expect(combinedTitle({ ...input, area: 'branch' }, { base: 'origin/main' }, null)).toBe('Branch Changes (origin/main)')
-    expect(combinedTitle({ ...input, commit: 'abcdef0123' }, null, null)).toBe('Commit abcdef0')
-    expect(combinedTitle({ ...input, area: 'unstaged', title: 'Mine' }, null, null)).toBe('Mine')
+describe('review items', () => {
+  test('a path is a different card in another scope', () => {
+    const change: GitChange = { path: 'a.ts', status: 'modified', added: 1, removed: 1, binary: false }
+    expect(itemFromFile(file()).key).not.toBe(itemFromChange(change, 'c'.repeat(40)).key)
+    expect(itemFromChange(change, 'c'.repeat(40)).key).not.toBe(itemFromChange(change, 'd'.repeat(40)).key)
   })
 
-  test('which uncommitted areas each combined diff covers', () => {
-    expect(uncommittedAreas('all')).toEqual(['staged', 'unstaged', 'untracked'])
-    expect(uncommittedAreas('branch')).toEqual([])
-    expect(uncommittedAreas('unstaged')).toEqual(['unstaged'])
+  test('a commit file is never reviewed and carries no notes', () => {
+    const change: GitChange = { path: 'b.ts', oldPath: 'a.ts', status: 'renamed', added: 2, removed: 1, binary: false }
+    expect(itemFromChange(change, 'c'.repeat(40))).toMatchObject({ path: 'b.ts', oldPath: 'a.ts', mark: 'none', notes: 0 })
   })
-})
 
-test('entrySignature changes with the counts, so a changed file reloads', () => {
-  expect(entrySignature(entry())).toBe(entrySignature(entry()))
-  expect(entrySignature(entry({ added: 2 }))).not.toBe(entrySignature(entry()))
+  test('the signature changes with the counts, so a changed file reloads', () => {
+    expect(itemFromFile(file()).signature).toBe(itemFromFile(file()).signature)
+    expect(itemFromFile(file({ added: 2 })).signature).not.toBe(itemFromFile(file()).signature)
+    expect(itemFromFile(file({ status: 'A' })).signature).not.toBe(itemFromFile(file()).signature)
+  })
+
+  test('the signature ignores the review mark and the notes, which do not change the diff', () => {
+    expect(itemFromFile(file({ mark: 'reviewed', notes: 3 })).signature).toBe(itemFromFile(file()).signature)
+  })
 })

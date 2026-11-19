@@ -4,10 +4,19 @@ import { join } from 'node:path'
 import type { ProjectGroup, QuirkyClient, Repo, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { builtinsDir, makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { UI_CONTROL_COMMAND } from '../src/ui-control'
+import { DEFAULT_STOCK_OPTIONS } from '../src/control-types'
+import { allSpecFromStock, DEFAULT_ACTIVITY_PREFERENCES, type ViewsState } from '../src/view-types'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { failure, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
-import { button, click, dialogNamed, field, listRowName, menuItem, openDisclosure, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+import { button, click, dialogNamed, field, listRowName, menuItem, pressEscape, sectionHeading, sectionHeadingMatches, setText } from './window/dom'
+
+/** The Worktrees panel's own header `…` button; other chrome has a More button too. */
+const worktreesMore = () =>
+  [...(sidebarPanel()?.querySelectorAll<HTMLButtonElement>('button[aria-label="More"]') ?? [])].find((candidate) =>
+    candidate.closest('header')?.querySelector('h2')?.textContent?.trim() === 'Worktrees'
+  )
 const WORKTREES_CONTRIBUTION = 'sidebar-section:quirky.worktree/worktrees'
 const WORKTREES_TOOL = WORKTREES_CONTRIBUTION
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -143,15 +152,27 @@ async function openMenu(win: HeadlessWindow, name: string, project?: string): Pr
   const row = card(name, project)
   if (!row) throw new Error(`no worktree row for ${project}/${name}`)
   await click(button(row, `Actions for ${name}`)!)
-  return win.waitFor(() => document.querySelector<HTMLElement>('[role="menu"]') ?? undefined)
+  return win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu?.getAttribute('aria-label') === `Actions for ${name}` && document.activeElement === menu
+      ? menu
+      : undefined
+  })
 }
 
 const item = (label: string): HTMLElement | undefined => menuItem(document, label)
 
 async function choose(win: HeadlessWindow, label: string): Promise<void> {
   const target = await win.waitFor(() => item(label))
+  const opensSubmenu = target.getAttribute('aria-haspopup') === 'menu'
   target.click()
-  await Bun.sleep(20)
+  try {
+    await win.waitFor(() => opensSubmenu
+      ? target.getAttribute('aria-expanded') === 'true'
+      : document.querySelector('[role="menu"]') === null)
+  } catch (error) {
+    throw new Error(`Menu selection ${label}: connected=${target.isConnected}, expanded=${target.getAttribute('aria-expanded')}, menus=${[...document.querySelectorAll('[role="menu"]')].map((menu) => menu.getAttribute('aria-label')).join(', ')}`, { cause: error })
+  }
 }
 
 test('SC-44: the sidebar reports project and group membership, primary worktrees, and nested children', async () => {
@@ -168,8 +189,11 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
 
   const apiRows = projectSections.find((section) => sectionHeadingMatches(section, 'api'))!
   expect([...apiRows.querySelectorAll<HTMLElement>('[data-worktree-id]')].map(listRowName)).toEqual(['main', 'fix-login', 'child'])
-  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!
+  const childToggle = card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!
   expect(childToggle.getAttribute('aria-expanded')).toBe('true')
+  expect(childToggle.getAttribute('aria-label')).toBe('1 child of fix-login')
+  expect(childToggle.querySelector('.worktree-child-count')?.textContent).toBe('1')
+  expect(card('fix-login', 'api')!.querySelectorAll('.worktree-row')).toHaveLength(1)
 
   await click(childToggle)
   await win.waitFor(() => !card('child', 'api'))
@@ -178,7 +202,7 @@ test('SC-44: the sidebar reports project and group membership, primary worktrees
   expect(card('child', 'api')).toBeUndefined()
   await agent.callAny('quirky.worktree/set', { worktree: fixLogin.id, status: 'in-progress' })
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-progress')
-  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('button[aria-expanded]')!)
+  await click(card('fix-login', 'api')!.querySelector<HTMLButtonElement>('.worktree-child-toggle')!)
   await win.waitFor(() => card('child', 'api'))
   const state = await win.waitFor(async () => {
     const next = await report(agent) as SidebarReport | undefined
@@ -237,25 +261,27 @@ test('SC-43: status, pin and unread from the card menu', async () => {
   await win.waitFor(() => card('docs', 'api'))
 
   await openMenu(win, 'fix-login', 'api')
-  await choose(win, 'Move to Status')
+  await choose(win, 'Move to status')
   await choose(win, 'In review')
   await win.waitFor(async () => (await listed(agent, fixLogin.id)).status === 'in-review')
 
   await win.waitFor(async () => (await reportRow(agent, fixLogin.id))?.workspaceStatus === 'in-review')
-  await win.waitFor(() => card('fix-login', 'api')?.textContent?.includes('In review'))
   await openMenu(win, 'fix-login', 'api')
+  await choose(win, 'More')
   await choose(win, 'Pin')
   await win.waitFor(() => card('fix-login', undefined, 'pinned'))
   expect((await listed(agent, fixLogin.id)).pinned).toBe(true)
   const pinnedSection = sidebarPanel()!.querySelector<HTMLElement>('[data-top-level-section="pinned"]')!
   expect(sectionHeading(pinnedSection)).toBe('Pinned')
   expect(pinnedSection.nextElementSibling?.getAttribute('data-top-level-section')?.startsWith('repo:')).toBe(true)
-  expect(await reportRow(agent, fixLogin.id)).toMatchObject({ pinned: true, workspaceStatus: 'in-review' })
+  expect(sidebarElements('[data-worktree-id="' + fixLogin.id + '"]')).toHaveLength(1)
+  expect(await reportRow(agent, fixLogin.id)).toBeUndefined()
   expect((await report(agent)).pinned).toEqual([fixLogin.id])
 
   await agent.callAny('quirky.worktree/set', { worktree: docs!.id, unread: false })
   await openMenu(win, 'docs', 'api')
-  await choose(win, 'Mark Unread')
+  await choose(win, 'More')
+  await choose(win, 'Mark unread')
   await win.waitFor(() => card('docs', 'api')!.querySelector('[role="img"][aria-label="Unread"]'))
   expect((await listed(agent, docs!.id)).unread).toBe(true)
 
@@ -273,7 +299,7 @@ test('SC-59: the primary checkout cannot be deleted', async () => {
   expect(error.code).toBe(RpcErrorCode.Conflict)
 
   await openMenu(win, 'main', 'api')
-  const del = item('Delete') as HTMLButtonElement
+  const del = item('Delete…') as HTMLButtonElement
   expect(del.disabled).toBe(true)
   del.click()
   await Bun.sleep(20)
@@ -290,7 +316,7 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   await win.waitFor(() => card('fix-login', 'api'))
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', code: 'KeyN', metaKey: true, bubbles: true, cancelable: true }))
-  const dialog = await win.waitFor(() => dialogNamed('New workspace'))
+  const dialog = await win.waitFor(() => dialogNamed('New worktree'))
   expect(selectedProject(dialog)).toBe('api')
   const open = await win.waitFor(async () => {
     const next = await report(agent)
@@ -299,12 +325,12 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   expect(open.dialog).toEqual({ kind: 'create', repoId: api.id })
 
   await pressEscape()
-  await win.waitFor(() => !dialogNamed('New workspace'))
+  await win.waitFor(() => !dialogNamed('New worktree'))
   await win.waitFor(async () => (await report(agent)).dialog === null)
 
   await agent.callAny('ui.command.run', { id: NEW_WORKTREE, args: { repo: 'web' } })
   await win.waitFor(() => {
-    const next = dialogNamed('New workspace')
+    const next = dialogNamed('New worktree')
     return next && selectedProject(next) === 'web'
   })
   const second = await win.waitFor(async () => {
@@ -314,14 +340,161 @@ test('SC-62: Mod+N and the API open the create dialog on the right project', asy
   expect(second.dialog).toEqual({ kind: 'create', repoId: web!.id })
 }, SLOW)
 
+test('ui.command.run reaches public worktree and view controls and matches their UI effects', async () => {
+  const { win, agent } = await boot({ docs: true })
+  const repos = await agent.callAny('quirky.repo/list', {}) as Repo[]
+  const repo = repos.find((candidate) => candidate.name === 'api')!
+  const worktrees = await agent.callAny('quirky.worktree/list', {}) as Worktree[]
+  const worktree = worktrees.find((candidate) => candidate.repoId === repo.id && candidate.name === 'fix-login')!
+  const initialViews = await agent.callAny('quirky.worktree/views', {}) as ViewsState
+  expect(repo.id).toBeTruthy()
+  expect(worktree.id).toBeTruthy()
+  await agent.callAny('quirky.worktree/setViews', {
+    state: {
+      ...initialViews,
+      views: [...initialViews.views, {
+        id: 'view_public_boundary',
+        name: 'Public boundary',
+        starred: true,
+        spec: allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES)
+      }]
+    }
+  })
+  const views = await win.waitFor(async () => {
+    const state = await agent.callAny('quirky.worktree/views', {}) as ViewsState
+    return state.views.find((candidate) => candidate.name === 'Public boundary') ? state : undefined
+  })
+  const viewId = views.views.find((candidate) => candidate.name === 'Public boundary')!.id
+
+  const invoke = async (
+    scope: 'worktrees-section' | 'view-tabs',
+    target: 'worktrees' | 'views',
+    operation: string,
+    payload: Record<string, unknown>
+  ) => {
+    const reply = await agent.callAny('ui.command.run', {
+      id: UI_CONTROL_COMMAND,
+      args: { action: 'control', scope, target, operation, payload }
+    }) as { result: { delivered: number } }
+    expect(reply.result.delivered).toBe(1)
+  }
+  const viewTab = (id: string) => sidebarElements<HTMLElement>('[role="tab"]').find((candidate) => candidate.dataset.viewId === id)
+  await win.waitFor(() => viewTab(viewId))
+  const menuLabels = (menu: HTMLElement) =>
+    [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((item) => item.textContent?.replace(/\s+/g, ' ').trim())
+
+  await invoke('worktrees-section', 'worktrees', 'new-worktree', { repoId: repo.id })
+  const commandDialog = await win.waitFor(() => dialogNamed('New worktree'))
+  expect(selectedProject(commandDialog)).toBe(repo.name)
+  await pressEscape()
+  await win.waitFor(() => !dialogNamed('New worktree'))
+  await click(await win.waitFor(() => button(sidebarPanel()!, 'New worktree'))!)
+  const clickDialog = await win.waitFor(() => dialogNamed('New worktree'))
+  expect(selectedProject(clickDialog)).toBe(repo.name)
+  await pressEscape()
+  await win.waitFor(() => !dialogNamed('New worktree'))
+
+  await invoke('worktrees-section', 'worktrees', 'set-selection', { worktreeIds: [worktree.id] })
+  const row = await win.waitFor(() => card('fix-login', 'api'))
+  await win.waitFor(() => row.classList.contains('selected'))
+  expect((await reportRow(agent, worktree.id))?.selected).toBe(false)
+  row.querySelector<HTMLButtonElement>('.worktree-row__main')!.dispatchEvent(
+    new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true })
+  )
+  await win.waitFor(() => !row.classList.contains('selected'))
+  expect((await reportRow(agent, worktree.id))?.selected).toBe(false)
+
+  await invoke('worktrees-section', 'worktrees', 'select-view', { id: viewId })
+  const selectedByCommand = await win.waitFor(() => {
+    const tab = viewTab(viewId)
+    return tab?.getAttribute('aria-selected') === 'true' ? tab : undefined
+  })
+  const commandViewState = {
+    selected: selectedByCommand.getAttribute('aria-selected'),
+    rows: sidebarElements<HTMLElement>('[data-worktree-id]').map((element) => element.dataset.worktreeId),
+    empty: sidebarPanel()!.textContent?.includes('Nothing needs you') ?? false
+  }
+  await click(viewTab('all')!)
+  await win.waitFor(() => viewTab('all')?.getAttribute('aria-selected') === 'true')
+  await click(viewTab(viewId)!)
+  await win.waitFor(() => viewTab(viewId)?.getAttribute('aria-selected') === 'true')
+  expect({
+    selected: viewTab(viewId)?.getAttribute('aria-selected'),
+    rows: sidebarElements<HTMLElement>('[data-worktree-id]').map((element) => element.dataset.worktreeId),
+    empty: sidebarPanel()!.textContent?.includes('Nothing needs you') ?? false
+  }).toEqual(commandViewState)
+
+  await invoke('view-tabs', 'views', 'open-list', {})
+  const listByCommand = await win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu ? menuLabels(menu) : undefined
+  })
+  await pressEscape()
+  await win.waitFor(() => document.querySelector('[role="menu"]') === null)
+  await click(await win.waitFor(() => button(sidebarPanel()!, 'All views'))!)
+  const listByClick = await win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu ? menuLabels(menu) : undefined
+  })
+  expect(listByCommand).toEqual(listByClick)
+  await pressEscape()
+  await win.waitFor(() => document.querySelector('[role="menu"]') === null)
+  await invoke('view-tabs', 'views', 'open-view-menu', { id: viewId })
+  const contextMenuByCommand = await win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu ? menuLabels(menu) : undefined
+  })
+  await pressEscape()
+  await win.waitFor(() => document.querySelector('[role="menu"]') === null)
+  viewTab(viewId)!.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 24,
+    clientY: 24
+  }))
+  const contextMenuByClick = await win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu ? menuLabels(menu) : undefined
+  })
+  expect(contextMenuByCommand).toEqual(contextMenuByClick)
+  await pressEscape()
+  await win.waitFor(() => document.querySelector('[role="menu"]') === null)
+
+  await click(viewTab('all')!)
+  await win.waitFor(() => viewTab('all')?.getAttribute('aria-selected') === 'true')
+  await invoke('worktrees-section', 'worktrees', 'set-board', { open: true })
+  const boardByCommand = await win.waitFor(() => {
+    const board = sidebarPanel()?.querySelector<HTMLElement>('.worktree-tree-board')
+    return board ? [...board.querySelectorAll('h2')].map((heading) => heading.textContent?.trim()) : undefined
+  })
+  const toggleBoardFromMenu = async (expectedChecked: boolean) => {
+    const more = await win.waitFor(() => worktreesMore())
+    await click(more!)
+    const headerMenu = await win.waitFor(() =>
+      document.querySelector<HTMLElement>('[role="menu"][aria-label="Worktrees"]')
+    )
+    const boardItem = await win.waitFor(() =>
+      [...headerMenu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.querySelector<HTMLElement>('.qt-menu-label')?.textContent?.trim() === 'Workspace board'
+      )
+    )
+    expect(boardItem.getAttribute('aria-checked')).toBe(expectedChecked ? 'true' : 'false')
+    await click(boardItem)
+  }
+  await toggleBoardFromMenu(true)
+  await win.waitFor(() => !sidebarPanel()?.querySelector('.worktree-tree-board'))
+  await toggleBoardFromMenu(false)
+  const boardByClick = await win.waitFor(() => {
+    const board = sidebarPanel()?.querySelector<HTMLElement>('.worktree-tree-board')
+    return board ? [...board.querySelectorAll('h2')].map((heading) => heading.textContent?.trim()) : undefined
+  })
+  expect(boardByCommand).toEqual(boardByClick)
+}, SLOW)
+
 test('workspace status icon/avatar controls persist safe plain text and render on the board', async () => {
   const { win, agent } = await boot()
-  const statusOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(statusOptionsButton)
-  const statusOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', statusOptions)
-  const edit = await win.waitFor(() => button(statusOptions, 'Edit workspace statuses'))
-  await click(edit)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Edit statuses')))
   const dialog = await win.waitFor(() => dialogNamed('Workspace statuses'))
   const icon = field(dialog, 'Status icon 3')
   if (!icon) throw new Error('status editor did not expose the in-review icon control')
@@ -331,12 +504,8 @@ test('workspace status icon/avatar controls persist safe plain text and render o
 
   const statuses = await agent.callAny('quirky.worktree/statusDefinitions', {}) as Array<{ id: string; icon?: string }>
   expect(statuses.find((status) => status.id === 'in-review')?.icon).toBe('🧪')
-  const boardOptionsButton = await win.waitFor(() => button(document, 'Worktrees options'))
-  await click(boardOptionsButton)
-  const boardOptions = await win.waitFor(() => dialogNamed('Worktrees options'))
-  await openDisclosure('More workspace tools', boardOptions)
-  const board = await win.waitFor(() => button(boardOptions, 'Workspace board'))
-  await click(board)
+  await click(await win.waitFor(() => worktreesMore()))
+  await click(await win.waitFor(() => menuItem(document, 'Workspace board')))
   const laneHeading = await win.waitFor(() =>
     sidebarElements<HTMLHeadingElement>('h2').find((heading) => heading.textContent?.includes('In review'))
   )

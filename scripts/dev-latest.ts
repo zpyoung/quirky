@@ -1,14 +1,15 @@
 #!/usr/bin/env bun
 /**
  * Runs `bun run dev` on this checkout's newest code: fast-forwards the branch from its upstream,
- * installs dependencies, replaces a daemon that runs older or other-checkout sources, then starts
- * the dev app. Terminals survive the daemon restart because the PTY host keeps them, so the PTY
- * host itself is reported but never stopped.
+ * installs dependencies, removes a leftover native browser preload bundle so the dev app builds it
+ * from source, replaces a daemon that runs older or other-checkout sources, then starts the dev
+ * app. Terminals survive the daemon restart because the PTY host keeps them, so the PTY host itself
+ * is reported but never stopped.
  *
  *   bun run dev:latest [--no-pull] [--no-launch]
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const USAGE = 'usage: bun scripts/dev-latest.ts [--no-pull] [--no-launch]'
@@ -60,6 +61,13 @@ if (flags.has('--no-pull')) {
 
 step('installing dependencies')
 run(['bun', 'install', '--frozen-lockfile'])
+
+// the dev app prefers this bundle over the source whenever it exists, and only `bun run bundle` or a build refreshes it
+const preload = join(root, 'apps', 'desktop', 'resources', 'native-browser-preload.js')
+if (existsSync(preload)) {
+  rmSync(preload)
+  step('removed the native browser preload bundle; the dev app rebuilds it from source')
+}
 
 // imported after install, so a fresh checkout without node_modules still gets this far
 const { daemonEntryHash, ensureDaemon, isDaemonAlive, quirkyHome, readRuntime } = await import(

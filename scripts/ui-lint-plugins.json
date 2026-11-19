@@ -1,6 +1,7 @@
 [
   "quirky.accounts",
   "quirky.ask",
+  "quirky.avatar",
   "quirky.notifications",
   "quirky.structured",
   "quirky.tasks",
@@ -23,6 +24,7 @@
   "quirky.terminal",
   "quirky.terminal-dock",
   "quirky.vault",
+  "quirky.view",
   "quirky.mobile",
   "quirky.cli",
   "quirky.palette",

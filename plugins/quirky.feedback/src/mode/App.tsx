@@ -9,9 +9,9 @@ import { findMarkers } from './markers'
 import type { Session } from './session'
 import { Tray } from './Tray'
 
-type Props = { session: Session; layout: Layout; bannerSlot: HTMLElement; annotate(pane: string): void }
+type Props = { session: Session; layout: Layout; bannerSlot: HTMLElement }
 
-export function App({ session, layout, bannerSlot, annotate }: Props) {
+export function App({ session, layout, bannerSlot }: Props) {
   const state = useSyncExternalStore(session.subscribe, session.getState)
   const version = useSyncExternalStore(layout.subscribe, layout.version)
   const found = useMemo(() => findMarkers(state.comments), [state.comments, version])
@@ -20,13 +20,17 @@ export function App({ session, layout, bannerSlot, annotate }: Props) {
   return <>
     {createPortal(<Banner count={state.comments.length} open={!state.collapsed} onToggle={session.toggleCollapsed} onExit={() => void session.exit()} />, bannerSlot)}
     <Dots comments={state.comments} found={found} />
-    <Chips chips={chips} onComment={session.pickElement} onAnnotate={annotate} />
-    <Tray state={state} found={found} session={session} />
-    {state.card !== null ? <Card key={state.card.serial} card={state.card} number={editing < 0 ? null : editing + 1} actions={{
-      setText: session.setText,
-      setIntent: session.setIntent,
-      submit: () => void session.submit(),
-      cancel: session.cancel
-    }} /> : null}
+    <Chips chips={chips} onComment={session.pickElement} onAnnotate={session.annotate} />
+    <Tray state={state} found={found} session={session} onEdit={session.edit} />
+    {state.card !== null ? <Card
+      key={state.card.serial}
+      card={state.card}
+      number={editing < 0 ? null : editing + 1}
+      onText={session.setText}
+      onIntent={session.setIntent}
+      onAdd={() => void session.add()}
+      onSave={() => void session.save()}
+      onCancel={session.cancel}
+    /> : null}
   </>
 }

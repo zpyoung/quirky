@@ -99,7 +99,9 @@ describe('sidebar review filter projection API', () => {
     const off = await extras<ActivityProjection>(client, 'projection')
     expect(off.reviewHiddenIds).toEqual([])
     expect(off.reviewHiddenCount).toBe(0)
-    expect(await fakeHostingCalls(client)).toEqual([])
+    const offCalls = await fakeHostingCalls(client)
+    expect(offCalls.length).toBeGreaterThan(0)
+    expect(offCalls[0]!.worktrees).not.toContain(folder.primary.id)
 
     await extras(client, 'activate', { worktree: project.main.id })
     await extras(client, 'set', { hideCompletedReviewWorkspaces: true })

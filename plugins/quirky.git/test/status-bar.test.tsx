@@ -1,11 +1,13 @@
 import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './ui/register-dom'
+import type { Fake } from './ui/panel-support'
+import type { MountFunction as Mount } from '@quirky/protocol'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./ui/panel-support')
-const { act, click, entry, failure, fakeContext, layoutFor, settle, statusOf } = s
+const { act, click, entry, failure, fakeContext, layoutFor, settle, settleAfter, statusOf } = s
 const { activate } = await import('../src/ui')
 
 const ITEM = 'status-bar:quirky.git/ahead-behind'
@@ -16,9 +18,7 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-type Mount = (element: HTMLElement, props: Record<string, never>) => (() => void) | void
-
-function mountItem(fake: ReturnType<typeof fakeContext>): { element: HTMLElement; unmount: () => void } {
+function mountItem(fake: Fake): { element: HTMLElement; unmount: () => void } {
   let mount: Mount | undefined
   const provide = fake.context.provide
   fake.context.provide = (id, implementation) => {
@@ -31,7 +31,7 @@ function mountItem(fake: ReturnType<typeof fakeContext>): { element: HTMLElement
   document.body.appendChild(element)
   let cleanup: (() => void) | void
   act(() => {
-    cleanup = mount!(element, {})
+    cleanup = mount!(element, { report: (state) => fake.reports.push(state) })
   })
   return {
     element,
@@ -49,7 +49,7 @@ const advance = (ms: number) => (jest as unknown as { advanceTimersByTime(ms: nu
 
 const popup = () => document.querySelector('.ui-popup')
 const rows = () => [...document.querySelectorAll('.ui-popup [role="menuitem"]')].map((row) => row.textContent ?? '')
-const statusCalls = (fake: ReturnType<typeof fakeContext>) => fake.called('quirky.git/status')
+const statusCalls = (fake: Fake) => fake.called('quirky.git/status')
 
 describe('quirky.git ahead and behind status bar item', () => {
   test('the manifest declares the item at order 10 and activate provides it', async () => {
@@ -147,25 +147,49 @@ describe('quirky.git ahead and behind status bar item', () => {
   })
 
   test('it reads again on this worktree\'s git events and follows the selected worktree', async () => {
-    const fake = fakeContext(layoutFor('one'))
-    fake.statuses.one = statusOf([], { ahead: 1, behind: 0, branch: 'one-branch' })
-    fake.statuses.two = statusOf([], { ahead: 0, behind: 4, branch: 'two-branch' })
-    const { element, unmount } = mountItem(fake)
-    await settle()
-    expect(element.textContent).toBe('↑1 ↓0')
+    jest.useFakeTimers()
+    let unmount: (() => void) | null = null
+    try {
+      const fake = fakeContext(layoutFor('one'))
+      fake.statuses.one = statusOf([], { ahead: 1, behind: 0, branch: 'one-branch' })
+      fake.statuses.two = statusOf([], { ahead: 0, behind: 4, branch: 'two-branch' })
+      const mounted = mountItem(fake)
+      unmount = mounted.unmount
+      await settle()
+      expect(mounted.element.textContent).toBe('↑1 ↓0')
 
-    fake.statuses.one = statusOf([], { ahead: 3, behind: 0, branch: 'one-branch' })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'other' } }))
-    await settle()
-    expect(statusCalls(fake)).toHaveLength(1)
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'one' } }))
-    await settle()
-    expect(element.textContent).toBe('↑3 ↓0')
+      fake.statuses.one = statusOf([], { ahead: 3, behind: 0, branch: 'one-branch' })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'other' } }))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'one' } }))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+      await settleAfter(3_000)
+      expect(mounted.element.textContent).toBe('↑3 ↓0')
+      expect(statusCalls(fake)).toHaveLength(2)
 
-    await act(async () => fake.setLayout(layoutFor('two')))
-    await settle()
-    expect(element.textContent).toBe('↑0 ↓4')
-    expect(statusCalls(fake).at(-1)?.params).toEqual({ worktree: 'two' })
-    unmount()
+      await act(async () => fake.setLayout(layoutFor('two')))
+      await settle()
+      expect(mounted.element.textContent).toBe('↑0 ↓4')
+      expect(statusCalls(fake).filter(({ params }) => params.worktree === 'two')).toHaveLength(1)
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
+})
+
+test('the status-bar mount reports its generic control scope while status is unread without adding a placeholder or read', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const fake = fakeContext(layoutFor('feat'))
+  fake.on('quirky.git/status', () => pending.promise)
+  const mounted = mountItem(fake)
+  try {
+    await settle()
+    expect(fake.reports.at(-1)).toEqual({ uiControls: [] })
+    expect(mounted.element.textContent).toBe('')
+    expect(fake.called('quirky.git/status')).toHaveLength(1)
+    expect(fake.called('ui.window.self')).toEqual([])
+  } finally { mounted.unmount() }
 })

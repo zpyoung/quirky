@@ -12,6 +12,8 @@ import {
   type DesktopWindowCloseResult,
   type DesktopWindowOpenRequest,
   type DesktopWindowResult,
+  type FilePickerRequest,
+  type FilePickerResult,
   type FolderPickerRequest,
   type FolderPickerResult,
   type NativeBrowserDownloadUpdate,
@@ -68,6 +70,7 @@ export type NativeBrowserHostRPC = {
       }
       readClipboardText: { params: {}; response: string }
       pickFolder: { params: FolderPickerRequest; response: FolderPickerResult }
+      pickFiles: { params: FilePickerRequest; response: FilePickerResult }
       openWindow: { params: DesktopWindowOpenRequest; response: DesktopWindowResult }
       closeWindow: { params: { windowId: string }; response: DesktopWindowCloseResult }
       revealItem: { params: DesktopRevealRequest; response: DesktopRevealResult }

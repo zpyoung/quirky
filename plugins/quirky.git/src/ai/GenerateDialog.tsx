@@ -1,25 +1,26 @@
 import { useId, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, Dialog, FormRow } from '@quirky/ui'
-import { generators, hasCustomCommand, initialAgent, type AgentList } from './agents'
+import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine } from '@quirky/ui'
+import { generators, hasCustomCommand, initialAgent, type Agents } from './agents'
 import { CUSTOM_AGENT, DEFAULT_TEMPLATE } from './types'
 
 type Props = {
   context: UiPluginContext
-  agents: AgentList | null
+  agents: Agents
   onClose(): void
   /** Runs one generation with these values; nothing is saved. */
   onGenerate(choice: { agent: string; template: string }): void
 }
 
 /**
- * "Generate Commit Message": the first generation, before any recipe exists, picks the agent and
+ * "Generate Commit Message", opened from the ✦ menu's "Choose agent…": picks the agent and
  * command template for this one run. The choice is never saved.
  */
 export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) {
-  const choices = agents === null ? [] : generators(agents)
+  const choices = agents.list === null ? [] : generators(agents.list)
   const options = [...choices.map((agent) => ({ id: agent.id, label: agent.label })), ...(hasCustomCommand(context) ? [{ id: CUSTOM_AGENT, label: 'Custom command' }] : [])]
-  const [agent, setAgent] = useState(() => (agents === null ? '' : initialAgent(agents, choices)) || (options[0]?.id ?? ''))
+  const [picked, setPicked] = useState<string | null>(null)
+  const agent = picked ?? ((agents.list === null ? '' : initialAgent(agents.list, choices)) || (options[0]?.id ?? ''))
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const agentId = useId()
   const templateId = useId()
@@ -40,22 +41,28 @@ export function GenerateDialog({ context, agents, onClose, onGenerate }: Props) 
     >
       <div className="ui-stack">
         <p className="ui-text-muted">Choose the agent and command template for this run.</p>
-        <FormRow label="Agent" htmlFor={agentId}>
-          <select
-            id={agentId}
-            className="ui-text-field__input"
-            aria-label="Agent"
-            value={agent}
-            onChange={(event) => setAgent(event.target.value)}
-          >
-            {options.length === 0 && <option value="">No enabled agents</option>}
-            {options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FormRow>
+        {agents.error !== null && (
+          <InlineError message={`Could not read the agents: ${agents.error}`} action={{ label: 'Retry', onAction: agents.retry }} />
+        )}
+        {!agents.settled && <div role="status"><NoticeLine>Detecting agents...</NoticeLine></div>}
+        {agents.settled && agents.error === null && options.length === 0 && <EmptyState message="No enabled agents" />}
+        {options.length > 0 && (
+          <FormRow label="Agent" htmlFor={agentId}>
+            <select
+              id={agentId}
+              className="ui-text-field__input"
+              aria-label="Agent"
+              value={agent}
+              onChange={(event) => setPicked(event.target.value)}
+            >
+              {options.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </FormRow>
+        )}
         <FormRow label="Command template" htmlFor={templateId}>
           <textarea
             id={templateId}

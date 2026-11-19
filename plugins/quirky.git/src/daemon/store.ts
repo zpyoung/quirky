@@ -2,7 +2,8 @@ import type { StoreMigration } from '@quirky/protocol'
 
 /**
  * The plugin store's schema, append-only. `notes` holds diff notes by worktree; `recipes` holds
- * the saved AI recipes (scope is `global` or a repo ID).
+ * the saved AI recipes (scope is `global` or a repo ID); `review_marks` holds the content a user
+ * marked reviewed, by worktree and path.
  */
 export const migrations: StoreMigration[] = [
   `CREATE TABLE notes (
@@ -25,5 +26,14 @@ export const migrations: StoreMigration[] = [
     PRIMARY KEY (scope, action)
   )`,
   `ALTER TABLE recipes ADD COLUMN launch_options TEXT;
-  ALTER TABLE recipes ADD COLUMN launch_options_agent TEXT`
+  ALTER TABLE recipes ADD COLUMN launch_options_agent TEXT`,
+  `CREATE TABLE review_marks (
+    worktree_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    base_key TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    content BLOB,
+    marked_at INTEGER NOT NULL,
+    PRIMARY KEY (worktree_id, path)
+  )`
 ]

@@ -44,6 +44,11 @@ differently:
 | The host (crash, `restart-host`, reboot) | is gone | after a **restore**, a new shell in the old directory with the old screen and history above its prompt (**cold restore**) |
 | Nothing; the session was killed or exited | is gone | its final screen and history, read only, even after the host restarted |
 
+The host survives daemon disconnects while it still owns its home and socket. It checks their
+filesystem identities once a second. Losing only the socket stops the sessions as `host-restart`,
+retaining their history for restore. Losing or replacing the home stops the sessions without
+further path writes. Shutdown preserves replacement sockets and pid files.
+
 A session whose host went away is **restorable**. It stays exited until someone opens its pane or
 runs `quirky session restore`, which starts the user's shell in its place under the same session id
 ([D10](../../../loop/decisions/m1-term-daemon.md)).

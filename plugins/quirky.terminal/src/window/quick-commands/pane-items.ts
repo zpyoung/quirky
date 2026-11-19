@@ -1,7 +1,8 @@
 import type { UiPluginContext } from '@quirky/protocol'
 import type { QuickCommand } from '../../layout/types'
 import { isQuickCommandComplete } from '../../quick-commands/normalize'
-import { openQuickCommandDialog } from './QuickCommandDialog'
+import { requestWindowCommand } from '../window-command'
+import { QUICK_COMMAND_DIALOG_COMMAND } from './QuickCommandDialog'
 import { runCommand } from './shared'
 
 /** One row of the pane menu's Quick Commands submenu, in the shape the pane menu adapts. */
@@ -12,7 +13,7 @@ export type PaneMenuItem = {
   enabled: boolean
   /** True when a separator is drawn above the row. */
   separatorBefore?: boolean
-  onSelect(): void | Promise<void>
+  onSelect?: () => void | Promise<void>
 }
 
 /**
@@ -30,14 +31,28 @@ export function paneQuickCommandItems(context: UiPluginContext, commands: readon
     enabled: true,
     onSelect: () => runCommand(context, { id: command.id, pane })
   }))
-  if (items.length === 0) items.push({ label: 'No quick commands', enabled: false, onSelect() {} })
+  if (items.length === 0) items.push({ label: 'No quick commands', enabled: false })
   items.push({
     label: 'Add Quick Command…',
     enabled: true,
     separatorBefore: true,
-    onSelect() {
-      openQuickCommandDialog({ context, command: null, repo: options.repo ?? null })
+    async onSelect() {
+      await requestPaneQuickCommandDialog(context, options.repo)
     }
   })
   return items
+}
+
+async function requestPaneQuickCommandDialog(context: UiPluginContext, repo: string | null | undefined): Promise<void> {
+  try {
+    const result = await requestWindowCommand(context, {
+      command: QUICK_COMMAND_DIALOG_COMMAND,
+      args: { action: 'open', ...(repo ? { repo } : {}) }
+    })
+    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
+      throw new Error('reason' in result ? String(result.reason) : 'dialog request was refused')
+    }
+  } catch (error) {
+    context.toast('Could not open quick command dialog', error instanceof Error ? error.message : String(error))
+  }
 }

@@ -1,6 +1,7 @@
 import { isRecord, optionalBooleanField, optionalStringField } from './data'
 import type { AuthAccount } from './auth-inventory'
 import type { Handler, HostingEnv, HostingConfiguration, IssueSourcePreference } from './env'
+import { routeByProvider } from './gitlab/router'
 
 const REQUIRED_PROJECT_SCOPES = ['project', 'read:org', 'repo']
 
@@ -24,7 +25,7 @@ export function runtimeMethods(env: HostingEnv): Record<string, Handler> {
     let accounts: AuthAccount[] = []
     let ghAvailable = true
     try {
-      accounts = await env.authAccounts(scope, true)
+      accounts = await env.authAccounts(scope, optionalBooleanField(params, 'force') !== false)
     } catch (error) {
       ghAvailable = reasonOf(error) !== 'gh_unavailable'
       if (reasonOf(error) !== 'gh_unavailable') throw error
@@ -112,7 +113,7 @@ export function runtimeMethods(env: HostingEnv): Record<string, Handler> {
     return { worktreeId: scope.worktree.id, ...env.configuration(scope.worktree) }
   }
 
-  return { repository, diagnoseAuth, viewer, rateLimit, accounts, configure, configuration }
+  return routeByProvider(env, { repository, diagnoseAuth, viewer, rateLimit, accounts, configure, configuration })
 }
 
 function isPreference(value: string): value is IssueSourcePreference {

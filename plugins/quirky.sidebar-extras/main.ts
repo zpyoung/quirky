@@ -7,6 +7,7 @@ import {
   isPlainRecord,
   stateMigrations,
   validateDirtyParams,
+  validateProjectionParams,
   validateReadParams,
   validateSetParams,
   validateWorktreeParams,
@@ -23,7 +24,7 @@ export function activate(context: PluginContext): void {
 
   const handlers: Record<string, MethodHandler> = {
     state(params) {
-      return state.read(validateReadParams(params, context))
+      return state.read(validateReadParams(params, context).client)
     },
     set(params) {
       const { client, patch } = validateSetParams(params, context)
@@ -50,8 +51,9 @@ export function activate(context: PluginContext): void {
       })
     },
     async projection(params) {
-      const client = validateReadParams(params, context)
-      return projectActivity(context, state.read(client), () => Date.now())
+      const { client, preferences, worktree } = validateProjectionParams(params, context)
+      const stored = state.read(client)
+      return projectActivity(context, preferences === undefined ? stored : { ...stored, preferences }, () => Date.now(), worktree)
     },
     dirty(params) {
       return readDirty(context, validateDirtyParams(params, context))

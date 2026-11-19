@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION, RpcError, RpcErrorCode, type QuirkyClient, type Quirk
 import { connectDaemon } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { DaemonError } from '../src/errors'
-import { createRpcHandler } from '../src/rpc-handler'
+import { createRpcHandler, MAX_REPLY_BYTES } from '../src/rpc-handler'
 import type { ClientConn } from '../src/types'
 import { makeTempHome, startHarness, waitFor, type Harness } from './helpers'
 import { makeTempDir, removeTempDirs, writeModulePlugin } from './plugins/fixtures'
@@ -100,7 +100,7 @@ describe('unix socket transport', () => {
     const events: QuirkyEvent[] = []
     client.onEvent((event) => events.push(event))
     const other = await h.connect()
-    await other.call('ui.sidebar.set', { visible: false })
+    await other.call('ui.palette.set', {})
     await waitFor(() => events.find((event) => event.type === 'ui.state.changed'))
   })
 
@@ -377,5 +377,35 @@ describe('rpc handler', () => {
     await handler(conn, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'status.get' }))
     expect(received).toBeUndefined()
     expect(sent[0]).toEqual({ jsonrpc: '2.0', id: 1, result: null })
+  })
+
+  test.each(['websocket', 'socket'] as const)('a %s reply over the size cap answers that request with an error and keeps the connection', async (transport) => {
+    const logged: string[] = []
+    const handler = createRpcHandler({
+      rpcToken: 'tok',
+      log: (message) => logged.push(message),
+      dispatcher: {
+        async dispatch(method) {
+          return method === 'big/read' ? 'x'.repeat(MAX_REPLY_BYTES) : 'small'
+        }
+      }
+    })
+    const { conn, sent } = stubConn(transport)
+    const outcome = await handler(conn, JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'big/read' }))
+    expect(outcome).toBeUndefined()
+    expect(sent[0]).toEqual({
+      jsonrpc: '2.0',
+      id: 7,
+      error: {
+        code: RpcErrorCode.Internal,
+        message: expect.stringContaining('big/read'),
+        data: { reason: 'reply_too_large', bytes: expect.any(Number), limit: MAX_REPLY_BYTES }
+      }
+    })
+    expect(sent[0].error.data.bytes).toBeGreaterThan(MAX_REPLY_BYTES)
+    expect(logged.some((line) => line.includes('big/read'))).toBe(true)
+
+    await handler(conn, JSON.stringify({ jsonrpc: '2.0', id: 8, method: 'small/read' }))
+    expect(sent[1]).toEqual({ jsonrpc: '2.0', id: 8, result: 'small' })
   })
 })

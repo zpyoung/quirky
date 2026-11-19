@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { Terminal } from '@xterm/headless'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { version as xtermVersion } from '@xterm/headless/package.json'
 import { Screen } from '../src/screen'
+import { mouseEncoding, wheelUp } from './mouse'
 
 const ESC = '\x1b'
 
@@ -183,6 +185,30 @@ describe('Screen snapshot', () => {
     })
   })
 
+  test.each([
+    ['SGR', '?1006h'],
+    ['SGR_PIXELS', '?1016h']
+  ])('the %s mouse encoding round-trips, so a reattached pane reports the wheel the same way', async (encoding, mode) => {
+    const output = `${ESC}[?1049h${ESC}[?1003h${ESC}[${mode}${ESC}[Hframe`
+    const screen = new Screen({ cols: 20, rows: 6 })
+    screen.write(output)
+    const oracle = fresh(20, 6)
+    await feed(oracle, output)
+    const copy = await roundTrip(screen, 20, 6)
+    expect(mouseEncoding(copy)).toBe(encoding)
+    const report = await wheelUp(copy)
+    expect(report.startsWith('data:')).toBe(true)
+    expect(report).toBe(await wheelUp(oracle))
+  })
+
+  test('the mouse encoding survives while tracking is off, so turning tracking back on reports in it', async () => {
+    const screen = new Screen({ cols: 20, rows: 6 })
+    screen.write(`${ESC}[?1006h${ESC}[?1003h${ESC}[?1003l`)
+    const copy = await roundTrip(screen, 20, 6)
+    expect(copy.modes.mouseTrackingMode).toBe('none')
+    expect(mouseEncoding(copy)).toBe('SGR')
+  })
+
   test('modes are off for a plain screen', async () => {
     const screen = new Screen({ cols: 10, rows: 3 })
     screen.write('hi')
@@ -193,6 +219,8 @@ describe('Screen snapshot', () => {
       mouseTracking: false,
       applicationCursor: false
     })
+    expect(screen.snapshot().ansi).not.toContain(`${ESC}[?1006h`)
+    expect(screen.snapshot().ansi).not.toContain(`${ESC}[?1016h`)
   })
 })
 
@@ -213,6 +241,27 @@ describe('Screen query replies', () => {
     screen.write(`${ESC}[6n`)
     await screen.settled()
     expect(replies).toHaveLength(2)
+  })
+
+  test('a program asking which terminal this is hears xterm.js and its version', async () => {
+    const replies: string[] = []
+    const screen = new Screen({ cols: 10, rows: 3, onReply: (bytes) => replies.push(new TextDecoder().decode(bytes)) })
+    screen.write(`${ESC}[>q`)
+    await screen.settled()
+    expect(replies).toEqual([`${ESC}P>|xterm.js(${xtermVersion})${ESC}\\`])
+
+    screen.seeding = true
+    screen.write(`${ESC}[>q`)
+    await screen.settled()
+    expect(replies).toHaveLength(1)
+  })
+
+  test('XTVERSION with a nonzero parameter gets no reply', async () => {
+    const replies: string[] = []
+    const screen = new Screen({ cols: 10, rows: 3, onReply: (bytes) => replies.push(new TextDecoder().decode(bytes)) })
+    screen.write(`${ESC}[>1q`)
+    await screen.settled()
+    expect(replies).toEqual([])
   })
 })
 

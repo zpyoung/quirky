@@ -1,11 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { UiPluginContext, Worktree } from '@quirky/protocol'
-import { Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
+import { Button, Dialog, EmptyState, FormRow, SectionHeader, TextField } from '@quirky/ui'
 import type { WorktreeReference } from './parity-types'
 import { setWorktree } from './actions'
+import { registerUiController, requestUiControl, type UiControlArgs } from './ui-control'
 
 type EditableWorktree = Worktree & { references?: WorktreeReference[] }
 type Props = { context: UiPluginContext; worktree: EditableWorktree; onClose(): void }
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 /** Edits workspace notes and durable manual references without treating reference URLs as commands. */
 export function UpdateDialog({ context, worktree, onClose }: Props) {
@@ -18,19 +23,45 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
   const [busy, setBusy] = useState(false)
   const folderName = worktree.path.split('/').filter(Boolean).pop() ?? worktree.name
 
-  const addReference = () => {
-    const reference = { url: referenceUrl, label: referenceLabel.trim() }
+  const addReference = (url: string, label: string) => {
+    if (busy || url.trim() === '') return false
+    const reference = { url, label: label.trim() }
     setReferences((current) => current.some((item) => item.url === reference.url)
       ? current.map((item) => item.url === reference.url ? reference : item)
       : [...current, reference])
     setReferencesChanged(true)
-    setReferenceUrl('')
-    setReferenceLabel('')
+    setReferenceUrl((current) => current === url ? '' : current)
+    setReferenceLabel((current) => current === label ? '' : current)
+    return true
   }
 
   const unlinkReference = (url: string) => {
+    if (busy || !references.some((reference) => reference.url === url)) return false
     setReferences((current) => current.filter((item) => item.url !== url))
     setReferencesChanged(true)
+    return true
+  }
+
+  useEffect(() => registerUiController(context, 'worktree-details', (args: UiControlArgs) => {
+    if (busy) return false
+    if (args.action === 'add-reference') {
+      if (args.worktree !== worktree.id) return false
+      return addReference(args.url, args.label)
+    }
+    if (args.action === 'unlink-reference') {
+      if (args.worktree !== worktree.id) return false
+      return unlinkReference(args.url)
+    }
+    return false
+  }), [context, worktree.id, busy, references])
+
+  async function requestReferenceControl(args: UiControlArgs) {
+    try {
+      const result = await requestUiControl(context, args)
+      if (result.delivered === 0) context.log(`worktree: ${args.action} reached no mounted target`)
+    } catch (error) {
+      context.toast('Could not change linked work', messageOf(error))
+    }
   }
 
   const save = async (event: FormEvent) => {
@@ -46,7 +77,7 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
   }
 
   return (
-    <Dialog open title="Workspace details" onClose={onClose}>
+    <Dialog open title="Worktree details" onClose={onClose}>
       <p className="ui-text-muted">Attach reviews and tasks, and keep notes for this workspace.</p>
       <form className="ui-stack" onSubmit={save}>
         <TextField
@@ -70,19 +101,37 @@ export function UpdateDialog({ context, worktree, onClose }: Props) {
         </FormRow>
         <section className="ui-stack" aria-label="Linked references">
           <SectionHeader title="Linked work" />
-          {references.length === 0 ? <p className="ui-text-muted">No references linked.</p> : (
+          {references.length === 0 ? <EmptyState message="No references linked." /> : (
             <ul className="ui-tree">
               {references.map((reference) => (
                 <li className="ui-tree-item ui-cluster" key={reference.url}>
                   <span className="ui-text-ellipsis">{reference.label || reference.url} · {reference.url}</span>
-                  <Button type="button" disabled={busy} aria-label={`Unlink ${reference.label || reference.url}`} onClick={() => unlinkReference(reference.url)}>Unlink</Button>
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    aria-label={`Unlink ${reference.label || reference.url}`}
+                    onClick={() => void requestReferenceControl({ action: 'unlink-reference', worktree: worktree.id, url: reference.url })}
+                  >
+                    Unlink
+                  </Button>
                 </li>
               ))}
             </ul>
           )}
           <TextField label="Reference URL" id="workspace-reference-url" value={referenceUrl} onChange={(event) => setReferenceUrl(event.target.value)} placeholder="https://…" />
           <TextField label="Reference label" id="workspace-reference-label" value={referenceLabel} onChange={(event) => setReferenceLabel(event.target.value)} placeholder="APP-42" />
-          <Button type="button" disabled={busy || referenceUrl.trim() === ''} onClick={addReference}>Add reference</Button>
+          <Button
+            type="button"
+            disabled={busy || referenceUrl.trim() === ''}
+            onClick={() => void requestReferenceControl({
+              action: 'add-reference',
+              worktree: worktree.id,
+              url: referenceUrl,
+              label: referenceLabel
+            })}
+          >
+            Add reference
+          </Button>
           <p className="ui-help-text">Links are displayed as text here and are not opened.</p>
         </section>
         <div className="ui-actions">

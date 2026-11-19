@@ -44,7 +44,7 @@ export function DeleteDialog({ context, worktree, sessions, descendants, onConfi
   }, [context, worktree.id])
 
   return (
-    <Dialog open title="Delete Workspace" onClose={onClose}>
+    <Dialog open title="Delete worktree" onClose={onClose}>
       <p className="ui-text-muted">
         {`Remove ${worktree.name} from git and delete its workspace folder. Any uncommitted or untracked changes in Git workspaces will be permanently deleted.`}
       </p>
@@ -76,7 +76,7 @@ export function DeleteDialog({ context, worktree, sessions, descendants, onConfi
           Cancel
         </Button>
         <Button type="button" variant="destructive" onClick={() => onConfirm({ dontAskAgain })}>
-          Delete Workspace
+          Delete worktree
         </Button>
       </div>
     </Dialog>

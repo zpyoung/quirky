@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { QuirkyClient, type ApiCatalog, type Schema } from '@quirky/protocol'
+import { PLUGIN_API_VERSION, QuirkyClient, type ApiCatalog, type Schema } from '@quirky/protocol'
 import { createDaemonLink } from '../src/link'
 import { cliContextFor } from '../src/plugin-commands'
 import { Printer } from '../src/output'
 import type { Context } from '../src/commands/types'
 import { FakeDaemon, runCli } from './fixtures/fake-daemon'
+
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
 
 const NOTE_PARAMS: Schema = {
   type: 'object',
@@ -22,6 +25,8 @@ const NOTE_PARAMS: Schema = {
 const MODULE_SOURCE = `
 import { appendFileSync } from 'node:fs'
 appendFileSync(process.env.QUIRKY_TEST_MARKER, 'loaded\\n')
+
+export const help = { greet: 'Extra guide for greet.\\nSecond line.' }
 
 export const commands = {
   greet: async (args, ctx) => {
@@ -151,7 +156,6 @@ describe('a declared command with a CLI module', () => {
   test('the module is imported only when its command runs', async () => {
     await run(['acme.notes', 'add', 'x'])
     await run(['acme.notes', '--help'])
-    await run(['acme.notes', 'greet', '--help'])
     await run(['api', '--json'])
     expect(loads()).toBe(0)
 
@@ -194,7 +198,7 @@ describe('a declared command with a CLI module', () => {
     expect(gone.stderr).toContain('could not load the CLI module of acme.notes')
   })
   test('incompatible, missing, and malformed API floors fail before importing the module', async () => {
-    for (const apiVersion of ['1.3.0', undefined, '^1.0.0', 1]) {
+    for (const apiVersion of [NEXT_API_MINOR_VERSION, undefined, '^1.0.0', 1]) {
       setCommandApiVersion('cli-command:acme.notes/greet', apiVersion)
       const result = await run(['acme.notes', 'greet'])
       expect(result.code).toBe(1)
@@ -254,6 +258,20 @@ describe('declared commands beat generated ones, and help lists them', () => {
     expect(one.stdout).toContain('usage: quirky acme.notes add <name>')
     expect(one.stdout).toContain('<name>  The note title')
     expect(one.stdout).toMatch(/--color red\|blue\s+Note color/)
+  })
+
+  test('a module help entry is appended to its command help only', async () => {
+    const greet = await run(['acme.notes', 'greet', '--help'])
+    expect(greet.code).toBe(0)
+    expect(greet.stdout).toContain('usage: quirky acme.notes greet [<who>] [--shout]')
+    expect(greet.stdout).toEndWith('global: --json prints machine-readable JSON\n\nExtra guide for greet.\nSecond line.\n')
+    expect(loads()).toBe(1)
+
+    const boom = await run(['acme.notes', 'boom', '--help'])
+    expect(boom.stdout).toBe('usage: quirky acme.notes boom\n\nboom\n\nglobal: --json prints machine-readable JSON\n')
+    const add = await run(['acme.notes', 'add', '--help'])
+    expect(add.stdout).not.toContain('Extra guide')
+    expect(add.stdout).toEndWith('global: --json prints machine-readable JSON\n')
   })
 
   test('quirky api text and the skill list declared commands and the global switches', async () => {

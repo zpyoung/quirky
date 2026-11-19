@@ -1,6 +1,7 @@
 import { formatContributionId, type PluginContext } from '@quirky/protocol'
 import { createEnv } from './src/daemon/env'
 import { methodTable } from './src/daemon/methods'
+import { keepReviewAfterEditorSave } from './src/daemon/review'
 import { migrations } from './src/daemon/store'
 let stopModelSnapshots: (() => void) | undefined
 /**
@@ -14,8 +15,9 @@ export function activate(context: PluginContext): void {
     context.provide(formatContributionId('method', context.pluginId, name), handler)
   }
   stopModelSnapshots = context.subscribe((event) => {
-    if (event.type !== 'quirky.agents/modelSnapshot') return
     const data = 'data' in event ? event.data : undefined
+    if (event.type === 'quirky.editor/saved') return keepReviewAfterEditorSave(env, data)
+    if (event.type !== 'quirky.agents/modelSnapshot') return
     try {
       env.recipes.retireStaleModels(data)
     } catch (error) {

@@ -75,17 +75,31 @@
 }
 
 .tt-shortcut-row {
-  align-items: end;
+  align-items: center;
   border-bottom: var(--ui-border-width) solid var(--ui-border);
   display: grid;
-  gap: var(--ui-space-8);
+  column-gap: var(--ui-space-8);
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  row-gap: var(--ui-space-4);
   min-width: 0;
   padding-block: var(--ui-space-8);
 }
 
 .tt-shortcut-row > .ui-form-row {
+  display: grid;
+  grid-row: 1 / span 2;
+  grid-template-rows: subgrid;
   min-width: 0;
+}
+
+.tt-shortcut-row > .ui-form-row > .ui-form-row__control {
+  display: grid;
+}
+
+.tt-shortcut-row > .tt-shortcut-status,
+.tt-shortcut-row > .ui-cluster {
+  grid-row: 2;
 }
 
 .tt-shortcut-status {

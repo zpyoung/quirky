@@ -17,9 +17,14 @@ import {
   type DesktopWindowRunOwnerCommandRequest,
   type DesktopWindowRunOwnerCommandResult,
   type DesktopWindowResult,
+  type FilePickerRequest,
+  type FilePickerResult,
   type FolderPickerRequest,
   type FolderPickerResult,
+  type BrowserHostPrompt,
   type NativeDesktopCapabilities,
+  type FolderListing,
+  type Methods,
   type QuirkyEvent,
   type Schema,
   type UiLayout,
@@ -47,6 +52,7 @@ const PALETTE_RECENT_ID_LIMIT = 2048
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const TOAST_DISMISS = 'ui.toast.dismiss'
+const BROWSER_HOST_CONTROL = 'ui.browserHost.control'
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 const PANEL_WIDTH_MIN = 220
 const PANEL_WIDTH_MAX = 4096
@@ -110,6 +116,7 @@ type AuxiliaryWindowRoute = {
 
 const DEFAULT_DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
   directoryPicker: false,
+  filePicker: false,
   auxiliaryWindows: false,
   revealItem: false,
   notifications: { permission: false, click: false, dismiss: false }
@@ -122,6 +129,7 @@ function nativeResultMatches(action: DesktopShellAction, value: unknown): value 
   if (!isRecord(value)) return false
   switch (action.kind) {
     case 'folder-picker':
+    case 'file-picker':
       return typeof value.cancelled === 'boolean' && Array.isArray(value.paths) &&
         value.paths.every((path) => typeof path === 'string') && value.cancelled === (value.paths.length === 0)
     case 'window-open':
@@ -134,6 +142,90 @@ function nativeResultMatches(action: DesktopShellAction, value: unknown): value 
       return value.requested === true
   }
 }
+/** Identifies the browser controller's deliberate shell-only capability subset. */
+function hasBrowserHostCapabilities(capabilities: NativeDesktopCapabilities | undefined): boolean {
+  return capabilities !== undefined &&
+    capabilities.directoryPicker &&
+    capabilities.auxiliaryWindows &&
+    !capabilities.revealItem &&
+    !capabilities.notifications.permission &&
+    !capabilities.notifications.click &&
+    !capabilities.notifications.dismiss
+}
+
+function folderListingFromReply(value: unknown): FolderListing {
+  if (!isRecord(value) ||
+    typeof value.path !== 'string' ||
+    !(value.parent === null || typeof value.parent === 'string') ||
+    !Array.isArray(value.entries) ||
+    typeof value.offset !== 'number' ||
+    !Number.isInteger(value.offset) ||
+    typeof value.limit !== 'number' ||
+    !Number.isInteger(value.limit) ||
+    typeof value.hasMore !== 'boolean') {
+    throw conflict('browser host returned an invalid folder listing')
+  }
+  const entries: FolderListing['entries'] = []
+  for (const entry of value.entries) {
+    if (!isRecord(entry) || typeof entry.name !== 'string' || typeof entry.path !== 'string') {
+      throw conflict('browser host returned an invalid folder listing')
+    }
+    entries.push({ name: entry.name, path: entry.path })
+  }
+  return {
+    path: value.path,
+    parent: value.parent,
+    entries,
+    offset: value.offset,
+    limit: value.limit,
+    hasMore: value.hasMore
+  }
+}
+
+function browserHostPromptFromReply(value: unknown): BrowserHostPrompt | null {
+  if (value === null) return null
+  if (!isRecord(value) ||
+    typeof value.requestId !== 'string' ||
+    (value.kind !== 'folder-picker' && value.kind !== 'window-open') ||
+    typeof value.title !== 'string' ||
+    typeof value.expiresAt !== 'number' ||
+    typeof value.busy !== 'boolean' ||
+    !(value.error === null || typeof value.error === 'string')) {
+    throw conflict('browser host returned an invalid prompt')
+  }
+  const prompt: BrowserHostPrompt = {
+    requestId: value.requestId,
+    kind: value.kind,
+    title: value.title,
+    expiresAt: value.expiresAt,
+    busy: value.busy,
+    error: value.error
+  }
+  if (value.draftPath !== undefined) {
+    if (typeof value.draftPath !== 'string') throw conflict('browser host returned an invalid prompt')
+    prompt.draftPath = value.draftPath
+  }
+  if (value.directory !== undefined) prompt.directory = folderListingFromReply(value.directory)
+  if (value.selectedPaths !== undefined) {
+    if (!Array.isArray(value.selectedPaths) || !value.selectedPaths.every((path) => typeof path === 'string')) {
+      throw conflict('browser host returned an invalid prompt')
+    }
+    prompt.selectedPaths = value.selectedPaths
+  }
+  if (value.multiple !== undefined) {
+    if (typeof value.multiple !== 'boolean') throw conflict('browser host returned an invalid prompt')
+    prompt.multiple = value.multiple
+  }
+  return prompt
+}
+
+function browserHostControlResult(value: unknown): Methods['ui.browserHost.control']['result'] {
+  if (!isRecord(value) || !Object.hasOwn(value, 'active')) {
+    throw conflict('browser host returned an invalid control state')
+  }
+  return { active: browserHostPromptFromReply(value.active) }
+}
+
 
 function overlayShown(report: Report | undefined): boolean {
   if (!report) return false
@@ -158,7 +250,7 @@ function sameValue(a: unknown, b: unknown): boolean {
   const left = a as Record<string, unknown>
   const right = b as Record<string, unknown>
   const keys = Object.keys(left)
-  return keys.length === Object.keys(right).length && keys.every((key) => key in right && sameValue(left[key], right[key]))
+  return keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]))
 }
 
 type OpenView = NonNullable<UiLayout['view']>
@@ -294,7 +386,9 @@ export class LayoutService {
   private readonly desktopCapabilitiesByWindow = new Map<number, NativeDesktopCapabilities>()
   private readonly auxiliaryWindows = new Map<string, AuxiliaryWindowRoute>()
   private readonly windowViews = new Map<number, WindowLayoutOverride>()
+  private readonly sentLayouts = new Map<number, UiLayout>()
   private reportCounter = 0
+  private storedLayoutSettled = false
   private lastFocusedAt = 0
   private awayMs: number
 
@@ -334,6 +428,7 @@ export class LayoutService {
   }
 
   private stateFor(connId: number | undefined, fallbackReports: boolean): UiState {
+    this.settleStoredLayout()
     const layout = connId === undefined ? this.layout() : this.windowLayout(connId)
     const model = this.options.ui.contributions()
     const windows = this.windows()
@@ -356,6 +451,7 @@ export class LayoutService {
       })),
       ...model.sidebarSections.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.statusBars.map((entry) => ({ entry, shown: () => true })),
+      ...(model.windowBarItems ?? []).map((entry) => ({ entry, shown: () => true })),
       ...model.panels.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) })),
       ...model.views.map((entry) => ({ entry, shown: () => shownToolBodies.has(entry.id) || activeViews.has(entry.id) })),
       ...model.overlays.map((entry) => ({ entry, shown: (report?: Report) => overlayShown(report) }))
@@ -381,17 +477,22 @@ export class LayoutService {
     const windows = this.openWindows()
     if (windows.length > 1) throw conflict('multiple Quirky windows are open; specify connId')
     if (windows.length === 1) return this.openWindowView(windows[0]!.id, id, input)
+    return this.showSharedView(id, input, true)
+  }
+
+  private showSharedView(id: string, input: unknown, closeExpandedHosts: boolean): UiLayout {
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
     const view = { id, ...(input !== undefined ? { input } : {}) }
     return this.change((layout) => {
       const worktree = worktreeOf(view)
-      return {
+      const opened = {
         ...layout,
         view,
         viewTabs: viewTabOpened(layout.viewTabs ?? [], view),
         worktree: worktree === undefined ? layout.worktree ?? null : worktree
       }
+      return closeExpandedHosts ? this.withExpandedHostsClosed(opened, id) : opened
     })
   }
 
@@ -414,6 +515,7 @@ export class LayoutService {
 
   /** Removes a deleted workspace from the shared layout, every window override, and auxiliary routes. */
   forgetWorktree(worktreeId: string): void {
+    this.settleStoredLayout()
     const shared = this.layout()
     const nextShared = {
       ...shared,
@@ -498,12 +600,19 @@ export class LayoutService {
           windows: [this.auxiliaryWindowSummary(auxiliary)]
         })
       }
-      if (conn.subscribed) this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+      if (conn.subscribed) this.sendLayout(conn, layout)
     }
   }
 
-  /** Opens a view only in the exact live UI connection. */
+  /**
+   * Opens a view only in the exact live UI connection. A main window also closes the slot of a tool
+   * whose expanded view this is; an auxiliary window has no slots and leaves the main window's alone.
+   */
   openWindowView(connId: number, id: string, input?: unknown): UiLayout {
+    return this.showWindowView(connId, id, input, true)
+  }
+
+  private showWindowView(connId: number, id: string, input: unknown, closeExpandedHosts: boolean): UiLayout {
     const target = this.requireWindowById(connId)
     this.requireSlot(id, 'view')
     if (jsonLength(input) > MAX_JSON_LENGTH) throw invalidParams('input is over 64 KiB')
@@ -519,7 +628,7 @@ export class LayoutService {
       else auxiliary.input = input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       const next = this.windowLayout(target.id)
-      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      this.sendLayout(target, next)
       return next
     }
 
@@ -529,11 +638,19 @@ export class LayoutService {
     const worktree = worktreeUpdate === undefined ? previous.worktree : worktreeUpdate
     if (this.openWindows().length === 1) {
       this.windowViews.delete(target.id)
-      return this.change((layout) => ({ ...layout, view, viewTabs, worktree }))
+      return this.change((layout) => {
+        const opened = { ...layout, view, viewTabs, worktree }
+        return closeExpandedHosts ? this.withExpandedHostsClosed(opened, id) : opened
+      })
     }
     this.windowViews.set(target.id, { ...previous, view, viewTabs, worktree })
+    if (closeExpandedHosts) {
+      const shared = this.layout()
+      const closed = this.withExpandedHostsClosed(shared, id)
+      if (closed !== shared) this.change(() => closed)
+    }
     const next = this.windowLayout(target.id)
-    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    this.sendLayout(target, next)
     return next
   }
 
@@ -556,7 +673,7 @@ export class LayoutService {
       else auxiliary.input = view.input
       this.options.sendTo(target, { type: 'desktop.window.changed', windows: [this.auxiliaryWindowSummary(auxiliary)] })
       const next = this.windowLayout(target.id)
-      this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+      this.sendLayout(target, next)
       return next
     }
 
@@ -577,7 +694,7 @@ export class LayoutService {
     }
     this.windowViews.set(target.id, { view, viewTabs, worktree, ...(focus === undefined ? {} : { focus }) })
     const next = this.windowLayout(target.id)
-    this.options.sendTo(target, { type: 'ui.state.changed', layout: next })
+    this.sendLayout(target, next)
     return next
   }
 
@@ -654,8 +771,41 @@ export class LayoutService {
     })
   }
 
+  /**
+   * Opens a tool in its slot. For a tool with an expanded view, the focused (or only) main window
+   * decides: an active expanded view is closed and the slot opens, an expanded view behind another
+   * view becomes the active one and no slot opens.
+   */
   openTool(id: string): UiLayout {
     const tool = this.requireTool(id)
+    const expandedView = tool.expandedView
+    if (expandedView === undefined) return this.openToolSlot(tool)
+    const connId = this.toolWindowId()
+    if (connId === undefined) {
+      for (const window of this.mainWindows()) {
+        const current = this.windowLayout(window.id)
+        const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+        if (tab !== undefined) return this.showWindowView(window.id, tab.id, tab.input, true)
+      }
+      if (this.openWindows().length > 0) return this.openToolSlot(tool)
+      const shared = this.layout()
+      const tab = (shared.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+      if (tab === undefined) return this.openToolSlot(tool)
+      if (shared.view?.id !== tab.id) return this.showSharedView(tab.id, tab.input, false)
+      this.closeView()
+      return this.openToolSlot(tool)
+    }
+    const current = this.windowLayout(connId)
+    const tab = (current.viewTabs ?? []).find((candidate) => candidate.id === expandedView)
+    if (tab === undefined) return this.openToolSlot(tool)
+    if (current.view?.id !== tab.id) return this.showWindowView(connId, tab.id, tab.input, true)
+    this.closeWindowView(connId)
+    this.openToolSlot(tool)
+    return this.windowLayout(connId)
+  }
+
+  private openToolSlot(tool: UiToolEntry): UiLayout {
+    const id = tool.id
     return this.change((layout) => {
       const slot = this.slotOfTool(layout.tools!, tool)
       const open = { ...layout.tools!.open, [slot]: id }
@@ -864,12 +1014,25 @@ export class LayoutService {
     this.validateCommand(id, args)
     return this.route(target, id, args)
   }
+  /** Routes the reserved browser-host control only to its exact live browser window. */
+  browserHostControl(
+    connId: number,
+    control: Omit<Methods['ui.browserHost.control']['params'], 'connId'>
+  ): Promise<Methods['ui.browserHost.control']['result']> {
+    const target = this.requireWindowById(connId)
+    if (!hasBrowserHostCapabilities(this.desktopCapabilitiesByWindow.get(connId))) {
+      throw conflict('browser-host control is unavailable for this UI window')
+    }
+    return this.route(target, BROWSER_HOST_CONTROL, control).then(({ result }) => browserHostControlResult(result))
+  }
 
-  /** Records capabilities reported by this exact UI window's trusted native preload. */
+
+  /** Records the shell capabilities reported for this exact UI connection. */
   setDesktopCapabilities(conn: ClientConn, capabilities: NativeDesktopCapabilities): void {
     this.requireWindow(conn)
     this.desktopCapabilitiesByWindow.set(conn.id, {
       directoryPicker: capabilities.directoryPicker,
+      filePicker: capabilities.filePicker,
       auxiliaryWindows: capabilities.auxiliaryWindows,
       revealItem: capabilities.revealItem,
       notifications: { ...capabilities.notifications }
@@ -886,6 +1049,10 @@ export class LayoutService {
 
   pickFolder(conn: ClientConn, request: FolderPickerRequest): Promise<FolderPickerResult> {
     return this.requestDesktopShell(conn, { kind: 'folder-picker', request }) as Promise<FolderPickerResult>
+  }
+
+  pickFiles(conn: ClientConn, request: FilePickerRequest): Promise<FilePickerResult> {
+    return this.requestDesktopShell(conn, { kind: 'file-picker', request }) as Promise<FilePickerResult>
   }
 
   openDesktopWindow(conn: ClientConn, request: DesktopWindowRequest): Promise<DesktopWindowResult> {
@@ -940,7 +1107,7 @@ export class LayoutService {
     if (request.title !== undefined) route.title = request.title
     this.announceDesktopWindows()
     const layout = this.windowLayout(conn.id)
-    this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+    this.sendLayout(conn, layout)
     return this.auxiliaryWindowSummary(route)
   }
 
@@ -963,6 +1130,7 @@ export class LayoutService {
     const problem = validateValue(this.argsSchema(request.id), args, 'args')
     if (problem !== null) throw invalidParams(problem)
     const result = await this.route(owner, request.id, args)
+    if (request.activateOwner === false) return { result: result.result, activated: false }
     const activation = await this.requestDesktopShell(conn, {
       kind: 'window-activate-owner',
       request: { windowId: request.windowId }
@@ -1079,6 +1247,7 @@ export class LayoutService {
     }
     this.toastReports.delete(conn.id)
     this.windowViews.delete(conn.id)
+    this.sentLayouts.delete(conn.id)
     for (const [requestId, pending] of this.pending) {
       if (pending.conn === conn) this.settle(requestId, (settled) => settled.reject(unanswered()))
     }
@@ -1100,13 +1269,23 @@ export class LayoutService {
       const windows = this.openWindows()
       const survivor = windows.length === 1 ? windows[0] : undefined
       if (survivor && !this.auxiliaryView(survivor.id)) {
+        const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
+        if (hosts.length > 0) this.storedLayoutSettled = true
         const override = this.windowViewFor(survivor.id)
-        this.change((layout) => ({
-          ...layout,
-          view: override.view,
-          viewTabs: override.viewTabs,
-          worktree: override.worktree
-        }))
+        this.change((layout) => {
+          let merged: UiLayout = {
+            ...layout,
+            view: override.view,
+            viewTabs: override.viewTabs,
+            worktree: override.worktree
+          }
+          for (const host of hosts) {
+            if (override.viewTabs.some((tab) => tab.id === host.expandedView)) {
+              merged = this.withExpandedHostsClosed(merged, host.expandedView!)
+            }
+          }
+          return merged
+        })
       }
       this.announceWindows()
     }
@@ -1165,6 +1344,7 @@ export class LayoutService {
     if (!capabilities) return false
     switch (kind) {
       case 'folder-picker': return capabilities.directoryPicker
+      case 'file-picker': return capabilities.filePicker === true
       case 'window-open':
       case 'window-close':
       case 'window-activate-owner': return capabilities.auxiliaryWindows
@@ -1175,6 +1355,7 @@ export class LayoutService {
   private desktopActionLabel(kind: DesktopShellAction['kind']): string {
     switch (kind) {
       case 'folder-picker': return 'directory selection'
+      case 'file-picker': return 'file selection'
       case 'window-open':
       case 'window-close':
       case 'window-activate-owner': return 'auxiliary windows'
@@ -1224,6 +1405,10 @@ export class LayoutService {
   private openWindows(): ClientConn[] {
     return [...this.options.clients()].filter((conn) => conn.role === 'ui' && !conn.closed)
   }
+  private mainWindows(): ClientConn[] {
+    const windows = this.openWindows()
+    return windows.filter((conn) => this.auxiliaryView(conn.id) === undefined)
+  }
   private requireWindowById(connId: number): ClientConn {
     if (!Number.isInteger(connId) || connId < 1) throw invalidParams('connId must be a positive integer')
     const target = [...this.options.clients()].find((conn) => conn.id === connId && !conn.closed)
@@ -1237,6 +1422,7 @@ export class LayoutService {
   }
 
   private windowViewFor(connId: number): WindowLayoutOverride {
+    this.settleStoredLayout()
     const existing = this.windowViews.get(connId)
     if (existing) return existing
 
@@ -1256,6 +1442,15 @@ export class LayoutService {
   }
 
   private windowLayout(connId: number): UiLayout {
+    const layout = this.computeWindowLayout(connId)
+    const sent = this.sentLayouts.get(connId)
+    // a state reply can replace the window's layout without an event
+    if (sent !== undefined && !sameValue(sent, layout)) this.sentLayouts.delete(connId)
+    return layout
+  }
+
+  private computeWindowLayout(connId: number): UiLayout {
+    this.settleStoredLayout()
     const layout = this.layout()
     const auxiliary = this.auxiliaryView(connId)
     if (auxiliary) {
@@ -1312,8 +1507,14 @@ export class LayoutService {
   }
 
 
-  private focusedConn(): ClientConn | undefined {
-    return this.openWindows().reduce<ClientConn | undefined>(
+  /** The focused main window, or the only main window, decides how an expanded tool opens. */
+  private toolWindowId(): number | undefined {
+    const windows = this.mainWindows()
+    return this.focusedConn(windows)?.id ?? (windows.length === 1 ? windows[0]!.id : undefined)
+  }
+
+  private focusedConn(windows: ClientConn[] = this.openWindows()): ClientConn | undefined {
+    return windows.reduce<ClientConn | undefined>(
       (best, conn) => (conn.focusedAt !== undefined && conn.focusedAt > (best?.focusedAt ?? 0) ? conn : best),
       undefined
     )
@@ -1471,18 +1672,71 @@ export class LayoutService {
     return null
   }
 
-  private publishGlobalLayout(layout: UiLayout): void {
-    this.options.broadcastNonWindows({ type: 'ui.state.changed', layout })
-    for (const conn of this.openWindows()) {
-      if (!conn.subscribed) continue
-      this.options.sendTo(conn, { type: 'ui.state.changed', layout: this.windowLayout(conn.id) })
+  /** Closes the slot of every tool whose expanded view is `viewId`, as `closeTool` would. */
+  private withExpandedHostsClosed(layout: UiLayout, viewId: string): UiLayout {
+    if (!layout.tools) return layout
+    const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView === viewId)
+    let next = layout
+    for (const host of hosts) {
+      for (const slot of UI_TOOL_SLOTS) {
+        if (next.tools!.open[slot] !== host.id) continue
+        const open = { ...next.tools!.open, [slot]: null }
+        const tools = { ...next.tools!, open }
+        const panel = this.panelForOpen(tools, next.panel)
+        const focusTarget = focusTargetOfTool(host)
+        next = {
+          ...next,
+          tools,
+          panel,
+          focus: focusTarget !== undefined && next.focus === focusTarget && (focusTarget !== 'panel' || panel === null)
+            ? null
+            : next.focus
+        }
+      }
     }
+    return next
+  }
+
+  /**
+   * Settles a stored layout that has a tool open beside its expanded view, once at most one window
+   * is connected: multiple windows can have per-window view state that has not reached shared storage.
+   */
+  private settleStoredLayout(): void {
+    if (this.storedLayoutSettled) return
+    const hosts = (this.options.ui.contributions().tools ?? []).filter((tool) => tool.expandedView !== undefined)
+    if (hosts.length === 0 || this.openWindows().length > 1) return
+    this.storedLayoutSettled = true
+    const layout = this.layout()
+    let settled = layout
+    for (const host of hosts) {
+      if ((layout.viewTabs ?? []).some((tab) => tab.id === host.expandedView)) {
+        settled = this.withExpandedHostsClosed(settled, host.expandedView!)
+      }
+    }
+    if (settled !== layout) this.change(() => settled)
+  }
+
+  private sendLayout(conn: ClientConn, layout: UiLayout): void {
+    if (sameValue(this.sentLayouts.get(conn.id), layout)) return
+    this.options.sendTo(conn, { type: 'ui.state.changed', layout })
+    this.sentLayouts.set(conn.id, layout)
   }
 
   private change(update: (layout: UiLayout) => UiLayout): UiLayout {
-    const next = update(this.layout())
-    this.options.store.setUiState(LAYOUT_KEY, next)
-    this.publishGlobalLayout(next)
+    this.settleStoredLayout()
+    const current = this.layout()
+    const next = update(current)
+    const changed = !sameValue(current, next)
+    if (changed) this.options.store.setUiState(LAYOUT_KEY, next)
+    const stale: [ClientConn, UiLayout][] = []
+    for (const conn of this.openWindows()) {
+      if (!conn.subscribed) continue
+      const layout = this.windowLayout(conn.id)
+      if (!sameValue(this.sentLayouts.get(conn.id), layout)) stale.push([conn, layout])
+    }
+    if (!changed && stale.length === 0) return next
+    this.options.broadcastNonWindows({ type: 'ui.state.changed', layout: next })
+    for (const [conn, layout] of stale) this.sendLayout(conn, layout)
     return next
   }
 }

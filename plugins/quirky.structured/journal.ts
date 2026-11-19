@@ -1,9 +1,18 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import type { ChatItem, PluginStore, StoreMigration, StructuredMessage, StructuredRole } from '@quirky/protocol'
+import { CREATE_QUEUE_TABLE } from './queue'
 
-type Row = { session_id: string; seq: number; role: StructuredRole; text: string; data: string | null; at: number }
+type Row = {
+  session_id: string
+  seq: number
+  role: StructuredRole
+  text: string
+  data: string | null
+  item: string | null
+  at: number
+}
 
 export type StructuredSendReceipt = {
   operationId: string
@@ -42,8 +51,10 @@ const CREATE_TABLE = `
     PRIMARY KEY (session_id, seq)
   )`
 
-const INSERT_ROW = 'INSERT INTO structured_messages (session_id, seq, role, text, data, at) VALUES (?, ?, ?, ?, ?, ?)'
-const IMPORT_ROW = INSERT_ROW.replace('INSERT', 'INSERT OR IGNORE')
+const INSERT_ROW =
+  'INSERT INTO structured_messages (session_id, seq, role, text, data, item, at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+const IMPORT_ROW = 'INSERT OR IGNORE INTO structured_messages (session_id, seq, role, text, data, at) VALUES (?, ?, ?, ?, ?, ?)'
+const SELECT_COLUMNS = 'session_id, seq, role, text, data, item, at'
 
 /** Creates the journal table, then copies a v1 home's `structured_messages` rows when that table exists. */
 function createAndImportV1(home: string): StoreMigration {
@@ -55,7 +66,7 @@ function createAndImportV1(home: string): StoreMigration {
     try {
       const hasTable = v1.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'structured_messages'").get()
       if (!hasTable) return
-      const rows = v1.query('SELECT session_id, seq, role, text, data, at FROM structured_messages').all() as Row[]
+      const rows = v1.query('SELECT session_id, seq, role, text, data, at FROM structured_messages').all() as Omit<Row, 'item'>[]
       store.transaction(() => {
         for (const row of rows) store.run(IMPORT_ROW, row.session_id, row.seq, row.role, row.text, row.data, row.at)
       })
@@ -68,7 +79,12 @@ function createAndImportV1(home: string): StoreMigration {
 
 /** The migrations of the plugin's store, for `context.openStore`. */
 export function journalMigrations(home: string): StoreMigration[] {
-  return [createAndImportV1(home), (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE)]
+  return [
+    createAndImportV1(home),
+    (store) => store.exec(CREATE_SEND_RECEIPTS_TABLE),
+    (store) => store.exec('ALTER TABLE structured_messages ADD COLUMN item TEXT'),
+    (store) => store.exec(CREATE_QUEUE_TABLE)
+  ]
 }
 
 /** The structured sessions' message journal. */
@@ -131,7 +147,14 @@ export class Journal {
   }
 
   /** Stores a message under the next `seq` of its session. */
-  append(input: { sessionId: string; role: StructuredRole; text: string; data?: unknown; at: number }): StructuredMessage {
+  append(input: {
+    sessionId: string
+    role: StructuredRole
+    text: string
+    data?: unknown
+    item?: ChatItem
+    at: number
+  }): StructuredMessage {
     const seq = this.store.transaction(() => {
       const row = this.store.get<{ next: number }>(
         'SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM structured_messages WHERE session_id = ?',
@@ -144,45 +167,53 @@ export class Journal {
         input.role,
         input.text,
         input.data === undefined ? null : JSON.stringify(input.data),
+        input.item === undefined ? null : JSON.stringify(input.item),
         input.at
       )
       return row.next
     })
     const message: StructuredMessage = { sessionId: input.sessionId, seq, role: input.role, text: input.text, at: input.at }
     if (input.data !== undefined) message.data = input.data
+    if (input.item !== undefined) message.item = input.item
     return message
   }
 
-  /** The session's messages with `seq` above `afterSeq`, oldest first unless a bounded tail is requested. */
-  list(sessionId: string, afterSeq = 0, limit?: number, tail = false): StructuredMessage[] {
+  /**
+   * The session's messages with `seq` above `afterSeq` and, when given, below `beforeSeq`, returned
+   * oldest first. A `limit` keeps the oldest of them, or the newest when `tail` is set.
+   */
+  list(sessionId: string, afterSeq = 0, limit?: number, tail = false, beforeSeq?: number): StructuredMessage[] {
+    const range = beforeSeq === undefined ? 'session_id = ? AND seq > ?' : 'session_id = ? AND seq > ? AND seq < ?'
+    const bounds: number[] = beforeSeq === undefined ? [afterSeq] : [afterSeq, beforeSeq]
     let rows: Row[]
     if (limit !== undefined && tail) {
       rows = this.store.all<Row>(
-        `SELECT session_id, seq, role, text, data, at FROM (
-           SELECT session_id, seq, role, text, data, at FROM structured_messages
-           WHERE session_id = ? AND seq > ? ORDER BY seq DESC LIMIT ?
+        `SELECT ${SELECT_COLUMNS} FROM (
+           SELECT ${SELECT_COLUMNS} FROM structured_messages
+           WHERE ${range} ORDER BY seq DESC LIMIT ?
          ) ORDER BY seq`,
         sessionId,
-        afterSeq,
+        ...bounds,
         limit
       )
     } else if (limit !== undefined) {
       rows = this.store.all<Row>(
-        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq LIMIT ?',
+        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE ${range} ORDER BY seq LIMIT ?`,
         sessionId,
-        afterSeq,
+        ...bounds,
         limit
       )
     } else {
       rows = this.store.all<Row>(
-        'SELECT session_id, seq, role, text, data, at FROM structured_messages WHERE session_id = ? AND seq > ? ORDER BY seq',
+        `SELECT ${SELECT_COLUMNS} FROM structured_messages WHERE ${range} ORDER BY seq`,
         sessionId,
-        afterSeq
+        ...bounds
       )
     }
     return rows.map((row) => {
       const message: StructuredMessage = { sessionId: row.session_id, seq: row.seq, role: row.role, text: row.text, at: row.at }
       if (row.data !== null) message.data = JSON.parse(row.data)
+      if (row.item !== null) message.item = JSON.parse(row.item) as ChatItem
       return message
     })
   }

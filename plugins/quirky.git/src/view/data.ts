@@ -13,46 +13,66 @@ export function reasonOf(error: unknown): string | undefined {
   return typeof reason === 'string' ? reason : undefined
 }
 
-export type DiffRequest = { path: string; source: GitDiffSource; oldPath?: string; commit?: string }
+export type DiffRequest = { path: string; source: GitDiffSource; oldPath?: string; commit?: string; against?: 'base' | 'reviewed' }
 
 /** One file's diff from the daemon. Rejects with git's message when the sides cannot be read. */
 export async function fetchDiff(context: UiPluginContext, worktree: string, request: DiffRequest): Promise<GitDiff> {
-  const { path, source, oldPath, commit } = request
+  const { path, source, oldPath, commit, against } = request
   return (await context.call('quirky.git/diff', {
     worktree,
     path,
     source,
     ...(oldPath ? { oldPath } : {}),
-    ...(commit ? { commit } : {})
+    ...(commit ? { commit } : {}),
+    ...(against ? { against } : {})
   })) as GitDiff
 }
 
-/** Whether a diff of this shape can take edits: an unstaged, readable text file that is still on disk. */
-export function isEditable(source: GitDiffSource, diff: GitDiff): boolean {
-  return (
-    source === 'unstaged' &&
-    diff.kind === 'text' &&
-    !diff.binary &&
-    diff.tooLarge === undefined &&
-    diff.modifiedDeleted !== true
-  )
+/** Whether a diff shows text a reader can read (not binary, image or past the display limits). */
+export function isTextDiff(diff: GitDiff): boolean {
+  return diff.kind === 'text' && !diff.binary && diff.tooLarge === undefined
 }
 
 /**
- * Runs `refresh` on every `quirky.git/changed` event and, when `intervalMs` is given, on a timer;
- * both stop with the component. The latest `refresh` is always the one called.
+ * Whether a Review card can take edits: its diff is text and its modified side is a file on disk
+ * with a known hash. Staged and commit scopes show content that is not the disk.
  */
-export function useRefreshTriggers(context: UiPluginContext, refresh: () => void, intervalMs: number | null): void {
+export function isEditableCard(diskSide: boolean, diff: GitDiff): boolean {
+  return diskSide && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
+}
+
+/**
+ * The ID a selector states outright: `id:<value>` or a bare `wt_` and 12 lowercase hex digits.
+ * Other selectors need daemon resolution and return null.
+ */
+export function worktreeIdOf(selector: string): string | null {
+  const value = selector.trim()
+  if (value.startsWith('id:')) return value.slice(3) || null
+  return /^wt_[0-9a-f]{12}$/.test(value) ? value : null
+}
+
+/**
+ * Runs `refresh` on `quirky.git/changed` for `worktree` and, when `intervalMs` is given, on a timer;
+ * both stop with the component. Selectors that don't state an ID hear every git change.
+ * The latest `refresh` is always the one called.
+ */
+export function useRefreshTriggers(
+  context: UiPluginContext,
+  refresh: () => void,
+  intervalMs: number | null,
+  worktree: string
+): void {
   const latest = useRef(refresh)
   latest.current = refresh
   useEffect(() => {
+    const worktreeId = worktreeIdOf(worktree)
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.git/changed') latest.current()
-    })
+    }, worktreeId === null ? undefined : { worktreeId })
     const timer = intervalMs === null ? null : setInterval(() => latest.current(), intervalMs)
     return () => {
       unsubscribe()
       if (timer !== null) clearInterval(timer)
     }
-  }, [context, intervalMs])
+  }, [context, intervalMs, worktree])
 }

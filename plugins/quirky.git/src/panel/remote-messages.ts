@@ -84,3 +84,37 @@ export function toastFor(
   const capped = action === 'fetch' || action === 'fast-forward' || action === 'rebase'
   return { title, body: capped ? message.slice(0, DETAIL_LIMIT) : message }
 }
+
+/** What the ship bar can offer next to a failed remote step. */
+export type ErrorNext = 'pull' | 'fetch' | 'retry'
+
+/** The ship bar's error line for a failed remote action, with the one action worth offering. */
+export type ErrorLine = { text: string; next: ErrorNext | null }
+
+const RETRYABLE: ReadonlySet<RemoteErrorReason> = new Set(['network', 'busy', 'failed'])
+
+/**
+ * The one-line wording for a failed remote action. It uses `toastFor`'s copy, except that the
+ * rejections whose instruction is an action (pull, fetch) say what happened and leave the
+ * instruction to the button. Null for `hook` and `lint`, which the caller shows with the hook's
+ * own summary.
+ */
+export function errorLineFor(
+  action: RemoteAction,
+  reason: RemoteErrorReason,
+  message: string,
+  operation?: GitOperation
+): ErrorLine | null {
+  switch (`${action}:${reason}`) {
+    case 'push:non-fast-forward':
+      return { text: 'Push rejected: the remote has new commits', next: 'pull' }
+    case 'force-push:stale-lease':
+      return { text: 'Force push rejected: the remote changed since the last fetch', next: 'fetch' }
+    case 'sync:non-fast-forward':
+    case 'sync:stale-lease':
+      return { text: 'Sync failed: the remote moved while syncing', next: 'retry' }
+  }
+  const copy = toastFor(action, reason, message, operation)
+  if (copy === null) return null
+  return { text: copy.body === '' ? copy.title : `${copy.title}. ${copy.body}`, next: RETRYABLE.has(reason) ? 'retry' : null }
+}

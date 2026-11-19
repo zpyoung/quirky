@@ -1,6 +1,6 @@
 {
   "id": "quirky.orchestration",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Orchestration",
   "version": "0.1.0",
   "description": "Durable Runs, task dependencies, Dispatch attempts, mail, questions, and decision gates.",
@@ -11,6 +11,101 @@
   "dependencies": ["quirky.session", "quirky.agent-status", "quirky.terminal", "quirky.worktree", "quirky.agents", "quirky.repo"],
   "contributes": {
     "method": [
+          {
+            "id": "summary",
+            "description": "Return a bounded local worktree summary with session activity and orchestration associations.",
+            "readOnly": true,
+            "params": {
+              "type": "object",
+              "properties": {
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 100 }
+              },
+              "additionalProperties": false
+            },
+            "result": {
+              "type": "object",
+              "properties": {
+                "scope": { "type": "string", "enum": ["local"] },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "worktree": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "path": { "type": "string" },
+                          "repoId": { "type": "string" }
+                        },
+                        "required": ["id", "name", "path", "repoId"],
+                        "additionalProperties": false
+                      },
+                      "sessions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "agent": { "type": "string" },
+                            "kind": { "type": "string", "enum": ["terminal", "structured"] },
+                            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+                            "display": {
+                              "description": "Agent display state: working, monitoring, waiting, permission, blocked, failed, interrupted, done, unverifiable, idle, unconfirmed, or null. The protocol schema subset cannot express nullable enums."
+                            },
+                            "live": { "type": "boolean" }
+                          },
+                          "required": ["id", "agent", "kind", "status", "display", "live"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "runIds": { "type": "array", "items": { "type": "string" } },
+                      "dispatches": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": { "type": "string" },
+                            "runId": { "type": "string" },
+                            "task": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "title": { "type": "string" },
+                                "status": { "type": "string", "enum": ["pending", "ready", "dispatched", "completed", "failed", "blocked"] }
+                              },
+                              "required": ["id", "title", "status"],
+                              "additionalProperties": false
+                            },
+                            "status": { "type": "string", "enum": ["pending", "dispatched", "completed", "failed", "circuit_broken"] },
+                            "creatorSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "assigneeSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "workerSessionId": { "description": "Session ID or null. String or null; null is represented without a schema type because the protocol subset has no union types." },
+                            "currentAssignment": { "type": "boolean" },
+                            "workerState": {
+                              "description": "Worker state: starting, ready, start_unknown, failed, succeeded, stopping, stop_unknown, stopped, abandoned, or null. The protocol schema subset cannot express nullable enums."
+                            },
+                            "terminalState": { "type": "string", "enum": ["active", "reclaimable", "retained", "release_pending", "release_unknown", "released"] }
+                          },
+                          "required": ["id", "runId", "task", "status", "creatorSessionId", "assigneeSessionId", "workerSessionId", "currentAssignment", "workerState", "terminalState"],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": ["worktree", "sessions", "runIds", "dispatches"],
+                    "additionalProperties": false
+                  }
+                },
+                "total": { "type": "integer" },
+                "limit": { "type": "integer" },
+                "truncated": { "type": "boolean" },
+                "unavailable": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["scope", "rows", "total", "limit", "truncated", "unavailable"],
+              "additionalProperties": false
+            }
+          },
           {
             "id": "runCreate",
             "description": "Create and bind a Run to the authenticated coordinator session.",
@@ -52,7 +147,7 @@
           },
           {
             "id": "taskList",
-            "description": "List Tasks in the bound Run or inspect an explicit Run. ready and status filters are mutually exclusive; brief truncates long specs.",
+            "description": "List Tasks in the bound Run or inspect an explicit Run. ready and status filters are mutually exclusive; brief truncates long specs. Tasks are listed oldest first, in creation order.",
             "readOnly": true,
             "params": {"type": "object", "properties": {"runId": {"type": "string"}, "ready": {"type": "boolean"}, "status": {"type": "string", "enum": ["pending", "ready", "dispatched", "completed", "failed", "blocked"]}, "brief": {"type": "boolean"}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}}, "additionalProperties": false},
             "result": {"type": "object", "properties": {"runId": {"type": "string"}, "tasks": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "runId": {"type": "string"}, "parentTaskId": {"description": "Task ID or null when this Task has no parent."}, "dependencyTaskIds": {"type": "array", "items": {"type": "string"}}, "createdBySessionId": {"description": "Creator session ID or null for a service-created Task."}, "taskTitle": {"type": "string"}, "displayName": {"type": "string"}, "spec": {"type": "string", "description": "The full spec, or the bounded brief projection when brief is true."}, "status": {"type": "string", "enum": ["pending", "ready", "dispatched", "completed", "failed", "blocked"]}, "result": {"description": "TaskResult or null; see taskCreate."}, "createdAt": {"type": "string"}, "completedAt": {"description": "Timestamp or null."}, "dispatchId": {"type": "string", "description": "Present for dispatched rows."}, "assigneeSessionId": {"type": "string", "description": "Present for dispatched rows."}, "specTruncated": {"type": "boolean", "description": "Present and true only when a brief spec was truncated."}}, "required": ["id", "runId", "parentTaskId", "dependencyTaskIds", "createdBySessionId", "taskTitle", "displayName", "spec", "status", "result", "createdAt", "completedAt"]}}, "count": {"type": "integer"}}, "required": ["runId", "tasks", "count"]}
@@ -84,9 +179,10 @@
           },
           {
             "id": "check",
+            "timeout": "1h",
             "description": "Read or consume the caller's mailbox. Default/consume acknowledges one durable FIFO delivery; peek and all are read-only unless ackDeliveryId is supplied. Wait is connection-aware and returns the full FIFO batch even when types filter the wake condition.",
             "connection": true,
-            "params": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["consume", "peek", "all"], "default": "consume"}, "ackDeliveryId": {"type": "string", "description": "Acknowledge this durable Delivery before reading/waiting; this is mutating in every mode."}, "runId": {"type": "string"}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated caller session; never authority."}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated caller session; never authority."}, "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Applies to peek/all; consume always returns its durable batch."}, "types": {"type": "array", "items": {"type": "string", "enum": ["status", "dispatch", "worker_done", "merge_ready", "escalation", "handoff", "decision_gate", "question", "heartbeat"]}}, "wait": {"type": "boolean"}, "timeoutMs": {"type": "integer", "minimum": 0}, "format": {"type": "boolean"}, "requestId": {"type": "string", "description": "Required for consume or an acknowledgement."}, "contractVersion": {"type": "integer", "enum": [1], "description": "Required for consume or an acknowledgement."}}, "additionalProperties": false},
+            "params": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["consume", "peek", "all"], "default": "consume"}, "ackDeliveryId": {"type": "string", "description": "Acknowledge this durable Delivery before reading/waiting; this is mutating in every mode."}, "runId": {"type": "string"}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated caller session; never authority."}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated caller session; never authority."}, "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Applies to peek/all; consume always returns its durable batch."}, "types": {"type": "array", "items": {"type": "string", "enum": ["status", "dispatch", "worker_done", "merge_ready", "escalation", "handoff", "decision_gate", "question", "heartbeat"]}}, "wait": {"type": "boolean"}, "timeoutMs": {"type": "integer", "minimum": 0, "maximum": 1800000}, "format": {"type": "boolean"}, "requestId": {"type": "string", "description": "Required for consume or an acknowledgement."}, "contractVersion": {"type": "integer", "enum": [1], "description": "Required for consume or an acknowledgement."}}, "additionalProperties": false},
             "result": {"type": "object", "description": "CheckObservationResult plus mode. Consume adds deliveryId and replayed plus a mutation receipt. Peek/all never consume and have no receipt unless ackDeliveryId was used.", "properties": {"mode": {"type": "string", "enum": ["consume", "peek", "all"]}, "runId": {"description": "Run ID or null when no Run mailbox applies."}, "messages": {"type": "array", "items": {"type": "object", "description": "Full MessageRow.", "properties": {"id": {"type": "string"}, "runId": {"type": "string"}, "fromSessionId": {"description": "Session ID or null for service senders."}, "sender": {"type":"object","description":"MailboxAddress: run, dispatch, or session discriminant with its matching ID.","properties":{"kind":{"type":"string","enum":["run","dispatch","session"]},"runId":{"type":"string"},"dispatchId":{"type":"string"},"sessionId":{"type":"string"}},"required":["kind"],"additionalProperties":false}, "mailbox": {"type":"object","description":"Resolved MailboxAddress: run, dispatch, or session discriminant with its matching ID.","properties":{"kind":{"type":"string","enum":["run","dispatch","session"]},"runId":{"type":"string"},"dispatchId":{"type":"string"},"sessionId":{"type":"string"}},"required":["kind"],"additionalProperties":false}, "subject": {"type": "string"}, "body": {"type": "string"}, "type": {"type": "string", "enum": ["status", "dispatch", "worker_done", "merge_ready", "escalation", "handoff", "decision_gate", "question", "heartbeat"]}, "priority": {"type": "string", "enum": ["normal", "high", "urgent"]}, "threadId": {"description": "Thread ID or null."}, "payload": {"description": "JSON value or null."}, "read": {"type": "boolean"}, "createdAt": {"type": "string"}, "deliveredAt": {"description": "Timestamp or null."}}, "required": ["id", "runId", "fromSessionId", "sender", "mailbox", "subject", "body", "type", "priority", "threadId", "payload", "read", "createdAt", "deliveredAt"]}}, "count": {"type": "integer"}, "deliveryId": {"description": "Delivery ID or null; present for consume."}, "replayed": {"type": "boolean", "description": "Present for consume."}, "acknowledged": {"description": "Acknowledged Delivery ID or null."}, "timedOut": {"type": "boolean"}, "cancelled": {"type": "boolean"}, "connectionLost": {"type": "boolean"}, "formatted": {"type": "string"}, "waitInterrupted": {"type": "string", "enum": ["consumer_fenced", "waiter_exists", "outcome_unknown"]}, "mutation": {"type": "object", "description": "Present for consume and for ackDeliveryId in peek/all.", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["mode", "runId", "messages", "count", "acknowledged", "timedOut", "cancelled", "connectionLost"]}
           },
           {
@@ -104,6 +200,7 @@
           },
           {
             "id": "ask",
+            "timeout": "1h",
             "description": "Create a resumable question or wait on its existing message ID. question and messageId are exclusive; options apply only to a new question; to is limited to the owning Run. timeoutMs is clamped to 0 through 1,800,000 ms.",
             "connection": true,
             "params": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["question", "resume"]}, "question": {"type": "string"}, "messageId": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}, "timeoutMs": {"type": "integer", "minimum": 0, "maximum": 1800000}, "runId": {"type": "string"}, "to": {"type": "object", "description": "Only the owning Run address {kind:run,runId} is valid.", "properties": {"kind": {"type": "string", "enum": ["run"]}, "runId": {"type": "string"}}, "required": ["kind", "runId"]}, "requestId": {"type": "string", "description": "Durable mutation receipt UUID supplied by the caller."}, "contractVersion": {"type": "integer", "enum": [1]}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "includeIdentity": {"type": "boolean", "description": "Return the current kernel-verified Run/Dispatch/session identity for a trusted caller-preserving forward."}}, "required": ["mode", "requestId", "contractVersion"], "additionalProperties": false},
@@ -123,7 +220,7 @@
           },
           {
             "id": "gateList",
-            "description": "List gates in the bound or explicitly inspected Run, optionally filtered by Task and status.",
+            "description": "List gates in the bound or explicitly inspected Run, optionally filtered by Task and status. Gates are listed oldest first, in creation order.",
             "readOnly": true,
             "params": {"type": "object", "properties": {"runId": {"type": "string"}, "taskId": {"type": "string"}, "status": {"type": "string", "enum": ["pending", "resolved", "timeout"]}, "from": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}, "terminal": {"type": "string", "description": "Optional equality assertion for the authenticated session; never authority."}}, "additionalProperties": false},
             "result": {"type": "object", "properties": {"runId": {"type": "string"}, "gates": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "runId": {"type": "string"}, "taskId": {"type": "string"}, "question": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}, "status": {"type": "string", "enum": ["pending", "resolved", "timeout"]}, "resolution": {"description": "Resolution or null while unresolved."}, "createdBySessionId": {"description": "Creator session ID or null for a service-created Task."}, "createdAt": {"type": "string"}, "resolvedAt": {"description": "Timestamp or null while unresolved."}}, "required": ["id", "runId", "taskId", "question", "options", "status", "resolution", "createdBySessionId", "createdAt", "resolvedAt"]}}, "count": {"type": "integer"}}, "required": ["runId", "gates", "count"]}
@@ -145,6 +242,7 @@
           },
           {
             "id": "workerStart",
+            "timeout": "24h",
             "description": "Create and supervise one worker for an existing Task or a supplied specification. Requires worktree; task/spec and agent/terminal selection rules are enforced at runtime. The native receipt includes effects, setup, mode, and the durable mutation marker.",
             "params": {
               "type": "object",
@@ -3673,12 +3771,14 @@
       },
       {
         "id": "serviceWorkerStart",
+        "timeout": "24h",
         "description": "Start a real supervised worker in an owned Run using an explicit existing workspace or new-top-level placement.",
         "params": {"type": "object", "properties": {"runId": {"type": "string"}, "requestId": {"type": "string"}, "contractVersion": {"type": "integer", "enum": [1]}, "on": {"type": "string", "description": "Exact saved paired execution host; no local fallback."}, "taskId": {"type": "string"}, "spec": {"type": "string"}, "worktree": {"type": "string", "description": "An exact existing workspace or new-top-level; current and new-child require a coordinator session."}, "agent": {"type": "string"}, "mode": {"type": "string", "enum": ["terminal", "structured"]}, "taskTitle": {"type": "string"}, "dependencyTaskIds": {"type": "array", "items": {"type": "string"}}, "parentTaskId": {"type": "string"}, "model": {"type": "string"}, "effort": {"type": "string"}, "name": {"type": "string"}, "repo": {"type": "string"}, "baseBranch": {"type": "string"}, "displayName": {"type": "string"}, "comment": {"type": "string"}, "setup": {"type": "string", "enum": ["run", "skip", "inherit"]}, "retryOfDispatchId": {"type": "string"}, "timeoutMs": {"type": "integer", "minimum": 1}}, "required": ["runId", "requestId", "contractVersion", "worktree", "agent"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"runId": {"type": "string"}, "taskId": {"type": "string"}, "dispatchId": {"type": "string"}, "state": {"type": "string", "enum": ["ready", "failed", "outcome_unknown"]}, "stage": {"type": "string"}, "mutation": {"type": "object", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["runId", "taskId", "dispatchId", "state", "stage", "mutation"], "additionalProperties": true}
       },
       {
         "id": "serviceCheck",
+        "timeout": "1h",
         "description": "Consume one durable Delivery from an owned Run mailbox using its current generation.",
         "params": {"type": "object", "properties": {"runId": {"type": "string"}, "requestId": {"type": "string"}, "contractVersion": {"type": "integer", "enum": [1]}, "ackDeliveryId": {"type": "string"}, "wait": {"type": "boolean"}, "timeoutMs": {"type": "integer", "minimum": 0, "maximum": 1800000}, "types": {"type": "array", "items": {"type": "string", "enum": ["status", "dispatch", "worker_done", "merge_ready", "escalation", "handoff", "decision_gate", "question", "heartbeat"]}}}, "required": ["runId", "requestId", "contractVersion"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"mode": {"type": "string", "enum": ["consume"]}, "runId": {"type": "string"}, "messages": {"type": "array", "items": {"type": "object", "description": "Full MessageRow.", "properties": {"id": {"type": "string"}, "runId": {"type": "string"}, "fromSessionId": {"description": "Session ID or null for service senders."}, "sender": {"type": "object", "description": "MailboxAddress: run, dispatch, or session discriminant with its matching ID.", "properties": {"kind": {"type": "string", "enum": ["run", "dispatch", "session"]}, "runId": {"type": "string"}, "dispatchId": {"type": "string"}, "sessionId": {"type": "string"}}, "required": ["kind"], "additionalProperties": false}, "mailbox": {"type": "object", "description": "Resolved MailboxAddress: run, dispatch, or session discriminant with its matching ID.", "properties": {"kind": {"type": "string", "enum": ["run", "dispatch", "session"]}, "runId": {"type": "string"}, "dispatchId": {"type": "string"}, "sessionId": {"type": "string"}}, "required": ["kind"], "additionalProperties": false}, "subject": {"type": "string"}, "body": {"type": "string"}, "type": {"type": "string", "enum": ["status", "dispatch", "worker_done", "merge_ready", "escalation", "handoff", "decision_gate", "question", "heartbeat"]}, "priority": {"type": "string", "enum": ["normal", "high", "urgent"]}, "threadId": {"description": "Thread ID or null."}, "payload": {"description": "JSON value or null."}, "read": {"type": "boolean"}, "createdAt": {"type": "string"}, "deliveredAt": {"description": "Timestamp or null."}}, "required": ["id", "runId", "fromSessionId", "sender", "mailbox", "subject", "body", "type", "priority", "threadId", "payload", "read", "createdAt", "deliveredAt"], "additionalProperties": false}}, "count": {"type": "integer"}, "deliveryId": {"description": "Delivery ID or null."}, "replayed": {"type": "boolean"}, "acknowledged": {"description": "Acknowledged Delivery ID or null."}, "timedOut": {"type": "boolean"}, "cancelled": {"type": "boolean"}, "connectionLost": {"type": "boolean"}, "questions": {"type": "array", "items": {"type": "object", "additionalProperties": true}}, "mutation": {"type": "object", "properties": {"requestId": {"type": "string"}, "replayed": {"type": "boolean"}}, "required": ["requestId", "replayed"]}}, "required": ["mode", "runId", "messages", "count", "deliveryId", "replayed", "acknowledged", "timedOut", "cancelled", "connectionLost", "questions", "mutation"]}
@@ -3729,6 +3829,7 @@
       },
       {
         "id": "peerCall",
+        "timeout": "24h",
         "description": "Plugin-only bounded peer call through the federation method ceiling. Remote mutations require a UUID requestId and expectedIncarnation.",
         "params": {"type": "object", "properties": {"peerId": {"type": "string"}, "pairingRevision": {"type": "integer"}, "method": {"type": "string"}, "params": {"type": "object", "additionalProperties": true}, "requestId": {"type": "string"}, "timeoutMs": {"type": "integer", "minimum": 1, "maximum": 2147483647}}, "required": ["peerId", "pairingRevision", "method", "params"], "additionalProperties": false},
         "result": {"type": "object", "properties": {"peer": {"type": "object"}, "status": {"type": "object"}, "result": {}}, "required": ["peer", "status", "result"]}
@@ -4075,7 +4176,8 @@
           {"id": "skill-install", "words": "skill-install", "summary": "explicitly install or update the orchestration skill", "flags": {"agents": {"type": "json", "param": "agents", "description": "Optional JSON array of detected agent IDs; omitted installs all detected supported targets."}}, "methods": ["quirky.orchestration/skillInstall"]},
           {"id": "policy-show", "words": "policy-show", "summary": "show the nested worker depth policy", "flags": {}, "methods": ["quirky.orchestration/policyShow"]},
           {"id": "policy-set", "words": "policy-set", "summary": "set the nested worker depth policy", "flags": {"nested-worker-max-depth": {"type": "integer", "param": "nestedWorkerMaxDepth", "required": true, "description": "Maximum worker dispatch depth; integer at least 1."}}, "methods": ["quirky.orchestration/policySet"]},
-          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve a Task's exact local terminal or read its remote worker output", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]}
+          {"id": "task-terminal", "words": "task-terminal", "summary": "resolve a Task's exact local terminal or read its remote worker output", "flags": {"task-id": {"type": "string", "param": "taskId", "required": true, "description": "Task ID to navigate."}}, "methods": ["quirky.orchestration/taskTerminal"]},
+          {"id": "ps", "words": "ps", "summary": "summarize local worktree, session, and orchestration activity", "flags": {"limit": {"type": "integer", "description": "Maximum worktree rows from 1 through 100; defaults to 100."}}, "methods": ["quirky.orchestration/summary"]}
         ],
     "view": [
       {"id": "settings", "title": "Orchestration", "settings": true},
@@ -4086,7 +4188,9 @@
     ],
     "command": [
       {"id": "open-settings", "title": "Open Orchestration settings"},
-      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"}
+      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"},
+      {"id": "copy-install-command", "title": "Copy Orchestration skill install command", "description": "Copy the orchestration skill install command to this window's clipboard.", "palette": false},
+      {"id": "copy-prompt", "title": "Copy Orchestration example prompt", "description": "Copy one Orchestration usage example prompt to this window's clipboard.", "palette": false, "args": {"type": "object", "properties": {"example": {"type": "string", "enum": ["hand-off-active-task", "hand-off-to-worktree", "phased-workflow", "parallel-work", "split-large-change"]}}, "required": ["example"], "additionalProperties": false}}
     ]
   }
 }

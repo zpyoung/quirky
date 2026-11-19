@@ -1,5 +1,5 @@
-import { expect } from 'bun:test'
-import type { GitDiff, GitStatus, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import { expect, jest } from 'bun:test'
+import type { GitDiff, GitStatus, QuirkyEvent, ReviewFile, ReviewModel, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
 
 // the test file registers happy-dom before importing this module
@@ -31,6 +31,7 @@ export type Fake = {
   layout: UiLayout
   emit(event: QuirkyEvent): void
   listeners(): number
+  scopes(): string[]
   callsTo(method: string): Call[]
   /** Runs `command:quirky.git/<id>` as the host would. */
   run(id: string, args?: unknown): Promise<unknown>
@@ -47,7 +48,7 @@ export function layoutFor(worktree: string | null): UiLayout {
 }
 
 export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
-  const listeners = new Set<(event: QuirkyEvent) => void>()
+  const listeners = new Map<(event: QuirkyEvent) => void | Promise<void>, string | null | undefined>()
   const fake: Fake = {
     calls: [],
     opened: [],
@@ -61,9 +62,17 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
     provided: new Map(),
     layout,
     emit(event) {
-      for (const listener of [...listeners]) void listener(event)
+      const taggedWorktreeId =
+        event.type.includes('/') && 'worktreeId' in event && typeof event.worktreeId === 'string'
+          ? event.worktreeId
+          : undefined
+      for (const [listener, worktreeId] of [...listeners]) {
+        if (taggedWorktreeId !== undefined && (worktreeId === null || (typeof worktreeId === 'string' && worktreeId !== taggedWorktreeId))) continue
+        void listener(event)
+      }
     },
     listeners: () => listeners.size,
+    scopes: () => [...listeners.values()].filter((worktreeId): worktreeId is string => typeof worktreeId === 'string'),
     callsTo: (method) => fake.calls.filter((c) => c.method === method),
     run: async (id, args) => {
       const handler = fake.provided.get(`command:quirky.git/${id}`)
@@ -89,8 +98,8 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
         if (!handler) throw new Error(`unexpected call ${method}`)
         return handler(params)
       },
-      subscribe(listener) {
-        listeners.add(listener)
+      subscribe(listener, options?: { worktreeId?: string | null }) {
+        listeners.set(listener, options?.worktreeId)
         return () => listeners.delete(listener)
       },
       getSetting: (name) => fake.settings[name],
@@ -112,6 +121,12 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
       setContext() {},
       mountView: () => () => {}
     }
+  }
+  fake.handlers['ui.window.self'] = () => ({ connId: 1 })
+  fake.handlers['ui.window.command.run'] = async (params) => {
+    const handler = fake.provided.get(String(params.id))
+    if (typeof handler !== 'function') throw new Error(`no command ${String(params.id)}`)
+    return { result: await handler(params.args) }
   }
   void activate(fake.context)
   return fake
@@ -152,6 +167,14 @@ export function mountView(fake: Fake, input: unknown): Mounted {
 
 export async function settle(rounds = 6): Promise<void> {
   for (let i = 0; i < rounds; i++) await act(async () => {})
+}
+
+/** Advances only the explicitly requested fake-clock interval, then flushes pending work. */
+export async function settleAfter(ms: number, rounds = 6): Promise<void> {
+  await act(async () => {
+    ;(jest as unknown as { advanceTimersByTime(ms: number): void }).advanceTimersByTime(ms)
+  })
+  await settle(rounds)
 }
 
 export async function wait(ms: number): Promise<void> {
@@ -265,6 +288,68 @@ export function stubIntersectionObserver() {
     },
     restore() {
       globalThis.IntersectionObserver = original
+    }
+  }
+}
+
+/** One changed file of a review model; override any field. */
+export const reviewFile = (path: string, extra: Partial<ReviewFile> = {}): ReviewFile => ({
+  path,
+  status: 'M',
+  added: 2,
+  removed: 1,
+  binary: false,
+  uncommitted: true,
+  staged: false,
+  mark: 'none',
+  notes: 0,
+  ...extra
+})
+
+/** A `quirky.git/review` result for `files`, with counts derived from their marks. */
+export function reviewModel(files: ReviewFile[], extra: Partial<ReviewModel> = {}): ReviewModel {
+  const marked = (mark: ReviewFile['mark']) => files.filter((f) => f.mark === mark).length
+  return {
+    worktreeId: 'w1',
+    branch: 'feat',
+    base: { name: 'main', source: 'detected', isCurrentBranch: false },
+    compare: { status: 'ready', mergeBase: 'b'.repeat(40), headOid: 'c'.repeat(40) },
+    totals: { added: files.reduce((n, f) => n + (f.added ?? 0), 0), removed: files.reduce((n, f) => n + (f.removed ?? 0), 0) },
+    counts: { files: files.length, reviewed: marked('reviewed'), changed: marked('changed'), uncommitted: files.length, staged: 0 },
+    capped: false,
+    files: [...files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+    ...extra
+  }
+}
+
+/** A stand-in for ResizeObserver whose measurements tests set by hand. */
+export function stubResizeObserver() {
+  type Entry = { callback: ResizeObserverCallback; element: Element; observer: object }
+  const entries: Entry[] = []
+  const original = globalThis.ResizeObserver
+  class Stub {
+    constructor(readonly callback: ResizeObserverCallback) {}
+    observe(element: Element) {
+      entries.push({ callback: this.callback, element, observer: this })
+    }
+    disconnect() {
+      for (let i = entries.length - 1; i >= 0; i--) if (entries[i].observer === this) entries.splice(i, 1)
+    }
+    unobserve() {}
+  }
+  globalThis.ResizeObserver = Stub as unknown as typeof ResizeObserver
+  return {
+    observed: () => entries.map((e) => e.element),
+    async resize(width: number) {
+      await act(async () => {
+        for (const entry of [...entries]) {
+          entry.callback([{ target: entry.element, contentRect: { width } } as unknown as ResizeObserverEntry], entry.observer as ResizeObserver)
+        }
+      })
+      await settle()
+    },
+    restore() {
+      globalThis.ResizeObserver = original
     }
   }
 }

@@ -26,6 +26,13 @@ export type RpcHandlerOptions = {
 
 const MAX_REQUEST_ID_LENGTH = 128
 
+/**
+ * The largest reply sent as-is. Both transports drop the whole connection on a frame over 16 MiB
+ * (`websocket-output.ts`, `socket-server.ts`), so a larger reply becomes an error for that call
+ * instead; the slack covers the frame header and line terminator.
+ */
+export const MAX_REPLY_BYTES = 16 * 1024 * 1024 - 64
+
 let lastConnId = 0
 
 /** Connection ids are unique across both transports. */
@@ -108,7 +115,17 @@ export function createRpcHandler(options: RpcHandlerOptions): RpcHandler {
         { conn },
         requestId === undefined ? undefined : { requestId }
       )
-      reply({ jsonrpc: '2.0', id, result })
+      const text = JSON.stringify({ jsonrpc: '2.0', id, result } satisfies RpcSuccess)
+      const bytes = text.length * 3 <= MAX_REPLY_BYTES ? text.length : Buffer.byteLength(text, 'utf8')
+      if (bytes > MAX_REPLY_BYTES) {
+        options.log(`rpc ${method} reply is ${bytes} bytes, over the ${MAX_REPLY_BYTES}-byte cap; answered with an error`)
+        return fail(id, RpcErrorCode.Internal, `The reply to ${method} is too large to send (${bytes} bytes; the limit is ${MAX_REPLY_BYTES}). Ask for less, for example with a limit.`, {
+          reason: 'reply_too_large',
+          bytes,
+          limit: MAX_REPLY_BYTES
+        })
+      }
+      if (!conn.closed) conn.sendText(text)
     } catch (error) {
       if (error instanceof DaemonError) return fail(id, error.code, error.message, error.data)
       options.log(`rpc ${method} failed: ${(error as Error)?.stack ?? error}`)

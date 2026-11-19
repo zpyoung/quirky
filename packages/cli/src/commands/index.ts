@@ -3,8 +3,10 @@ import { commandHelp, usageOf } from '../command-spec'
 import { api, apiCall } from './api'
 import { jobList, jobRun } from './job'
 import { daemonRestart } from './daemon'
+import { serve } from './serve'
 import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
 import { open } from './open'
+import { desktopPickFolder } from './desktop'
 import {
   pluginActivate,
   pluginContributions,
@@ -18,7 +20,9 @@ import {
 import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
+import { diagnosticsMemory } from './diagnostics'
 import { themeList, themeSet } from './theme'
+import { keybindingDisable, keybindingList, keybindingReset, keybindingSet } from './keybinding'
 import {
   uiClosePanel,
   uiCloseTool,
@@ -33,6 +37,7 @@ import {
   uiRun,
   uiSidebar,
   uiConfigurePanel,
+  uiUrl,
   uiState
 } from './ui'
 import type { Command, Context } from './types'
@@ -53,6 +58,7 @@ const help: Command = {
 
 export const COMMANDS: Command[] = [
   status,
+  diagnosticsMemory,
   pluginList,
   pluginContributions,
   pluginEnable,
@@ -66,9 +72,11 @@ export const COMMANDS: Command[] = [
   distroList,
   distroRemove,
   daemonRestart,
+  serve,
   jobList,
   jobRun,
   uiContributions,
+  uiUrl,
   uiState,
   uiOpenView,
   uiCloseView,
@@ -88,7 +96,12 @@ export const COMMANDS: Command[] = [
   settingReset,
   themeList,
   themeSet,
+  keybindingList,
+  keybindingSet,
+  keybindingDisable,
+  keybindingReset,
   open,
+  desktopPickFolder,
   api,
   apiCall,
   skillShow,

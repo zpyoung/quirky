@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -124,30 +126,84 @@ describe('Heimdall orchestration adapter', () => {
     )
     expect(unknown).toEqual({
       kind: 'indeterminate',
-      requestId: orchestrationRequestIdForAttemptFingerprint('fp-1'),
+      requestId: orchestrationRequestIdForAttemptFingerprint('watcher_fixture', 'fp-1'),
       detail: expect.any(String)
     })
   })
-  test('reports a lost worker-start reply as indeterminate with the persisted request ID', async () => {
+  test('reports a lost worker-start reply as indeterminate and retries with the persisted request ID', async () => {
+    const enrollment = makeEnrollment()
+    const workerStartRequestIds: unknown[] = []
     const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
       if (method === 'quirky.orchestration/serviceRunCreate') {
         return { run: { id: 'run_fixture' }, mutation: { requestId: params.requestId, replayed: false } }
       }
       if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
-      if (method === 'quirky.orchestration/serviceWorkerStart') throw new Error('connection closed after request')
+      if (method === 'quirky.orchestration/serviceWorkerStart') {
+        workerStartRequestIds.push(params.requestId)
+        if (workerStartRequestIds.length === 1) throw new Error('connection closed after request')
+        return readyReceipt(params.runId, params.requestId)
+      }
       throw new Error(`unexpected method ${method}`)
-    }), makeStore(makeEnrollment()), () => {})
+    }), makeStore(enrollment), () => {})
+    const attempt = preparedAttempt()
+    const request = { spec: 'fixture task', worktree: '/tmp/fixture-worktree' }
 
-    const result = await adapter.dispatch(makeEnrollment(), preparedAttempt(), {
+    const first = await adapter.dispatch(enrollment, attempt, request)
+    const second = await adapter.dispatch(enrollment, attempt, request)
+
+    expect(first).toMatchObject({
+      kind: 'indeterminate',
+      requestId: orchestrationRequestIdForAttemptFingerprint(enrollment.watcherId, attempt.fingerprint),
+      detail: expect.stringContaining('connection closed after request')
+    })
+    expect(second).toEqual({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
+    expect(workerStartRequestIds).toEqual([attempt.requestId, attempt.requestId])
+    adapter.dispose()
+  })
+  test('recovers a legacy v1 prepared request without rekeying its persisted ID', async () => {
+    const enrollment = makeEnrollment({ orchestrationRunId: 'run_fixture' })
+    const store = makeStore(enrollment)
+    const legacyRequestId = legacyDispatchRequestId('fp-1')
+    const attempt = { ...preparedAttempt(), requestId: legacyRequestId }
+    const workerStartRequestIds: unknown[] = []
+    const adapter = createOrchestrationAdapter(makeContext(async (method, params = {}) => {
+      if (method === 'quirky.orchestration/serviceRegisterSubmissionPreflight') return submissionPreflightReceipt(params)
+      if (method === 'quirky.orchestration/serviceWorkerStart') {
+        workerStartRequestIds.push(params.requestId)
+        return readyReceipt(params.runId, params.requestId)
+      }
+      throw new Error(`unexpected method ${method}`)
+    }), store, () => {})
+
+    const result = await adapter.recover(enrollment, attempt)
+
+    expect(result).toEqual({ kind: 'dispatched', dispatchId: 'ctx_fixture' })
+    expect(workerStartRequestIds).toEqual([legacyRequestId])
+    expect(attempt.requestId).toBe(legacyRequestId)
+    adapter.dispose()
+  })
+  test('rejects a v2 prepared request scoped to a different current watcher', async () => {
+    const enrollment = makeEnrollment()
+    const attempt = {
+      ...preparedAttempt(),
+      watcherId: 'watcher_other',
+      requestId: orchestrationRequestIdForAttemptFingerprint('watcher_other', 'fp-1')
+    }
+    let workerStarted = false
+    const adapter = createOrchestrationAdapter(makeContext(async (method) => {
+      if (method === 'quirky.orchestration/serviceWorkerStart') workerStarted = true
+      throw new Error(`unexpected method ${method}`)
+    }), makeStore(enrollment), () => {})
+
+    const result = await adapter.dispatch(enrollment, attempt, {
       spec: 'fixture task', worktree: '/tmp/fixture-worktree'
     })
 
-    expect(result).toMatchObject({
-      kind: 'indeterminate',
-      requestId: orchestrationRequestIdForAttemptFingerprint('fp-1'),
-      detail: expect.stringContaining('connection closed after request')
-    })
+    expect(result).toMatchObject({ kind: 'refused', reason: 'invalid-prepared-request' })
+    expect(workerStarted).toBe(false)
+    adapter.dispose()
   })
+
   test('replays run creation with the same mutation key after a lost reply', async () => {
     const enrollment = makeEnrollment()
     const store = makeStore(enrollment)
@@ -428,6 +484,10 @@ function makeContext(
     getSetting: () => undefined,
     storedSettingValue: () => undefined,
     error: (_kind, message) => new Error(message),
+    process: {
+      run: async () => { throw new Error('unexpected process run in the orchestration fixture') },
+      spawn: () => { throw new Error('unexpected process spawn in the orchestration fixture') },
+    },
     pty: null as never,
     notify: () => {},
     launch: null as never
@@ -493,7 +553,7 @@ function makeStore(initial: Enrollment): KernelStore {
 }
 
 function preparedAttempt(workerRequest: WorkerRequest = { spec: 'fixture task', worktree: '/tmp/fixture-worktree' }): Attempt {
-  const requestId = orchestrationRequestIdForAttemptFingerprint('fp-1')
+  const requestId = orchestrationRequestIdForAttemptFingerprint('watcher_fixture', 'fp-1')
   return {
     seq: 1,
     eventId: 'attempt-fixture',
@@ -514,6 +574,14 @@ function preparedAttempt(workerRequest: WorkerRequest = { spec: 'fixture task', 
     requestId,
     workerRequest
   }
+}
+
+function legacyDispatchRequestId(fingerprint: string): string {
+  const digest = createHash('sha256').update(`heimdall-dispatch-v1\0${fingerprint}`).digest()
+  digest[6] = ((digest[6] ?? 0) & 0x0f) | 0x80
+  digest[8] = ((digest[8] ?? 0) & 0x3f) | 0x80
+  const hex = digest.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function readyReceipt(runId: unknown, requestId: unknown): Record<string, unknown> {

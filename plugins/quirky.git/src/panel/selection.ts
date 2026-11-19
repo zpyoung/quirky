@@ -1,72 +1,53 @@
-/** The rows picked for the bulk bar, and the row a shift-click measures from. */
-export type SelectionState = {
-  /** Selected paths. A plain click never selects, so this is empty until a modifier click. */
-  readonly selected: readonly string[]
-  readonly anchor: string | null
+import type { ReviewFile } from '@quirky/protocol'
+import { nextToReview, reviewOrder } from '../review/order'
+
+/** What a key press asks of the file list; `null` from `keyIntent` means the key is not the list's. */
+export type KeyIntent =
+  | { type: 'select'; path: string | null }
+  | { type: 'open'; path: string }
+  | { type: 'toggle-mark'; path: string; reviewed: boolean }
+  | { type: 'revert'; path: string }
+
+/**
+ * The step a key press takes in the list. `rows` are the files in the order they are shown (a
+ * collapsed folder's files are not in it) and `selected` is the shared selection. ↓ from nothing
+ * selects the first row and ↑ the last; at either end the selection stays. Space marks a file that
+ * is not reviewed (or changed since review) and unmarks a reviewed one, and does nothing for a
+ * conflicted file. Keys that need a selection return null without one, except Escape, which
+ * clears it.
+ */
+export function keyIntent(rows: readonly ReviewFile[], selected: string | null, key: string): KeyIntent | null {
+  const at = selected === null ? -1 : rows.findIndex((row) => row.path === selected)
+  const current = at === -1 ? undefined : rows[at]
+  switch (key) {
+    case 'ArrowDown':
+    case 'ArrowUp': {
+      if (rows.length === 0) return null
+      const next = current === undefined ? (key === 'ArrowDown' ? 0 : rows.length - 1) : at + (key === 'ArrowDown' ? 1 : -1)
+      const row = rows[Math.min(rows.length - 1, Math.max(0, next))]!
+      return { type: 'select', path: row.path }
+    }
+    case 'Enter':
+      return current === undefined ? null : { type: 'open', path: current.path }
+    case ' ':
+      return current === undefined || current.conflict !== undefined
+        ? null
+        : { type: 'toggle-mark', path: current.path, reviewed: current.mark !== 'reviewed' }
+    case 'Backspace':
+    case 'Delete':
+      return current === undefined ? null : { type: 'revert', path: current.path }
+    case 'Escape':
+      return selected === null ? null : { type: 'select', path: null }
+    default:
+      return null
+  }
 }
 
-export const EMPTY_SELECTION: SelectionState = { selected: [], anchor: null }
-
 /**
- * What a pointer or key did. `order` is the paths of the rows in display order (tree folders
- * included only for the file rows they show). Unlike Orca, whose Shift and Cmd clicks open a split,
- * every modifier click here selects.
+ * Where the selection goes after `path` is marked reviewed: the next file in the shown order
+ * that still needs a look, wrapping around, or null when none is left and the selection stays.
+ * `files` is the whole review, not the filtered rows, so a filter never hides the next file.
  */
-export type SelectionAction =
-  | { type: 'click'; path: string }
-  | { type: 'mod-click'; path: string }
-  | { type: 'shift-click'; path: string; order: readonly string[] }
-  | { type: 'context-click'; path: string }
-  /** Escape, or a pointer-down outside the panel. */
-  | { type: 'escape' }
-  /** The view mode or the worktree changed. */
-  | { type: 'reset' }
-  /** The visible rows changed (status refresh, filter): drop what is gone. */
-  | { type: 'prune'; order: readonly string[] }
-
-/** The next state, and the row to open in a diff when the action was a plain click (else null). */
-export type SelectionResult = { state: SelectionState; open: string | null }
-
-export const isSelected = (state: SelectionState, path: string): boolean => state.selected.includes(path)
-
-/**
- * The selection reducer. A plain click clears the selection and opens the row; mod-click toggles
- * and moves the anchor; shift-click selects the run of rows from the anchor to the clicked row,
- * replacing the previous selection and keeping the anchor (with no usable anchor it selects only
- * the clicked row); context-click selects only the row unless it is already selected. States
- * come back unchanged (same reference) when nothing changes, so callers can skip a re-render.
- */
-export function reduceSelection(state: SelectionState, action: SelectionAction): SelectionResult {
-  switch (action.type) {
-    case 'click':
-      return { state: { selected: [], anchor: action.path }, open: action.path }
-    case 'mod-click': {
-      const selected = isSelected(state, action.path)
-        ? state.selected.filter((p) => p !== action.path)
-        : [...state.selected, action.path]
-      return { state: { selected, anchor: action.path }, open: null }
-    }
-    case 'shift-click': {
-      const from = state.anchor === null ? -1 : action.order.indexOf(state.anchor)
-      const to = action.order.indexOf(action.path)
-      if (from === -1 || to === -1) return { state: { selected: [action.path], anchor: action.path }, open: null }
-      const [low, high] = from <= to ? [from, to] : [to, from]
-      return { state: { selected: action.order.slice(low, high + 1), anchor: state.anchor }, open: null }
-    }
-    case 'context-click':
-      return {
-        state: isSelected(state, action.path) ? state : { selected: [action.path], anchor: action.path },
-        open: null
-      }
-    case 'escape':
-    case 'reset':
-      return { state: state.selected.length === 0 && state.anchor === null ? state : EMPTY_SELECTION, open: null }
-    case 'prune': {
-      const visible = new Set(action.order)
-      const selected = state.selected.filter((p) => visible.has(p))
-      const anchor = state.anchor !== null && visible.has(state.anchor) ? state.anchor : null
-      if (selected.length === state.selected.length && anchor === state.anchor) return { state, open: null }
-      return { state: { selected, anchor }, open: null }
-    }
-  }
+export function advanceAfterMark(files: readonly ReviewFile[], mode: 'list' | 'tree', path: string): string | null {
+  return nextToReview(reviewOrder(files, mode), path)
 }

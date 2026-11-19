@@ -1,12 +1,13 @@
 /** Diff content for every source (staged, unstaged, branch, commit) and the guarded save of a working file. */
 import { createHash, randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, lstat, readFile, readlink, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join } from 'node:path'
+import { chmod, copyFile, lstat, mkdtemp, readFile, readlink, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { GitDiff, GitDiffSource } from '@quirky/protocol'
 import { NotAllowedError } from './conflicts'
 import { GitError } from './index'
-import { gitEnv, runGit } from './run'
+import { runGit, withGitWrite } from './run'
 
 export const MAX_BLOB_BYTES = 10 * 1024 * 1024
 export const MAX_RENDER_LINES_PER_SIDE = 120_000
@@ -41,8 +42,13 @@ export function contentHash(bytes: Uint8Array): string {
 
 export type DiffRequest = {
   path: string
-  source: GitDiffSource
+  /** `'worktree'` is internal: `from` to the working file, reported as an `unstaged` diff. */
+  source: GitDiffSource | 'worktree'
   oldPath?: string
+  /** For `'worktree'`: the revision of the left side; empty means no left side (unborn HEAD). For `'trees'`: the tree oid of the left side. */
+  from?: string
+  /** For `'trees'`: the tree oid of the right side. */
+  to?: string
   mergeBase?: string
   head?: string
   commit?: string
@@ -63,62 +69,46 @@ function requireOid(value: string | null | undefined): string {
   return value
 }
 
+function requireTreeOid(value: string | undefined): string {
+  if (typeof value !== 'string' || !OID.test(value)) throw new GitError('Invalid tree id', '', -1)
+  return value
+}
+
+/** Whether `oid` names a tree object (or a commit, whose tree it then is) in the repository at `cwd`. */
+export async function treeExists(cwd: string, oid: string): Promise<boolean> {
+  if (!OID.test(oid)) return false
+  const r = await runGit(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${oid}^{tree}`], { readOnly: true })
+  return r.exitCode === 0
+}
+
 async function gitCommitExists(cwd: string, oid: string): Promise<boolean> {
   const r = await runGit(cwd, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${oid}^{commit}`], { readOnly: true })
   return r.exitCode === 0
 }
+
+type Revision = 'commit' | 'tree'
 
 /**
  * Reads `git show <spec>` with stdout capped at `MAX_BLOB_BYTES`; past the cap the process is
  * killed and the side is `tooBig`. A path absent at a real revision is an empty side; any other
  * failure throws.
  */
-async function readBlob(cwd: string, spec: string): Promise<Side> {
-  const proc = Bun.spawn(['git', 'show', '--no-textconv', '--end-of-options', spec], {
-    cwd,
-    env: await gitEnv(cwd, { readOnly: true }),
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe'
+async function readBlob(cwd: string, spec: string, kind: Revision = 'commit'): Promise<Side> {
+  const r = await runGit(cwd, ['show', '--no-textconv', '--end-of-options', spec], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES
   })
-  const stderr = new Response(proc.stderr as ReadableStream).text()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let tooBig = false
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.length
-    if (total > MAX_BLOB_BYTES) {
-      tooBig = true
-      proc.kill()
-      await reader.cancel().catch(() => {})
-      break
-    }
-    chunks.push(value)
-  }
-  const [message, exitCode] = await Promise.all([stderr, proc.exited])
-  if (tooBig) return { bytes: new Uint8Array(0), tooBig: true, present: true }
-  if (exitCode === 0) return { bytes: concat(chunks, total), tooBig: false, present: true }
+  if (r.overflow === true) return { bytes: new Uint8Array(0), tooBig: true, present: true }
+  if (r.exitCode === 0) return { bytes: r.stdout, tooBig: false, present: true }
 
+  const message = r.stderr
   const revision = spec.slice(0, spec.indexOf(':'))
   const unbornHead = revision === 'HEAD' && /invalid object name 'HEAD'/.test(message)
   // git words an unknown commit like a missing path, so a hex revision has to be checked itself
-  const knownRevision = !OID.test(revision) || (await gitCommitExists(cwd, revision))
+  const knownRevision = !OID.test(revision) || (await (kind === 'tree' ? treeExists(cwd, revision) : gitCommitExists(cwd, revision)))
   if (unbornHead || (MISSING_BLOB.test(message) && knownRevision)) return EMPTY
   const detail = message.trim()
-  throw new GitError(`git show failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
-}
-
-function concat(chunks: Uint8Array[], total: number): Uint8Array {
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    out.set(chunk, offset)
-    offset += chunk.length
-  }
-  return out
+  throw new GitError(`git show failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, message, r.exitCode)
 }
 
 type WorkingFile = { side: Side; hash: string | null; deleted: boolean }
@@ -170,13 +160,17 @@ function decodeSide(side: Side): string {
 /**
  * Both sides of `request.path` for its source, shaped as a `GitDiff`: staged is HEAD to index,
  * unstaged is index (else HEAD) to the working file, or HEAD to the working file when requested;
- * branch is merge base to head, commit is parent to commit. Images carry base64 sides; binary and
+ * branch is merge base to head, commit is parent to commit, trees is the `from` tree to the `to`
+ * tree. Images carry base64 sides; binary and
  * too-large files carry empty bodies.
  * Throws `GitError` for a bad commit id or any git failure other than a missing path, so an
  * unreadable diff never looks like "no changes".
  */
 export async function diffSource(cwd: string, request: DiffRequest): Promise<GitDiff> {
   const { path, source, oldPath } = request
+  if (source === 'worktree' && request.from === undefined) {
+    throw new GitError('from is required for source worktree.', '', -1)
+  }
   if (request.compareAgainstHead === true && source !== 'unstaged') {
     throw new GitError('compareAgainstHead is only available for source unstaged.', '', -1)
   }
@@ -198,6 +192,19 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
       working = file
       modified = file.side
     }
+  } else if (source === 'worktree') {
+    const from = request.from!
+    const [base, file] = await Promise.all([
+      from === '' ? EMPTY : readBlob(cwd, `${from}:${fromPath}`),
+      readWorkingFile(cwd, path)
+    ])
+    original = base
+    working = file
+    modified = file.side
+  } else if (source === 'trees') {
+    const from = requireTreeOid(request.from)
+    const to = requireTreeOid(request.to)
+    ;[original, modified] = await Promise.all([readBlob(cwd, `${from}:${fromPath}`, 'tree'), readBlob(cwd, `${to}:${path}`, 'tree')])
   } else if (source === 'branch') {
     const mergeBase = requireOid(request.mergeBase)
     const head = requireOid(request.head)
@@ -217,7 +224,8 @@ export async function diffSource(cwd: string, request: DiffRequest): Promise<Git
     original: '',
     modified: '',
     binary: false,
-    source,
+    // the protocol has no worktree source; the daemon relabels these diffs as review
+    source: source === 'worktree' ? 'unstaged' : source,
     kind: 'text',
     ...(oldPath !== undefined ? { oldPath } : {})
   }
@@ -267,31 +275,65 @@ export async function saveWorkingFile(
   content: string,
   expected?: string | null
 ): Promise<{ hash: string }> {
-  const full = join(cwd, path)
-  let mode: number | undefined
-  let currentHash: string | null = null
-  try {
-    const info = await lstat(full)
-    if (info.isSymbolicLink()) throw new NotAllowedError(`${path} is a symbolic link and cannot be saved.`)
-    if (!info.isFile()) throw new NotAllowedError(`${path} is not a regular file.`)
-    mode = info.mode & 0o7777
-    if (expected !== undefined) currentHash = await hashFile(full)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-  if (expected !== undefined && currentHash !== expected) throw new ChangedOnDiskError()
+  return withGitWrite(async () => {
+    const full = join(cwd, path)
+    let mode: number | undefined
+    let currentHash: string | null = null
+    try {
+      const info = await lstat(full)
+      if (info.isSymbolicLink()) throw new NotAllowedError(`${path} is a symbolic link and cannot be saved.`)
+      if (!info.isFile()) throw new NotAllowedError(`${path} is not a regular file.`)
+      mode = info.mode & 0o7777
+      if (expected !== undefined) currentHash = await hashFile(full)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    if (expected !== undefined && currentHash !== expected) throw new ChangedOnDiskError()
 
-  const bytes = new TextEncoder().encode(content)
-  const temp = join(dirname(full), `.${basename(full)}.${randomBytes(6).toString('hex')}.tmp`)
-  try {
-    await writeFile(temp, bytes, { flag: 'wx' })
-    if (mode !== undefined) await chmod(temp, mode)
-    await rename(temp, full)
-  } catch (error) {
-    await unlink(temp).catch(() => {})
-    throw error
+    const bytes = new TextEncoder().encode(content)
+    const temp = join(dirname(full), `.${basename(full)}.${randomBytes(6).toString('hex')}.tmp`)
+    try {
+      await writeFile(temp, bytes, { flag: 'wx' })
+      if (mode !== undefined) await chmod(temp, mode)
+      await rename(temp, full)
+    } catch (error) {
+      await unlink(temp).catch(() => {})
+      throw error
+    }
+    return { hash: contentHash(bytes) }
+  })
+}
+
+const PATCH_ARGS = ['--patch', '--minimal', '--no-color', '--no-ext-diff']
+
+/** The output of `git diff` with `args`, or `omitted` when the runner hits `MAX_BLOB_BYTES`. */
+async function capturePatch(cwd: string, args: string[], env?: Record<string, string>): Promise<{ patch: string; omitted: boolean }> {
+  const r = await runGit(cwd, ['diff', ...args], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES,
+    ...(env ? { env, share: false } : {})
+  })
+  if (r.overflow === true) return { patch: '', omitted: true }
+  if (r.exitCode !== 0) {
+    const detail = r.stderr.trim()
+    throw new GitError(`git diff failed (exit ${r.exitCode})${detail ? `: ${detail}` : ''}`, r.stderr, r.exitCode)
   }
-  return { hash: contentHash(bytes) }
+  return { patch: new TextDecoder().decode(r.stdout), omitted: false }
+}
+
+/**
+ * The NUL-separated listing of untracked, non-ignored paths, or null once the runner hits
+ * `MAX_BLOB_BYTES`. Each listed path appears at least four times in a patch of it, so a listing
+ * that large already means an omitted patch.
+ */
+async function untrackedListing(cwd: string): Promise<string | null> {
+  const r = await runGit(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], {
+    readOnly: true,
+    maxOutputBytes: MAX_BLOB_BYTES
+  })
+  if (r.overflow === true) return null
+  if (r.exitCode !== 0) throw new GitError(`git ls-files failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+  return new TextDecoder().decode(r.stdout)
 }
 
 /**
@@ -300,35 +342,73 @@ export async function saveWorkingFile(
  * so the prompt can say the diff was too large to read. Throws `GitError` on any other failure.
  */
 export async function stagedPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
-  const proc = Bun.spawn(['git', 'diff', '--cached', '--patch', '--minimal', '--no-color', '--no-ext-diff'], {
-    cwd,
-    env: await gitEnv(cwd, { readOnly: true }),
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe'
-  })
-  const stderr = new Response(proc.stderr as ReadableStream).text()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  let omitted = false
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.length
-    if (total > MAX_BLOB_BYTES) {
-      omitted = true
-      proc.kill()
-      await reader.cancel().catch(() => {})
-      break
-    }
-    chunks.push(value)
+  return capturePatch(cwd, ['--cached', ...PATCH_ARGS])
+}
+
+/**
+ * Everything uncommitted as one minimal, colourless patch from HEAD to the working tree: staged,
+ * unstaged, deleted and untracked files (ignored ones excluded), each file once. An unborn HEAD
+ * compares against the empty tree. Untracked files are made visible to the diff through a
+ * throwaway copy of the index, so the real index and the working tree are not touched (git
+ * writes the empty blob for the intent-to-add entries). Past `MAX_BLOB_BYTES` of output, or of untracked
+ * path names alone, the result is `{patch: '', omitted: true}`. Throws
+ * `GitError` on any other failure.
+ */
+export async function workingPatch(cwd: string): Promise<{ patch: string; omitted: boolean }> {
+  const text = async (args: string[], input?: string): Promise<string> => {
+    const r = await runGit(cwd, args, { readOnly: true, ...(input === undefined ? {} : { input }) })
+    if (r.exitCode !== 0) throw new GitError(`git ${args[0]} failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+    return new TextDecoder().decode(r.stdout)
   }
-  const [message, exitCode] = await Promise.all([stderr, proc.exited])
-  if (omitted) return { patch: '', omitted: true }
-  if (exitCode !== 0) {
-    const detail = message.trim()
-    throw new GitError(`git diff failed (exit ${exitCode})${detail ? `: ${detail}` : ''}`, message, exitCode)
+  const born = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
+  const base = born ? 'HEAD' : (await text(['hash-object', '-t', 'tree', '--stdin'], '')).trim()
+  const untracked = await untrackedListing(cwd)
+  if (untracked === null) return { patch: '', omitted: true }
+  if (untracked === '') return capturePatch(cwd, [base, ...PATCH_ARGS])
+
+  // beside the real index so a split index still finds its shared part
+  const index = resolve(cwd, (await text(['rev-parse', '--git-path', 'index'])).trim())
+  const scratch = `${index}.quirky-${randomBytes(6).toString('hex')}`
+  try {
+    await copyFile(index, scratch).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    })
+    const added = await runGit(cwd, ['add', '--intent-to-add', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+      readOnly: true,
+      input: untracked,
+      env: { GIT_INDEX_FILE: scratch }
+    })
+    if (added.exitCode !== 0) throw new GitError(`git add failed (exit ${added.exitCode}): ${added.stderr.trim()}`, added.stderr, added.exitCode)
+    return await capturePatch(cwd, [base, ...PATCH_ARGS], { GIT_INDEX_FILE: scratch })
+  } finally {
+    await unlink(scratch).catch(() => {})
   }
-  return { patch: new TextDecoder().decode(concat(chunks, total)), omitted: false }
+}
+
+/**
+ * Writes a tree object for the whole working tree, tracked and untracked files alike and honoring
+ * `.gitignore`, and returns its oid. It builds the tree in a temporary index seeded from HEAD (empty
+ * on an unborn HEAD), so the real index, HEAD and refs are never touched; only objects are added.
+ * Throws `GitError` when `cwd` is not a git work tree or git fails.
+ */
+export async function snapshotTree(cwd: string): Promise<string> {
+  const inside = await runGit(cwd, ['rev-parse', '--is-inside-work-tree'], { readOnly: true })
+  if (inside.exitCode !== 0 || new TextDecoder().decode(inside.stdout).trim() !== 'true') {
+    throw new GitError('not a git work tree', inside.stderr, inside.exitCode === 0 ? -1 : inside.exitCode)
+  }
+  const dir = await mkdtemp(join(tmpdir(), 'quirky-snapshot-'))
+  const env = { GIT_INDEX_FILE: join(dir, 'index') }
+  const text = async (args: string[]): Promise<string> => {
+    const r = await runGit(cwd, args, { env })
+    if (r.exitCode !== 0) throw new GitError(`git ${args[0]} failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
+    return new TextDecoder().decode(r.stdout)
+  }
+  try {
+    const born = (await runGit(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD'], { readOnly: true })).exitCode === 0
+    if (born) await text(['read-tree', 'HEAD'])
+    await text(['add', '-A'])
+    return (await text(['write-tree'])).trim()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 }

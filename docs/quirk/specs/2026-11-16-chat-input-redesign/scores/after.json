@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-11-17T00:46:46.038Z",
+  "plugins": [
+    "view:quirky.session/structured"
+  ],
+  "reportPath": "/private/tmp/claude-502/-Users-zpyoung-quirky-workspaces-quirky-claude-desktop-chat-interface/e418ed64-9369-40db-a42f-b5468f3253c8/scratchpad/a1-score/ui-review/review-report.json",
+  "surfaces": [
+    {
+      "id": "view:quirky.session/structured",
+      "plugin": "quirky.session",
+      "dark": 74,
+      "light": 58
+    }
+  ]
+}

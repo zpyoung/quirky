@@ -255,7 +255,7 @@ export function parseLaunchOptions(env: DaemonEnv, value: unknown): RecipeLaunch
     }
     const entries = Object.entries(raw.optionValues)
     if (entries.length > 16) return invalidLaunchOptions(env, 'launchOptions.optionValues accepts at most 16 entries.')
-    const optionValues: Record<string, string | boolean> = Object.create(null)
+    const validatedEntries: Array<[string, string | boolean]> = []
     for (const [id, selected] of entries) {
       if (id.length > 64 || id === 'model' || id === '__proto__' || id === 'constructor' || id === 'prototype') {
         return invalidLaunchOptions(env, `launchOptions.optionValues has an invalid option ID: ${id}.`)
@@ -263,9 +263,12 @@ export function parseLaunchOptions(env: DaemonEnv, value: unknown): RecipeLaunch
       if (typeof selected !== 'string' && typeof selected !== 'boolean') {
         return invalidLaunchOptions(env, `launchOptions.optionValues.${id} must be a string or boolean.`)
       }
-      optionValues[id] = selected
+      validatedEntries.push([id, selected])
     }
-    if (entries.length > 0) result.optionValues = optionValues
+    if (validatedEntries.length > 0) {
+      const optionValues = Object.setPrototypeOf(Object.fromEntries(validatedEntries), null) as Record<string, string | boolean>
+      result.optionValues = optionValues
+    }
   }
   return result
 }
@@ -387,11 +390,12 @@ export function setAiRecipe(env: DaemonEnv): Handler {
       saved = env.recipes.remove(scopeOf(worktree, scope), action)
       if (saved) env.recipes.announce(scope === 'repo' ? worktree.repoId : null)
     } else {
-      const fields: Partial<StoredRecipe> = {}
+      const fieldEntries: Array<[typeof TEXT_FIELDS[number], string | null]> = []
       for (const field of TEXT_FIELDS) {
         const value = storedTextField(env, field, params[field])
-        if (value !== undefined) fields[field] = value
+        if (value !== undefined) fieldEntries.push([field, value])
       }
+      const fields = Object.fromEntries(fieldEntries) as Partial<StoredRecipe>
 
       const launchOptions = parseLaunchOptions(env, params.launchOptions)
       let launchOptionsAgent: string | null = null

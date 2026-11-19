@@ -48,6 +48,10 @@ class GuardedRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'done')
   }
 
+  async interrupt(sessionId: string): Promise<void> {
+    this.context.setStatus(sessionId, 'done')
+  }
+
   async stop(sessionId: string): Promise<void> {
     this.context.setStatus(sessionId, 'exited')
   }
@@ -201,6 +205,11 @@ describe('guarded structured sends', () => {
     expect((await journal(session.id, { afterSeq: 1, limit: 1 })).map((message) => message.seq)).toEqual([2])
     expect((await journal(session.id, { limit: 2, tail: true })).map((message) => message.seq)).toEqual([3, 4])
     expect((await journal(session.id, { afterSeq: 1, limit: 2, tail: true })).map((message) => message.seq)).toEqual([3, 4])
+    expect((await journal(session.id, { beforeSeq: 4, limit: 2, tail: true })).map((message) => message.seq)).toEqual([2, 3])
+    expect((await journal(session.id, { beforeSeq: 3 })).map((message) => message.seq)).toEqual([1, 2])
+    expect((await journal(session.id, { afterSeq: 1, beforeSeq: 4 })).map((message) => message.seq)).toEqual([2, 3])
+    expect((await journal(session.id, { beforeSeq: 1 }))).toEqual([])
+    expect((await failure(journal(session.id, { beforeSeq: 0 }))).code).toBe(RpcErrorCode.InvalidParams)
   })
 
   test('guard options reject invalid sequence values before any runner bytes are sent', async () => {

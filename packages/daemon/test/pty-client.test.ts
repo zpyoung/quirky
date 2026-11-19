@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PTY_PROTOCOL_VERSION, PtyFrameDecoder, encodePtyJson, type ExitCause, type PtyFact, type PtyRequest } from '@quirky/protocol'
 import { socketPath } from '@quirky/protocol/node'
+import { liveProcesses, stopAllProcesses } from '@quirky/process'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
 import { createPtyApi } from '../src/plugins/pty-api'
 import { PtyClient } from '../src/pty-client'
@@ -11,6 +12,7 @@ import { makeTempHome, waitFor } from './helpers'
 
 const FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'fake-pty-host.ts')
 const GATED_FAKE_HOST_MAIN = join(import.meta.dir, 'fixtures', 'gated-fake-pty-host.ts')
+const REAL_HOST_MAIN = join(import.meta.dir, '../../pty-host/src/main.ts')
 
 const cleanups: (() => Promise<void> | void)[] = []
 const scopes = new Map<string, ProcessScope>()
@@ -51,6 +53,21 @@ async function withScopeToken<T>(scope: ProcessScope, action: () => Promise<T>):
   }
 }
 
+function settleWithin<T>(promise: Promise<T>, timeoutMs: number) {
+  const { promise: timeout, resolve } = Promise.withResolvers<{ status: 'timeout' }>()
+  const timer = setTimeout(() => resolve({ status: 'timeout' }), timeoutMs)
+  return Promise.race([
+    promise.then(
+      (value) => ({ status: 'resolved' as const, value }),
+      (error: unknown) => ({
+        status: 'rejected' as const,
+        error: error instanceof Error ? error : new Error(String(error))
+      })
+    ),
+    timeout
+  ]).finally(() => clearTimeout(timer))
+}
+
 /** An in-process fake host that stops itself when told to shut down, as the real host exits. */
 function startStoppableHost(home: string, version?: number): FakePtyHost {
   const host: FakePtyHost = startFakePtyHost(home, { version, onShutdown: () => setTimeout(() => host.stop(), 0) })
@@ -60,7 +77,14 @@ function startStoppableHost(home: string, version?: number): FakePtyHost {
 
 function newClient(
   home: string,
-  extra: { hostEntry?: string; connectTimeoutMs?: number; shutdownWaitMs?: number } = {}
+  extra: {
+    hostEntry?: string
+    connectTimeoutMs?: number
+    shutdownWaitMs?: number
+    protocol?: { min: number; max: number }
+    reconnectDelayMs?: { initial: number; max: number }
+    log?: (message: string) => void
+  } = {}
 ): PtyClient {
   const scope = scopeFor(home)
   const client = new PtyClient({ home, hostEntry: FAKE_HOST_MAIN, log: () => {}, ...extra })
@@ -86,6 +110,12 @@ function home(): string {
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   scopeFor(dir)
   return dir
+}
+
+function exitingHostEntry(dir: string): string {
+  const entry = join(dir, 'exit-pty-host.ts')
+  writeFileSync(entry, 'process.exit(0)\n')
+  return entry
 }
 
 /** A host that answers hello at `version`, then accepts shutdown without ever replying or closing. */
@@ -131,6 +161,52 @@ function startSilentHost(
 }
 
 describe('spawning the host', () => {
+  test('the host stays outside runner ownership and survives stopping runner processes', async () => {
+    const client = newClient(home())
+    await client.connect()
+    const pid = client.hostPid!
+    expect(pid).toBeGreaterThan(0)
+    expect(liveProcesses().some(entry => entry.pid === pid)).toBe(false)
+    await stopAllProcesses()
+    // the external host must remain alive beyond shutdown; fake time cannot advance its process
+    await Bun.sleep(300)
+    expect(process.kill(pid, 0)).toBe(true)
+  })
+
+  test('a daemon-launched host survives client close and exits after its home is deleted', async () => {
+    const dir = home()
+    const scope = scopeFor(dir)
+    const client = newClient(dir, { hostEntry: REAL_HOST_MAIN })
+    await client.connect()
+    const hostPid = client.hostPid!
+    const session = await client.request('create', {
+      sessionId: 's1',
+      cwd: '/tmp',
+      argv: ['/bin/sh', '-c', '/bin/sleep 600 & wait'],
+      env: { PATH: '/usr/bin:/bin' },
+      cols: 80,
+      rows: 24
+    })
+    scope.track(session.pid)
+
+    client.close()
+    // This real delay verifies detached-process survival; fake timers cannot advance another process.
+    await Bun.sleep(3500)
+    expect(process.kill(hostPid, 0)).toBe(true)
+
+    rmSync(dir, { recursive: true, force: true })
+    await waitFor(() => {
+      try {
+        process.kill(hostPid, 0)
+        return undefined
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ESRCH') return true
+        throw error
+      }
+    }, 12_000)
+    expect(existsSync(dir)).toBe(false)
+  }, 30_000)
+
   test('starts the host in the home, not the daemon directory', async () => {
     const dir = home()
     const marker = join(dir, 'cwd.txt')
@@ -169,6 +245,192 @@ describe('protocol version handling', () => {
     expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
     expect(newer.requests.some((r) => r.type === 'shutdown')).toBe(false)
   })
+
+  test('bounds the hello request when a host stays silent', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { silentHello: true })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { hostEntry: exitingHostEntry(dir), connectTimeoutMs: 300 })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow(
+      /^quirky-pty did not answer within 300ms: pty request timed out: hello; see .*pty-host\.log$/
+    )
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test('times out when retiring a host that goes silent after rejecting the current version', async () => {
+    const dir = home()
+    const oldVersion = 1
+    const host = startFakePtyHost(dir, { version: oldVersion, rejectThenSilent: true })
+    cleanups.push(() => host.stop())
+    const logs: string[] = []
+    const client = newClient(dir, {
+      hostEntry: exitingHostEntry(dir),
+      connectTimeoutMs: 300,
+      log: (message) => logs.push(message)
+    })
+    const started = Date.now()
+
+    await expect(client.connect()).rejects.toThrow()
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: oldVersion })
+    expect(logs).toContain(
+      `could not retire quirky-pty speaking protocol ${oldVersion}: pty request timed out: hello`
+    )
+  })
+
+  test('adopts a newer host that negotiates the daemon protocol', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { version: PTY_PROTOCOL_VERSION + 1, minVersion: PTY_PROTOCOL_VERSION })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+    const result = await settleWithin(client.connect(), 2000)
+    expect(result.status).toBe('resolved')
+
+    expect(client.connected).toBe(true)
+    expect(client.protocolVersion).toBe(PTY_PROTOCOL_VERSION)
+    expect(host.requests).toHaveLength(1)
+    expect(host.requests[0]).toMatchObject({
+      type: 'hello',
+      version: PTY_PROTOCOL_VERSION,
+      minVersion: PTY_PROTOCOL_VERSION
+    })
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
+    expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
+  })
+
+  test('adopts an older legacy host with an exact second hello', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { version: PTY_PROTOCOL_VERSION - 1, legacyHello: true })
+    cleanups.push(() => host.stop())
+    const messages: string[] = []
+    const client = newClient(dir, {
+      protocol: { min: PTY_PROTOCOL_VERSION - 1, max: PTY_PROTOCOL_VERSION },
+      log: (message) => messages.push(message)
+    })
+    const result = await settleWithin(client.connect(), 2000)
+    expect(result.status).toBe('resolved')
+
+    expect(client.protocolVersion).toBe(PTY_PROTOCOL_VERSION - 1)
+    expect(client.hostPid).toBe(process.pid)
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[0]).toMatchObject({ type: 'hello', version: PTY_PROTOCOL_VERSION, minVersion: PTY_PROTOCOL_VERSION - 1 })
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: PTY_PROTOCOL_VERSION - 1 })
+    expect(host.requests[1]).not.toHaveProperty('minVersion')
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
+    expect(messages).toContain(
+      `adopted quirky-pty speaking protocol ${PTY_PROTOCOL_VERSION - 1}; this quirkyd speaks ${PTY_PROTOCOL_VERSION}`
+    )
+  })
+
+  test('bounds hello timeout when adopting an older legacy host', async () => {
+    const dir = home()
+    const hostVersion = PTY_PROTOCOL_VERSION - 1
+    const host = startFakePtyHost(dir, { version: hostVersion, legacyHello: true, rejectThenSilent: true })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, {
+      hostEntry: exitingHostEntry(dir),
+      connectTimeoutMs: 300,
+      protocol: { min: hostVersion, max: PTY_PROTOCOL_VERSION }
+    })
+    const outcome = await settleWithin(client.connect(), 3000)
+
+    expect(outcome.status).toBe('rejected')
+    if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+    expect(outcome.error.message).toContain('pty request timed out: hello')
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(host.requests[0]).toMatchObject({
+      type: 'hello',
+      version: PTY_PROTOCOL_VERSION,
+      minVersion: hostVersion
+    })
+    expect(host.requests[1]).toMatchObject({ type: 'hello', version: hostVersion })
+    expect(host.requests[1]).not.toHaveProperty('minVersion')
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
+  })
+
+  test('adopts an older host that negotiates within the client range', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { version: PTY_PROTOCOL_VERSION - 1 })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { protocol: { min: PTY_PROTOCOL_VERSION - 1, max: PTY_PROTOCOL_VERSION } })
+    const result = await settleWithin(client.connect(), 2000)
+    expect(result.status).toBe('resolved')
+
+    expect(client.protocolVersion).toBe(PTY_PROTOCOL_VERSION - 1)
+    expect(host.requests).toHaveLength(1)
+    expect(host.requests[0]).toMatchObject({ type: 'hello', version: PTY_PROTOCOL_VERSION, minVersion: PTY_PROTOCOL_VERSION - 1 })
+    expect(host.requests.some((request) => request.type === 'shutdown')).toBe(false)
+  })
+
+
+  test('clears the negotiated version when the connection closes', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+
+    const connected = await settleWithin(client.connect(), 2000)
+    expect(connected.status).toBe('resolved')
+    expect(client.protocolVersion).toBe(PTY_PROTOCOL_VERSION)
+
+    const release = host.holdNextHello()
+    try {
+      host.dropConnections()
+      await waitFor(() => (client.protocolVersion === null ? true : undefined), 1000)
+      expect(client.connected).toBe(false)
+      expect(client.protocolVersion).toBeNull()
+    } finally {
+      client.close()
+      release()
+    }
+    expect(client.protocolVersion).toBeNull()
+  })
+
+  test('refuses a hello reply outside the client range without starting another host', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir, { replyVersion: 99 })
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { connectTimeoutMs: 5000 })
+
+    const started = Date.now()
+    const outcome = await settleWithin(client.connect(), 2000)
+
+    expect(outcome.status).toBe('rejected')
+    if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+    expect(outcome.error.message).toContain('answered hello with protocol 99')
+    expect(Date.now() - started).toBeLessThan(2000)
+    expect(client.connected).toBe(false)
+    expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
+  })
+
+  test('a reply held during connect is discarded when the client closes', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const release = host.holdNextHello()
+    const client = newClient(dir)
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    const connecting = client.connect()
+    await waitFor(() => (host.requests.some((request) => request.type === 'hello') ? true : undefined), 2000)
+    client.close()
+    release()
+    const outcome = await settleWithin(connecting, 1000)
+    expect(outcome.status).toBe('rejected')
+    if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+    expect(outcome.error.message).toBe('pty client closed')
+
+    await waitFor(() => (host.connectionCount() === 0 ? true : undefined), 2000)
+    expect(client.connected).toBe(false)
+    expect(reconnects).toBe(0)
+    expect(host.connectionCount()).toBe(0)
+    expect(host.requests.filter((request) => request.type === 'hello')).toHaveLength(1)
+    expect(existsSync(join(dir, 'pty.pid'))).toBe(false)
+  })
 })
 
 describe('restartHost', () => {
@@ -188,9 +450,200 @@ describe('restartHost', () => {
     expect(b).toEqual(a)
     expect(client.hostPid).toBe(a.pid)
     expect(client.connected).toBe(true)
+    // detached hosts and socket callbacks run on the real clock, including late notifications
     await Bun.sleep(300)
     expect(reconnects).toBe(1)
   })
+
+  test('a request during restart announces reconnect only after the replacement answers', async () => {
+    const dir = home()
+    const first = startFakePtyHost(dir)
+    cleanups.push(() => first.stop())
+    const client = newClient(dir)
+    expect((await settleWithin(client.connect(), 2000)).status).toBe('resolved')
+    const announcedPids: (number | null)[] = []
+    client.onReconnect(() => announcedPids.push(client.hostPid))
+
+    const restarting = settleWithin(client.restartHost(), 3000)
+    // the request must reach the real socket on the next macrotask
+    const nextTurn = Promise.withResolvers<void>()
+    setTimeout(nextTurn.resolve, 0)
+    await nextTurn.promise
+    const during = await settleWithin(client.request('list', {}), 1000)
+    first.stop()
+    const result = await restarting
+
+    expect(during).toEqual({ status: 'resolved', value: [] })
+    expect(result.status).toBe('resolved')
+    if (result.status !== 'resolved') throw new Error('restart did not resolve')
+    expect(first.requests.filter((request) => request.type === 'shutdown')).toHaveLength(1)
+    expect(result.value.pid).not.toBe(process.pid)
+    // a late socket callback from the old host must not announce a second reconnect
+    await Bun.sleep(300)
+    expect(announcedPids).toEqual([result.value.pid])
+    expect(client.hostPid).toBe(result.value.pid)
+    expect(client.connected).toBe(true)
+  }, 10000)
+})
+
+
+describe('reconnecting after a failed first connect', () => {
+  test('reconnects immediately after a ready connection drops despite a long retry delay', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir, { reconnectDelayMs: { initial: 60_000, max: 60_000 } })
+    expect((await settleWithin(client.connect(), 2000)).status).toBe('resolved')
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    host.dropConnections()
+    await waitFor(() => (client.connected && reconnects === 1 ? true : undefined), 2000)
+
+    expect(host.requests.map((request) => request.type)).toEqual(['hello', 'hello'])
+    expect(client.connected).toBe(true)
+    expect(reconnects).toBe(1)
+  }, 10000)
+
+  test('connects to a late host and notifies without a request', async () => {
+    const dir = home()
+    const startMarker = join(dir, 'pty-host.start')
+    const client = newClient(dir, {
+      hostEntry: GATED_FAKE_HOST_MAIN,
+      connectTimeoutMs: 300,
+      reconnectDelayMs: { initial: 50, max: 200 }
+    })
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    await withScopeToken(scopeFor(dir), async () => {
+      const outcome = await settleWithin(client.connect(), 2000)
+      if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+      writeFileSync(startMarker, '')
+      await waitFor(() => (client.connected ? true : undefined), 5000)
+    })
+
+    expect(reconnects).toBe(1)
+  }, 15000)
+
+  test('delivers reconnect during an outage before an on-demand request resolves', async () => {
+    const dir = home()
+    const startMarker = join(dir, 'pty-host.start')
+    const client = newClient(dir, {
+      hostEntry: GATED_FAKE_HOST_MAIN,
+      connectTimeoutMs: 300,
+      reconnectDelayMs: { initial: 60_000, max: 60_000 }
+    })
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    await withScopeToken(scopeFor(dir), async () => {
+      const outcome = await settleWithin(client.connect(), 2000)
+      if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+      writeFileSync(startMarker, '')
+      await waitFor(() => (existsSync(join(dir, 'pty.sock')) ? true : undefined), 2000)
+
+      expect(await client.request('list', {})).toEqual([])
+      expect(reconnects).toBe(1)
+      client.close()
+      expect(reconnects).toBe(1)
+    })
+  }, 15000)
+
+  test('retries with bounded backoff until close and cancels further attempts', async () => {
+    const dir = home()
+    const attempts = join(dir, 'host-attempts.txt')
+    const entry = join(dir, 'record-attempt.ts')
+    writeFileSync(entry, `require('node:fs').appendFileSync(${JSON.stringify(attempts)}, 'attempt\\n')\n`)
+    const client = newClient(dir, {
+      hostEntry: entry,
+      connectTimeoutMs: 100,
+      reconnectDelayMs: { initial: 50, max: 100 }
+    })
+
+    await withScopeToken(scopeFor(dir), async () => {
+      const outcome = await settleWithin(client.connect(), 2000)
+      if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+      await waitFor(() => (existsSync(attempts) && readFileSync(attempts, 'utf8').trim().split('\n').length >= 3 ? true : undefined), 5000)
+
+      client.close()
+      // Child-process retries use the real clock and cannot be driven by fake timers.
+      await Bun.sleep(100)
+      const countAfterClose = readFileSync(attempts, 'utf8').trim().split('\n').length
+      await Bun.sleep(400)
+      expect(readFileSync(attempts, 'utf8').trim().split('\n')).toHaveLength(countAfterClose)
+    })
+  }, 15000)
+
+  test('closing during connect prevents a late socket from becoming ready', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const client = newClient(dir)
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    const connecting = client.connect()
+    client.close()
+    const outcome = await settleWithin(connecting, 1000)
+    expect(outcome.status).toBe('rejected')
+    if (outcome.status !== 'rejected') throw new Error('connect did not reject')
+    expect(outcome.error.message).toBe('pty client closed')
+    await waitFor(() => (host.connectionCount() === 0 ? true : undefined), 2000)
+    // real socket opens can complete after close; fake time cannot drive their callbacks
+    await Bun.sleep(300)
+    expect(client.connected).toBe(false)
+    expect(host.connectionCount()).toBe(0)
+
+    const helloCount = host.requests.filter((request) => request.type === 'hello').length
+    const later = await settleWithin(client.connect(), 1000)
+    expect(later.status).toBe('rejected')
+    if (later.status !== 'rejected') throw new Error('closed client connected')
+    expect(later.error.message).toBe('pty client closed')
+    expect(host.requests.filter((request) => request.type === 'hello')).toHaveLength(helloCount)
+    expect(reconnects).toBe(0)
+  }, 10000)
+
+  test('closing during a retry-held hello stops notifications and future host attempts', async () => {
+    const dir = home()
+    const host = startFakePtyHost(dir)
+    cleanups.push(() => host.stop())
+    const token = join(dir, 'pty.token')
+    const hiddenToken = join(dir, 'pty.token.hidden')
+    renameSync(token, hiddenToken)
+    const attempts = join(dir, 'host-attempts.txt')
+    const entry = join(dir, 'record-attempt.ts')
+    writeFileSync(entry, `require('node:fs').appendFileSync(${JSON.stringify(attempts)}, 'attempt\\n')\n`)
+    const client = newClient(dir, {
+      hostEntry: entry,
+      connectTimeoutMs: 100,
+      reconnectDelayMs: { initial: 50, max: 50 }
+    })
+    let reconnects = 0
+    client.onReconnect(() => reconnects++)
+
+    await withScopeToken(scopeFor(dir), async () => {
+      const initial = await settleWithin(client.connect(), 2000)
+      if (initial.status !== 'rejected') throw new Error('initial connect did not reject')
+      const release = host.holdNextHello()
+      renameSync(hiddenToken, token)
+      await waitFor(() => (host.requests.some((request) => request.type === 'hello') ? true : undefined), 5000)
+
+      client.close()
+      release()
+      // an already-spawned child can still append before cancellation settles
+      await Bun.sleep(100)
+      const countAfterClose = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0
+      await Bun.sleep(400)
+
+      expect(client.connected).toBe(false)
+      expect(reconnects).toBe(0)
+      expect(host.connectionCount()).toBe(0)
+      expect(host.requests.filter((request) => request.type === 'hello')).toHaveLength(1)
+      const finalCount = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0
+      expect(finalCount).toBe(countAfterClose)
+    })
+  }, 15000)
 })
 
 describe('a host that accepts shutdown but never replies or closes', () => {

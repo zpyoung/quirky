@@ -58,6 +58,7 @@ function settingFields(settings: SettingInfo[]): SettingField[] {
 }
 
 /**
+ * Skips hidden settings, which have no generic control.
  * Groups categorized settings by their declared category and section.
  * Settings without either field remain grouped by plugin ID, use that plugin's manifest name,
  * and keep every group's fields sorted by setting ID.
@@ -67,6 +68,7 @@ export function settingsGroups(settings: SettingInfo[]): SettingGroup[] {
   const categories = new Map<string | undefined, Map<string | undefined, SettingInfo[]>>()
 
   for (const setting of settings) {
+    if (setting.hidden) continue
     if (setting.category === undefined && setting.section === undefined) {
       const members = plugins.get(setting.plugin)
       if (members) members.push(setting)

@@ -1,13 +1,24 @@
-import { EmptyState } from '@quirky/ui'
-import { useEffect, useState } from 'react'
+import { EmptyState, InlineError } from '@quirky/ui'
+import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
-import { forgetShowAllEvents, WORKTREE_VIEW_ID, WorktreeSessions } from './window/model'
-import { StructuredView } from './window/StructuredView'
+// under `bun test`, Bun.build fails to resolve ./window/model when ./window/chat is imported before it
+import {
+  forgetShowAllEvents,
+  rememberShowAllEvents,
+  RUN_BADGE_COMMAND,
+  SHOW_ALL_EVENTS_COMMAND,
+  WORKTREE_VIEW_ID,
+  WorktreeSessions
+} from './window/model'
+import { ChatView } from './window/chat/ChatView'
+import { newChatCommand, resetNewChatDialog } from './window/chat/newChat'
+import { NewChatOverlay } from './window/chat/NewChatOverlay'
 import { WorktreeView } from './window/WorktreeView'
 
 const PLUGIN_ID = 'quirky.session'
 const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
+const CHAT_OVERLAY_ID = `overlay:${PLUGIN_ID}/chat-dialogs`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 /** The selected worktree, if any. */
@@ -37,27 +48,44 @@ function touches(event: QuirkyEvent, id: string): boolean {
   return event.type === 'quirky.session/removed' && data?.sessionId === id
 }
 
-type Loaded = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; session: Session }
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-/** One structured session's transcript and input, re-read whenever the session changes or goes away. */
+type Loaded =
+  | { status: 'loading' }
+  | { status: 'missing' }
+  | { status: 'failed'; failure: string }
+  | { status: 'ready'; session: Session }
+
+/** Reads one structured session, distinguishing absence from a failed read. */
+async function readSession(context: UiPluginContext, id: string): Promise<Exclude<Loaded, { status: 'loading' }>> {
+  try {
+    const session = (await context.call('quirky.session/get', { session: id })) as Session
+    return { status: 'ready', session }
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound) return { status: 'missing' }
+    return { status: 'failed', failure: messageOf(error) }
+  }
+}
+
+/** One structured session's chat, re-read whenever the session changes or goes away. */
 function StructuredSession({ context, id }: { context: UiPluginContext; id: string | null }) {
   const [loaded, setLoaded] = useState<Loaded>(id === null ? { status: 'missing' } : { status: 'loading' })
+  const latest = useRef(0)
+  const cancelled = useRef(false)
+
+  function load(): void {
+    if (id === null) return
+    setLoaded((current) => current.status === 'failed' ? { status: 'loading' } : current)
+    const attempt = ++latest.current
+    void readSession(context, id).then((result) => {
+      if (cancelled.current || attempt !== latest.current) return
+      setLoaded((current) => result.status === 'failed' && current.status === 'ready' ? current : result)
+    })
+  }
 
   useEffect(() => {
     if (id === null) return
-    let cancelled = false
-    let latest = 0
-    const load = () => {
-      const attempt = ++latest
-      context
-        .call('quirky.session/get', { session: id })
-        .then((session) => {
-          if (!cancelled && attempt === latest) setLoaded({ status: 'ready', session: session as Session })
-        })
-        .catch((error: { code?: unknown }) => {
-          if (!cancelled && attempt === latest && error?.code === RpcErrorCode.NotFound) setLoaded({ status: 'missing' })
-        })
-    }
+    cancelled.current = false
     const unsubscribe = context.subscribe((event) => {
       if (touches(event, id)) load()
     })
@@ -66,15 +94,19 @@ function StructuredSession({ context, id }: { context: UiPluginContext; id: stri
     })
     load()
     return () => {
-      cancelled = true
+      cancelled.current = true
+      latest.current++
       unsubscribe()
       unsubscribeConnection()
     }
   }, [context, id])
 
   if (loaded.status === 'missing') return <EmptyState message="Session not found" />
-  if (loaded.status === 'loading') return null
-  return <StructuredView context={context} session={loaded.session} />
+  if (loaded.status === 'loading') return <EmptyState message="Loading session…" />
+  if (loaded.status === 'failed') {
+    return <InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />
+  }
+  return <ChatView context={context} session={loaded.session} />
 }
 
 /**
@@ -124,6 +156,15 @@ export function activate(context: UiPluginContext): void {
     return () => queueMicrotask(() => root.unmount())
   }
 
+  const mountChatDialogs: MountFunction = (element) => {
+    const root = createRoot(element)
+    root.render(<NewChatOverlay context={context} />)
+    return () => {
+      resetNewChatDialog()
+      queueMicrotask(() => root.unmount())
+    }
+  }
+
   const selectTab = (index: number) => {
     const target = current?.tab(index)
     if (target) current?.open(target.id)
@@ -131,6 +172,8 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(WORKTREE_VIEW_ID, mountView)
   context.provide(STRUCTURED_VIEW_ID, mountStructured)
+  context.provide(CHAT_OVERLAY_ID, mountChatDialogs)
+  context.provide(`command:${PLUGIN_ID}/new-chat`, (args?: unknown) => newChatCommand(context, args))
   context.provide(`command:${PLUGIN_ID}/new-shell`, async () => {
     const store = current
     const worktree = store?.report().worktree ?? layoutWorktree(context)
@@ -148,4 +191,17 @@ export function activate(context: UiPluginContext): void {
     selectTab(Number((args as { index?: unknown } | undefined)?.index))
   })
   for (const index of TAB_SHORTCUTS) context.provide(`command:${PLUGIN_ID}/select-tab-${index}`, () => selectTab(index))
+  context.provide(SHOW_ALL_EVENTS_COMMAND, async (args?: unknown) => {
+    const { session: sessionId, enabled } = args as { session: string; enabled: boolean }
+    const session = (await context.call('quirky.session/get', { session: sessionId })) as Session
+    rememberShowAllEvents(session, enabled)
+    return { session: sessionId, enabled }
+  })
+  context.provide(RUN_BADGE_COMMAND, async (args?: unknown) => {
+    const { session: sessionId, badge: badgeKey } = args as { session: string; badge: string }
+    const session = (await context.call('quirky.session/get', { session: sessionId })) as Session
+    const badge = session.badges?.[badgeKey]
+    if (!badge?.command) throw new Error(`session ${sessionId} has no badge ${badgeKey} with a command`)
+    await context.executeCommand(badge.command, badge.args)
+  })
 }

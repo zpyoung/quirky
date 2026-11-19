@@ -1,9 +1,9 @@
 {
   "id": "quirky.structured",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.6.0",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude, Codex, pi and omp sessions without terminals: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -11,7 +11,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude, Codex, pi or omp conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -20,19 +20,28 @@
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             },
-            "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
             "model": { "type": "string", "description": "A model ID from the agent's catalog, 1 to 128 characters." },
+            "permissionMode": { "type": "string", "description": "The permission mode to start in; one of the agent's permissionModes." },
             "lifetime": { "type": "string", "enum": ["plugin"], "description": "Plugin callers only: stop this live connection when its authenticated creating plugin is disabled or removed. Omit for an independent session." },
             "lifetimeKey": { "type": "string", "description": "With plugin lifetime, groups this connection under the creating plugin's opaque resource key (1 to 128 characters, validated at runtime)." },
             "options": {
               "type": "object",
               "additionalProperties": true,
-              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean."
+              "properties": {
+                "toolPolicy": {
+                  "type": "string",
+                  "enum": ["default", "deny-all"],
+                  "description": "With deny-all the session runs no tools: every tool or approval request is refused without an ask. A pi or omp session is checked before each prompt and ends if the agent has a tool to offer, which omp does whenever an MCP server is configured for it. Omit for the provider's normal approval flow."
+                }
+              },
+              "description": "Launch option picks by option ID, such as { \"effort\": \"high\" }: up to 16 entries, each a string or a boolean. `toolPolicy` is handled by this plugin and is not an agent catalog option."
             },
-            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." }
+            "extraArgs": { "type": "string", "description": "Refused: a structured session has no command line." },
+            "permissionMode": { "type": "string", "description": "A permission mode from the agent's capabilities to open in. Omitted, the session opens in the mode matching the agent's terminal permission preset, else the agent's first mode." }
           },
           "required": ["agent"]
         },
@@ -62,7 +71,7 @@
       },
       {
         "id": "messages",
-        "description": "The messages of a structured session, optionally only those after `afterSeq`.",
+        "description": "The messages of a structured session, oldest first, optionally only those after `afterSeq` and before `beforeSeq`. With `limit`, `tail` keeps the newest of them, so `beforeSeq` plus `tail` pages back through a long chat.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -70,6 +79,7 @@
           "properties": {
             "session": { "type": "string" },
             "afterSeq": { "type": "integer", "minimum": 0 },
+            "beforeSeq": { "type": "integer", "minimum": 1 },
             "limit": { "type": "integer", "minimum": 1, "maximum": 1000 },
             "tail": { "type": "boolean" }
           },
@@ -85,6 +95,7 @@
               "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
               "text": { "type": "string" },
               "data": { "description": "The agent's raw event." },
+              "item": { "type": "object", "description": "The typed chat item (kind user, prose, activity, file-change, tests, steps, ask, view, view-error, changes, turn-end, error or status); absent on messages journaled before items existed." },
               "at": { "type": "number" }
             },
             "required": ["sessionId", "seq", "role", "text", "at"]
@@ -93,7 +104,7 @@
       },
       {
         "id": "resume",
-        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn.",
+        "description": "Resumes the persisted native Claude, Codex, pi or omp conversation into a new structured session; the optional prompt starts its first turn. A session created with toolPolicy: deny-all resumes with it.",
         "params": {
           "type": "object",
           "properties": {
@@ -109,7 +120,7 @@
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["structured"] },
-            "agent": { "type": "string", "enum": ["claude", "codex"] },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
             "title": { "type": "string" },
@@ -149,6 +160,21 @@
         }
       },
       {
+        "id": "interrupt",
+        "description": "Ends the current turn of a structured session and leaves it idle and usable, with its queue untouched. Does not close the provider connection.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "stopOwned",
         "description": "Plugin callers only: stops live connections created by this exact plugin under a resource key, including a create whose reply was lost. Session history is retained.",
         "params": {
@@ -179,7 +205,17 @@
             "expectedIncarnation": { "type": "string", "description": "When present, sends only to this live structured lease incarnation." },
             "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." },
             "requireIdle": { "type": "boolean" },
-            "expectedAfterSeq": { "type": "integer", "minimum": 0 }
+            "expectedAfterSeq": { "type": "integer", "minimum": 0 },
+            "images": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Absolute paths of png, jpg, jpeg, gif or webp files of at most 20 MB. Refused with invalid-params for an agent that does not accept images."
+            },
+            "when": {
+              "type": "string",
+              "enum": ["now", "idle"],
+              "description": "`now` (the default) sends at once; `idle` queues the message while the agent is working or waiting and sends it at once when idle."
+            }
           },
           "required": ["session", "text"]
         },
@@ -187,10 +223,238 @@
           "type": "object",
           "properties": {
             "ok": { "type": "boolean" },
-            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] }
+            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] },
+            "queuedId": { "type": "string", "description": "The queue entry, when `when: idle` queued the message." }
           },
           "required": ["ok"]
         }
+      },
+      {
+        "id": "capabilities",
+        "description": "What an agent's structured runner supports: steer, plan mode, permission modes, images, effort, approval for a session and resume. Static; it never contacts the agent. An unknown agent fails with invalid-params.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "agent": { "type": "string", "description": "claude, codex, pi or omp." } },
+          "required": ["agent"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
+            "steer": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "planMode": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "permissionModes": {
+              "type": "object",
+              "properties": {
+                "ok": { "type": "boolean" },
+                "modes": { "type": "array", "items": { "type": "string" }, "description": "The first is the agent's default." },
+                "labels": { "type": "object", "additionalProperties": true, "description": "A display name per mode id, each a string." },
+                "dangerous": { "type": "array", "items": { "type": "string" }, "description": "Modes that let the agent act without asking." },
+                "reason": { "type": "string" }
+              },
+              "required": ["ok"]
+            },
+            "images": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "effort": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "approveForSession": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
+          },
+          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume"]
+        }
+      },
+      {
+        "id": "queue",
+        "description": "The messages waiting in a session's queue, oldest first.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } }, "at": { "type": "string" } }, "required": ["id", "text", "at"] } }
+      },
+      {
+        "id": "dequeue",
+        "description": "Removes a message from a session's queue; an id that is not queued (or already flushed) fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "editQueued",
+        "description": "Changes the text of a queued message; an id that is not queued fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" }, "text": { "type": "string" } },
+          "required": ["session", "id", "text"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "reorderQueued",
+        "description": "Sets the order of a session's queue to the given ids, which must list every queued id exactly once; an unknown id fails with not-found and a non-permutation with invalid-params.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "ids": { "type": "array", "items": { "type": "string" } } },
+          "required": ["session", "ids"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "sendQueued",
+        "description": "Sends a queued message now as a new turn while the session is idle; an id that is not queued fails with not-found, and a working or ended session fails with conflict (data.reason busy or exited).",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "commands",
+        "description": "The slash commands and skills the session's agent last reported, or an empty list when it reported none. Works for live and ended sessions.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } },
+                "required": ["name", "kind"]
+              }
+            }
+          },
+          "required": ["commands"]
+        }
+      },
+      {
+        "id": "models",
+        "description": "The models a running session's agent offers, as ids `configure` accepts, with the model the session launched with. Runners without a live list return an empty list; a session that is not running fails with conflict.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+                "required": ["id", "label"]
+              }
+            },
+            "current": { "description": "The model the session launched with, or null." }
+          },
+          "required": ["models", "current"]
+        }
+      },
+      {
+        "id": "defaults",
+        "description": "The model and effort the agent's own settings give a new session in the worktree (Claude Code settings, Codex config.toml, pi settings.json, omp config.yml), null where they name none or cannot be read.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] }, "worktree": { "type": "string" } },
+          "required": ["agent", "worktree"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "model": { "description": "The model id, or null." },
+            "effort": { "description": "The effort level, or null." }
+          },
+          "required": ["model", "effort"]
+        }
+      },
+      {
+        "id": "configure",
+        "description": "Applies composer picks to a running session: model and effort, and permission mode (Plan is one of the modes). Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": { "type": "string" },
+            "model": { "type": "string" },
+            "effort": { "type": "string" },
+            "permissionMode": { "type": "string" }
+          },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": { "type": "boolean" },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": { "type": "string" },
+                "effort": { "type": "string" },
+                "permissionMode": { "type": "string" }
+              }
+            }
+          },
+          "required": ["ok", "settings"]
+        }
+      },
+      {
+        "id": "settings",
+        "description": "The settings a running session is in: model, effort, permission mode, as configure reports them. A session that is not running returns empty settings.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": { "type": "string" },
+                "effort": { "type": "string" },
+                "permissionMode": { "type": "string" }
+              }
+            }
+          },
+          "required": ["settings"]
+        }
+      },
+      {
+        "id": "steer",
+        "description": "Removes a queued message and sends it now. An agent that cannot be steered fails with conflict (reason steer-unsupported); an id that is not queued fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
       }
     ],
     "event": [
@@ -208,12 +472,37 @@
                 "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
                 "text": { "type": "string" },
                 "data": { "description": "The agent's raw event." },
+                "item": { "type": "object", "description": "The typed chat item; absent on messages journaled before items existed." },
                 "at": { "type": "number" }
               },
               "required": ["sessionId", "seq", "role", "text", "at"]
             }
           },
           "required": ["message"]
+        }
+      },
+      {
+        "id": "queueChanged",
+        "description": "A structured session's message queue changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "queue": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } }, "at": { "type": "string" } }, "required": ["id", "text", "at"] } }
+          },
+          "required": ["sessionId", "queue"]
+        }
+      },
+      {
+        "id": "commandsChanged",
+        "description": "A structured session's agent reported a new list of slash commands and skills.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "commands": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } }, "required": ["name", "kind"] } }
+          },
+          "required": ["sessionId", "commands"]
         }
       },
       {

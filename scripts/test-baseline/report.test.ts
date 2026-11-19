@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { COMMENT_MARKER, displayKey, renderComment, renderLocal } from './report'
+import { COMMENT_MARKER, displayKey, renderComment } from './report'
 import type { Verdict } from './types'
 
 const NOW = new Date('2026-10-30T12:00:00Z')
@@ -147,63 +147,5 @@ describe('renderComment', () => {
   test('uses no emoji', () => {
     const body = renderComment(verdict({ ok: false, runBroken: true, new: ['a.test.ts'], fixed: ['b.test.ts'] }), NOW)
     expect(body).not.toMatch(/\p{Extended_Pictographic}/u)
-  })
-})
-
-describe('renderLocal', () => {
-  test('prints one labelled line per failing test, then the summary', () => {
-    const out = renderLocal(
-      verdict({
-        ok: false,
-        advisory: true,
-        new: [key('a.test.ts', 's', 'one')],
-        known: [key('b.test.ts', 's', 'two'), key('b.test.ts', 's', 'three')],
-      }),
-      NOW,
-    )
-    const lines = out.trimEnd().split('\n')
-    expect(lines.length).toBe(4)
-    expect(lines[0]).toStartWith('new')
-    expect(lines[0]).toContain('a.test.ts > s > one')
-    expect(lines[1]).toStartWith('known')
-    expect(lines[2]).toStartWith('known')
-    expect(lines[3]).toBe('advisory: 1 new failure, 2 known failures, 0 flaky, against baseline abcdef0')
-  })
-
-  test('lists flaky and incomplete files too', () => {
-    const out = renderLocal(verdict({ ok: false, flaky: [key('a.test.ts', 's', 'x')], incomplete: ['c.test.ts'] }), NOW)
-    expect(out).toContain('flaky')
-    expect(out).toContain('incomplete')
-    expect(out).toContain('c.test.ts')
-  })
-
-  test('lists fixed and missing tests with their labels', () => {
-    const out = renderLocal(verdict({ fixed: [key('a.test.ts', 's', 'now-passes')], missing: [key('b.test.ts', 's', 'gone')] }), NOW)
-    const lines = out.trimEnd().split('\n')
-    expect(lines).toContain('fixed: a.test.ts > s > now-passes')
-    expect(lines).toContain('missing: b.test.ts > s > gone')
-    expect(lines.at(-1)).toBe('result: 0 new failures, 0 known failures, 0 flaky, against baseline abcdef0')
-  })
-
-  test('says no baseline in the summary', () => {
-    const out = renderLocal(verdict({ advisory: true, baseline: null, new: [key('a.test.ts', 's', 'x')] }), NOW)
-    const last = out.trimEnd().split('\n').at(-1)
-    expect(last).toBe('advisory: 1 new failure, 0 known failures, 0 flaky, no baseline')
-  })
-
-  test('starts the summary with advisory only when advisory', () => {
-    const last = (v: Verdict) => renderLocal(v, NOW).trimEnd().split('\n').at(-1)!
-    expect(last(verdict({ advisory: true }))).toStartWith('advisory:')
-    expect(last(verdict({ advisory: false }))).not.toStartWith('advisory:')
-  })
-
-  test('says so when no tests were needed', () => {
-    const out = renderLocal(verdict({ advisory: true, selection: { mode: 'none', files: [], reasons: [] } }), NOW)
-    expect(out.toLowerCase()).toContain('no tests were needed')
-  })
-
-  test('flags a broken run', () => {
-    const out = renderLocal(verdict({ advisory: true, ok: false, runBroken: true }), NOW)
-    expect(out.toLowerCase()).toContain("can't be trusted")
   })
 })

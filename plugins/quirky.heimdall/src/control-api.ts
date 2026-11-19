@@ -412,7 +412,7 @@ export const controlContributions = {
       worktree: flag('string', 'Filter by worktree ID, workspace name or path.')
     }),
     command('show', 'show a local or paired watcher and its live detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail'], [watcherId]),
-    command('objective', 'show the objective kind detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.heimdall/objectiveDetail'], [watcherId]),
+    command('objective', 'show the objective kind detail', ['quirky.heimdall/fleet', 'quirky.heimdall/detail', 'quirky.objective/detail'], [watcherId]),
     command('create', 'enroll a registered watcher kind', ['quirky.heimdall/enroll'], [positional('kind', 'A registered Heimdall kind.')], {
       worktree: flag('string', 'Worktree selector; defaults to active.'),
       spec: flag('string', 'JSON or @file with the supported create-spec root keys.'),
@@ -431,6 +431,7 @@ export const controlContributions = {
       cap: flag('string', 'Repeatable capability assignment key=off|gated|on.', { repeatable: true }),
       'branch-update': flag('string', 'Hosted-review branch update mode.', { enum: ['merge-base-update', 'rebase'] }),
       'merge-method': flag('string', 'Hosted-review merge method.', { enum: ['default', 'merge', 'squash', 'rebase'] }),
+      'merge-check-scope': flag('string', 'Hosted-review merge check scope.', { enum: ['all', 'required'] }),
       ...ownerFlags
     }),
     command('pause', 'pause one watcher after its current tick drains', commandMethods, [watcherId]),

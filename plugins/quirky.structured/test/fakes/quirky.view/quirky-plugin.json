@@ -1,0 +1,14 @@
+{
+  "id": "quirky.view",
+  "apiVersion": "1.0.0",
+  "name": "View (fake)",
+  "version": "0.0.0",
+  "main": "main.ts",
+  "activation": "startup",
+  "contributes": {
+    "event": [
+      { "id": "changed", "data": { "type": "object", "additionalProperties": true } },
+      { "id": "rejected", "data": { "type": "object", "additionalProperties": true } }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import { QuirkyClient, type QuirkyEvent } from '@quirky/protocol'
+import { QuirkyClient, type CallOptions, type QuirkyEvent, type TerminalStreamOptions } from '@quirky/protocol'
 import { INITIAL_DELAY_MS, nextDelay } from './lib/backoff'
 import { daemonAnswers } from './lib/probe'
 import { loadDesktopClientId } from './lib/desktop-client-id'
@@ -6,8 +6,16 @@ import { parseHashToken, rpcUrl } from './lib/token'
 import type { ConnectionStatus } from './lib/state'
 import type { Store } from './store'
 
+export const UI_READ_TIMEOUT_MS = 30_000
+
 /** Consecutive socket failures after which the page checks whether the daemon is up at all. */
 export const FAILURES_BEFORE_PROBE = 3
+
+/**
+ * How long a connection must last before the retry delay starts over. A daemon that drops every
+ * connection soon after it opens (a reply it cannot send, say) then gets backoff, not a tight loop.
+ */
+export const STABLE_CONNECTION_MS = 5_000
 
 type ConnectionOptions = { initialDelayMs?: number }
 
@@ -49,9 +57,9 @@ export class Connection {
   }
 
   /** Calls any daemon or plugin method; the result is untyped. */
-  callAny(method: string, params: Record<string, unknown>): Promise<unknown> {
+  callAny(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown> {
     if (!this.client || this.client.isClosed) return Promise.reject(new Error('Not connected'))
-    return this.client.callAny(method, params)
+    return this.client.callAny(method, params, options)
   }
 
   /** Receives every daemon event, in addition to the store dispatch; the returned function unsubscribes. */
@@ -67,9 +75,9 @@ export class Connection {
   }
 
   /** Binary frames of terminal stream `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void {
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions): () => void {
     if (!this.client) throw new Error('Not connected')
-    return this.client.onTerminalOutput(streamId, listener)
+    return this.client.onTerminalOutput(streamId, listener, options)
   }
 
   /** Reports each change between connected and not connected; the returned function unsubscribes. */
@@ -100,11 +108,12 @@ export class Connection {
         const closed = new Promise<void>((resolve) => client.onClose(resolve))
         client.onEvent((event) => this.handleEvent(event))
         this.client = client
-        delay = initialDelay
         failures = 0
         this.setStatus('connected')
         this.notify(this.connectedListeners)
+        const connectedAt = Date.now()
         await closed
+        if (Date.now() - connectedAt >= STABLE_CONNECTION_MS) delay = initialDelay
       } catch {
         failures += 1
         this.client?.close()

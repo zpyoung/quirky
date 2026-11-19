@@ -22,6 +22,8 @@ const subscribed = new WeakSet<UiPluginContext>()
 const DIFF_TAB_ICON = { kind: 'tool', name: 'git-diff', hue: 'azure' } as const
 const CLOSE_DIFF_COMMAND = 'command:quirky.git/close-diff'
 const dirtyUpdates = new Map<string, Promise<void>>()
+/** The hosted tab that is each worktree's Review tab, by worktree. */
+const reviewOwners = new Map<string, string>()
 
 function workspaceFrom(value: unknown): PublicWorkspace {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Terminal returned an invalid workspace.')
@@ -86,9 +88,11 @@ function titleOf(input: DiffViewInput, dirty = false): string {
     ? input.path ? `${input.path} (${input.source === 'branch' ? 'Branch Diff' : input.source === 'commit' ? 'Commit Diff' : 'Diff'})` : 'Diff'
     : input.mode === 'combined'
       ? input.commit ? `Commit ${input.commit.slice(0, 8)}` : `${input.area ?? 'Changes'} Diff`
-      : input.mode === 'conflicts'
-        ? 'Conflicts'
-        : input.path ?? 'Conflict'
+      : input.mode === 'review'
+        ? 'Review'
+        : input.mode === 'conflicts'
+          ? 'Conflicts'
+          : input.path ?? 'Conflict'
   const title = dirty ? `${base} • Unsaved` : base
   return title.length <= 200 ? title : `…${title.slice(-199)}`
 }
@@ -107,7 +111,13 @@ function tabById(workspace: PublicWorkspace, id: string): TabLocation | undefine
   return tabLocations(workspace).find(({ tab }) => tab.id === id)
 }
 
-export async function openHostedDiff(context: UiPluginContext, requested: DiffViewInput): Promise<DiffViewInput> {
+export async function openHostedDiff(
+  context: UiPluginContext,
+  requested: DiffViewInput,
+  options: { activate?: boolean; showWorktree?: boolean } = {}
+): Promise<DiffViewInput> {
+  const activate = options.activate ?? true
+  const showWorktree = options.showWorktree ?? true
   const workspace = await readWorkspace(context, requested.worktree)
   const groups = groupsIn(workspace.root)
   const groupId = requested.groupId ?? workspace.activeGroup
@@ -143,8 +153,8 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     title: titleOf(input, dirty),
     icon: DIFF_TAB_ICON,
     reuse: true,
-    activate: true,
     preview,
+    activate,
     closeCommand: CLOSE_DIFF_COMMAND,
     closeMethod: 'quirky.git/diffCloseGuard',
     closeParams: { worktree: requested.worktree, dirty },
@@ -182,11 +192,67 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     changes: [{ tab: opened.tab, key, input: finalApiInput, title: titleOf(finalInput, dirty), preview }],
     revision: openedWorkspace.revision
   })
-  setActiveHostedView(opened.tab)
-  if (shownWorktree(context) !== requested.worktree) {
+  if (activate) setActiveHostedView(opened.tab)
+  if (showWorktree && shownWorktree(context) !== requested.worktree) {
     context.openView(SESSIONS_VIEW_ID, { worktree: requested.worktree })
   }
   return finalInput
+}
+export async function findHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<string | null> {
+  const workspace = await readWorkspace(context, input.worktree)
+  const key = diffViewKey(input)
+  const owner = input.mode === 'review' ? reviewOwners.get(input.worktree) : undefined
+  const tabs = tabLocations(workspace).filter(({ tab }) => tab.viewId === DIFF_VIEW_ID)
+  const found = tabs.find(({ tab }) => tab.key === key) ?? tabs.find(({ tab }) => tab.id === owner)
+  return found?.tab.id ?? null
+}
+
+/** Activates the hosted diff tab for `input`, or returns null when none is open. */
+export async function activateHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<string | null> {
+  const tabId = await findHostedDiff(context, input)
+  if (tabId === null) return null
+  await context.call('quirky.terminal/activateTab', { tab: tabId })
+  setActiveHostedView(tabId)
+  return tabId
+}
+
+/**
+ * Whether hosted tab `tabId` is the worktree's Review tab: the first claim wins and later tabs of
+ * the same worktree are duplicates. Claiming again with the owner's id is a no-op, so a remount
+ * keeps its place.
+ */
+export function claimReviewTab(worktree: string, tabId: string): boolean {
+  const owner = reviewOwners.get(worktree)
+  if (owner !== undefined && owner !== tabId) return false
+  reviewOwners.set(worktree, tabId)
+  return true
+}
+
+/** Frees the worktree's Review place when `tabId` holds it. */
+export function releaseReviewTab(worktree: string, tabId: string): void {
+  if (reviewOwners.get(worktree) === tabId) reviewOwners.delete(worktree)
+}
+
+/** Whether a hosted tab currently owns its worktree's Review content. */
+export function ownsReviewTab(worktree: string, tabId: string): boolean {
+  return reviewOwners.get(worktree) === tabId
+}
+
+/**
+ * Names a restored legacy diff tab "Review" once it is its worktree's Review tab. Its key and
+ * stored input stay as they were because the close guard checks them against each other.
+ */
+export async function nameReviewTab(context: UiPluginContext, input: DiffViewInput): Promise<void> {
+  if (!input.tabId) return
+  const workspace = await readWorkspace(context, input.worktree)
+  const current = tabById(workspace, input.tabId)
+  const title = titleOf(input)
+  if (!current || current.tab.viewId !== DIFF_VIEW_ID || current.tab.title === title) return
+  await context.call('quirky.terminal/rekeyViewTabs', {
+    workspace: `id:${input.worktree}`,
+    viewId: DIFF_VIEW_ID,
+    changes: [{ tab: input.tabId, key: current.tab.key, title }]
+  })
 }
 
 export async function closeHostedDiff(context: UiPluginContext, input: DiffViewInput, restoreDirty = false): Promise<void> {
@@ -314,7 +380,7 @@ export function subscribeHostedLayouts(context: UiPluginContext): void {
     const worktree = payload.workspace
     if (typeof worktree !== 'string' || worktree === '') return
     void promotePinnedPreviews(context, worktree).catch((error: unknown) => {
-      context.toast('Could not make the diff tab permanent', messageOf(error))
+      context.toast('Could not make the diff tab permanent', messageOf(error), { kind: 'error' })
     })
     void refreshActiveHostedView(context)
   })

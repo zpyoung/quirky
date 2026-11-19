@@ -6,13 +6,18 @@ import type { OwnerConfig } from './contracts'
 import type {
   AuthorizedEnrollment,
   BudgetPolicy,
-  JournalEntry,
   Enrollment,
   EnrollmentInput,
   EnrollmentResult,
   EnrollmentService,
+  HandoffLink,
+  HandoffRequest,
+  HandoffResult,
+  JournalEntry,
   Json,
   KernelOptions,
+  StopResult,
+  TerminalSummary,
   WatcherKind
 } from './contracts'
 import { budgetUsage } from './budget'
@@ -21,6 +26,12 @@ type RefusalReason = Extract<EnrollmentResult, { kind: 'refused' }>['reason']
 
 class CommitConflict extends Error {
   constructor(readonly reason: RefusalReason, message: string) {
+    super(message)
+  }
+}
+
+class HandoffConflict extends Error {
+  constructor(readonly reason: string, message: string) {
     super(message)
   }
 }
@@ -465,6 +476,286 @@ export function createEnrollmentService(
       return { kind: existing ? 're-armed' : 'enrolled', enrollment }
     })
   }
+  const validHandoffRequest = (value: unknown): value is HandoffRequest =>
+    record(value) && isJsonValue(value) &&
+    Object.keys(value).every((key) => key === 'kind' || key === 'kindPayload' || key === 'capabilities') &&
+    typeof value.kind === 'string' && value.kind.length > 0 &&
+    Object.hasOwn(value, 'kindPayload') && Object.hasOwn(value, 'capabilities') &&
+    record(value.capabilities) && normalizeCapabilities(value.capabilities) !== null
+
+  const replayHandoff = (watcherId: string, requestedKind?: string): HandoffResult | null => {
+    const source = options.store.get(watcherId)
+    if (!source || source.terminalAtMs === null) return null
+    const terminal = options.store.journal(watcherId).find((entry) => entry.kind === 'terminal')
+    const linkValue = terminal?.handoff
+    if (!record(linkValue) || typeof linkValue.watcherId !== 'string' || linkValue.watcherId.length === 0 ||
+      typeof linkValue.kind !== 'string' || linkValue.kind.length === 0) return null
+    const link: HandoffLink = { watcherId: linkValue.watcherId, kind: linkValue.kind }
+    if (requestedKind !== undefined && requestedKind !== link.kind) {
+      return { kind: 'refused', reason: 'handoff-replay-mismatch', detail: 'source already handed off to a different target kind' }
+    }
+    const enrollment = options.store.get(link.watcherId)
+    const summary = options.store.summary(watcherId)
+    if (!enrollment || enrollment.kind !== link.kind || enrollment.workspaceKey !== source.workspaceKey ||
+      enrollment.workspacePath !== source.workspacePath || enrollment.executionHostId !== source.executionHostId ||
+      enrollment.schedulerOwner !== source.schedulerOwner || !summary) {
+      return { kind: 'refused', reason: 'handoff-record-invalid', detail: 'recorded handoff successor or source summary is unavailable' }
+    }
+    return { kind: 'handed-off', enrollment, summary, link }
+  }
+
+  const refuseHandoff = (reason: string, detail: string): HandoffResult => ({ kind: 'refused', reason, detail })
+
+  const handoff = async (
+    sourceIdentity: Pick<Enrollment, 'watcherId' | 'commandRevision'>,
+    terminalResult: Extract<StopResult, { kind: 'terminal' }>,
+    guard: () => string | null
+  ): Promise<HandoffResult> => {
+    const terminalState = terminalResult.state
+    const terminalReason = terminalResult.reason
+    if (terminalState.length === 0 || terminalReason.length === 0) {
+      return refuseHandoff('invalid-payload', 'handoff terminal state and reason must be non-empty strings')
+    }
+    const requestValue: unknown = terminalResult.handoff
+    if (!validHandoffRequest(requestValue)) {
+      return refuseHandoff('invalid-payload', 'handoff request must contain a kind, finite JSON payload, and capability map')
+    }
+    const request = JSON.parse(JSON.stringify(requestValue)) as HandoffRequest
+    if (!Number.isSafeInteger(sourceIdentity.commandRevision) || sourceIdentity.commandRevision < 0) {
+      return refuseHandoff('stale-command-revision', 'source command revision is invalid')
+    }
+    if (options.store.readOnly) return refuseHandoff('owner-not-executable', 'Heimdall store is read-only')
+
+    let original: Enrollment | null
+    try {
+      const replay = replayHandoff(sourceIdentity.watcherId, request.kind)
+      if (replay) return replay
+      original = options.store.get(sourceIdentity.watcherId)
+    } catch (error) {
+      return refuseHandoff('source-unavailable', `cannot inspect source handoff state: ${errorDetail(error)}`)
+    }
+    if (!original) return refuseHandoff('source-removed', 'source watcher no longer exists')
+    if (original.terminalAtMs !== null) return refuseHandoff('source-terminal', 'source watcher is already terminal without a handoff link')
+    if (original.commandRevision !== sourceIdentity.commandRevision) {
+      return refuseHandoff('stale-command-revision', 'source command revision changed before handoff authorization')
+    }
+    if (!original.enabled || original.paused || original.haltReason === 'operator-disarmed') {
+      return refuseHandoff('source-not-executable', 'source watcher is paused, disabled, or disarmed')
+    }
+
+    const settings = enrollmentSettings({
+      kind: request.kind,
+      kindPayload: request.kindPayload,
+      capabilities: request.capabilities,
+      budget: { wallClockActiveMs: null, turns: null },
+      owner: null
+    })
+    if (!settings) return refuseHandoff('invalid-payload', 'handoff request settings are invalid')
+    const kind = options.registry.get(settings.input.kind)
+    if (!kind) return refuseHandoff('unknown-kind', `unknown handoff kind ${settings.input.kind}`)
+
+    let authorization: unknown
+    try {
+      authorization = await kind.authorizeEnrollment({
+        kind: settings.input.kind,
+        kindPayload: JSON.parse(JSON.stringify(settings.input.kindPayload)) as Json,
+        capabilities: { ...settings.capabilities },
+        budget: { wallClockActiveMs: null, turns: null },
+        owner: null
+      })
+    } catch (error) {
+      const detail = errorDetail(error)
+      return refuseHandoff(
+        error instanceof Error && error.name === 'InvalidEnrollmentAuthority' ? 'invalid-payload' : 'authorization-failed',
+        `handoff authorization failed: ${detail}`
+      )
+    }
+
+    const undoAuthorization = async (reason: string, detail: string): Promise<HandoffResult> => {
+      try {
+        await kind.undoAuthorization?.(authorization as AuthorizedEnrollment)
+      } catch (error) {
+        detail += `; authorization undo failed: ${errorDetail(error)}`
+      }
+      return refuseHandoff(reason, detail)
+    }
+
+    let candidate: AuthorizedEnrollment | null
+    try {
+      candidate = normalizeAuthorization(authorization, settings)
+    } catch (error) {
+      return undoAuthorization('invalid-payload', `invalid authorized workspace path: ${errorDetail(error)}`)
+    }
+    if (!candidate) {
+      return undoAuthorization('invalid-payload', 'authorization returned invalid handoff authority or payload')
+    }
+    if (candidate.executionHostId !== executionHostId || candidate.schedulerOwner !== schedulerOwner ||
+      candidate.executionHostId !== original.executionHostId || candidate.schedulerOwner !== original.schedulerOwner ||
+      candidate.workspaceKey !== original.workspaceKey || candidate.workspacePath !== original.workspacePath ||
+      (candidate.repoId ?? null) !== (original.repoId ?? null) ||
+      (candidate.worktreeId ?? null) !== (original.worktreeId ?? null)) {
+      return undoAuthorization('wrong-authority', 'handoff authorization must preserve the source canonical workspace, host, repository, and scheduler')
+    }
+
+    let payloadFailure: string | null
+    try {
+      payloadFailure = payloadProblem(kind, candidate.kindPayload)
+    } catch (error) {
+      return undoAuthorization('invalid-payload', `cannot validate handoff target payload: ${errorDetail(error)}`)
+    }
+    if (payloadFailure) return undoAuthorization('invalid-payload', payloadFailure)
+
+    return serialize(async () => {
+      if (options.store.readOnly) {
+        return undoAuthorization('owner-not-executable', 'Heimdall store became read-only before handoff commit')
+      }
+      try {
+        await kind.validateEnrollment?.(JSON.parse(JSON.stringify(candidate)) as AuthorizedEnrollment, null)
+      } catch (error) {
+        return undoAuthorization('invalid-payload', `kind rejected handoff enrollment: ${errorDetail(error)}`)
+      }
+      if (options.store.readOnly) {
+        return undoAuthorization('owner-not-executable', 'Heimdall store became read-only during handoff validation')
+      }
+      let nowMs: number
+      try {
+        nowMs = now()
+        if (!Number.isFinite(nowMs)) throw new Error('clock returned a non-finite timestamp')
+      } catch (error) {
+        return undoAuthorization('owner-not-executable', `cannot timestamp handoff: ${errorDetail(error)}`)
+      }
+
+      let replayed = false
+      try {
+        const committed = options.store.transaction((): HandoffResult => {
+          const current = options.store.get(sourceIdentity.watcherId)
+          if (!current) throw new HandoffConflict('source-removed', 'source watcher was removed before handoff commit')
+          if (current.terminalAtMs !== null) {
+            const replay = replayHandoff(sourceIdentity.watcherId, request.kind)
+            if (replay?.kind === 'handed-off') {
+              replayed = true
+              return replay
+            }
+            throw new HandoffConflict(
+              replay?.kind === 'refused' ? replay.reason : 'source-terminal',
+              replay?.kind === 'refused' ? replay.detail : 'source watcher became terminal before handoff commit'
+            )
+          }
+          if (current.commandRevision !== sourceIdentity.commandRevision ||
+            current.commandRevision !== original.commandRevision) {
+            throw new HandoffConflict('stale-command-revision', 'source command revision changed during handoff authorization')
+          }
+          if (!current.enabled || current.paused || current.haltReason === 'operator-disarmed') {
+            throw new HandoffConflict('source-not-executable', 'source watcher was paused, disabled, or disarmed during handoff authorization')
+          }
+          if (current.kind !== original.kind || current.workspaceKey !== original.workspaceKey ||
+            current.workspacePath !== original.workspacePath || current.executionHostId !== original.executionHostId ||
+            current.schedulerOwner !== original.schedulerOwner || current.repoId !== original.repoId ||
+            current.worktreeId !== original.worktreeId) {
+            throw new HandoffConflict('source-ownership-changed', 'source workspace ownership changed during handoff authorization')
+          }
+          let guardFailure: string | null
+          try {
+            guardFailure = guard()
+          } catch (error) {
+            guardFailure = errorDetail(error)
+          }
+          if (guardFailure) throw new HandoffConflict('source-fenced', guardFailure)
+
+          const occupied = options.store.live(candidate.workspaceKey)
+          if (occupied && occupied.watcherId !== current.watcherId) {
+            throw new HandoffConflict('duplicate-workspace', `workspace already has watcher ${occupied.watcherId}`)
+          }
+          const journal = options.store.journal(current.watcherId)
+          const usage = budgetUsage(journal, nowMs, current.budget)
+          if (!Number.isFinite(usage.activeMs) || usage.activeMs < 0 ||
+            !Number.isSafeInteger(usage.turns) || usage.turns < 0) {
+            throw new HandoffConflict('invalid-budget', 'source budget usage is invalid')
+          }
+          const remaining = (limit: number | null, spent: number): number | null =>
+            limit === null ? null : Math.max(0, limit - spent)
+          const budget: BudgetPolicy = {
+            wallClockActiveMs: remaining(current.budget.wallClockActiveMs, usage.activeMs),
+            turns: remaining(current.budget.turns, usage.turns)
+          }
+          const watcherId = randomUUID()
+          const link: HandoffLink = { watcherId, kind: settings.input.kind }
+          const successor: Enrollment = {
+            ...candidate,
+            watcherId,
+            kind: settings.input.kind,
+            enabled: true,
+            paused: false,
+            commandRevision: 0,
+            capabilities: settings.capabilities,
+            budget,
+            owner: null,
+            coordinator: {
+              handle: `heimdall-coordinator_${randomBytes(24).toString('base64url')}`,
+              paneKey: `heimdall-pane_${randomBytes(24).toString('base64url')}`
+            },
+            orchestrationRunId: null,
+            createdAtMs: nowMs,
+            terminalAtMs: null,
+            parkReason: null,
+            haltReason: null
+          }
+          const sourceTerminal: Enrollment = {
+            ...current,
+            enabled: false,
+            terminalAtMs: nowMs,
+            haltReason: terminalReason
+          }
+          const summary: TerminalSummary = {
+            watcherId: current.watcherId,
+            kind: current.kind,
+            state: terminalState,
+            reason: terminalReason,
+            atMs: nowMs,
+            budget: usage
+          }
+          options.store.save(sourceTerminal)
+          options.store.append(current.watcherId, {
+            eventId: `terminal:${current.watcherId}`,
+            atMs: nowMs,
+            kind: 'terminal',
+            class: 'fact',
+            origin: 'owner',
+            resolved: true,
+            state: terminalState,
+            reason: terminalReason,
+            handoff: link
+          })
+          options.store.save(successor)
+          options.store.append(watcherId, {
+            eventId: `budget-generation:${watcherId}:0`,
+            atMs: nowMs,
+            class: 'fact',
+            origin: 'owner',
+            kind: 'evidence',
+            resolved: true,
+            evidenceKind: 'budget-generation',
+            generation: `initial:${watcherId}`,
+            wallClockActiveMs: budget.wallClockActiveMs,
+            turns: budget.turns
+          })
+          options.store.terminal(sourceTerminal, summary)
+          return { kind: 'handed-off', enrollment: successor, summary, link }
+        })
+        if (replayed) {
+          try { await kind.undoAuthorization?.(authorization as AuthorizedEnrollment) }
+          catch (error) { options.context.log(`Handoff replay authorization cleanup failed: ${errorDetail(error)}`) }
+        }
+        return committed
+      } catch (error) {
+        if (error instanceof HandoffConflict) {
+          return undoAuthorization(error.reason, error.message)
+        }
+        return undoAuthorization('commit-failed', `failed to persist handoff transaction: ${errorDetail(error)}`)
+      }
+    })
+  }
+
   return {
     async enroll(input) {
       if (options.store.readOnly) {
@@ -495,6 +786,7 @@ export function createEnrollmentService(
         return refused('owner-not-executable', `authorization failed: ${detail}`)
       }
       return finishAuthorized(kind, settings, authorization)
-    }
+    },
+    handoff
   }
 }

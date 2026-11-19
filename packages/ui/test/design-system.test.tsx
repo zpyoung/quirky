@@ -3,12 +3,13 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act, createElement as h, createRef, StrictMode, useState, type ReactNode } from 'react'
+import { act, createElement as h, createRef, StrictMode, useLayoutEffect, useState, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ToolPanelActions } from '@quirky/ui'
 import {
   Badge,
   Button,
+  Checkbox,
   ContextMenu,
   Dialog,
   EmptyState,
@@ -78,6 +79,12 @@ const click = async (element: Element) => act(async () => {
 const key = async (element: Element, value: string, options: KeyboardEventInit = {}) => act(async () => {
   element.dispatchEvent(new KeyboardEvent('keydown', { ...options, key: value, bubbles: true, cancelable: true }))
 })
+function LayoutProbe({ onCommit }: { onCommit: () => void }) {
+  useLayoutEffect(() => {
+    onCommit()
+  })
+  return null
+}
 
 let fakeNowMs = 0
 let timers: { fn: () => void; id: number; ms: number | undefined; deadline: number }[] = []
@@ -157,6 +164,55 @@ describe('shared graphite components', () => {
     expect(input.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2)
     expect(container.textContent).toContain('Shown in history')
     expect(container.textContent).toContain('Message is required')
+  })
+
+  test('hidden text labels retain native input ownership and forwarding', async () => {
+    const ref = createRef<HTMLInputElement>()
+    const keys: string[] = []
+    const changes: string[] = []
+    await render(<>
+      <span id="external-help">External</span>
+      <TextField label="Address and search" hideLabel id="probe-address" ref={ref}
+        help="Help" error="Failed" aria-describedby="external-help" disabled
+        name="address" value="https://example.test/" className="probe-input"
+        onChange={(event) => changes.push(event.currentTarget.value)}
+        onKeyDown={(event) => keys.push(event.key)} />
+    </>)
+    const input = container.querySelector('input')!
+    expect(container.querySelector('label')?.className).toBe('ui-text-field__label ui-text-field__label--hidden')
+    expect(container.querySelector('label')?.control).toBe(input)
+    expect(input.id).toBe('probe-address')
+    expect(input.getAttribute('aria-describedby')).toBe('external-help probe-address-help probe-address-error')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(input.disabled).toBe(true)
+    expect(input.name).toBe('address')
+    expect(input.value).toBe('https://example.test/')
+    expect(input.className).toBe('ui-text-field__input probe-input')
+    expect(input.hasAttribute('hidelabel')).toBe(false)
+    expect(ref.current).toBe(input)
+    expect(container.querySelector('#probe-address-help')?.textContent).toBe('Help')
+    expect(container.querySelector('#probe-address-error')?.textContent).toBe('Failed')
+    await render(<TextField label="Address and search" hideLabel id="probe-address" ref={ref}
+      value="draft" onChange={(event) => changes.push(event.currentTarget.value)}
+      onKeyDown={(event) => keys.push(event.key)} />)
+    ref.current!.focus()
+    expect(document.activeElement).toBe(ref.current)
+    await key(ref.current!, 'Enter')
+    expect(keys).toEqual(['Enter'])
+  })
+
+  test('text labels remain visible by default and when hideLabel is false', async () => {
+    await render(<>
+      <TextField label="Default" defaultValue="one" />
+      <TextField label="Explicit" hideLabel={false} defaultValue="two" />
+      <TextArea label="Multiline" />
+      <SelectField label="Selection"><option>One</option></SelectField>
+    </>)
+    expect([...container.querySelectorAll('label')].map((label) => label.className)).toEqual([
+      'ui-text-field__label', 'ui-text-field__label', 'ui-text-field__label', 'ui-text-field__label',
+    ])
+    expect([...container.querySelectorAll('input')].map((input) => input.hasAttribute('hidelabel'))).toEqual([false, false])
+    expect([...container.querySelectorAll('.ui-text-field')]).toHaveLength(4)
   })
 
   test('multiline and selection fields preserve native form values and accessible error ownership', async () => {
@@ -314,6 +370,128 @@ describe('shared graphite components', () => {
     expect(document.activeElement).toBe(outerAction)
     await key(outerAction, 'Escape')
     expect(calls).toEqual(['inner', 'outer'])
+  })
+
+  test('a second dialog owns focus and Escape in the commit that shows it', async () => {
+    const calls: string[] = []
+    let focusAtCommit: Element | null = null
+    const tree = (inner: boolean) => <>
+      <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+        <input id="workspace-name" autoFocus />
+      </Dialog>
+      {inner && <>
+        <Dialog open title="Trust setup" onClose={() => calls.push('inner')}>
+          <button id="trust-action">Run setup</button>
+        </Dialog>
+        <LayoutProbe onCommit={() => {
+          focusAtCommit = document.activeElement
+          document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+          }))
+        }} />
+      </>}
+    </>
+    await render(tree(false))
+    const lowerDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[0]!
+    const lowerField = container.querySelector<HTMLInputElement>('#workspace-name')!
+    lowerField.focus()
+
+    await render(tree(true))
+    const upperDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[1]!
+    expect(upperDialog.contains(focusAtCommit)).toBe(true)
+    expect(calls).toEqual(['inner'])
+
+    await render(tree(false))
+    const state = Reflect.get(document, Symbol.for('quirky.ui.dialogState')) as {
+      stack: HTMLElement[]
+      inertStates: Map<HTMLElement, boolean>
+    }
+    expect(document.activeElement).toBe(lowerField)
+    expect(state.stack).toEqual([lowerDialog])
+    expect(lowerDialog.closest('[inert]')).toBeNull()
+    expect(state.inertStates.size).toBe(0)
+  })
+
+  test('a second dialog owns focus and Escape in the commit that shows it under StrictMode', async () => {
+    const calls: string[] = []
+    const focusAtCommit: (Element | null)[] = []
+    const tree = (inner: boolean) => <StrictMode>
+      <>
+        <Dialog open title="New workspace" onClose={() => calls.push('outer')}>
+          <input id="strict-workspace-name" autoFocus />
+        </Dialog>
+        {inner && <>
+          <Dialog open title="Trust setup" onClose={() => calls.push('inner')}>
+            <button id="strict-trust-action">Run setup</button>
+          </Dialog>
+          <LayoutProbe onCommit={() => {
+            focusAtCommit.push(document.activeElement)
+            document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'Escape',
+              bubbles: true,
+              cancelable: true,
+            }))
+          }} />
+        </>}
+      </>
+    </StrictMode>
+    await render(tree(false))
+    const lowerField = container.querySelector<HTMLInputElement>('#strict-workspace-name')!
+    lowerField.focus()
+
+    await render(tree(true))
+    const upperDialog = container.querySelectorAll<HTMLElement>('[role="dialog"]')[1]!
+    expect(focusAtCommit).toHaveLength(2)
+    expect(focusAtCommit.every((focus) => upperDialog.contains(focus))).toBe(true)
+    expect(calls).toEqual(['inner', 'inner'])
+  })
+
+  test('a first dialog takes focus in the commit that shows it and keeps a child autofocus', async () => {
+    const focusAtCommit: (Element | null)[] = []
+    const tree = (open: boolean, autofocus: boolean) => <>
+      <button id="outside-opener">Outside</button>
+      <Dialog open={open} title="First setup" onClose={() => {}}>
+        {autofocus
+          ? <><button id="earlier-action">Earlier action</button><input id="preferred-field" autoFocus /></>
+          : <button id="first-action">First action</button>}
+      </Dialog>
+      {open && <LayoutProbe onCommit={() => focusAtCommit.push(document.activeElement)} />}
+    </>
+    await render(tree(false, false))
+    const opener = container.querySelector<HTMLButtonElement>('#outside-opener')!
+    opener.focus()
+
+    await render(tree(true, false))
+    const firstDialog = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const closeButton = firstDialog.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!
+    expect(focusAtCommit[0]).toBe(closeButton)
+
+    await render(tree(false, false))
+    const state = Reflect.get(document, Symbol.for('quirky.ui.dialogState')) as {
+      stack: HTMLElement[]
+      inertStates: Map<HTMLElement, boolean>
+    }
+    expect(document.activeElement).toBe(opener)
+    expect(state.stack).toEqual([])
+    expect(state.inertStates.size).toBe(0)
+    expect(document.querySelector('[inert]')).toBeNull()
+
+    await render(tree(true, true))
+    const autofocusDialog = container.querySelector<HTMLElement>('[role="dialog"]')!
+    const earlierAction = autofocusDialog.querySelector<HTMLButtonElement>('#earlier-action')!
+    const preferredField = autofocusDialog.querySelector<HTMLInputElement>('#preferred-field')!
+    const autofocusCloseButton = autofocusDialog.querySelector<HTMLButtonElement>('[aria-label="Close dialog"]')!
+    expect(focusAtCommit[1]).toBe(preferredField)
+    expect(focusAtCommit[1]).not.toBe(earlierAction)
+    expect(focusAtCommit[1]).not.toBe(autofocusCloseButton)
+
+    await render(tree(false, true))
+    expect(document.activeElement).toBe(opener)
+    expect(state.stack).toEqual([])
+    expect(state.inertStates.size).toBe(0)
+    expect(document.querySelector('[inert]')).toBeNull()
   })
 
   test('closing a stacked dialog keeps keyboard focus in a busy parent', async () => {
@@ -902,12 +1080,30 @@ describe('shared graphite components', () => {
     await render(<FormRow label="Workspace name" htmlFor="workspace-name" help="Visible to you" error="Name is required">
       <input />
     </FormRow>)
+    expect(container.querySelector('.ui-form-row')?.className).toBe('ui-form-row')
     const input = container.querySelector('input')!
     expect(input.id).toBe('workspace-name')
     expect(container.querySelector('label')?.htmlFor).toBe(input.id)
     expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual(['workspace-name-help', 'workspace-name-error'])
     expect(input.getAttribute('aria-invalid')).toBe('true')
   })
+  test('inline form rows associate a hidden Checkbox with the visible label and native descriptions', async () => {
+    await render(<FormRow label="Enable feature" htmlFor="enable-feature" layout="inline" help="Used by this workspace" error="Choose whether to enable it">
+      <Checkbox checked={false} label="Enable feature" hideLabel disabled onChange={() => undefined} />
+    </FormRow>)
+    const input = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    const label = container.querySelector<HTMLLabelElement>('.ui-form-row__label')!
+    expect(container.querySelector('.ui-form-row')?.classList.contains('ui-form-row--inline')).toBe(true)
+    expect(input.id).toBe('enable-feature')
+    expect(input.getAttribute('aria-describedby')).toBe('enable-feature-help enable-feature-error')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(input.disabled).toBe(true)
+    expect(label.htmlFor).toBe(input.id)
+    expect(label.control).toBe(input)
+    expect(input.getAttribute('aria-label')).toBe(label.textContent)
+    expect(container.querySelector('.ui-checkbox__text')).toBeNull()
+  })
+
 
   test('tool panels expose a heading and a functioning minimize action', async () => {
     const calls: number[] = []

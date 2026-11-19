@@ -1,29 +1,47 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Button, Dialog, EmptyState } from '@quirky/ui'
-import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import type { MountCleanup, MountFunction, UiPluginContext } from '@quirky/protocol'
 
 import { DIFF_VIEW_ID, SESSIONS_VIEW_ID, type DiffViewInput, type ReviewSnapshot } from '../shared/view-input'
-import { CombinedDiff } from './CombinedDiff'
 import { ConflictFile } from './ConflictFile'
 import { ConflictReview } from './ConflictReview'
-import { FileDiff } from './FileDiff'
-import { registerView, type ViewHandle } from './registry'
-import { closeHostedDiff, updateHostedDiffDirty } from './hosted-tabs'
+import { ReviewDiff } from './ReviewDiff'
+import { messageOf } from './data'
+import { registerView, reviewViewFor, type ViewHandle } from './registry'
+import { activateHostedDiff, claimReviewTab, closeHostedDiff, nameReviewTab, ownsReviewTab, releaseReviewTab, updateHostedDiffDirty } from './hosted-tabs'
 import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
+import { requestViewControl, useViewControl, viewControlGeneration, viewTarget } from './view-control'
 
-const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file']
+const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file', 'review']
 type CloseChoice = 'save' | 'discard' | 'cancel'
+const noControlData = (data: Record<string, unknown> | undefined): boolean =>
+  data === undefined || Object.keys(data).length === 0
 
-/** The mount input as a `DiffViewInput`, or null when it names no worktree. A missing mode means a file diff. */
+/**
+ * The mount input as a `DiffViewInput`, or null when it names no worktree. A missing mode means a
+ * file diff, and `file` and `combined` inputs (from tabs saved before the Review tab) become
+ * `review` ones: the file's path is revealed and a commit is the scope.
+ */
 export function parseInput(input: unknown): DiffViewInput | null {
   if (typeof input !== 'object' || input === null) return null
   const value = input as Partial<DiffViewInput>
   if (typeof value.worktree !== 'string' || value.worktree === '') return null
   const mode = MODES.includes(value.mode as DiffViewInput['mode']) ? (value.mode as DiffViewInput['mode']) : 'file'
   const { review, noteId, ...rest } = value
-  return { ...rest, worktree: value.worktree, mode, ...(isReview(review) ? { review } : {}), ...(typeof noteId === 'string' && noteId !== '' ? { noteId } : {}) }
+  const extras = { ...(isReview(review) ? { review } : {}), ...(typeof noteId === 'string' && noteId !== '' ? { noteId } : {}) }
+  if (mode === 'file' || mode === 'combined') {
+    const { path, source: _source, oldPath: _oldPath, area: _area, commitMessage: _message, title: _title, ...kept } = rest
+    return {
+      ...kept,
+      worktree: value.worktree,
+      mode: 'review',
+      ...(mode === 'file' && typeof path === 'string' && path !== '' ? { reveal: path } : {}),
+      ...extras
+    }
+  }
+  return { ...rest, worktree: value.worktree, mode, ...extras }
 }
 
 function isReview(value: unknown): value is ReviewSnapshot {
@@ -32,8 +50,43 @@ function isReview(value: unknown): value is ReviewSnapshot {
   return typeof capturedAt === 'number' && Array.isArray(entries) && entries.every((e) => typeof e?.path === 'string' && typeof e?.kind === 'string')
 }
 
+/**
+ * Whether this hosted tab is a second Review tab for its worktree. The first one mounted keeps the
+ * place (and is named Review); a later one shows its path and scope in that tab and closes itself.
+ * Views that are not hosted tabs never fold.
+ */
+function useFoldsIntoReview(context: UiPluginContext, input: DiffViewInput): boolean {
+  const tabId = input.mode === 'review' ? input.tabId : undefined
+  const [duplicate] = useState(() => tabId !== undefined && !claimReviewTab(input.worktree, tabId))
+  useEffect(() => {
+    if (tabId === undefined) return
+    if (duplicate) {
+      const survivor = reviewViewFor(input.worktree)
+      survivor?.setScope(input.commit ?? null)
+      if (input.reveal !== undefined) survivor?.reveal(input.reveal, input.noteId)
+      else survivor?.scrollToTop()
+      void (async () => {
+        await activateHostedDiff(context, { worktree: input.worktree, mode: 'review' })
+        await closeHostedDiff(context, input)
+      })().catch((error: unknown) => context.toast('Could not close the duplicate Review tab', messageOf(error), { kind: 'error' }))
+      return
+    }
+    // the name is cosmetic; the tab works without it
+    void nameReviewTab(context, input).catch(() => undefined)
+    return () => releaseReviewTab(input.worktree, tabId)
+  }, [])
+  return duplicate
+}
+
+/** The view for one input; a second Review tab of a worktree renders nothing while it closes. */
+function DiffWindow(props: { context: UiPluginContext; input: DiffViewInput; report(state: ViewReport): void }) {
+  const duplicate = useFoldsIntoReview(props.context, props.input)
+  // keep the ownership claim alive while resetting input-scoped content
+  return duplicate ? null : <DiffTab key={JSON.stringify(props.input)} {...props} />
+}
+
 /** The view's content for one input: the mode's component under the view's settings and handle. */
-function DiffWindow({ context, input, report }: { context: UiPluginContext; input: DiffViewInput; report(state: ViewReport): void }) {
+function DiffTab({ context, input, report }: { context: UiPluginContext; input: DiffViewInput; report(state: ViewReport): void }) {
   const { settings, setSetting } = useDiffSettings(context)
   const controller = useRef<Controller>({})
   const [closeDialogOpen, setCloseDialogOpen] = useState(false)
@@ -41,6 +94,26 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   const closeChoiceResolver = useRef<((choice: CloseChoice) => void) | null>(null)
   const closeChoicePromise = useRef<Promise<CloseChoice> | null>(null)
   const closeTask = useRef<Promise<void> | null>(null)
+  const [closeDialogGeneration, setCloseDialogGeneration] = useState<string | null>(null)
+  const closeDialogGenerationRef = useRef<string | null>(null)
+  const closeBusyRef = useRef(false)
+  const mounted = useRef(true)
+  const closeDialogTarget = viewTarget('close-dialog', {
+    worktree: input.worktree,
+    ...(input.tabId === undefined ? {} : { tabId: input.tabId })
+  })
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      closeBusyRef.current = false
+      closeDialogGenerationRef.current = null
+      const resolve = closeChoiceResolver.current
+      closeChoiceResolver.current = null
+      closeChoicePromise.current = null
+      resolve?.('cancel')
+    }
+  }, [])
   const bind = useCallback((next: Controller) => {
     controller.current = next
   }, [])
@@ -58,17 +131,21 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
     const pending = Promise.withResolvers<CloseChoice>()
     closeChoiceResolver.current = pending.resolve
     closeChoicePromise.current = pending.promise
+    const generation = viewControlGeneration()
+    closeDialogGenerationRef.current = generation
+    setCloseDialogGeneration(generation)
     setCloseDialogOpen(true)
     return pending.promise
   }, [])
-  const chooseClose = useCallback((choice: CloseChoice) => {
-    if (closeBusy) return
+  const chooseClose = useCallback((choice: CloseChoice): boolean => {
+    if (closeBusyRef.current) return false
     const resolve = closeChoiceResolver.current
-    if (!resolve) return
+    if (!resolve) return false
     closeChoiceResolver.current = null
     closeChoicePromise.current = null
     resolve(choice)
-  }, [closeBusy])
+    return true
+  }, [])
   const requestClose = useCallback(() => {
     if (closeTask.current !== null) return closeTask.current
     const task = (async () => {
@@ -76,24 +153,35 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
         let restoreDirty = false
         if (controller.current.isDirty?.() ?? true) {
           const choice = await askCloseChoice()
-          if (choice === 'cancel') return
+          if (choice === 'cancel' || !mounted.current) return
           if (choice === 'save') {
+            closeBusyRef.current = true
             setCloseBusy(true)
             try {
               await controller.current.save?.()
             } finally {
-              setCloseBusy(false)
+              closeBusyRef.current = false
+              if (mounted.current) setCloseBusy(false)
             }
-            if (controller.current.isDirty?.() ?? true) return
+            if (!mounted.current || (controller.current.isDirty?.() ?? true)) return
           } else {
             restoreDirty = true
+            closeBusyRef.current = true
             setCloseBusy(true)
           }
         }
-        await closeAfterDecision(restoreDirty)
+        if (mounted.current) await closeAfterDecision(restoreDirty)
       } finally {
-        setCloseBusy(false)
-        setCloseDialogOpen(false)
+        if (mounted.current) {
+          closeBusyRef.current = false
+          setCloseBusy(false)
+          setCloseDialogOpen(false)
+          closeDialogGenerationRef.current = null
+          setCloseDialogGeneration(null)
+        } else {
+          closeBusyRef.current = false
+          closeDialogGenerationRef.current = null
+        }
       }
     })()
     closeTask.current = task
@@ -105,7 +193,7 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   }, [askCloseChoice, closeAfterDecision])
   const toastFailure = useCallback((title: string, error: unknown) => {
     try {
-      context.toast(title, error instanceof Error ? error.message : String(error))
+      context.toast(title, error instanceof Error ? error.message : String(error), { kind: 'error' })
     } catch {
       // these failures can land after the plugin is revoked, when toast itself throws
     }
@@ -113,6 +201,23 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   const close = useCallback(() => {
     void requestClose().catch((error: unknown) => toastFailure('Could not close diff', error))
   }, [requestClose, toastFailure])
+  const closeDialogActions = ['cancel', 'discard', 'save']
+  const postCloseChoice = (action: CloseChoice) => {
+    const generation = closeDialogGenerationRef.current
+    if (generation === null) return
+    void requestViewControl(context, { target: closeDialogTarget, generation, action })
+  }
+  useViewControl(
+    context,
+    closeDialogGeneration === null || closeBusy
+      ? null
+      : { target: closeDialogTarget, generation: closeDialogGeneration, actions: closeDialogActions },
+    ({ action, generation, data }) => {
+      if (!noControlData(data) || generation !== closeDialogGenerationRef.current || closeBusyRef.current) return false
+      if (action !== 'cancel' && action !== 'discard' && action !== 'save') return false
+      return chooseClose(action)
+    }
+  )
 
   const lastDirty = useRef<boolean | null>(null)
   const send = useCallback((state: ViewReport) => {
@@ -162,20 +267,15 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   const props = { context, input, settings, setSetting, report: send, bind, close }
   let content: ReactNode
   switch (input.mode) {
-    case 'combined':
-      content = <CombinedDiff {...props} />
-      break
     case 'conflicts':
       content = <ConflictReview {...props} />
       break
     case 'conflict-file':
       content = <ConflictFile {...props} />
       break
-    case 'file':
-      content = <FileDiff {...props} />
-      break
+    default:
+      content = <ReviewDiff {...props} />
   }
-  const closePath = input.mode === 'file' ? input.path : undefined
   return (
     <>
       {content}
@@ -183,13 +283,13 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
         <Dialog
           open
           title="Unsaved changes"
-          onClose={() => { if (!closeBusy) chooseClose('cancel') }}
+          onClose={() => { if (!closeBusyRef.current) postCloseChoice('cancel') }}
         >
-          <p>Save changes to {closePath ?? 'this diff'} before closing?</p>
+          <p>Save changes to this diff before closing?</p>
           <div className="ui-dialog__actions">
-            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('cancel')}>Cancel</Button>
-            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('discard')}>Don't Save</Button>
-            <Button variant="primary" disabled={closeBusy} onClick={() => chooseClose('save')}>Save</Button>
+            <Button variant="secondary" disabled={closeBusy} onClick={() => postCloseChoice('cancel')}>Cancel</Button>
+            <Button variant="secondary" disabled={closeBusy} onClick={() => postCloseChoice('discard')}>Don't Save</Button>
+            <Button variant="primary" disabled={closeBusy} onClick={() => postCloseChoice('save')}>Save</Button>
           </div>
         </Dialog>
       )}
@@ -197,7 +297,7 @@ function DiffWindow({ context, input, report }: { context: UiPluginContext; inpu
   )
 }
 
-/** The `view:quirky.git/diff` mount function; the host remounts it with the new input whenever the input changes. */
+/** The `view:quirky.git/diff` mount; same-tab Review input changes keep their ownership mount alive. */
 export function mountDiffView(context: UiPluginContext): MountFunction {
   return (element, { input, report }) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
@@ -208,11 +308,29 @@ export function mountDiffView(context: UiPluginContext): MountFunction {
       root.render(<EmptyState message="Open a worktree first." />)
       return () => root.unmount()
     }
-    root.render(
-      <div data-git-view-root className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
-        <DiffWindow context={context} input={parsed} report={send} />
-      </div>
-    )
-    return () => root.unmount()
+    const render = (next: DiffViewInput) => {
+      const tree = (
+        <div data-git-view-root className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
+          <DiffWindow context={context} input={next} report={send} />
+        </div>
+      )
+      root.render(tree)
+    }
+    render(parsed)
+    const cleanup: MountCleanup = () => root.unmount()
+    cleanup.updateInput = (nextInput) => {
+      const next = parseInput(nextInput)
+      if (
+        parsed.mode !== 'review' ||
+        next === null ||
+        next.mode !== 'review' ||
+        next.worktree !== parsed.worktree ||
+        next.tabId !== parsed.tabId ||
+        (next.tabId !== undefined && !ownsReviewTab(next.worktree, next.tabId))
+      ) return false
+      render(next)
+      return true
+    }
+    return cleanup
   }
 }

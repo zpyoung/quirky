@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Badge, type UiStatus } from '@quirky/ui'
+import type { UiStatus } from '@quirky/ui'
 import type { AgentDisplayState } from '@quirky/protocol'
 import type { DisplayStatus } from './status'
+import type { ActivityMarkState } from './view-types'
 
 const TICK_MS = 60_000
 
@@ -40,7 +41,21 @@ export function semanticStatus(value: AgentDisplayState | DisplayStatus): UiStat
 }
 
 
-/** A worktree's glyph for unread activity, styled as a shared badge. */
-export function UnreadBell() {
-  return <Badge tone="accent" label="Unread">Unread</Badge>
+export const MARK_LABELS: Record<ActivityMarkState, string> = {
+  running: 'Running',
+  waiting: 'Waiting on you',
+  error: 'Error',
+  idle: 'Idle',
+  asleep: 'Asleep'
+}
+
+/** The accessible name of a row's activity mark; a waiting mark says how many questions are pending. */
+export function markLabel(state: ActivityMarkState, pendingAsks = 0): string {
+  if (state === 'waiting' && pendingAsks > 0) return `${MARK_LABELS.waiting}: ${pendingAsks} pending ${pendingAsks === 1 ? 'question' : 'questions'}`
+  return MARK_LABELS[state]
+}
+
+/** The small accent dot a worktree with unread activity carries. */
+export function UnreadDot() {
+  return <span className="worktree-unread-dot" role="img" aria-label="Unread" />
 }

@@ -2,28 +2,43 @@ import { useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiToolHue } from '@quirky/protocol'
 import {
+  ActivityMark,
   AgentIcon,
   Badge,
+  BulkBar,
   Button,
+  Checkbox,
   ControlIcon,
   Dialog,
   EmptyState,
   FileIcon,
   FormRow,
+  HoverCard,
   ExpandingIconButton,
   IconButton,
   InlineAgentCard,
+  InlineError,
   ListRow,
   Menu,
+  NoticeLine,
   PopupMenu,
   ProjectTile,
+  ReviewMark,
+  ScopeChip,
   SectionHeader,
+  ReachMeter,
+  SegmentedControl,
+  SplitButton,
   StatusDot,
+  SwatchGroup,
   Tabs,
+  TagChip,
+  TagChips,
   TextField,
   Toast,
   ToolIcon,
-  ToolPanelFrame
+  ToolPanelFrame,
+  type UiTagColor
 } from '@quirky/ui'
 import '@quirky/ui/styles.css'
 
@@ -37,6 +52,8 @@ type CategoryName =
   | 'Tabs'
   | 'Badge'
   | 'StatusDot'
+  | 'ReachMeter'
+  | 'SegmentedControl'
   | 'Menu'
   | 'Toast'
   | 'Dialog'
@@ -50,6 +67,18 @@ type CategoryName =
   | 'FileIcon'
   | 'ProjectTile'
   | 'PopupMenu'
+  | 'ReviewMark'
+  | 'SplitButton'
+  | 'InlineError'
+  | 'ScopeChip'
+  | 'ActivityMark'
+  | 'TagChip'
+  | 'TagChips'
+  | 'Checkbox'
+  | 'SwatchGroup'
+  | 'NoticeLine'
+  | 'HoverCard'
+  | 'BulkBar'
 
 type CategoryProps = { name: CategoryName; theme: Theme; children: ReactNode }
 
@@ -183,6 +212,33 @@ function BadgeDemo({ theme }: { theme: Theme }) {
         <Badge tone="needs-you" label="One task needs attention">1</Badge>
         <Badge tone="failing" label="Two failed tasks">2</Badge>
       </div>
+    </Category>
+  )
+}
+
+const REACH_OPTIONS = [
+  { value: 'shadow', label: 'Shadow', title: 'Shadow: logs what it would do, acts on nothing' },
+  { value: 'local', label: 'Local', title: 'Local: nothing leaves this Mac' },
+  { value: 'own-branch', label: 'Own branch', title: 'Own branch: can push and open draft PRs' },
+  { value: 'full', label: 'Full', title: 'Full: anything the mandate allows, merge included', caution: true }
+]
+
+function ReachMeterDemo({ theme }: { theme: Theme }) {
+  const [value, setValue] = useState('local')
+  return (
+    <Category name="ReachMeter" theme={theme}>
+      <ReachMeter label="Level for demo" options={REACH_OPTIONS} value={value} onChange={setValue} />
+      <Status name="reach-meter">{`Level: ${value}`}</Status>
+    </Category>
+  )
+}
+
+function SegmentedControlDemo({ theme }: { theme: Theme }) {
+  const [value, setValue] = useState<string | null>(null)
+  return (
+    <Category name="SegmentedControl" theme={theme}>
+      <SegmentedControl label="Set level for demo" options={REACH_OPTIONS} value={value} onChange={setValue} />
+      <Status name="segmented-control">{`Chosen: ${value ?? 'none'}`}</Status>
     </Category>
   )
 }
@@ -459,6 +515,191 @@ function PopupMenuDemo({ theme }: { theme: Theme }) {
   )
 }
 
+function ReviewMarkDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ReviewMark" theme={theme}>
+      <div className="ui-cluster">
+        <ReviewMark state="none" />
+        <ReviewMark state="reviewed" />
+        <ReviewMark state="changed" />
+      </div>
+    </Category>
+  )
+}
+
+const splitButtonItems = [
+  { id: 'commit-all', label: 'Commit all 3 files' },
+  { id: 'create-pr', label: 'Create PR', enabled: false, detail: 'no GitHub remote' }
+]
+
+function SplitButtonDemo({ theme }: { theme: Theme }) {
+  const [chosen, setChosen] = useState('none')
+  return (
+    <Category name="SplitButton" theme={theme}>
+      <div className="ui-cluster">
+        <SplitButton label="Commit 2 staged files" onClick={() => setChosen('primary')} menuLabel="More ship steps" items={splitButtonItems} onChoose={setChosen} />
+        <SplitButton label="Committing" busy onClick={() => setChosen('primary')} menuLabel="More busy steps" items={splitButtonItems} onChoose={setChosen} />
+        <SplitButton label="Nothing to ship" disabled title="No changes" onClick={() => setChosen('primary')} menuLabel="More idle steps" items={splitButtonItems} onChoose={setChosen} />
+      </div>
+      <Status name="split-button">Chosen step: {chosen}</Status>
+    </Category>
+  )
+}
+
+function InlineErrorDemo({ theme }: { theme: Theme }) {
+  const [message, setMessage] = useState('Push failed: remote rejected the update')
+  const [dismissed, setDismissed] = useState(false)
+  return (
+    <Category name="InlineError" theme={theme}>
+      {dismissed ? null : (
+        <InlineError message={message} action={{ label: 'Retry', onAction: () => setMessage('Retrying push') }} onDismiss={() => setDismissed(true)} />
+      )}
+      <InlineError message="Could not read the branch" onDismiss={() => undefined} />
+      <Status name="inline-error">Error: {dismissed ? 'dismissed' : message}</Status>
+    </Category>
+  )
+}
+
+function ScopeChipDemo({ theme }: { theme: Theme }) {
+  const [removed, setRemoved] = useState(false)
+  return (
+    <Category name="ScopeChip" theme={theme}>
+      <div className="ui-cluster">
+        {removed ? null : <ScopeChip label="Commit f5429a1" onRemove={() => setRemoved(true)} />}
+        <ScopeChip label="Commit 9c1d0e2" removeLabel="Back to worktree review" onRemove={() => undefined} />
+      </div>
+      <Status name="scope-chip">Scope: {removed ? 'worktree' : 'commit'}</Status>
+    </Category>
+  )
+}
+
+const galleryTags = [
+  { id: 'release', name: 'Release', color: 'violet' as const },
+  { id: 'hotfix', name: 'Hotfix', color: 'coral' as const },
+  { id: 'docs', name: 'Docs', color: null },
+  { id: 'infra', name: 'Infra', color: 'teal' as const }
+]
+
+const activityMarkSamples = [
+  { state: 'running', label: 'Agent running' },
+  { state: 'waiting', label: 'Agent waiting for you' },
+  { state: 'error', label: 'Agent errored' },
+  { state: 'idle', label: 'Agent idle' },
+  { state: 'asleep', label: 'Worktree asleep' }
+] as const
+
+function ActivityMarkDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ActivityMark" theme={theme}>
+      <div className="ui-cluster">
+        {activityMarkSamples.flatMap(({ state, label }) => [
+          <ActivityMark key={`${state}-plain`} state={state} label={label} />,
+          <ActivityMark key={`${state}-accent`} state={state} label={`${label}, accent ring`} ring="accent" />,
+          <ActivityMark key={`${state}-needs-you`} state={state} label={`${label}, needs-you ring`} ring="needs-you" />
+        ])}
+      </div>
+    </Category>
+  )
+}
+
+function TagChipDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="TagChip" theme={theme}>
+      <div className="ui-cluster">
+        {galleryTags.map((tag) => <TagChip key={tag.id} name={tag.name} color={tag.color} />)}
+      </div>
+    </Category>
+  )
+}
+
+function TagChipsDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="TagChips" theme={theme}>
+      <TagChips tags={galleryTags} />
+      <TagChips tags={galleryTags} max={3} />
+      <TagChips tags={galleryTags.slice(0, 1)} />
+    </Category>
+  )
+}
+
+function CheckboxDemo({ theme }: { theme: Theme }) {
+  const [selected, setSelected] = useState([true, false])
+  const [allowDeploys, setAllowDeploys] = useState(true)
+  const count = selected.filter(Boolean).length
+  return (
+    <Category name="Checkbox" theme={theme}>
+      <Checkbox
+        label="Select all worktrees"
+        checked={count === selected.length}
+        indeterminate={count > 0 && count < selected.length}
+        onChange={(checked) => setSelected(selected.map(() => checked))}
+      />
+      <Checkbox label="Select feat/login" checked={selected[0] ?? false} onChange={(checked) => setSelected([checked, selected[1] ?? false])} />
+      <Checkbox label="Select fix/cache" hideLabel checked={selected[1] ?? false} onChange={(checked) => setSelected([selected[0] ?? false, checked])} />
+      <Checkbox label="Let the avatar deploy" checked={allowDeploys} tone="needs-you" onChange={setAllowDeploys} />
+      <Status name="checkbox">Selected worktrees: {count}</Status>
+    </Category>
+  )
+}
+
+function SwatchGroupDemo({ theme }: { theme: Theme }) {
+  const [color, setColor] = useState<UiTagColor | null>('blue')
+  return (
+    <Category name="SwatchGroup" theme={theme}>
+      <SwatchGroup label="Tag color" value={color} onChange={setColor} />
+      <Status name="swatch-group">Tag color: {color ?? 'grey'}</Status>
+    </Category>
+  )
+}
+
+function NoticeLineDemo({ theme }: { theme: Theme }) {
+  const [saved, setSaved] = useState(false)
+  return (
+    <Category name="NoticeLine" theme={theme}>
+      <NoticeLine actions={[{ label: 'Save', onAction: () => setSaved(true) }, { label: 'Revert', onAction: () => setSaved(false) }]}>
+        {saved ? 'View saved' : 'View changed'}
+      </NoticeLine>
+      <NoticeLine>Hiding 3 asleep worktrees</NoticeLine>
+      <Status name="notice-line">Notice: {saved ? 'saved' : 'unsaved'}</Status>
+    </Category>
+  )
+}
+
+function HoverCardDemo({ theme }: { theme: Theme }) {
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <Category name="HoverCard" theme={theme}>
+      <Button
+        ref={setAnchor}
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        feat/login
+      </Button>
+      <HoverCard anchor={anchor} open={open}>Three commits ahead of main, checks passing.</HoverCard>
+      <Status name="hover-card">Hover card: {open ? 'open' : 'closed'}</Status>
+    </Category>
+  )
+}
+
+function BulkBarDemo({ theme }: { theme: Theme }) {
+  const [last, setLast] = useState('none')
+  return (
+    <Category name="BulkBar" theme={theme}>
+      <BulkBar
+        count={3}
+        actions={[{ label: 'Tag', onAction: () => setLast('tag') }, { label: 'Archive', onAction: () => setLast('archive') }]}
+        onClear={() => setLast('clear')}
+      />
+      <Status name="bulk-bar">Bulk action: {last}</Status>
+    </Category>
+  )
+}
+
 function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
   return (
     <section className="ui-gallery-theme" data-theme={theme} aria-label={`${label} theme component examples`}>
@@ -472,6 +713,8 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <TabsDemo theme={theme} />
         <BadgeDemo theme={theme} />
         <StatusDotDemo theme={theme} />
+        <ReachMeterDemo theme={theme} />
+        <SegmentedControlDemo theme={theme} />
         <MenuDemo theme={theme} />
         <ToastDemo theme={theme} />
         <DialogDemo theme={theme} />
@@ -485,6 +728,18 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <FileIconDemo theme={theme} />
         <ProjectTileDemo theme={theme} />
         <PopupMenuDemo theme={theme} />
+        <ReviewMarkDemo theme={theme} />
+        <SplitButtonDemo theme={theme} />
+        <InlineErrorDemo theme={theme} />
+        <ScopeChipDemo theme={theme} />
+        <ActivityMarkDemo theme={theme} />
+        <TagChipDemo theme={theme} />
+        <TagChipsDemo theme={theme} />
+        <CheckboxDemo theme={theme} />
+        <SwatchGroupDemo theme={theme} />
+        <NoticeLineDemo theme={theme} />
+        <HoverCardDemo theme={theme} />
+        <BulkBarDemo theme={theme} />
       </div>
     </section>
   )

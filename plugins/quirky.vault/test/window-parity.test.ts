@@ -20,6 +20,7 @@ import type { PublicListResult, SearchResponse, SearchStatus } from '../src/type
 import { createWindowVaultHostForwarder, removeWindowVaultHostForwarder } from './window-parity-host'
 import { TrashVolume } from './support/trash-volume'
 import { VaultRig } from './support/harness'
+import { quietHistoryReport } from './support/history-window'
 
 afterEach(stopAll)
 
@@ -475,19 +476,29 @@ test(
         fault.restore()
       }
 
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source A selected and automatically expanded', (state) => state.selectedId === rowA.id && state.expandedIds.includes(rowA.id))
       const rowAElement = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-row="${rowA.id}"]`))
-      rowAElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"]')!.click()
+      await until(features, () => rowAElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Hide details"]'))
       const detailsA = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-details="${rowA.id}"]`))
-      document.querySelector<HTMLButtonElement>('[aria-label=\"View options\"]')!.click()
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
+      const viewOptions = await until(features, () => document.querySelector<HTMLButtonElement>('[aria-label="View options"]'))
+      viewOptions.click()
       await until(features, () => document.querySelector('[data-vault-view-options]'))
-      await until(features, () => detailsA.querySelector<HTMLElement>('[data-vault-first-prompt]'))
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
+      expect(detailsA.isConnected).toBe(true)
       expect(detailsA.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptA)
 
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source B still collapsed beside expanded A', (state) => state.selectedId === rowA.id && state.expandedIds.includes(rowA.id) && !state.expandedIds.includes(rowB.id))
       const rowBElement = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-row="${rowB.id}"]`))
-      rowBElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"]')!.click()
+      const expandB = await until(features, () => rowBElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Show details"]'))
+      expandB.click()
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source B selected with both sources expanded', (state) => state.selectedId === rowB.id && state.expandedIds.includes(rowA.id) && state.expandedIds.includes(rowB.id))
       const detailsB = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-details="${rowB.id}"]`))
-      await until(features, () => detailsB.querySelector<HTMLElement>('[data-vault-first-prompt]'))
+      await until(features, () => detailsB.isConnected && detailsB.querySelector('[data-vault-first-prompt]')?.textContent === promptB)
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
       expect(detailsB.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptB)
+      expect(detailsA.isConnected).toBe(true)
+      expect(detailsA.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptA)
 
     } finally {
       await features?.stop()
@@ -535,6 +546,51 @@ test.skipIf(process.platform !== 'darwin')(
         if (previousTmpdir === undefined) delete process.env.TMPDIR
         else process.env.TMPDIR = previousTmpdir
         volume.cleanup()
+      }
+    }
+  },
+  FEATURE_MS
+)
+
+test.skipIf(process.platform !== 'linux')(
+  'SC-19: confirmed mounted-window deletion reports the OS Trash refusal and retains the Claude row',
+  async () => {
+    const source = sourceHome()
+    const sourcePath = writeClaudeSession(source, 'confirmed-linux-refusal-session', { prompt: 'Keep this supported Claude transcript.' })
+    const originalBytes = readFileSync(sourcePath)
+    let features: Features | undefined
+    try {
+      const mounted = features = await makeFeatures(source)
+      const listing = await mounted.h.call<PublicListResult>('quirky.vault/list', { host: 'local', agents: ['claude'], unlimited: true })
+      const session = listing.sessions.find((entry) => entry.sessionId === 'confirmed-linux-refusal-session')
+      if (!session) throw new Error('The real Claude deletion fixture was not discovered.')
+      await mounted.h.call('quirky.vault/setView', { scope: 'all' })
+      await runCommand(mounted, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
+      await reportOf<HistoryReport>(mounted, HISTORY_PANEL, 'selected supported Claude source', (state) => state.selectedId === session.id)
+
+      const document = mounted.win.document
+      await until(mounted, () => document.querySelector(`[data-vault-session-row="${session.id}"]`))
+      menuButton(document, session.id).click()
+      const menu = await until(mounted, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${session.id}"]`))
+      buttonNamed(menu, 'Delete').click()
+      const confirmation = await until(mounted, () => dialogByTitle(document, 'Delete this agent session?'))
+      buttonNamed(confirmation, 'Delete').click()
+
+      const reason = 'OS Trash is supported only on macOS'
+      const failure = await until(mounted, () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
+        .find((alert) => alert.textContent?.includes(reason)))
+      expect(failure.textContent?.trim()).toContain(reason)
+      expect(existsSync(sourcePath)).toBe(true)
+      expect(readFileSync(sourcePath)).toEqual(originalBytes)
+      const retained = await reportOf<HistoryReport>(mounted, HISTORY_PANEL, 'source remains listed after platform refusal', (state) => !state.loading && state.visibleIds.includes(session.id))
+      expect(retained.visibleIds).toContain(session.id)
+      expect(document.body.textContent).not.toContain('Session moved to Trash')
+      expect(document.body.textContent).not.toContain('Session already missing')
+    } finally {
+      try {
+        await features?.stop()
+      } finally {
+        rmSync(source, { recursive: true, force: true })
       }
     }
   },
@@ -906,14 +962,14 @@ test(
       const enabledRemoteSwitch = await until(local, () => {
         const currentRow = [...document.querySelectorAll<HTMLElement>('[data-vault-host-row]')].find((row) => row.dataset.vaultHostId === healthy.id)
         const currentSwitch = currentRow?.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-        return currentSwitch?.checked ? currentSwitch : undefined
+        return currentSwitch && currentSwitch.checked && !currentSwitch.disabled ? currentSwitch : undefined
       })
       enabledRemoteSwitch.click()
       await waitFor('remote switch disabled the actual remote index', async () => (!(await local!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: healthy.id })).status.enabled ? true : undefined), 30_000)
       const disabledRemoteSwitch = await until(local, () => {
         const currentRow = [...document.querySelectorAll<HTMLElement>('[data-vault-host-row]')].find((row) => row.dataset.vaultHostId === healthy.id)
         const currentSwitch = currentRow?.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-        return currentSwitch && !currentSwitch.checked ? currentSwitch : undefined
+        return currentSwitch && !currentSwitch.checked && !currentSwitch.disabled ? currentSwitch : undefined
       })
       disabledRemoteSwitch.click()
       await waitFor('remote switch re-enabled the actual remote index', async () => ((await local!.h.call<{ status: SearchStatus }>('quirky.vault/searchStatus', { host: healthy.id })).status.enabled ? true : undefined), 30_000)

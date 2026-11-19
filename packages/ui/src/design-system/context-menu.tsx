@@ -64,7 +64,12 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
     return () => window.removeEventListener('resize', position)
   }, [items])
 
+  const settledRows = useRef(`${signature}\u0000${highlightFirst}`)
   useEffect(() => {
+    const rows = `${signature}\u0000${highlightFirst}`
+    // a click can land before this passive effect flushes; resetting on mount would close the submenu it just opened
+    if (settledRows.current === rows) return
+    settledRows.current = rows
     setOpen(-1)
     setHighlight(highlightFirst ? firstRow(items) : -1)
     // The rows changed (a filter typed into the header), so the old position means nothing.
@@ -73,6 +78,10 @@ export function ContextMenuList({ items, label, onChoose, onClose, onBack, heade
   useEffect(() => {
     if (autoFocus && !header) root.current?.focus()
   }, [autoFocus, header])
+
+  useEffect(() => {
+    root.current?.querySelector<HTMLElement>('[data-highlighted]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [highlight])
 
   const closeSubmenu = () => {
     setOpen(-1)

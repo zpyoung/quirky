@@ -8,7 +8,7 @@ import { FLOATING_WORKSPACE, isTerminalTab, isViewTab, TAB_COLOR_HEX, TAB_COLORS
 import type { Edge, Group, GroupNode, PaneLeaf, PaneNode, Tab, Workspace } from '../../layout/types'
 import type { PaneReport, SearchOptions, TerminalPaneHandle, TerminalPaneProps } from '../pane/TerminalPaneView'
 import type { DockState } from '../dock/types'
-import { AGENTS_VIEW_ID, TERMINAL_ONLY_MENU, filterEntries, loadMenuEntries, type MenuEntry } from './menuEntries'
+import { AGENTS_VIEW_ID, TERMINAL_ONLY_MENU, filterEntries, loadMenuEntries, menuEntries, type AgentListing, type MenuEntry } from './menuEntries'
 import { focusedController } from './registry'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
@@ -29,6 +29,7 @@ import {
   type TabReport,
   type WorkspaceSettings
 } from './model'
+import { WORKSPACE_MENU_COMMAND, requestWindowCommand } from '../window-command'
 import type { NewSessionRequest } from './PromptDialog'
 
 /** Clicks on a dialog this soon after the previous close was confirmed are taken for a double click. */
@@ -47,10 +48,10 @@ export type CloseTarget =
 export type MenuState = { kind: string; target: string | null; x: number; y: number; query: string }
 
 export type DialogState =
-  | { kind: 'close-running'; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
-  | { kind: 'close-pinned'; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
-  | { kind: 'switch-tabs'; title: string; group: string; order: string[]; index: number }
-  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null; startedSession?: Session }
+  | { kind: 'close-running'; generation: string; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
+  | { kind: 'close-pinned'; generation: string; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
+  | { kind: 'switch-tabs'; generation: string; title: string; group: string; order: string[]; index: number }
+  | { kind: 'new-session'; generation: string; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null; startedSession?: Session }
 
 export type PaneDropTarget = { kind: 'edge'; pane: string; edge: Edge } | { kind: 'tab'; tab: string }
 
@@ -79,6 +80,7 @@ export type ControllerState = {
   dockHosts: Readonly<Record<string, DockHostState>>
   tabDrag: { tab: string; over: TabDrop | null } | null
   paneDrag: { pane: string; target: PaneDropTarget | null } | null
+  overflowGroup: string | null
 }
 type DockHostState = { mounted: boolean; focused: boolean; composerFocused: boolean }
 
@@ -122,10 +124,26 @@ export type ViewReport = {
   /** Mounted terminal accessory contribution IDs by pane ID. */
   mountedAccessories: Record<string, string[]>
   menu: { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] } | null
-  dialog: { kind: string; title: string } | null
+  dialog: { kind: string; title: string; generation: string } | null
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+export async function requestWorkspaceCommand(
+  context: UiPluginContext,
+  descriptor: { command: string; args?: unknown },
+  failureTitle: string
+): Promise<void> {
+  try {
+    const result = await requestWindowCommand(context, descriptor)
+    if (result && typeof result === 'object' && 'ok' in result && result.ok === false) {
+      const reason = 'reason' in result && typeof result.reason === 'string' ? result.reason : 'The command was refused.'
+      context.toast(failureTitle, reason)
+    }
+  } catch (error) {
+    context.toast(failureTitle, messageOf(error))
+  }
+}
 
 const hasTabs = (workspace: Workspace): boolean => groupsInOrder(workspace.root).some((group) => group.tabs.length > 0)
 
@@ -179,13 +197,18 @@ export class WorkspaceController {
   private unsubscribes: (() => void)[] = []
   private settingOverrides: Record<string, unknown> = {}
   private stopped = false
-  private loading = false
+  private loadPromise: Promise<void> | null = null
   private reloadAfter = false
+  private reloadEnsure = false
   private loadingSessions = false
   private wasReconnecting = false
   private guardUntil = 0
   private startSession: string | undefined
   private didFocusInput = false
+  private selectionSeq = 0
+  private selectionMutationsPending = 0
+  private selectionRefocusRevision: number | null = null
+  private selectionMutation: Promise<void> = Promise.resolve()
   private lastReport = ''
   private mountedAccessories: Record<string, string[]> = {}
   /** Receives the view report whenever it changes. */
@@ -235,7 +258,8 @@ export class WorkspaceController {
       dockHosts: {},
       focusFlash: null,
       tabDrag: null,
-      paneDrag: null
+      paneDrag: null,
+      overflowGroup: null
     }
   }
 
@@ -289,6 +313,7 @@ export class WorkspaceController {
 
   stop(): void {
     this.stopped = true
+    this.selectionSeq += 1
     this.pendingFocusPane = null
     for (const unsubscribe of this.unsubscribes.splice(0)) unsubscribe()
     this.listeners.clear()
@@ -308,22 +333,39 @@ export class WorkspaceController {
     return this.load(false)
   }
 
-  private async load(ensure: boolean): Promise<void> {
-    if (this.loading) {
+  private load(ensure: boolean): Promise<void> {
+    if (this.stopped) return Promise.resolve()
+    if (this.loadPromise) {
       this.reloadAfter = true
-      return
+      this.reloadEnsure ||= ensure
+      return this.loadPromise
     }
-    this.loading = true
-    try {
-      let first = ensure
+
+    const run = async () => {
+      let nextEnsure = ensure
       do {
         this.reloadAfter = false
-        await this.loadOnce(first)
-        first = false
+        this.reloadEnsure = false
+        await this.loadOnce(nextEnsure)
+        nextEnsure = this.reloadEnsure
       } while (this.reloadAfter && !this.stopped)
-    } finally {
-      this.loading = false
     }
+    const finish = () => {
+      this.loadPromise = null
+      if (this.stopped || this.didFocusInput || this.startSession === undefined) return
+      this.didFocusInput = true
+      const seq = ++this.selectionSeq
+      void this.selectRequestedSession(this.startSession, seq)
+    }
+    const promise = Promise.resolve().then(run).then(
+      () => finish(),
+      (error) => {
+        finish()
+        throw error
+      }
+    )
+    this.loadPromise = promise
+    return promise
   }
 
   private async loadOnce(ensure: boolean): Promise<void> {
@@ -367,23 +409,41 @@ export class WorkspaceController {
   }
 
   private afterWorkspace(workspace: Workspace): void {
-    if (!this.didFocusInput && this.startSession !== undefined) {
-      this.didFocusInput = true
-      void this.openRequestedSession(workspace, this.startSession)
-    }
     const unknown = groupsInOrder(workspace.root).some((group) =>
       group.tabs.some((tab) => isTerminalTab(tab) && paneLeaves(tab.root).some((leaf) => !this.state.sessions[leaf.session]))
     )
     if (unknown) void this.reloadSessions()
   }
 
-  private async openRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
+  selectSession(session: string | undefined): void {
+    if (this.stopped) return
+    const seq = ++this.selectionSeq
+    this.startSession = session
+    this.didFocusInput = true
+    this.pendingFocusPane = null
+    this.set({ selectionError: null })
+    if (session === undefined) {
+      if (!this.floating && (!this.ws || !hasTabs(this.ws))) void this.load(true)
+      return
+    }
+    void this.selectRequestedSession(session, seq)
+  }
+
+  private isCurrentSelection(seq: number): boolean {
+    return !this.stopped && this.selectionSeq === seq
+  }
+
+  private async selectRequestedSession(sessionId: string, seq: number): Promise<void> {
+    if (!this.isCurrentSelection(seq)) return
+    if (!this.ws || this.loadPromise) await this.load(false)
+    if (!this.isCurrentSelection(seq)) return
+
     let session = this.state.sessions[sessionId]
     if (!session) {
       try {
         session = (await this.context.call('quirky.session/get', { session: sessionId })) as Session
       } catch (error) {
-        if (this.stopped) return
+        if (!this.isCurrentSelection(seq)) return
         const message = hasCode(error, RpcErrorCode.NotFound)
           ? `Session ${sessionId} was not found.`
           : `Could not open session ${sessionId}: ${messageOf(error)}`
@@ -391,52 +451,81 @@ export class WorkspaceController {
         return
       }
     }
-    if (this.stopped) return
+    if (!this.isCurrentSelection(seq)) return
+
+    const workspace = this.ws
+    if (!workspace) return
     if (session.worktreeId !== workspace.id) {
       this.set({ selectionError: `Session ${sessionId} belongs to a different worktree.` })
       return
     }
-
     this.set({ sessions: { ...this.state.sessions, [sessionId]: session }, selectionError: null })
-    const current = this.ws ?? workspace
-    const existing = locateSession(current, sessionId)
-    if (existing) {
-      await this.focusRequestedSession(current, sessionId)
-      return
-    }
+    this.enqueueSelectionMutation(async () => {
+      if (!this.isCurrentSelection(seq)) return
+      const current = this.ws
+      if (!current) return
 
-    const group = groupsInOrder(current.root)[0]
-    if (!group) {
-      this.set({ selectionError: `No workspace group is available for session ${sessionId}.` })
-      return
-    }
+      const existing = locateSession(current, sessionId)
+      if (existing) {
+        await this.focusRequestedSession(sessionId, seq)
+        return
+      }
 
-    let result: { workspace?: Workspace } | undefined
-    try {
-      result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, { group: group.id, session: sessionId })) as
-        | { workspace?: Workspace }
-        | undefined
-    } catch (error) {
+      const targetGroup = groupsInOrder(current.root)[0]
+      if (!targetGroup) {
+        if (this.isCurrentSelection(seq)) this.set({ selectionError: `No workspace group is available for session ${sessionId}.` })
+        return
+      }
+
+      let result: { workspace?: Workspace } | undefined
+      try {
+        result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, { group: targetGroup.id, session: sessionId })) as
+          | { workspace?: Workspace }
+          | undefined
+      } catch (error) {
+        if (this.isCurrentSelection(seq)) this.set({ selectionError: `Could not open session ${sessionId}: ${messageOf(error)}` })
+        return
+      }
       if (this.stopped) return
-      this.set({ selectionError: `Could not open session ${sessionId}: ${messageOf(error)}` })
-      return
-    }
-    if (this.stopped) return
-    if (!result?.workspace) {
-      this.set({ selectionError: `Could not open session ${sessionId}.` })
-      return
-    }
-    this.apply(result.workspace)
-    const adopted = locateSession(this.ws ?? result.workspace, sessionId)
-    if (!adopted) {
-      this.set({ selectionError: `Could not select session ${sessionId}.` })
-      return
-    }
-    await this.focusRequestedSession(this.ws ?? result.workspace, sessionId)
+      if (result?.workspace) {
+        this.apply(result.workspace)
+        this.selectionRefocusRevision = this.ws?.revision ?? result.workspace.revision
+      }
+      if (!this.isCurrentSelection(seq)) return
+      if (!result?.workspace) {
+        this.set({ selectionError: `Could not open session ${sessionId}.` })
+        return
+      }
+      const adopted = this.ws ? locateSession(this.ws, sessionId) : null
+      if (!adopted) {
+        this.set({ selectionError: `Could not select session ${sessionId}.` })
+        return
+      }
+      await this.focusRequestedSession(sessionId, seq)
+    }, true)
   }
 
-  private async focusRequestedSession(workspace: Workspace, sessionId: string): Promise<void> {
-    const loc = locateSession(workspace, sessionId)
+  private enqueueSelectionMutation<T>(mutation: () => Promise<T>, selection = false): Promise<T> {
+    if (selection) this.selectionMutationsPending += 1
+    const run = async () => {
+      try {
+        return await mutation()
+      } finally {
+        if (selection) this.selectionMutationsPending -= 1
+      }
+    }
+    const next = this.selectionMutation.then(run, run)
+    this.selectionMutation = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
+  }
+
+  private async focusRequestedSession(sessionId: string, seq: number): Promise<void> {
+    if (!this.isCurrentSelection(seq)) return
+    const workspace = this.ws
+    const loc = workspace ? locateSession(workspace, sessionId) : null
     if (!loc) {
       this.set({ selectionError: `Could not select session ${sessionId}.` })
       return
@@ -445,13 +534,48 @@ export class WorkspaceController {
     if (
       loc.tab.activePane === loc.leaf.id &&
       loc.group.activeTab === loc.tab.id &&
-      workspace.activeGroup === loc.group.id &&
+      workspace?.activeGroup === loc.group.id &&
       shown
     ) {
+      this.focusPaneHandle(loc.leaf.id)
       return
     }
-    const focused = await this.run('focusPane', { pane: loc.leaf.id }, 'select the session')
-    if (!focused && !this.stopped) this.set({ selectionError: `Could not select session ${sessionId}.` })
+
+    let result: { workspace?: Workspace } | undefined
+    try {
+      result = (await this.context.call(`${TERMINAL_PREFIX}focusPane`, { pane: loc.leaf.id })) as
+        | { workspace?: Workspace }
+        | undefined
+    } catch (error) {
+      if (!this.isCurrentSelection(seq)) return
+      if (hasCode(error, RpcErrorCode.Conflict)) void this.refresh()
+      else this.context.toast('Could not select the session', messageOf(error))
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    if (this.stopped) return
+    if (result?.workspace) {
+      this.apply(result.workspace)
+      this.selectionRefocusRevision = this.ws?.revision ?? result.workspace.revision
+    }
+    if (!this.isCurrentSelection(seq)) return
+    const current = this.ws
+    const selected = current ? locateSession(current, sessionId) : null
+    if (!selected) {
+      this.set({ selectionError: `Could not select session ${sessionId}.` })
+      return
+    }
+    this.focusPaneHandle(selected.leaf.id)
+  }
+
+  private focusPaneHandle(paneId: string): void {
+    const handle = this.handles.get(paneId)
+    if (!handle) {
+      this.pendingFocusPane = paneId
+      return
+    }
+    this.pendingFocusPane = null
+    handle.focus()
   }
 
   private async reloadSessions(): Promise<void> {
@@ -499,7 +623,7 @@ export class WorkspaceController {
       }
       case 'setting.changed': {
         const name = terminalSettingName(event.id)
-        if (name !== null) this.settingOverrides[name] = event.value
+        if (name !== null) Object.assign(this.settingOverrides, { [name]: event.value })
         this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
         if (name !== null) void this.load(false)
         return
@@ -510,9 +634,9 @@ export class WorkspaceController {
   // ---- daemon calls
 
   /** Calls a `quirky.terminal` method and adopts the workspace it returns; null after a failure, which is shown as a toast. */
-  private async run(method: string, params: Record<string, unknown>, what: string): Promise<Workspace | null> {
+  private async run(request: () => Promise<unknown>, what: string): Promise<Workspace | null> {
     try {
-      const result = (await this.context.call(`${TERMINAL_PREFIX}${method}`, params)) as { workspace?: Workspace } | undefined
+      const result = (await request()) as { workspace?: Workspace } | undefined
       if (this.stopped) return null
       if (result?.workspace) {
         this.apply(result.workspace)
@@ -531,6 +655,7 @@ export class WorkspaceController {
   private apply(workspace: Workspace): void {
     const held = this.state.workspace
     if (held && workspace.revision < held.revision) return
+    if (this.selectionRefocusRevision !== null && workspace.revision > this.selectionRefocusRevision) this.selectionRefocusRevision = null
     if (this.pendingFocusPane !== null && !locatePane(workspace, this.pendingFocusPane)) this.pendingFocusPane = null
     this.set({ workspace, status: 'ready', preview: null })
     this.afterWorkspace(workspace)
@@ -548,7 +673,9 @@ export class WorkspaceController {
   }
 
   setPaneState(paneId: string, report: PaneReport): void {
+    if (this.stopped) return
     this.set({ paneStates: { ...this.state.paneStates, [paneId]: report } })
+    this.focusPendingPane(paneId)
   }
 
   setDockState(paneId: string, dock: DockState): void {
@@ -609,11 +736,19 @@ export class WorkspaceController {
     handle.scrollToBottom()
   }
 
+  /** Selection RPC results may update layout without authorizing automatic terminal focus. */
+  get suppressLayoutAutoFocus(): boolean {
+    return this.selectionMutationsPending > 0 || this.selectionRefocusRevision === this.ws?.revision
+  }
+
   /** Gives keyboard focus back to the focused pane after the layout changed under it; a text field or dock owner keeps it. */
   refocus(): void {
     const { menu, dialog, rename } = this.state
-    if (menu || dialog || rename || !this.ws) return
-    const pane = focusedPaneOf(this.ws)?.leaf.id
+    const workspace = this.ws
+    if (menu || dialog || rename || !workspace || this.selectionMutationsPending > 0) return
+    if (this.selectionRefocusRevision === workspace.revision) return
+    this.selectionRefocusRevision = null
+    const pane = focusedPaneOf(workspace)?.leaf.id
     const dock = pane ? this.state.dockStates[pane] : undefined
     const host = pane ? this.state.dockHosts[pane] : undefined
     if (dock?.enabled && dock.supported && dock.docked && dock.mounted && host?.mounted && !dock.passthrough) return
@@ -628,7 +763,7 @@ export class WorkspaceController {
 
   /** Opens a tab, in `group` or the active group. */
   async newTab(spec: { group?: string; agent?: string; prompt?: string; cwd?: string; title?: string } = {}): Promise<void> {
-    await this.run('newTab', { workspace: this.workspaceId, ...spec }, 'open a tab')
+    await this.run(() => this.context.call('quirky.terminal/newTab', { workspace: this.workspaceId, ...spec }), 'open a tab')
   }
 
   async activateTab(tabId: string): Promise<void> {
@@ -649,21 +784,21 @@ export class WorkspaceController {
       } else if (pane) this.handleOf(pane)?.focus()
       return
     }
-    await this.run('activateTab', { tab: tabId }, 'switch tabs')
+    await this.run(() => this.context.call('quirky.terminal/activateTab', { tab: tabId }), 'switch tabs')
   }
 
   async selectTab(index: number): Promise<void> {
     const at = this.ws ? focusedTabOf(this.ws) : null
     if (!at || !Number.isInteger(index) || index < 1 || index > at.group.tabs.length) return
-    await this.run('activateTab', { workspace: this.workspaceId, index }, 'switch tabs')
+    await this.run(() => this.context.call('quirky.terminal/activateTab', { workspace: this.workspaceId, index }), 'switch tabs')
   }
 
   async nextTab(): Promise<void> {
-    await this.run('activateTab', { workspace: this.workspaceId, offset: 1, order: 'position' }, 'switch tabs')
+    await this.run(() => this.context.call('quirky.terminal/activateTab', { workspace: this.workspaceId, offset: 1, order: 'position' }), 'switch tabs')
   }
 
   async previousTab(): Promise<void> {
-    await this.run('activateTab', { workspace: this.workspaceId, offset: -1, order: 'position' }, 'switch tabs')
+    await this.run(() => this.context.call('quirky.terminal/activateTab', { workspace: this.workspaceId, offset: -1, order: 'position' }), 'switch tabs')
   }
 
   async reopenTab(): Promise<void> {
@@ -677,11 +812,11 @@ export class WorkspaceController {
   }
 
   async setTabColor(tabId: string, color: string): Promise<void> {
-    await this.run('setTabColor', { tab: tabId, color }, 'set the tab colour')
+    await this.run(() => this.context.call('quirky.terminal/setTabColor', { tab: tabId, color }), 'set the tab colour')
   }
 
   async pinTab(tabId: string, pinned: boolean): Promise<void> {
-    await this.run('pinTab', { tab: tabId, pinned }, pinned ? 'pin the tab' : 'unpin the tab')
+    await this.run(() => this.context.call('quirky.terminal/pinTab', { tab: tabId, pinned }), pinned ? 'pin the tab' : 'unpin the tab')
   }
 
   async promoteViewTab(tabId: string): Promise<void> {
@@ -696,25 +831,26 @@ export class WorkspaceController {
       }
       return
     }
-    await this.run('rekeyViewTabs', {
+    const { viewId, key } = loc.tab
+    await this.run(() => this.context.call('quirky.terminal/rekeyViewTabs', {
       workspace: this.workspaceId,
-      viewId: loc.tab.viewId,
-      changes: [{ tab: tabId, key: loc.tab.key, preview: false }]
-    }, 'promote the preview')
+      viewId,
+      changes: [{ tab: tabId, key, preview: false }]
+    }), 'promote the preview')
   }
 
   /** Moves a tab to `index` of a group (the end when omitted); it becomes that group's active tab. */
   async moveTabToGroup(tabId: string, group: string, index?: number): Promise<void> {
-    await this.run('moveTab', { tab: tabId, group, ...(index === undefined ? {} : { index }) }, 'move the tab')
+    await this.run(() => this.context.call('quirky.terminal/moveTab', { tab: tabId, group, ...(index === undefined ? {} : { index }) }), 'move the tab')
   }
 
   /** Moves a tab into a new group opened on `side` of group `of`. */
   async moveTabToSplit(tabId: string, side: 'right' | 'left' | 'down' | 'up', of?: string): Promise<void> {
-    await this.run('moveTab', { tab: tabId, split: side, ...(of === undefined ? {} : { of }) }, 'move the tab')
+    await this.run(() => this.context.call('quirky.terminal/moveTab', { tab: tabId, split: side, ...(of === undefined ? {} : { of }) }), 'move the tab')
   }
 
   async closeGroup(group: string): Promise<void> {
-    await this.run('closeGroup', { group }, 'close the split')
+    await this.run(() => this.context.call('quirky.terminal/closeGroup', { group }), 'close the split')
   }
 
   private activePaneId(): string | null {
@@ -727,7 +863,7 @@ export class WorkspaceController {
 
   async splitPane(direction: 'right' | 'down', paneId?: string): Promise<void> {
     const pane = this.resolvePane(paneId)
-    if (pane) await this.run('splitPane', { pane, direction }, 'split the pane')
+    if (pane) await this.run(() => this.context.call('quirky.terminal/splitPane', { pane, direction }), 'split the pane')
   }
 
   splitRight(paneId?: string): Promise<void> {
@@ -739,29 +875,44 @@ export class WorkspaceController {
   }
 
   async focusPane(paneId: string): Promise<void> {
-    const ws = this.ws
-    const loc = ws ? locatePane(ws, paneId) : null
-    if (!ws || !loc) return
-    const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
-    if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
-    await this.run('focusPane', { pane: paneId }, 'focus the pane')
+    const current = this.ws
+    const focused = current ? locatePane(current, paneId) : null
+    if (!current || !focused || this.stopped) return
+    const visible = focused.tab.expandedPane === null || focused.tab.expandedPane === paneId
+    // autofocus reports the applied layout, not a new selection to replay after queued input
+    if (focused.tab.activePane === paneId && focused.group.activeTab === focused.tab.id && current.activeGroup === focused.group.id && visible) return
+    await this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return
+      const ws = this.ws
+      const loc = ws ? locatePane(ws, paneId) : null
+      if (!ws || !loc) return
+      const shown = loc.tab.expandedPane === null || loc.tab.expandedPane === paneId
+      if (loc.tab.activePane === paneId && loc.group.activeTab === loc.tab.id && ws.activeGroup === loc.group.id && shown) return
+      await this.run(() => this.context.call('quirky.terminal/focusPane', { pane: paneId }), 'focus the pane')
+    })
   }
 
   /** Activates a pane through the daemon, then requests native focus, a scroll to bottom and a visible flash. */
   async focusPaneForCommand(paneId: string): Promise<boolean> {
-    const workspace = await this.run('focusPane', { pane: paneId }, 'focus the pane')
-    if (!workspace) return false
-    const loc = locatePane(workspace, paneId)
-    if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
-    this.pendingFocusPane = paneId
-    this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
-    this.focusPendingPane(paneId)
-    return true
+    return this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return false
+      const workspace = await this.run(() => this.context.call('quirky.terminal/focusPane', { pane: paneId }), 'focus the pane')
+      if (!workspace) return false
+      const loc = locatePane(workspace, paneId)
+      if (!loc || this.state.sessions[loc.leaf.session]?.kind === 'structured') return false
+      this.pendingFocusPane = paneId
+      this.set({ focusFlash: { pane: paneId, token: ++this.focusFlashToken } })
+      this.focusPendingPane(paneId)
+      return true
+    })
   }
 
-  private async cycleFocus(offset: 1 | -1): Promise<void> {
-    const at = this.ws ? focusedTabOf(this.ws) : null
-    if (at && isTerminalTab(at.tab)) await this.run('focusPane', { tab: at.tab.id, offset }, 'focus the pane')
+  private cycleFocus(offset: 1 | -1): Promise<void> {
+    return this.enqueueSelectionMutation(async () => {
+      if (this.stopped) return
+      const at = this.ws ? focusedTabOf(this.ws) : null
+      if (at && isTerminalTab(at.tab)) await this.run(() => this.context.call('quirky.terminal/focusPane', { tab: at.tab.id, offset }), 'focus the pane')
+    })
   }
 
   focusNext(): Promise<void> {
@@ -776,7 +927,7 @@ export class WorkspaceController {
   async toggleExpand(paneId?: string): Promise<void> {
     const loc = this.ws ? (paneId ? locatePane(this.ws, paneId) : focusedPaneOf(this.ws)) : null
     if (!loc || paneLeaves(loc.tab.root).length < 2) return
-    await this.run('expandPane', { pane: loc.leaf.id, expanded: loc.tab.expandedPane === null }, 'expand the pane')
+    await this.run(() => this.context.call('quirky.terminal/expandPane', { pane: loc.leaf.id, expanded: loc.tab.expandedPane === null }), 'expand the pane')
   }
 
   async equalize(tabId?: string): Promise<void> {
@@ -784,27 +935,27 @@ export class WorkspaceController {
     const tab = tabId ?? at?.tab.id
     const loc = tab && this.ws ? locateTab(this.ws, tab) : null
     if (loc && isTerminalTab(loc.tab) && paneLeaves(loc.tab.root).length > 1) {
-      await this.run('equalize', { tab: loc.tab.id }, 'equalize the panes')
+      await this.run(() => this.context.call('quirky.terminal/equalize', { tab: loc.tab.id }), 'equalize the panes')
     }
   }
 
   async clearPane(paneId?: string): Promise<void> {
     const pane = this.resolvePane(paneId)
-    if (pane) await this.run('clearPane', { pane }, 'clear the screen')
+    if (pane) await this.run(() => this.context.call('quirky.terminal/clearPane', { pane }), 'clear the screen')
   }
 
   async resetPane(paneId?: string): Promise<void> {
     const pane = this.resolvePane(paneId)
-    if (pane) await this.run('resetPane', { pane }, 'reset the terminal')
+    if (pane) await this.run(() => this.context.call('quirky.terminal/resetPane', { pane }), 'reset the terminal')
   }
 
   async restartPane(paneId: string): Promise<void> {
-    await this.run('restartPane', { pane: paneId }, 'restart the terminal')
+    await this.run(() => this.context.call('quirky.terminal/restartPane', { pane: paneId }), 'restart the terminal')
   }
 
   async clearTitle(paneId?: string): Promise<void> {
     const pane = this.resolvePane(paneId)
-    if (pane) await this.run('setPaneTitle', { pane, title: '' }, 'clear the title')
+    if (pane) await this.run(() => this.context.call('quirky.terminal/setPaneTitle', { pane, title: '' }), 'clear the title')
   }
 
   /** Opens the inline title field in the header of a pane (the focused one by default), focusing it first. */
@@ -833,11 +984,11 @@ export class WorkspaceController {
       if (!loc) return
       const current = isViewTab(loc.tab) ? loc.tab.title : loc.tab.customTitle ?? displayTitle(loc.tab)
       if (value.trim() === current) return
-      await this.run('renameTab', { tab: rename.id, title: value }, 'rename the tab')
+      await this.run(() => this.context.call('quirky.terminal/renameTab', { tab: rename.id, title: value }), 'rename the tab')
     } else {
       const loc = locatePane(ws, rename.id)
       if (!loc || value.trim() === (loc.leaf.title ?? '')) return
-      await this.run('setPaneTitle', { pane: rename.id, title: value }, 'set the title')
+      await this.run(() => this.context.call('quirky.terminal/setPaneTitle', { pane: rename.id, title: value }), 'set the title')
     }
   }
 
@@ -848,7 +999,7 @@ export class WorkspaceController {
   /** Moves a pane beside another pane of its tab, or into another tab. */
   async movePane(paneId: string, to: PaneDropTarget): Promise<void> {
     const params = to.kind === 'edge' ? { pane: paneId, toPane: to.pane, edge: to.edge } : { pane: paneId, toTab: to.tab }
-    await this.run('movePane', params, 'move the pane')
+    await this.run(() => this.context.call('quirky.terminal/movePane', params), 'move the pane')
   }
 
   // ---- closing
@@ -868,7 +1019,7 @@ export class WorkspaceController {
       const loc = locateTab(ws, target.tab)
       if (!loc) return
       if (loc.tab.pinned && this.state.settings['confirm-close-pinned']) {
-        this.set({ dialog: { kind: 'close-pinned', title: 'Close pinned tab?', target, tabLabel: displayTitle(loc.tab), notBefore: 0 }, menu: null })
+        this.set({ dialog: { kind: 'close-pinned', generation: crypto.randomUUID(), title: 'Close pinned tab?', target, tabLabel: displayTitle(loc.tab), notBefore: 0 }, menu: null })
         return
       }
     }
@@ -901,7 +1052,7 @@ export class WorkspaceController {
       const agent = isAgentQuestion(question)
       this.set({
         menu: null,
-        dialog: { kind: 'close-running', title: agent ? 'Stop this agent?' : 'Stop running command?', target, tabLabel: this.tabLabelOf(target), agent, notBefore }
+        dialog: { kind: 'close-running', generation: crypto.randomUUID(), title: agent ? 'Stop this agent?' : 'Stop running command?', target, tabLabel: this.tabLabelOf(target), agent, notBefore }
       })
       return
     }
@@ -919,16 +1070,16 @@ export class WorkspaceController {
           this.context.toast('Could not close the tab', messageOf(error))
           return
         }
-        const after = await this.run('workspace', { workspace: this.workspaceId }, 'refresh the workspace')
+        const after = await this.run(() => this.context.call('quirky.terminal/workspace', { workspace: this.workspaceId }), 'refresh the workspace')
         if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
         return
       }
     }
     const params = { ...this.closeParams(target), yes: true }
     let after: Workspace | null
-    if (target.kind === 'tab') after = await this.run('closeTab', params, 'close the tab')
-    else if (target.kind === 'pane') after = await this.run('closePane', params, 'close the pane')
-    else after = await this.run('closeTabs', params, 'close the tabs')
+    if (target.kind === 'tab') after = await this.run(() => this.context.call('quirky.terminal/closeTab', params), 'close the tab')
+    else if (target.kind === 'pane') after = await this.run(() => this.context.call('quirky.terminal/closePane', params), 'close the pane')
+    else after = await this.run(() => this.context.call('quirky.terminal/closeTabs', params), 'close the tabs')
     if (hadTabs && after && !hasTabs(after)) await this.minimizeFloating()
   }
 
@@ -938,7 +1089,7 @@ export class WorkspaceController {
   }
 
   private async setBooleanSetting(name: string, value: boolean): Promise<void> {
-    this.settingOverrides[name] = value
+    Object.assign(this.settingOverrides, { [name]: value })
     this.set({ settings: readWorkspaceSettings(this.context, this.settingOverrides) })
     try {
       await this.context.call('setting.set', { id: `${SETTING_PREFIX}${name}`, value })
@@ -1002,7 +1153,7 @@ export class WorkspaceController {
     const order = switcherOrder(at.group, this.state.settings['ctrl-tab-order'])
     if (order.length < 2) return
     const index = (Math.max(order.indexOf(at.tab.id), 0) + 1) % order.length
-    this.set({ dialog: { kind: 'switch-tabs', title: 'Switch tabs', group: at.group.id, order, index }, menu: null })
+    this.set({ dialog: { kind: 'switch-tabs', generation: crypto.randomUUID(), title: 'Switch tabs', group: at.group.id, order, index }, menu: null })
   }
 
   stepSwitcher(direction: 1 | -1): void {
@@ -1060,6 +1211,74 @@ export class WorkspaceController {
   }
 
   /** The rows of the open menu, in display order. */
+  private targetFailure(
+    workspace: Workspace | null,
+    target: string,
+    kind: 'tab' | 'pane' | 'session' | 'group'
+  ): string | null {
+    if (!workspace) return `no mounted terminal workspace holds ${target}`
+    const matched = kind === 'group'
+      ? findGroup(workspace.root, target)
+      : kind === 'tab'
+        ? locateTab(workspace, target)
+        : locatePane(workspace, target)
+    if (matched) return null
+    if (findGroup(workspace.root, target) || locateTab(workspace, target) || locatePane(workspace, target)) {
+      return `target ${target} is not a ${kind} target`
+    }
+    return `no mounted terminal workspace holds ${target}`
+  }
+
+  async copyId(
+    target: string,
+    kind: 'tab' | 'pane' | 'session'
+  ): Promise<{ ok: true; text: string } | { ok: false; reason: string }> {
+    const workspace = this.ws
+    const reason = this.targetFailure(workspace, target, kind)
+    if (reason) return { ok: false, reason }
+    const text = kind === 'tab'
+      ? locateTab(workspace!, target)!.tab.id
+      : kind === 'pane'
+        ? locatePane(workspace!, target)!.leaf.id
+        : locatePane(workspace!, target)!.leaf.session
+    try {
+      await writeClipboard(text)
+      return { ok: true, text }
+    } catch (error) {
+      return { ok: false, reason: messageOf(error) }
+    }
+  }
+
+  async chooseAgent(target: string, agent: string, background: boolean): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const initialFailure = this.targetFailure(this.ws, target, 'group')
+    if (initialFailure) return { ok: false, reason: initialFailure }
+    if (this.stopped) return { ok: false, reason: `no mounted terminal workspace holds ${target}` }
+    let entries: MenuEntry[]
+    try {
+      const listing = (await this.context.call('quirky.agents/list')) as AgentListing
+      entries = menuEntries(listing)
+    } catch (error) {
+      return { ok: false, reason: messageOf(error) }
+    }
+    if (this.stopped) return { ok: false, reason: `no mounted terminal workspace holds ${target}` }
+    const currentFailure = this.targetFailure(this.ws, target, 'group')
+    if (currentFailure) return { ok: false, reason: currentFailure }
+    const entry = entries.find(
+      (candidate) => candidate.kind === 'agent' && candidate.request.agent === agent && candidate.request.background === background
+    )
+    if (!entry) return { ok: false, reason: `agent ${agent} is not available` }
+    this.chooseEntry(entry, target)
+    return { ok: true }
+  }
+
+  setOverflowGroup(target: string, open: boolean): { ok: true } | { ok: false; reason: string } {
+    const reason = this.targetFailure(this.ws, target, 'group')
+    if (reason) return { ok: false, reason }
+    const overflowGroup = open ? target : this.state.overflowGroup === target ? null : this.state.overflowGroup
+    if (overflowGroup !== this.state.overflowGroup) this.set({ overflowGroup })
+    return { ok: true }
+  }
+
   menuItems(): ContextMenuItem[] {
     const menu = this.state.menu
     if (!menu) return []
@@ -1077,13 +1296,6 @@ export class WorkspaceController {
     }
   }
 
-  private async copyText(text: string): Promise<void> {
-    try {
-      await writeClipboard(text)
-    } catch (error) {
-      this.context.toast('Could not copy', messageOf(error))
-    }
-  }
   private menuKey(command: string, fallback: string): string | null {
     return this.options.shortcutKey
       ? this.options.shortcutKey(command.startsWith('command:') ? command : `command:quirky.terminal/${command}`)
@@ -1112,12 +1324,12 @@ export class WorkspaceController {
         ]
       }] : []),
       { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', onSelect: () => void this.pinTab(tabId, !tab.pinned) },
-      { label: 'Copy Tab ID', onSelect: () => void this.copyText(tabId) },
+      { label: 'Copy Tab ID', onSelect: () => void requestWorkspaceCommand(this.context, { command: WORKSPACE_MENU_COMMAND, args: { action: 'copy-id', target: tabId, kind: 'tab' } }, 'Could not copy') },
       { label: 'Close', key: this.menuKey('close-pane', '⌘W'), onSelect: () => void this.closeTab(tabId) },
       { label: 'Close Others', enabled: group.tabs.length > 1, onSelect: () => void this.closeTabs(tabId, 'others') },
       { label: 'Close All Tabs To The Right', enabled: index < group.tabs.length - 1, onSelect: () => void this.closeTabs(tabId, 'right') },
       { label: 'Close All Tabs To The Left', enabled: index > 0, onSelect: () => void this.closeTabs(tabId, 'left') },
-      { label: 'Change Title', key: this.menuKey('rename-tab', '⌘R'), onSelect: () => this.renameTab(tabId) },
+      { label: 'Change Title', key: this.menuKey('rename-tab', '⌘R'), onSelect: () => requestWorkspaceCommand(this.context, { command: 'command:quirky.terminal/rename-tab', args: { tab: tabId } }, 'Could not rename the tab') },
       {
         label: 'Tab Color',
         submenu: TAB_COLORS.map((color) => ({
@@ -1141,9 +1353,9 @@ export class WorkspaceController {
     const quick = this.options.paneMenuExtras?.(leaf) ?? []
     const contributed = this.options.paneMenuContributions?.(leaf, this.state.sessions[leaf.session]) ?? []
     const items: ContextMenuItem[] = [
-      { label: 'Copy', key: this.menuKey('copy', '⌘C'), onSelect: () => this.copy(paneId) },
-      { label: 'Select All', key: this.menuKey('select-all', '⌘A'), onSelect: () => this.selectAll(paneId) },
-      { label: 'Paste', key: this.menuKey('paste', '⌘V'), onSelect: () => void this.pasteFromClipboard(paneId) },
+      { label: 'Copy', key: this.menuKey('copy', '⌘C'), onSelect: () => requestWorkspaceCommand(this.context, { command: 'command:quirky.terminal/copy', args: { pane: paneId } }, 'Could not copy') },
+      { label: 'Select All', key: this.menuKey('select-all', '⌘A'), onSelect: () => requestWorkspaceCommand(this.context, { command: 'command:quirky.terminal/select-all', args: { pane: paneId } }, 'Could not select all') },
+      { label: 'Paste', key: this.menuKey('paste', '⌘V'), onSelect: () => requestWorkspaceCommand(this.context, { command: 'command:quirky.terminal/paste', args: { pane: paneId } }, 'Could not paste') },
       { label: 'Quick Commands', submenu: quick.length > 0 ? quick : [{ label: 'No quick commands', enabled: false }] },
       ...contributed,
       CONTEXT_MENU_SEPARATOR,
@@ -1168,11 +1380,11 @@ export class WorkspaceController {
         { label: tab.expandedPane === null ? 'Expand Pane' : 'Collapse Pane', key: this.menuKey('toggle-expand-pane', '⌘⇧Enter'), onSelect: () => void this.toggleExpand(paneId) }
       )
     }
-    items.push(CONTEXT_MENU_SEPARATOR, { label: 'Set Title…', onSelect: () => void this.setTitle(paneId) })
+    items.push(CONTEXT_MENU_SEPARATOR, { label: 'Set Title…', onSelect: () => requestWorkspaceCommand(this.context, { command: 'command:quirky.terminal/set-pane-title', args: { pane: paneId } }, 'Could not open pane title') })
     if (leaf.title) items.push({ label: 'Clear Pane Title', onSelect: () => void this.clearTitle(paneId) })
     items.push(
-      { label: 'Copy Terminal ID', onSelect: () => void this.copyText(leaf.session) },
-      { label: 'Copy Pane ID', onSelect: () => void this.copyText(paneId) }
+      { label: 'Copy Terminal ID', onSelect: () => void requestWorkspaceCommand(this.context, { command: WORKSPACE_MENU_COMMAND, args: { action: 'copy-id', target: paneId, kind: 'session' } }, 'Could not copy') },
+      { label: 'Copy Pane ID', onSelect: () => void requestWorkspaceCommand(this.context, { command: WORKSPACE_MENU_COMMAND, args: { action: 'copy-id', target: paneId, kind: 'pane' } }, 'Could not copy') }
     )
     if (split) items.push({ label: 'Close Pane', key: this.menuKey('close-pane', '⌘W'), danger: true, onSelect: () => void this.closePane(paneId) })
     items.push(
@@ -1192,7 +1404,13 @@ export class WorkspaceController {
     const rows: ContextMenuItem[] = entries.map((entry) => ({
       label: entry.label,
       key: entry.kind === 'terminal' ? this.menuKey('command:quirky.session/new-shell', '⌘T') : null,
-      onSelect: () => this.chooseEntry(entry, target)
+      onSelect: () => entry.kind === 'agent' && target !== undefined
+        ? requestWorkspaceCommand(
+            this.context,
+            { command: WORKSPACE_MENU_COMMAND, args: { action: 'choose-agent', target, agent: entry.request.agent, background: entry.request.background } },
+            'Could not choose agent'
+          )
+        : this.chooseEntry(entry, target)
     }))
     const footer = entries.findIndex((entry) => entry.kind === 'manage')
     const visibleContributions = contributed.filter(
@@ -1220,7 +1438,7 @@ export class WorkspaceController {
   private chooseEntry(entry: MenuEntry, group: string | undefined): void {
     if (entry.kind === 'terminal') void this.newTab(group === undefined ? {} : { group })
     else if (entry.kind === 'manage') this.context.openView(AGENTS_VIEW_ID)
-    else this.set({ dialog: { kind: 'new-session', title: `New ${entry.request.label} session`, request: entry.request, group: group ?? null } })
+    else this.set({ dialog: { kind: 'new-session', generation: crypto.randomUUID(), title: `New ${entry.request.label} session`, request: entry.request, group: group ?? null } })
   }
 
   /**
@@ -1247,15 +1465,18 @@ export class WorkspaceController {
         })) as Session)
         startedSession = session
         if (this.stopped) return
-        const targetGroup = group ?? this.ws?.activeGroup
-        const result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, {
-          group: targetGroup,
-          session: session.id
-        })) as { workspace?: Workspace } | undefined
-        if (this.stopped) return
-        if (!result?.workspace) throw new Error(`Could not adopt session ${session.id}.`)
-        this.set({ sessions: { ...this.state.sessions, [session.id]: this.state.sessions[session.id] ?? session } })
-        this.apply(result.workspace)
+        await this.enqueueSelectionMutation(async () => {
+          if (this.stopped) return
+          const targetGroup = group ?? this.ws?.activeGroup
+          const result = (await this.context.call(`${TERMINAL_PREFIX}adoptSession`, {
+            group: targetGroup,
+            session: session.id
+          })) as { workspace?: Workspace } | undefined
+          if (this.stopped) return
+          if (!result?.workspace) throw new Error(`Could not adopt session ${session.id}.`)
+          this.set({ sessions: { ...this.state.sessions, [session.id]: this.state.sessions[session.id] ?? session } })
+          this.apply(result.workspace)
+        })
       } else {
         const spec = { ...(group === null ? {} : { group }), agent: request.agent, ...(text === '' ? {} : { prompt: text }) }
         const result = (await this.context.call(`${TERMINAL_PREFIX}newTab`, { workspace: this.workspaceId, ...spec })) as { workspace?: Workspace } | undefined
@@ -1300,14 +1521,6 @@ export class WorkspaceController {
     return this.handleOf(paneId)?.paste(text) ?? Promise.resolve()
   }
 
-  private async pasteFromClipboard(paneId: string): Promise<void> {
-    try {
-      const text = await this.context.readClipboardText()
-      if (text) await this.paste(text, paneId)
-    } catch (error) {
-      this.context.toast('Could not paste', messageOf(error))
-    }
-  }
 
   search(query?: string, options?: SearchOptions, paneId?: string): void {
     this.handleOf(paneId)?.search(query, options)
@@ -1356,14 +1569,14 @@ export class WorkspaceController {
       return
     }
     const ws = this.ws
-    const result = await this.run('resizeSplit', { split: preview.split, ratio: preview.ratio, ...(ws ? { revision: ws.revision } : {}) }, 'resize the split')
+    const result = await this.run(() => this.context.call('quirky.terminal/resizeSplit', { split: preview.split, ratio: preview.ratio, ...(ws ? { revision: ws.revision } : {}) }), 'resize the split')
     if (!result) this.set({ preview: null })
   }
 
   /** Puts a divider back at the middle of its pair. */
   async resetDivider(split: string): Promise<void> {
     const ws = this.ws
-    await this.run('resizeSplit', { split, ratio: 0.5, ...(ws ? { revision: ws.revision } : {}) }, 'resize the split')
+    await this.run(() => this.context.call('quirky.terminal/resizeSplit', { split, ratio: 0.5, ...(ws ? { revision: ws.revision } : {}) }), 'resize the split')
   }
 
   /** The group tree with a divider drag's ratio applied, for drawing while the pointer moves. */
@@ -1412,24 +1625,45 @@ export class WorkspaceController {
     else await this.moveTabToSplit(drag.tab, drop.zone, drop.group)
   }
 
-  /** Executes a trusted command after the daemon validates its explicit group target. */
+  async runGroupCommand(
+    target: string,
+    command: string,
+    args?: Record<string, unknown>
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const workspace = this.ws
+    if (this.floating || workspace?.id === FLOATING_WORKSPACE) {
+      return { ok: false, reason: 'command drops are not available in the floating workspace' }
+    }
+    const invalidTarget = this.targetFailure(workspace, target, 'group')
+    if (invalidTarget) return { ok: false, reason: invalidTarget }
+    if (!command) return { ok: false, reason: 'command is required' }
+    try {
+      const info = await this.context.call('quirky.terminal/groupInfo', { group: target })
+      const worktree = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
+      const current = this.ws
+      if (worktree === null || worktree !== workspace!.id || current !== workspace || current === null || !findGroup(current.root, target)) {
+        return { ok: false, reason: 'The target group is no longer available in this worktree.' }
+      }
+      await this.context.executeCommand(command, { ...args, group: target, worktree })
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: messageOf(error) }
+    }
+  }
+
+  /** Routes a consumed host-minted command descriptor through the public group action. */
   async dropCommand(transfer: DataTransfer | null, groupId: string): Promise<void> {
     const token = hasCommandDrop(transfer) ? transfer.getData(COMMAND_DROP_MIME) : ''
     const descriptor = token === '' ? null : this.context.consumeCommandDrag(token)
-    const workspace = this.ws
-    if (!descriptor || !workspace || workspace.id === FLOATING_WORKSPACE || !findGroup(workspace.root, groupId)) return
-    try {
-      const info = await this.context.call('quirky.terminal/groupInfo', { group: groupId })
-      const target = info && typeof info === 'object' && 'workspace' in info && typeof info.workspace === 'string' ? info.workspace : null
-      const current = this.ws
-      if (target === null || target !== workspace.id || current !== workspace || current === null || !findGroup(current.root, groupId)) {
-        this.context.toast('Could not run dropped command', 'The target group is no longer available in this worktree.')
-        return
-      }
-      await this.context.executeCommand(descriptor.command, { ...descriptor.args, group: groupId, worktree: target })
-    } catch (error) {
-      this.context.toast('Could not run dropped command', messageOf(error))
-    }
+    if (!descriptor) return
+    await requestWorkspaceCommand(
+      this.context,
+      {
+        command: WORKSPACE_MENU_COMMAND,
+        args: { action: 'run-group-command', target: groupId, command: descriptor.command, args: descriptor.args }
+      },
+      'Could not run dropped command'
+    )
   }
 
   // ---- report
@@ -1441,7 +1675,7 @@ export class WorkspaceController {
     if (current === undefined && ids.length === 0) return
     const next = { ...this.mountedAccessories }
     if (ids.length === 0) delete next[paneId]
-    else next[paneId] = [...ids]
+    else Object.assign(next, { [paneId]: [...ids] })
     this.mountedAccessories = next
     this.publish()
   }
@@ -1470,7 +1704,7 @@ export class WorkspaceController {
             items: this.menuItems().map((item) => ({ label: item.label, key: item.key ?? null, enabled: item.enabled !== false && !item.separator, separator: item.separator === true }))
           }
         : null,
-      dialog: dialog ? { kind: dialog.kind, title: dialog.title } : null
+      dialog: dialog ? { kind: dialog.kind, title: dialog.title, generation: dialog.generation } : null
     }
   }
 

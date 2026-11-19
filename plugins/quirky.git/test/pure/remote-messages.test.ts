@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  errorLineFor,
   toastFor,
   type RemoteAction,
   type RemoteErrorReason,
@@ -129,5 +130,43 @@ describe('toastFor, fallbacks', () => {
         }
       }
     }
+  })
+})
+
+describe('errorLineFor, the ship bar line', () => {
+  test('a rejected push says what happened and leaves "pull first" to the button', () => {
+    expect(errorLineFor('push', 'non-fast-forward', 'x')).toEqual({ text: 'Push rejected: the remote has new commits', next: 'pull' })
+  })
+
+  test('a stale lease points at fetching', () => {
+    expect(errorLineFor('force-push', 'stale-lease', 'x')).toEqual({
+      text: 'Force push rejected: the remote changed since the last fetch',
+      next: 'fetch'
+    })
+  })
+
+  test('a sync that raced the remote offers a retry', () => {
+    expect(errorLineFor('sync', 'non-fast-forward', 'x')?.next).toBe('retry')
+    expect(errorLineFor('sync', 'stale-lease', 'x')?.text).toBe('Sync failed: the remote moved while syncing')
+  })
+
+  test('other copy comes from toastFor, joined into one line', () => {
+    expect(errorLineFor('pull', 'conflicts', 'x')).toEqual({
+      text: 'Pull stopped with merge conflicts. Resolve them in Source Control, then continue the merge.',
+      next: null
+    })
+    expect(errorLineFor('pull', 'local-changes', 'x')?.text).toBe('Pull blocked — commit or stash your local changes first')
+    expect(errorLineFor('pull', 'busy', 'A push is already running.')).toEqual({ text: 'Pull failed. A push is already running.', next: 'retry' })
+    expect(errorLineFor('fetch', 'network', 'offline')?.next).toBe('retry')
+    expect(errorLineFor('push', 'auth', 'denied')?.next).toBeNull()
+  })
+
+  test('hook and lint failures have no line of their own', () => {
+    expect(errorLineFor('push', 'hook', 'x')).toBeNull()
+    expect(errorLineFor('sync', 'lint', 'x')).toBeNull()
+  })
+
+  test('the operation names a failed continue or abort', () => {
+    expect(errorLineFor('abort', 'failed', 'boom', 'merge')?.text).toBe('Abort merge failed. boom')
   })
 })

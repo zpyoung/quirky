@@ -10,6 +10,7 @@ export class ProfileLifecycle {
   private readonly maintaining = new Set<string>()
   private readonly admissions = new Map<string, number>()
   private readonly pending = new Map<string, { profile: string; claimed: boolean }>()
+  private readonly nativeUsed = new Set<string>(['default'])
 
   constructor(
     private readonly context: Pick<PluginContext, 'provide' | 'call' | 'error'>,
@@ -19,6 +20,7 @@ export class ProfileLifecycle {
   ) {}
 
   activate(): void {
+    this.recordNativePanes()
     this.context.provide('method:quirky.browser/profileClearNativeClaim', (params: Record<string, unknown>, caller: PluginCaller) => {
       if (!this.active || (caller.role !== 'ui' && caller.role !== 'desktop')) {
         throw this.context.error('conflict', 'browser_error: Only the desktop window can claim a pending native clear.')
@@ -38,14 +40,24 @@ export class ProfileLifecycle {
 
   async withProfileAdmission<T>(profile: string, operation: () => Promise<T>): Promise<T> {
     if (!this.active) throw this.context.error('conflict', 'browser_error: Browser is shutting down.')
+    this.recordNativePanes()
     this.assertAvailable(profile)
     this.admissions.set(profile, (this.admissions.get(profile) ?? 0) + 1)
     try {
-      return await operation()
+      const result = await operation()
+      if (result && typeof result === 'object' && 'mode' in result && result.mode === 'native' &&
+        'profileId' in result && typeof result.profileId === 'string') {
+        this.markNativeUsed(result.profileId)
+      }
+      return result
     } finally {
-      const remaining = (this.admissions.get(profile) ?? 1) - 1
-      if (remaining === 0) this.admissions.delete(profile)
-      else this.admissions.set(profile, remaining)
+      try {
+        this.recordNativePanes()
+      } finally {
+        const remaining = (this.admissions.get(profile) ?? 1) - 1
+        if (remaining === 0) this.admissions.delete(profile)
+        else this.admissions.set(profile, remaining)
+      }
     }
   }
 
@@ -54,8 +66,22 @@ export class ProfileLifecycle {
     this.store.getProfile(profile)
     this.assertAvailable(profile)
     if (remove && profile === 'default') throw this.context.error('invalid-params', 'browser_error: Default cannot be removed.')
+    this.recordNativePanes()
     if (this.admissions.has(profile) || this.listPanes().some((pane) => pane.profileId === profile) || this.store.listPages().some((page) => page.profileId === profile)) {
-      throw this.context.error('conflict', 'browser_error: Close this profile\'s panes and pages before clearing it.')
+      throw this.context.error('conflict', "browser_error: Close this profile's panes and pages before clearing it.")
+    }
+    if (remove && this.canDeleteWithoutNativeClear(profile)) {
+      this.maintaining.add(profile)
+      try {
+        await this.runtime.withProfileMaintenance(profile, async () => {
+          if (!this.active) throw this.context.error('conflict', 'browser_error: Browser is shutting down.')
+          this.store.deleteProfile(profile)
+          this.nativeUsed.delete(profile)
+        })
+      } finally {
+        this.maintaining.delete(profile)
+      }
+      return
     }
     this.maintaining.add(profile)
     const request = randomUUID()
@@ -73,6 +99,10 @@ export class ProfileLifecycle {
       await this.runtime.withProfileMaintenance(profile, async () => {
         if (remove) this.store.deleteProfile(profile)
         else this.store.clearProfileDirectory(profile)
+        if (profile !== 'default') {
+          this.nativeUsed.delete(profile)
+          if (!remove) this.store.markNoNativeUse(profile)
+        }
       })
     } catch (error) {
       if (pending.claimed && !nativeComplete && this.active) {
@@ -86,6 +116,25 @@ export class ProfileLifecycle {
       // profile users until a known completion, or a fresh daemon activation, makes that safe.
       if (!pending.claimed || nativeComplete || !this.active) this.maintaining.delete(profile)
     }
+  }
+
+  private recordNativePanes(): void {
+    for (const pane of this.listPanes()) {
+      if (pane.mode === 'native') this.markNativeUsed(pane.profileId)
+    }
+  }
+
+  private markNativeUsed(profile: string): void {
+    this.nativeUsed.add(profile)
+    try {
+      this.store.clearNoNativeUse(profile)
+    } catch {
+    }
+  }
+
+  private canDeleteWithoutNativeClear(profile: string): boolean {
+    this.recordNativePanes()
+    return profile !== 'default' && !this.nativeUsed.has(profile) && this.store.hasNoNativeUse(profile)
   }
 
   deactivate(): void {

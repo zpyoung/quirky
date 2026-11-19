@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-11-16T20:19:46.119Z",
+  "plugins": [
+    "view:quirky.session/structured"
+  ],
+  "reportPath": "/var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/redesign-chat-input/before/ui-review/review-report.json",
+  "surfaces": [
+    {
+      "id": "view:quirky.session/structured",
+      "plugin": "quirky.session",
+      "dark": 41,
+      "light": 41
+    }
+  ]
+}

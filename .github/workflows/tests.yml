@@ -38,6 +38,8 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - run: bun install --frozen-lockfile
+      - name: Check enrolled UI scoreboard checks
+        run: bun run ui:scoreboard:check
 
       - name: Plan the run
         env:
@@ -106,24 +108,164 @@ jobs:
           name: test-plan
           path: plan
 
+      - name: Prepare sandboxed Chrome
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          chrome=
+          for candidate in /usr/bin/google-chrome /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser; do
+            if [ -x "$candidate" ]; then
+              chrome="$candidate"
+              break
+            fi
+          done
+          if [ -z "$chrome" ]; then
+            echo "No installed Chrome or Chromium executable found" >&2
+            exit 1
+          fi
+          version_started=$SECONDS
+          version_status=0
+          timeout --signal=TERM --kill-after=5s 20s "$chrome" --version || version_status=$?
+          echo "Chrome version probe: $((SECONDS - version_started))s (exit $version_status)"
+          if [ "$version_status" -ne 0 ]; then exit "$version_status"; fi
+          restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$restriction" ] && [ "$(cat "$restriction")" = 1 ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          root=
+          smoke_pid=
+          smoke_attempt=0
+          smoke_pending=0
+          total_started=$SECONDS
+          cleanup_attempt() {
+            if [ -n "$smoke_pid" ]; then
+              kill -TERM -- "-$smoke_pid" 2>/dev/null || true
+              for attempt in {1..50}; do
+                if ! kill -0 -- "-$smoke_pid" 2>/dev/null; then break; fi
+                sleep 0.1
+              done
+              if kill -0 -- "-$smoke_pid" 2>/dev/null; then
+                kill -KILL -- "-$smoke_pid" 2>/dev/null || true
+              fi
+              wait "$smoke_pid" 2>/dev/null || true
+              smoke_pid=
+            fi
+            if [ -n "$root" ]; then
+              rm -rf "$root"
+              root=
+            fi
+          }
+          report_attempt() {
+            smoke_pending=0
+            echo "Chrome sandbox smoke attempt $smoke_attempt/3: $((SECONDS - smoke_started))s (exit $smoke_status, result $smoke_result)"
+            if [ "$smoke_status" -ne 0 ]; then
+              echo "Chrome sandbox smoke attempt $smoke_attempt/3 stderr:" >&2
+              cat "$root/chrome.log" >&2
+              if [ "$smoke_result" = missing-marker ]; then
+                echo "Chrome sandbox smoke attempt $smoke_attempt/3: expected quirky-linux-chrome marker missing" >&2
+              fi
+            fi
+          }
+          cleanup() {
+            status=$?
+            trap - EXIT
+            trap '' INT TERM
+            if [ "$smoke_pending" -eq 1 ]; then
+              smoke_status=$status
+              smoke_result=chrome-exit
+              report_attempt
+            fi
+            cleanup_attempt
+            echo "Chrome sandbox smoke total: $((SECONDS - total_started))s ($smoke_attempt attempts, exit $status)"
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          for smoke_attempt in 1 2 3; do
+            root=$(mktemp -d "$RUNNER_TEMP/quirky-chrome.XXXXXX")
+            mkdir -p "$root/home" "$root/config" "$root/cache" "$root/profile"
+            smoke_started=$SECONDS
+            timeout --signal=TERM --kill-after=5s 60s env \
+              HOME="$root/home" XDG_CONFIG_HOME="$root/config" XDG_CACHE_HOME="$root/cache" \
+              "$chrome" --headless --dump-dom --disable-background-networking \
+              --no-first-run --no-default-browser-check --user-data-dir="$root/profile" \
+              'data:text/html,<html><body>quirky-linux-chrome</body></html>' \
+              > "$root/dom.html" 2> "$root/chrome.log" &
+            smoke_pid=$!
+            smoke_pending=1
+            smoke_status=0
+            wait "$smoke_pid" || smoke_status=$?
+            smoke_result=ok
+            if [ "$smoke_status" -ne 0 ]; then
+              case "$smoke_status" in
+                124|137) smoke_result=timeout ;;
+                *) smoke_result=chrome-exit ;;
+              esac
+            elif ! grep -q 'quirky-linux-chrome' "$root/dom.html"; then
+              smoke_status=1
+              smoke_result=missing-marker
+            fi
+            report_attempt
+            cleanup_attempt
+            if [ "$smoke_status" -eq 0 ]; then exit 0; fi
+          done
+          exit "$smoke_status"
+
+      - name: Set Playwright browser path
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/quirky-playwright" >> "$GITHUB_ENV"
+
+      - name: Install Playwright Chromium
+        run: bun node_modules/playwright/cli.js install chromium
+
       - name: Run shard
         env:
           SHARD: ${{ matrix.shard }}
         run: bun scripts/test-baseline/cli.ts run-shard --plan plan --shard "$SHARD" --out "results/linux-$SHARD.json"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Linux shard results (attempt 1)
+        id: upload_results_1
+        if: ${{ !cancelled() && hashFiles('results/*.json') != '' }}
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-linux-${{ matrix.shard }}
           path: results/
           retention-days: 1
           if-no-files-found: error
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload Linux shard results (attempt 2)
+        id: upload_results_2
+        if: ${{ !cancelled() && steps.upload_results_1.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-${{ matrix.shard }}
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload Linux shard results (attempt 3)
+        id: upload_results_3
+        if: ${{ !cancelled() && steps.upload_results_2.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-${{ matrix.shard }}
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
 
   macos:
     name: macOS
     needs: plan
     if: needs.plan.outputs.has_macos == 'true'
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -147,16 +289,139 @@ jobs:
       - name: Run macOS files
         run: bun scripts/test-baseline/cli.ts run-shard --plan plan --macos --out results/macos.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload macOS results (attempt 1)
+        id: upload_results_1
+        if: ${{ !cancelled() && hashFiles('results/*.json') != '' }}
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-macos
           path: results/
           retention-days: 1
           if-no-files-found: error
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload macOS results (attempt 2)
+        id: upload_results_2
+        if: ${{ !cancelled() && steps.upload_results_1.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload macOS results (attempt 3)
+        id: upload_results_3
+        if: ${{ !cancelled() && steps.upload_results_2.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
+
+  speed:
+    name: Speed
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      QUIRKY_SPEED_RUNNER: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - run: bun install --frozen-lockfile
+      - run: bun node_modules/playwright/cli.js install chromium
+
+      - name: Isolate speed checks
+        run: |
+          echo "QUIRKY_HOME=$(mktemp -d)" >> "$GITHUB_ENV"
+          echo "QUIRKY_SPEED_IMAGE_VERSION=${ImageVersion:?runner image version missing}" >> "$GITHUB_ENV"
+          echo "QUIRKY_SPEED_RUNNER_LATENCY=$RUNNER_TEMP/speed-runner-latency.json" >> "$GITHUB_ENV"
+
+      - name: Configure runner latency experiment
+        run: bun scripts/speed/runner-latency.ts --configure --out "$QUIRKY_SPEED_RUNNER_LATENCY"
+
+      - name: Check real-daemon smoke
+        run: bun test scripts/speed/run.e2e.test.ts
+
+      - name: Prepare speed base
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_SHA=$(git merge-base "$HEAD_SHA" origin/main)
+            BASE_BASIS=merge-base
+          else
+            BASE_SHA=$(git rev-parse "$HEAD_SHA^")
+            BASE_BASIS=parent
+          fi
+          git worktree add --detach "$RUNNER_TEMP/speed-base" "$BASE_SHA"
+          (cd "$RUNNER_TEMP/speed-base" && bun install --frozen-lockfile)
+          {
+            echo "SPEED_BASE_ROOT=$RUNNER_TEMP/speed-base"
+            echo "SPEED_BASE_BASIS=$BASE_BASIS"
+          } >> "$GITHUB_ENV"
+
+      - name: Measure speed
+        run: |
+          measure_args=(--out speed --samples 20)
+          if [ -n "${SPEED_BASE_ROOT:-}" ]; then
+            measure_args+=(--base-root "$SPEED_BASE_ROOT" --base-basis "$SPEED_BASE_BASIS")
+          fi
+          bun scripts/speed.ts "${measure_args[@]}"
+
+      - name: Compare speed
+        if: always()
+        continue-on-error: true
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bun scripts/speed/ci.ts compare --current speed/report.json --pair speed/pair.json --out speed --head "$HEAD_SHA"
+
+      - name: Qualify speed baseline
+        id: qualify
+        if: always()
+        env:
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          bun -e 'import { validateReport } from "./scripts/speed/report.ts"; import { parseArtifactJson } from "./scripts/test-baseline/baseline.ts"; let r = null; try { r = validateReport(parseArtifactJson(await Bun.file("speed/report.json").text())) } catch {} console.log(`qualified=${r?.qualified === true && r.status === "complete" && r.cleanup === "complete" && r.commit === process.env.HEAD_SHA}`)' >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: speed-run
+          path: speed/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.qualify.outputs.qualified == 'true'
+        with:
+          name: speed-baseline-${{ github.sha }}
+          path: speed/report.json
+          retention-days: 14
+          if-no-files-found: error
 
   tests:
     name: Tests
-    needs: [plan, linux, macos]
+    needs: [plan, linux, macos, speed]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -183,23 +448,35 @@ jobs:
           path: results
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          pattern: speed-run
+          path: speed
+          merge-multiple: true
+
       - name: Judge the run
         id: verdict
+        if: always()
         continue-on-error: true
+        env:
+          JOBS_OK: ${{ needs.plan.result != 'failure' && needs.plan.result != 'cancelled' && needs.linux.result != 'failure' && needs.linux.result != 'cancelled' && needs.macos.result != 'failure' && needs.macos.result != 'cancelled' }}
+          SPEED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           mkdir -p plan results out
-          bun scripts/test-baseline/cli.ts verdict --plan plan --in results --out out --jobs-ok ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+          bun scripts/test-baseline/cli.ts verdict --plan plan --in results --out out --jobs-ok "$JOBS_OK" --speed speed
 
       - name: Ensure a comment exists
         if: always()
         run: |
           mkdir -p out
           if [ ! -f out/comment.md ]; then
-            printf '<!-- test-baseline-verdict -->\n## Tests\n\nThe verdict was not produced, so this run counts as failed.\n' > out/comment.md
+            printf '<!-- test-baseline-verdict -->\n## Tests\n\nThe verdict was not produced, so this run counts as failed.\n\n### Speed\n\nnot measured: verdict renderer failed\n' > out/comment.md
           fi
 
       - name: Write the step summary
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         run: cat out/comment.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update the pull request comment

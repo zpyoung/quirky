@@ -1,13 +1,10 @@
-import { Database } from 'bun:sqlite'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { PluginContext, PluginStore, StoreValue } from '@quirky/protocol'
+import type { PluginContext, StoreValue } from '@quirky/protocol'
 import type { Enrollment, JournalAppend, JournalEntry, KernelStore, KindRegistration, TerminalSummary, TickTrace } from './contracts'
 
-const VERSION = 1
 const RING = 50
-type ReadOnlyStore = PluginStore & { close(): void }
 const migration = `
 CREATE TABLE enrollments (
   watcher_id TEXT PRIMARY KEY, kind TEXT NOT NULL, workspace_key TEXT NOT NULL,
@@ -134,36 +131,12 @@ function attemptRetention(entries: JournalEntry[]): { known: boolean; pending: S
   return { known: latest.size > 0, pending }
 }
 
-function futureHandle(path: string): ReadOnlyStore | null {
-  if (!existsSync(path)) return null
-  const db = new Database(path, { readonly: true })
-  const row: unknown = db.query('PRAGMA user_version').get()
-  if (!record(row) || !finite(row.user_version)) { db.close(); throw new Error('Cannot read Heimdall schema version') }
-  const version = row.user_version
-  if (version <= VERSION) { db.close(); return null }
-  return {
-    version,
-    get<T>(sql: string, ...params: StoreValue[]) {
-      return (db.query(sql).get(...(params as never[])) as T | null) ?? null
-    },
-    all<T>(sql: string, ...params: StoreValue[]) {
-      return db.query(sql).all(...(params as never[])) as T[]
-    },
-    run() { throw new Error('Heimdall storage is read-only') },
-    exec() { throw new Error('Heimdall storage is read-only') },
-    transaction() { throw new Error('Heimdall storage is read-only') },
-    // A native read-only connection has an explicit lifetime, unlike the public context-owned handle.
-    close: () => db.close()
-  }
-}
-
 export function createKernelStore(context: PluginContext): KernelStore {
   const path = join(context.dataDir, 'store.db')
-  // The public store checks version after setting WAL: inspect first to leave future files untouched.
-  const future = futureHandle(path)
-  const readOnly = future !== null
-  if (!readOnly) { mkdirSync(context.dataDir, { recursive: true, mode: 0o700 }); chmodSync(context.dataDir, 0o700) }
-  const db = future ?? context.openStore([migration])
+  mkdirSync(context.dataDir, { recursive: true, mode: 0o700 })
+  chmodSync(context.dataDir, 0o700)
+  const db = context.openStore([migration], { newerVersion: 'read-only' })
+  const readOnly = db.readOnly ?? false
   if (!readOnly) db.exec('PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;')
   let closed = false
   function live(write = false): void {
@@ -316,7 +289,6 @@ export function createKernelStore(context: PluginContext): KernelStore {
     close() {
       if (closed) return
       closed = true
-      future?.close()
     }
   }
   return store

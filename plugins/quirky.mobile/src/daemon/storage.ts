@@ -1,4 +1,5 @@
-import { closeSync, chmodSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, chmodSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import type { Stats } from 'node:fs'
 import { hostname } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -30,6 +31,34 @@ export type AuthenticationResult =
   | { status: 'paired'; device: MobileDeviceRecord }
   | { status: 'unauthorized' }
   | { status: 'registry_unavailable' }
+
+export type MobilePairingResetCode = 'pairing_available' | 'not_quarantined' | 'unexpected_entry' | 'write_failed'
+
+export class MobilePairingResetError extends Error {
+  constructor(readonly code: MobilePairingResetCode, message: string, readonly registryReset: boolean) {
+    super(message)
+    this.name = 'MobilePairingResetError'
+  }
+}
+
+export type MobilePairingResetOutcome = {
+  identityCreated: boolean
+  unpairedDevices: number
+  previousRegistry: string | null
+  quarantined: string[]
+  unsynced: string[]
+}
+
+export type PairingResetHookPoint =
+  | 'copy:beforeOpen' | 'copy:created' | 'copy:written'
+  | 'registry:beforeTempOpen' | 'registry:tempOpened' | 'registry:tempWritten' | 'registry:renamed'
+  | 'identity:beforeTempOpen' | 'identity:tempOpened' | 'identity:tempWritten' | 'identity:renamed'
+
+let pairingResetHooksForTests: { at(point: PairingResetHookPoint, path: string): void } | null = null
+
+export function setPairingResetHooksForTests(hooks: { at(point: PairingResetHookPoint, path: string): void } | null): void {
+  pairingResetHooksForTests = hooks
+}
 
 export class MobileStoreError extends Error {
   constructor(readonly code: 'device_registry_unavailable' | 'e2ee_key_unavailable', message: string) {
@@ -103,6 +132,116 @@ function writeSecureAtomic(path: string, value: string): void {
   }
 }
 
+function resetHook(point: PairingResetHookPoint, path: string): void {
+  pairingResetHooksForTests?.at(point, path)
+}
+
+
+function lstatIfPresent(path: string): Stats | null {
+  try {
+    return lstatSync(path)
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+function isPairingQuarantineName(name: string): boolean {
+  return /^(?:devices\.json|e2ee-keypair\.json)\.corrupt-[0-9]+-[0-9a-f]{8}(?![\s\S])/.test(name)
+}
+
+function pairingResetQuarantineNames(dataDir: string): string[] {
+  return readdirSync(dataDir).filter((name) => {
+    if (!isPairingQuarantineName(name)) return false
+    try {
+      return lstatSync(join(dataDir, name)).isFile()
+    } catch {
+      return false
+    }
+  }).sort()
+}
+
+function pairingResetError(code: MobilePairingResetCode, detail: string, registryReset = false): MobilePairingResetError {
+  return new MobilePairingResetError(code, `${code}: ${detail}`, registryReset)
+}
+
+
+function writePairingResetAtomic(
+  path: string,
+  content: string,
+  part: 'registry' | 'identity',
+  committed: () => void
+): boolean {
+  const directory = dirname(path)
+  const temp = join(directory, `.${basename(path)}.tmp-${process.pid}-${randomBytes(8).toString('hex')}`)
+  let descriptor: number | null = null
+  let ownsTemp = false
+  try {
+    resetHook(`${part}:beforeTempOpen`, temp)
+    descriptor = openSync(temp, 'wx', 0o600)
+    ownsTemp = true
+    resetHook(`${part}:tempOpened`, temp)
+    writeFileSync(descriptor, content, 'utf8')
+    fsyncSync(descriptor)
+    fchmodSync(descriptor, 0o600)
+    closeSync(descriptor)
+    descriptor = null
+    resetHook(`${part}:tempWritten`, temp)
+    renameSync(temp, path)
+    ownsTemp = false
+    committed()
+    try {
+      resetHook(`${part}:renamed`, path)
+      syncDirectory(directory)
+      return false
+    } catch {
+      return true
+    }
+  } catch (error) {
+    if (descriptor !== null) {
+      try { closeSync(descriptor) } catch {}
+    }
+    if (ownsTemp) {
+      try { unlinkSync(temp) } catch {}
+    }
+    throw error
+  }
+}
+
+function writePairingResetCopy(path: string, content: Buffer): boolean {
+  const directory = dirname(path)
+  let descriptor: number | null = null
+  let ownsCopy = false
+  try {
+    resetHook('copy:beforeOpen', path)
+    descriptor = openSync(path, 'wx', 0o600)
+    ownsCopy = true
+    resetHook('copy:created', path)
+    writeFileSync(descriptor, content)
+    fsyncSync(descriptor)
+    fchmodSync(descriptor, 0o600)
+    closeSync(descriptor)
+    descriptor = null
+    ownsCopy = false
+    try {
+      resetHook('copy:written', path)
+      syncDirectory(directory)
+      return false
+    } catch {
+      return true
+    }
+  } catch (error) {
+    if (descriptor !== null) {
+      try { closeSync(descriptor) } catch {}
+    }
+    if (ownsCopy) {
+      try { unlinkSync(path) } catch {}
+    }
+    throw error
+  }
+}
+
+
 function readJson(path: string): unknown {
   chmodSync(path, 0o600)
   return JSON.parse(readFileSync(path, 'utf8')) as unknown
@@ -129,7 +268,7 @@ function normalizeSettings(value: unknown): MobileSettings | null {
   return { machineName, showMobileButton, onboardingSeen, autoRestoreFitMs, customAddresses: addresses }
 }
 
-/** Private durable pairing state; corruption is quarantined and never reinterpreted as an empty registry. */
+/** Private durable pairing state; quarantine prevents fresh initialization on later starts. */
 export class MobileStore {
   private readonly identityPath: string
   private readonly registryPath: string
@@ -243,10 +382,147 @@ export class MobileStore {
     this.identityAvailable = false
   }
 
+  /** Returns the ordered eligibility refusal without changing disk or memory. */
+  pairingResetRefusal(): MobilePairingResetError | null {
+    if (this.registryAvailable && this.identityAvailable) {
+      return pairingResetError('pairing_available', 'the device registry and encryption identity are both available; nothing was reset')
+    }
+
+    const unavailable = [
+      ...(!this.registryAvailable ? [{ filename: 'devices.json', path: this.registryPath }] : []),
+      ...(!this.identityAvailable ? [{ filename: 'e2ee-keypair.json', path: this.identityPath }] : [])
+    ]
+
+    for (const part of unavailable) {
+      let entry: Stats | null
+      try {
+        entry = lstatIfPresent(part.path)
+      } catch {
+        return pairingResetError('not_quarantined', `${part.filename} exists but is unavailable; it was not set aside, so nothing was reset`)
+      }
+      if (entry) {
+        return pairingResetError('not_quarantined', `${part.filename} exists but is unavailable; it was not set aside, so nothing was reset`)
+      }
+    }
+
+    let quarantined: string[]
+    try {
+      quarantined = pairingResetQuarantineNames(this.dataDir)
+    } catch {
+      const part = unavailable[0]!
+      return pairingResetError('not_quarantined', `${part.filename} is missing and no ${part.filename}.corrupt- file exists; nothing was reset`)
+    }
+    for (const part of unavailable) {
+      const prefix = `${part.filename}.corrupt-`
+      if (!quarantined.some((name) => name.startsWith(prefix))) {
+        return pairingResetError('not_quarantined', `${part.filename} is missing and no ${part.filename}.corrupt- file exists; nothing was reset`)
+      }
+    }
+
+    if (!this.identityAvailable && this.registryAvailable) {
+      let entry: Stats | null
+      try {
+        entry = lstatIfPresent(this.registryPath)
+      } catch {
+        return pairingResetError('unexpected_entry', 'devices.json is not a regular file; nothing was reset')
+      }
+      if (entry && (!entry.isFile() || entry.isSymbolicLink())) {
+        return pairingResetError('unexpected_entry', 'devices.json is not a regular file; nothing was reset')
+      }
+    }
+    return null
+  }
+
+  /** Replaces only pairing state that startup quarantined, preserving every set-aside file. */
+  resetPairing(): MobilePairingResetOutcome {
+    const refusal = this.pairingResetRefusal()
+    if (refusal) throw refusal
+
+    const quarantined = pairingResetQuarantineNames(this.dataDir)
+    const unpairedDevices = this.registryAvailable
+      ? this.devicesValue.filter((device) => device.lastSeenAt > 0).length
+      : 0
+    const unsynced: string[] = []
+    let previousRegistry: string | null = null
+
+    if (!this.identityAvailable && this.registryAvailable && this.devicesValue.length > 0) {
+      const copyName = `devices.json.reset-${Date.now()}-${randomBytes(4).toString('hex')}`
+      const copyPath = join(this.dataDir, copyName)
+      try {
+        const bytes = readFileSync(this.registryPath)
+        if (writePairingResetCopy(copyPath, bytes)) unsynced.push(copyName)
+        previousRegistry = copyName
+      } catch (error) {
+        const cause = error instanceof Error ? error.message : String(error)
+        throw pairingResetError(
+          'write_failed',
+          `devices.json.reset- copy could not be written (${cause}); nothing was reset`
+        )
+      }
+    }
+
+    try {
+      if (writePairingResetAtomic(this.registryPath, '[]', 'registry', () => {
+        this.devicesValue = []
+        this.registryAvailable = true
+      })) unsynced.push('devices.json')
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error)
+      throw pairingResetError(
+        'write_failed',
+        `devices.json could not be written (${cause}); the registry and identity are unchanged`
+      )
+    }
+
+    let identityCreated = false
+    if (!this.identityAvailable) {
+      let secretKey: Uint8Array | null = null
+      try {
+        const pair = nacl.box.keyPair()
+        secretKey = pair.secretKey
+        const publicKeyB64 = Buffer.from(pair.publicKey).toString('base64')
+        const identity: MobileIdentity = { publicKeyB64, secretKey }
+        const content = JSON.stringify({
+          v: 1,
+          publicKeyB64,
+          secretKeyB64: Buffer.from(secretKey).toString('base64')
+        })
+        if (writePairingResetAtomic(this.identityPath, content, 'identity', () => {
+          this.identityValue = identity
+          this.identityAvailable = true
+        })) unsynced.push('e2ee-keypair.json')
+        identityCreated = true
+      } catch (error) {
+        secretKey?.fill(0)
+        const cause = error instanceof Error ? error.message : String(error)
+        throw pairingResetError(
+          'write_failed',
+          `e2ee-keypair.json could not be written (${cause}); the device registry was reset, so run reset-pairing again`,
+          true
+        )
+      }
+    }
+
+    return { identityCreated, unpairedDevices, previousRegistry, quarantined, unsynced }
+  }
+
+
   private loadIdentityAndRegistry(): void {
-    const hasIdentity = existsSync(this.identityPath)
-    const hasRegistry = existsSync(this.registryPath)
+    let hasIdentity: boolean
+    let hasRegistry: boolean
+    try {
+      hasIdentity = existsSync(this.identityPath)
+      hasRegistry = existsSync(this.registryPath)
+    } catch {
+      return
+    }
     if (!hasIdentity && !hasRegistry) {
+      try {
+        if (lstatIfPresent(this.identityPath) || lstatIfPresent(this.registryPath)) return
+        if (readdirSync(this.dataDir).some(isPairingQuarantineName)) return
+      } catch {
+        return
+      }
       this.createInitialIdentity()
       this.devicesValue = []
       this.registryAvailable = true

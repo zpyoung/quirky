@@ -1,0 +1,380 @@
+.remote-workspaces {
+  gap: var(--ui-space-16);
+  padding: var(--ui-space-12);
+}
+
+.remote-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.remote-workspaces .ui-text-field,
+.remote-workspace .ui-text-field,
+.vm-environments .ui-text-field {
+  gap: var(--ui-space-6);
+}
+
+.remote-workspaces .ui-text-field > .ui-text-field__label,
+.remote-workspace .ui-text-field > .ui-text-field__label,
+.vm-environments .ui-text-field > .ui-text-field__label {
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.remote-workspaces .ui-button,
+.remote-workspace .ui-button,
+.vm-environments .ui-button {
+  font-weight: 500;
+  min-height: var(--ui-row-single);
+}
+
+.remote-workspaces .ui-button:not(.ui-button--primary):not(.ui-button--destructive),
+.remote-workspace .ui-button:not(.ui-button--primary):not(.ui-button--destructive),
+.vm-environments .ui-button:not(.ui-button--primary):not(.ui-button--destructive) {
+  background: var(--ui-transparent);
+}
+
+.remote-workspaces .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled),
+.remote-workspace .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled),
+.vm-environments .ui-button:not(.ui-button--primary):not(.ui-button--destructive):hover:not(:disabled) {
+  background: var(--ui-selected);
+}
+
+.remote-workspaces .ui-button:disabled,
+.remote-workspace .ui-button:disabled,
+.vm-environments .ui-button:disabled {
+  background: var(--ui-transparent);
+  color: var(--ui-text);
+  opacity: 0.7;
+}
+
+.vm-environments .remote-form > .ui-button {
+  align-self: flex-start;
+}
+
+.remote-replace .ui-checkbox,
+.vm-recipe .ui-checkbox {
+  align-items: flex-start;
+  gap: var(--ui-space-8);
+  line-height: 1.4;
+}
+
+.remote-replace .ui-checkbox__input,
+.vm-recipe .ui-checkbox__input {
+  appearance: none;
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-mark);
+  box-sizing: border-box;
+  display: grid;
+  height: calc(var(--ui-checkbox-size) - var(--ui-space-2));
+  margin: var(--ui-space-2) 0 0;
+  place-content: center;
+  width: calc(var(--ui-checkbox-size) - var(--ui-space-2));
+}
+
+.remote-replace .ui-checkbox__input:checked,
+.vm-recipe .ui-checkbox__input:checked {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.remote-replace .ui-checkbox__input:checked::after,
+.vm-recipe .ui-checkbox__input:checked::after {
+  background: var(--ui-surface);
+  clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 85% 8%, 38% 70%);
+  content: '';
+  height: 70%;
+  width: 70%;
+}
+
+.remote-replace .ui-checkbox__input:disabled,
+.vm-recipe .ui-checkbox__input:disabled {
+  cursor: not-allowed;
+}
+
+.remote-replace,
+.vm-recipe {
+  border: 0;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.remote-host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.remote-host-header {
+  flex-wrap: nowrap;
+  padding-inline: var(--ui-space-6);
+}
+
+.remote-host-header > .ui-section-header__title {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  font-size: var(--ui-font-label);
+  font-weight: 400;
+  gap: var(--ui-space-6);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.remote-host-header .remote-host-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-host-header > .ui-section-header__actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.remote-fact {
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.remote-rows,
+.remote-changes,
+.remote-blockers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.remote-blockers {
+  color: var(--ui-muted);
+}
+
+.remote-rows .ui-list-row,
+.remote-changes .ui-list-row {
+  background: inherit;
+  border: 0;
+  border-radius: var(--ui-radius-mark);
+  padding-inline: var(--ui-space-6);
+}
+
+.remote-rows .ui-list-row--interactive:hover:not([aria-disabled='true']),
+.remote-changes .ui-list-row--interactive:hover:not([aria-disabled='true']) {
+  background: var(--ui-selected);
+}
+
+.remote-reveal,
+.vm-reveal {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.remote-row:hover .remote-reveal,
+.remote-row:focus-within .remote-reveal,
+.vm-row:hover .vm-reveal,
+.vm-row:focus-within .vm-reveal {
+  opacity: 1;
+}
+
+.vm-environments,
+.remote-workspace {
+  color: var(--ui-text);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--ui-font-body);
+  gap: var(--ui-space-12);
+  margin-inline: auto;
+  max-width: var(--ui-dialog-wide-width);
+  min-width: 0;
+  padding: var(--ui-space-16);
+}
+
+.vm-environments > .ui-section-header > .ui-section-header__title {
+  font-size: var(--ui-font-label);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.vm-environments {
+  gap: var(--ui-space-16);
+  padding: var(--ui-space-16);
+}
+
+.vm-environments p,
+.remote-workspace p {
+  margin: 0;
+}
+
+.vm-diagnostics > summary {
+  color: var(--ui-muted);
+  cursor: pointer;
+  font-size: var(--ui-font-label);
+}
+
+.vm-diagnostics__body,
+.vm-recipe__commands,
+.remote-pre {
+  background: var(--ui-surface);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-control);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--ui-font-mono);
+  margin: 0;
+  overflow: auto;
+  padding: var(--ui-space-8);
+  white-space: pre-wrap;
+}
+
+.vm-table {
+  border-collapse: collapse;
+  font-size: var(--ui-font-body);
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+
+.vm-table th {
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  color: var(--ui-muted);
+  font-size: var(--ui-font-label);
+  font-weight: 400;
+  padding: var(--ui-space-4) var(--ui-space-8);
+  text-align: start;
+}
+
+.vm-table td {
+  min-height: var(--ui-row-single);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  vertical-align: middle;
+}
+
+.vm-table tbody tr:hover {
+  background: var(--ui-selected);
+}
+
+.vm-table__name {
+  display: block;
+}
+
+.vm-table__error {
+  display: block;
+}
+
+.vm-table__actions {
+  text-align: end;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.vm-table__sr {
+  clip: rect(0, 0, 0, 0);
+  height: var(--ui-border-width);
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
+}
+
+.vm-lifecycle {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--ui-space-6);
+}
+
+.remote-workspace__header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+  justify-content: space-between;
+}
+
+.remote-workspace__title {
+  font-size: var(--ui-font-title);
+  font-weight: 600;
+  margin: 0;
+}
+
+.remote-workspace__state {
+  align-items: center;
+  color: var(--ui-muted);
+  display: inline-flex;
+  font-size: var(--ui-font-label);
+  gap: var(--ui-space-6);
+}
+
+.remote-workspace__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-8);
+  min-width: 0;
+}
+
+.remote-details {
+  display: grid;
+  gap: var(--ui-space-4) var(--ui-space-16);
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0;
+}
+
+.remote-details > dt {
+  color: var(--ui-muted);
+}
+
+.remote-details > dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.remote-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-8);
+}
+
+.remote-diff__path {
+  font-size: var(--ui-font-label);
+  font-weight: 400;
+  margin: 0;
+}
+
+.remote-diff__panes {
+  display: grid;
+  gap: var(--ui-space-8);
+  grid-template-columns: 1fr 1fr;
+}
+
+.remote-pre--screen {
+  max-height: 45vh;
+  white-space: pre;
+}
+
+.remote-terminal__controls {
+  align-items: flex-end;
+}
+
+.remote-terminal__input {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ui-space-8);
+}
+
+.remote-terminal__input > .ui-text-field {
+  flex: 1 1 var(--ui-form-column-width);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .remote-reveal,
+  .vm-reveal {
+    transition: none;
+  }
+}

@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import type { QuirkyClient } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 import type { EditorBufferInfo, EditorOpenResult } from '../src/types'
@@ -13,8 +13,21 @@ type Fixture = {
   client: QuirkyClient
   home: string
   root: string
+  roots: string[]
   worktreeId: string
   call<T>(method: string, params?: Record<string, unknown>): Promise<T>
+}
+type WindowFixture = Fixture & {
+  rootB: string
+  worktreeBId: string
+  ui1: QuirkyClient
+  ui2: QuirkyClient
+  c1: number
+  c2: number
+}
+type WindowLayout = {
+  worktree: string | null
+  view: { id: string; input?: unknown } | null
 }
 type EditorBuffer = EditorBufferInfo & { content?: string; draft?: string | null; diskContent?: string | null }
 type EditorSnapshot = {
@@ -45,7 +58,7 @@ afterEach(async () => {
     } catch (error) {
       failures.push(error)
     } finally {
-      rmSync(fixture.root, { recursive: true, force: true })
+      for (const root of fixture.roots) rmSync(root, { recursive: true, force: true })
     }
   }
   if (failures.length > 0) throw new AggregateError(failures, 'Editor acceptance fixture cleanup failed')
@@ -53,7 +66,7 @@ afterEach(async () => {
 
 async function boot(): Promise<Fixture> {
   const home = makeHomeWithoutAutoHooks('quirky-editor-acceptance-')
-  const root = mkdtempSync(join(tmpdir(), 'quirky-editor-acceptance-repo-'))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-acceptance-repo-')))
   let harness: Harness | undefined
   try {
     const git = spawnSync('git', ['init', '-q'], {
@@ -74,7 +87,7 @@ async function boot(): Promise<Fixture> {
     const call = <T>(method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<T>
     await call('quirky.repo/add', { path: root })
     const worktree = await call<{ id: string }>('quirky.worktree/resolve', { selector: `path:${root}` })
-    const fixture: Fixture = { harness, client, home, root, worktreeId: worktree.id, call }
+    const fixture: Fixture = { harness, client, home, root, roots: [root], worktreeId: worktree.id, call }
     fixtures.add(fixture)
     return fixture
   } catch (error) {
@@ -94,9 +107,77 @@ function writeFixture(fixture: Fixture, path: string, text: string): string {
   return absolute
 }
 
+async function addWindowFixture(): Promise<WindowFixture> {
+  const fixture = await boot()
+  const rootB = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-editor-acceptance-repo-')))
+  fixture.roots.push(rootB)
+  const git = spawnSync('git', ['init', '-q'], {
+    cwd: rootB,
+    encoding: 'utf8',
+    env: {
+      PATH: process.env.PATH ?? '',
+      HOME: fixture.home,
+      QUIRKY_HOME: fixture.home,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_TERMINAL_PROMPT: '0'
+    }
+  })
+  if (git.status !== 0) throw new Error(`git init failed: ${git.stderr}`)
+
+  writeFixture(fixture, 'src/app.ts', 'first A\nsecond A\n')
+  writeFixture(fixture, 'docs/sentinel.md', '# A\n')
+  for (const [path, content] of [
+    ['src/app.ts', 'first\nsecond λ\n'],
+    ['docs/sentinel.md', '# B\n'],
+    ['docs/other.md', '# other\n']
+  ]) {
+    const absolute = join(rootB, path)
+    mkdirSync(dirname(absolute), { recursive: true })
+    writeFileSync(absolute, content)
+  }
+  await fixture.call('quirky.repo/add', { path: rootB })
+  const worktreeB = await fixture.call<{ id: string }>('quirky.worktree/resolve', { selector: `path:${rootB}` })
+  const ui1 = await fixture.harness.connect('ui')
+  const ui2 = await fixture.harness.connect('ui')
+  const { connId: c1 } = await ui1.callAny('ui.window.self', {}) as { connId: number }
+  const { connId: c2 } = await ui2.callAny('ui.window.self', {}) as { connId: number }
+  await ui1.callAny('ui.window.view.open', {
+    connId: c1,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: fixture.worktreeId }
+  })
+  await ui2.callAny('ui.window.view.open', {
+    connId: c2,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: fixture.worktreeId }
+  })
+  await fixture.call('quirky.editor/open', {
+    worktree: worktreeB.id,
+    path: 'docs/sentinel.md',
+    focus: true
+  })
+  return { ...fixture, rootB, worktreeBId: worktreeB.id, ui1, ui2, c1, c2 }
+}
+
+async function windowLayout(fixture: Fixture, connId: number): Promise<WindowLayout> {
+  const result = await fixture.call<{ layout: WindowLayout }>('ui.window.state', { connId })
+  return result.layout
+}
+
+async function windowSnapshot(fixture: WindowFixture) {
+  const [c1, c2, editor] = await Promise.all([
+    windowLayout(fixture, fixture.c1),
+    windowLayout(fixture, fixture.c2),
+    state(fixture, fixture.worktreeBId)
+  ])
+  return { c1, c2, editor }
+}
+
 const open = (fixture: Fixture, path: string, options: Record<string, unknown> = {}) =>
   fixture.call<EditorOpenResult>('quirky.editor/open', { worktree: fixture.worktreeId, path, ...options })
-const state = (fixture: Fixture) => fixture.call<EditorSnapshot>('quirky.editor/state', { worktree: fixture.worktreeId })
+const state = (fixture: Fixture, worktreeId = fixture.worktreeId) =>
+  fixture.call<EditorSnapshot>('quirky.editor/state', { worktree: worktreeId })
 
 async function bufferOf(fixture: Fixture, bufferId: string): Promise<EditorBuffer> {
   const result = await fixture.call<{ buffer?: EditorBuffer }>('quirky.editor/read', { bufferId, action: 'buffer' })
@@ -167,9 +248,9 @@ function groupsIn(root: TerminalGroup): TerminalGroup[] {
   ]
 }
 
-async function activeTab(fixture: Fixture): Promise<string | null> {
+async function activeTab(fixture: Fixture, worktreeId = fixture.worktreeId): Promise<string | null> {
   const { workspace } = await fixture.call<{ workspace: TerminalWorkspace }>('quirky.terminal/workspace', {
-    workspace: `id:${fixture.worktreeId}`
+    workspace: `id:${worktreeId}`
   })
   return groupsIn(workspace.root).find((group) => group.id === workspace.activeGroup)?.activeTab ?? null
 }
@@ -405,3 +486,95 @@ test('SC-3: save-close closes a saved tab but preserves a conflicted draft and i
     diskContent: 'external version\n'
   })
 })
+
+test('CLI --window navigates the selected window and implies focus on a reused tab', async () => {
+  const fixture = await addWindowFixture()
+  const c2Before = await windowLayout(fixture, fixture.c2)
+  const opened = cliJson<EditorOpenResult>(await runEditorCli(fixture, 'open', {
+    path: 'src/app.ts',
+    worktree: fixture.worktreeBId,
+    focus: true,
+    window: fixture.c1,
+    mode: 'source',
+    line: 2,
+    column: 3
+  }))
+
+  expect(opened.worktreeId).toBe(fixture.worktreeBId)
+  expect(opened.path).toBe(join(fixture.rootB, 'src/app.ts'))
+  expect(typeof opened.openedTabId).toBe('string')
+  const c1AfterOpen = await windowLayout(fixture, fixture.c1)
+  expect(c1AfterOpen.worktree).toBe(fixture.worktreeBId)
+  expect(c1AfterOpen.view).toEqual({
+    id: 'view:quirky.session/worktree',
+    input: { worktree: fixture.worktreeBId }
+  })
+  expect(await windowLayout(fixture, fixture.c2)).toEqual(c2Before)
+  expect(await activeTab(fixture, fixture.worktreeBId)).toBe(opened.openedTabId)
+  expect((await state(fixture, fixture.worktreeBId)).tabs).toContainEqual(expect.objectContaining({
+    tabId: opened.openedTabId,
+    bufferId: opened.id
+  }))
+  const firstBuffer = await bufferOf(fixture, opened.id)
+  expect((firstBuffer.view.byTabId as Record<string, Record<string, unknown>>)[opened.openedTabId])
+    .toMatchObject({ line: 2, column: 3, focused: true })
+
+  await fixture.ui1.callAny('ui.window.view.open', {
+    connId: fixture.c1,
+    id: 'view:quirky.session/worktree',
+    input: { worktree: fixture.worktreeId }
+  })
+  const reopened = cliJson<EditorOpenResult>(await runEditorCli(fixture, 'open', {
+    path: 'src/app.ts',
+    worktree: fixture.worktreeBId,
+    window: fixture.c1
+  }))
+  expect(reopened.id).toBe(opened.id)
+  expect(reopened.openedTabId).toBe(opened.openedTabId)
+  expect((await windowLayout(fixture, fixture.c1)).worktree).toBe(fixture.worktreeBId)
+  expect(await windowLayout(fixture, fixture.c2)).toEqual(c2Before)
+  expect(await activeTab(fixture, fixture.worktreeBId)).toBe(opened.openedTabId)
+  expect((await state(fixture, fixture.worktreeBId)).tabs.filter((tab) => tab.bufferId === opened.id))
+    .toHaveLength(1)
+
+  const help = await runCli(fixture, ['editor', 'open', '--help'])
+  expect(help.code).toBe(0)
+  expect(help.stdout).toContain('--window')
+}, 30_000)
+
+test('CLI --window refusals return exact errors without changing public state', async () => {
+  const fixture = await addWindowFixture()
+  const before = await windowSnapshot(fixture)
+
+  const closedWindow = await runEditorCli(fixture, 'open', {
+    path: 'src/app.ts',
+    worktree: fixture.worktreeBId,
+    window: 999
+  })
+  expect(closedWindow.code).toBe(1)
+  expect(JSON.parse(closedWindow.stdout)).toMatchObject({
+    error: { code: 'conflict', message: 'UI window connection 999 is not open' }
+  })
+  expect(await windowSnapshot(fixture)).toEqual(before)
+
+  const invalidWindow = await runEditorCli(fixture, 'open', {
+    path: 'src/app.ts',
+    worktree: fixture.worktreeBId,
+    window: 0
+  })
+  expect(invalidWindow.code).toBe(2)
+  expect(JSON.parse(invalidWindow.stdout)).toMatchObject({ error: { code: 'usage' } })
+  expect(await windowSnapshot(fixture)).toEqual(before)
+
+  const backgroundWindow = await runEditorCli(fixture, 'open', {
+    path: 'src/app.ts',
+    worktree: fixture.worktreeBId,
+    focus: false,
+    window: fixture.c1
+  })
+  expect(backgroundWindow.code).toBe(1)
+  expect(JSON.parse(backgroundWindow.stdout)).toMatchObject({
+    error: { code: 'invalid-params', message: 'window cannot be combined with focus: false' }
+  })
+  expect(await windowSnapshot(fixture)).toEqual(before)
+}, 30_000)

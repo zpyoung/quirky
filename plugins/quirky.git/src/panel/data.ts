@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitCompare, GitStatus, UiPluginContext, Worktree } from '@quirky/protocol'
 import { conflictBlocks } from '../view/conflict-markers'
 import { dataOf, messageOf } from './format'
-import type { GroupOrder } from './sections'
+import { readWindowStatus, subscribeWindowStatus } from '../status-resource'
 
 export const STATUS_POLL_MS = 3000
 export const COMPARE_POLL_MS = 30_000
 
 export type ViewMode = 'list' | 'tree'
 
-const GROUP_ORDERS: readonly GroupOrder[] = ['changes-first', 'staged-first', 'untracked-first']
 const VIEW_MODES: readonly ViewMode[] = ['list', 'tree']
 const COMPARE_BASES = ['repository-default', 'branch-upstream'] as const
 
 /** The settings the panel reads; each falls back to its default when the setting is missing or invalid. */
-export type PanelSettings = { groupOrder: GroupOrder; viewMode: ViewMode; compareBase: string; aiEnabled: boolean }
+export type PanelSettings = { viewMode: ViewMode; compareBase: string; aiEnabled: boolean }
 
 function read<T extends string>(context: UiPluginContext, name: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -36,7 +35,6 @@ function readAiEnabled(context: UiPluginContext): boolean {
 
 function readSettings(context: UiPluginContext): PanelSettings {
   return {
-    groupOrder: read(context, 'groupOrder', GROUP_ORDERS, 'changes-first'),
     viewMode: read(context, 'viewMode', VIEW_MODES, 'list'),
     compareBase: read(context, 'compareBase', COMPARE_BASES, 'repository-default'),
     aiEnabled: readAiEnabled(context)
@@ -49,8 +47,9 @@ const VIEW_MODE_ID = 'setting:quirky.git/viewMode'
  * The panel's settings, re-read on `setting.changed`. `setViewMode` shows the new mode at once
  * and writes it through `setting.set`; a refused write puts the stored mode back.
  */
-export function useSettings(context: UiPluginContext): [PanelSettings, (mode: ViewMode) => void] {
+export function useSettings(context: UiPluginContext): [PanelSettings, (mode: ViewMode, current?: () => boolean) => void] {
   const [settings, setSettings] = useState(() => readSettings(context))
+  const writeVersion = useRef(0)
   useEffect(() => {
     setSettings(readSettings(context))
     return context.subscribe((event) => {
@@ -63,10 +62,12 @@ export function useSettings(context: UiPluginContext): [PanelSettings, (mode: Vi
     })
   }, [context])
   const setViewMode = useCallback(
-    (mode: ViewMode) => {
+    (mode: ViewMode, current?: () => boolean) => {
+      const version = ++writeVersion.current
       setSettings((prev) => ({ ...prev, viewMode: mode }))
       context.call('setting.set', { id: VIEW_MODE_ID, value: mode }).catch((error: unknown) => {
-        context.toast('Could not change the view', messageOf(error))
+        if (version !== writeVersion.current || (current !== undefined && !current())) return
+        context.toast('Could not change the view', messageOf(error), { kind: 'error' })
         setSettings(readSettings(context))
       })
     },
@@ -118,8 +119,8 @@ export type StatusData = {
 const NO_PATHS: ReadonlySet<string> = new Set()
 
 /**
- * Polls `quirky.git/status` every 3 seconds while mounted and again on this worktree's
- * `quirky.git/changed` events. An unchanged result keeps the previous object so nothing re-renders.
+ * Shares bounded status reads with the other Git surfaces. Equal snapshots and readiness sets
+ * keep their existing object identities so an unchanged repository does not re-render.
  */
 export function useStatus(context: UiPluginContext, worktree: string): StatusData {
   const [status, setStatus] = useState<GitStatus | null>(null)
@@ -129,42 +130,81 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
   const [unreadableConflicts, setUnreadableConflicts] = useState<ReadonlySet<string>>(NO_PATHS)
   const newest = useRef(0)
   const alive = useRef(true)
+  const refreshes = useRef(new Set<AbortController>())
+  const processing = useRef<{ status: GitStatus; promise: Promise<void> } | null>(null)
 
-  const refresh = useCallback(async (): Promise<GitStatus | null> => {
+  const applyStatus = useCallback((next: GitStatus): Promise<void> => {
+    if (!alive.current) return Promise.resolve()
+    const pending = processing.current
+    if (pending?.status === next) return pending.promise
+
     const ticket = ++newest.current
-    try {
-      const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
-      const readiness = await findConflictReadiness(context, worktree, next)
-      if (!alive.current || ticket !== newest.current) return next
-      setStatus((prev) => (same(prev, next) ? prev : next))
-      setMarkersGone((prev) => (same([...prev].sort(), [...readiness.markersGone].sort()) ? prev : readiness.markersGone))
-      setUnreadableConflicts((prev) => (same([...prev].sort(), [...readiness.unreadableConflicts].sort()) ? prev : readiness.unreadableConflicts))
+    const promise = findConflictReadiness(context, worktree, next).then((readiness) => {
+      if (!alive.current || ticket !== newest.current) return
+      setStatus((previous) => (same(previous, next) ? previous : next))
+      setMarkersGone((previous) =>
+        same([...previous].sort(), [...readiness.markersGone].sort()) ? previous : readiness.markersGone)
+      setUnreadableConflicts((previous) =>
+        same([...previous].sort(), [...readiness.unreadableConflicts].sort()) ? previous : readiness.unreadableConflicts)
       setError(null)
       setUnavailable(null)
-      return next
-    } catch (e) {
-      if (!alive.current || ticket !== newest.current) return null
-      if (dataOf(e).reason === 'folder-workspace') setUnavailable(messageOf(e))
-      else setError(messageOf(e))
-      return null
-    }
+    })
+    const current = { status: next, promise }
+    processing.current = current
+    void promise.then(
+      () => {
+        if (processing.current === current) processing.current = null
+      },
+      () => {
+        if (processing.current === current) processing.current = null
+      }
+    )
+    return promise
   }, [context, worktree])
+
+  const onStatus = useCallback((result: { status: GitStatus | null; error: unknown | null }) => {
+    if (!alive.current) return
+    if (result.status !== null) {
+      void applyStatus(result.status)
+      return
+    }
+    if (result.error === null) return
+    newest.current += 1
+    if (dataOf(result.error).reason === 'folder-workspace') setUnavailable(messageOf(result.error))
+    else setError(messageOf(result.error))
+  }, [applyStatus])
+
+  const refresh = useMemo(() => {
+    async function refresh(): Promise<GitStatus | null> {
+      newest.current += 1
+      processing.current = null
+      const controller = new AbortController()
+      refreshes.current.add(controller)
+      try {
+        const next = await readWindowStatus(context, worktree, { fresh: true, signal: controller.signal })
+        if (!alive.current || controller.signal.aborted) return null
+        await applyStatus(next)
+        return next
+      } catch {
+        return null
+      } finally {
+        refreshes.current.delete(controller)
+      }
+    }
+    return refresh
+  }, [applyStatus, context, worktree])
 
   useEffect(() => {
     alive.current = true
-    void refresh()
-    const timer = setInterval(() => void refresh(), STATUS_POLL_MS)
-    const unsubscribe = context.subscribe((event) => {
-      if (event.type !== 'quirky.git/changed') return
-      const id = (event.data as { worktreeId?: unknown } | undefined)?.worktreeId
-      if (typeof id !== 'string' || id === worktree) void refresh()
-    })
+    const unsubscribe = subscribeWindowStatus(context, worktree, STATUS_POLL_MS, onStatus)
     return () => {
       alive.current = false
-      clearInterval(timer)
+      newest.current += 1
+      for (const controller of refreshes.current) controller.abort()
+      refreshes.current.clear()
       unsubscribe()
     }
-  }, [context, worktree, refresh])
+  }, [context, onStatus, worktree])
 
   return { status, error, unavailable, markersGone, unreadableConflicts, refresh }
 }
@@ -173,6 +213,8 @@ export type CompareData = {
   compare: GitCompare | null
   /** The compare call itself failed (not an unready compare, which is a result). */
   error: string | null
+  /** The current status/base trigger has no settled comparison read, successful or failed. */
+  pending: boolean
   refresh(): Promise<void>
 }
 
@@ -182,20 +224,26 @@ export type CompareData = {
  * `refresh` is called.
  */
 export function useCompare(context: UiPluginContext, worktree: string, trigger: string, enabled: boolean): CompareData {
-  const [compare, setCompare] = useState<GitCompare | null>(null)
+  const [loaded, setLoaded] = useState<{ compare: GitCompare | null; trigger: string } | null>(null)
+  const compare = loaded?.compare ?? null
   const [error, setError] = useState<string | null>(null)
   const newest = useRef(0)
   const alive = useRef(true)
+  const currentTrigger = useRef(trigger)
+  currentTrigger.current = trigger
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async function refresh(): Promise<void> {
     const ticket = ++newest.current
+    const requestedTrigger = currentTrigger.current
     try {
       const next = (await context.call('quirky.git/compare', { worktree })) as GitCompare
       if (!alive.current || ticket !== newest.current) return
-      setCompare((prev) => (same(prev, next) ? prev : next))
+      setLoaded((prev) => prev?.trigger === requestedTrigger && same(prev.compare, next) ? prev : { compare: next, trigger: requestedTrigger })
       setError(null)
     } catch (e) {
-      if (alive.current && ticket === newest.current) setError(messageOf(e))
+      if (!alive.current || ticket !== newest.current) return
+      setLoaded((prev) => ({ compare: prev?.compare ?? null, trigger: requestedTrigger }))
+      setError(messageOf(e))
     }
   }, [context, worktree])
 
@@ -212,7 +260,7 @@ export function useCompare(context: UiPluginContext, worktree: string, trigger: 
     }
   }, [refresh, trigger, enabled])
 
-  return { compare, error, refresh }
+  return { compare, error, pending: enabled && loaded?.trigger !== trigger, refresh }
 }
 
 /** The absolute path of the worktree, for Copy Path and dragging; null until it resolves. */

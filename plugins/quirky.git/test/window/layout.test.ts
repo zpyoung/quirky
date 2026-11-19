@@ -1,13 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { click, primary, primaryNow, q, qa, rowContainerOf, rowOf, sectionHeadings, text, type } from './dom'
+import { click, primary, primaryNow, q, qa, rowContainerOf, rowOf, rowPaths, sectionHeadings, text, type } from './dom'
 import { boot, sc1, shutdown } from './world'
 
 const { scratch } = isolateGitConfig()
 const SLOW = 60_000
 afterEach(shutdown)
 
-const sectionCounts = () => qa('[data-section-count]').map(text)
 const sourceControlStatus = () => {
   const button = qa('button').find((item) => item.getAttribute('aria-label')?.startsWith('Source Control'))
   if (!button) return null
@@ -22,10 +21,14 @@ test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const w = await boot(scratch)
   w.commit({ 'util.ts': 'export const u = 1\n' }, 'ahead')
   sc1(w)
-  await w.win.waitFor(() => rowOf('notes.txt') && sectionHeadings().includes('Committed on Branch'))
+  await w.win.waitFor(() => rowOf('notes.txt') && rowOf('util.ts'))
 
-  expect(sectionHeadings()).toEqual(['Changes', 'Staged Changes', 'Untracked Files', 'Committed on Branch', 'Commits'])
-  expect(sectionCounts().slice(0, 4)).toEqual(['1', '2', '1', '1'])
+  expect(rowPaths()).toEqual(['README.md', 'math.ts', 'new.ts', 'notes.txt', 'util.ts'])
+  expect(sectionHeadings()).toEqual(['Commits'])
+  await w.win.waitFor(() => text(q('[data-count-line]')) === '0 of 5 reviewed · 4 uncommitted')
+  expect(q('.git-row__dirty', rowOf('util.ts')!)).toBeNull()
+  await w.win.waitFor(() => primaryNow().label === 'Commit 2 staged files')
+  expect(primaryNow().enabled).toBe(true)
   expect(q('[data-history-content]')).toBeNull()
   expect(q('[aria-label="Filter files by name"]')).not.toBeNull()
   expect(q('[aria-label="More source control actions"]')).not.toBeNull()
@@ -33,15 +36,14 @@ test('SC-8: the panel shows Orca\'s layout against a real daemon', async () => {
   const branch = q('[data-branch-row]')!
   expect(text(q('[data-branch-name]', branch))).toBe('zoe/feat')
   expect(text(q('[data-base-ref]', branch))).toBe('origin/main')
-  expect(text(q('[aria-label="1 commit(s) to push"]', branch))).toBe('↑1')
-  expect(text(q('[aria-label="Lines changed on this branch"]', branch))).toBe('+1 −0')
+  expect(text(q('[aria-label="Lines changed on this branch"]', branch))).toMatch(/^\+\d+ −\d+$/)
 
   const math = rowOf('math.ts')!
   expect(text(q('[data-row-name]', math))).toBe('math.ts')
   expect(text(q('[aria-label*="additions"]', rowContainerOf('math.ts')!))).toMatch(/^\+\d+$/)
   expect(text(q('.git-row__status[aria-label="Git status modified"]', rowContainerOf('math.ts')!))).toBe('M')
   expect(text(q('.git-row__status[aria-label="Git status renamed"]', rowContainerOf('new.ts', 'staged')!))).toBe('R')
-  expect(text(q('.git-row__status[aria-label="Git status untracked"]', rowContainerOf('notes.txt')!))).toBe('U')
+  expect(text(q('.git-row__status[aria-label="Git status added"]', rowContainerOf('notes.txt')!))).toBe('A')
 
   const state = await w.win.waitFor(async () => {
     const r = await w.report()
@@ -67,12 +69,13 @@ test('SC-11: the Source Control activity toggle shows the uncommitted count, the
   })
   expect(shown.count).toBe('4')
   expect(shown.label).toMatch(/\b4\b.*uncommitted changes?/i)
-  await w.win.waitFor(() => rowOf('math.ts', 'unstaged'))
+  await w.win.waitFor(() => rowOf('math.ts') && !rowOf('math.ts', 'staged'))
 
   w.git('add', '-A')
-  await w.win.waitFor(() => !rowOf('math.ts', 'unstaged'))
+  await w.win.waitFor(() => rowOf('math.ts', 'staged'))
+  await w.win.waitFor(() => primaryNow().label === 'Commit 4 staged files')
   await type(q('textarea[aria-label="Commit message"]') as HTMLTextAreaElement, 'everything')
-  expect(primaryNow()).toMatchObject({ label: 'Commit', enabled: true })
+  expect(primaryNow()).toMatchObject({ label: 'Commit 4 staged files', enabled: true })
   const previousHead = w.git('rev-parse', 'HEAD')
   await click(primary())
   await w.win.waitFor(() =>

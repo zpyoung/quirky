@@ -8,7 +8,7 @@ const FIXTURES = join(import.meta.dir, 'fixtures')
 type Start = Extract<FakeEvent, { type: 'start' }>
 
 type Choice = { value: string; label: string }
-type OptionInfo = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
+type OptionInfo = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null; default?: string }
 type ModelInfo = { id: string; label: string; description: string | null; options: OptionInfo[] }
 type OptionsInfo = {
   agent: string
@@ -84,7 +84,8 @@ describe('the catalog (SC-1 to SC-4)', () => {
           { value: 'high', label: 'High' },
           { value: 'xhigh', label: 'Extra high' },
           { value: 'max', label: 'Max' }
-        ]
+        ],
+        default: 'high'
       }
       for (const id of ['fable', 'opus', 'sonnet']) expect(claude.models.find((m) => m.id === id)!.options).toEqual([effort])
       expect(claude.models.find((m) => m.id === 'haiku')!.options).toEqual([])
@@ -324,8 +325,12 @@ describe('resolving a selection (SC-6 to SC-17)', () => {
       ])
       expect((await resolveOf(e2e, { agent: 'omp', model: 'anthropic/sonnet' })).added).toEqual(['--model', 'anthropic/sonnet'])
 
-      const omp = await failureOf(resolveOf(e2e, { agent: 'omp', model: 'anthropic/sonnet', options: { effort: 'low' } }))
-      expect(omp).toMatchObject({ code: -32602, message: 'Agent omp model anthropic/sonnet does not support effort low.' })
+      expect((await resolveOf(e2e, { agent: 'omp', model: 'anthropic/sonnet', options: { effort: 'low' } })).added).toEqual([
+        '--model',
+        'anthropic/sonnet',
+        '--thinking',
+        'low'
+      ])
       const gemini = await failureOf(resolveOf(e2e, { agent: 'gemini', model: 'gemini-9' }))
       expect(gemini.message).toBe('Agent gemini does not support model gemini-9.')
     },

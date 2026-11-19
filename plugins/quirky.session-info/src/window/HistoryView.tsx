@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, ListRow, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'
 import { formatTimestamp } from './format'
 
 type Props = { context: UiPluginContext; input?: unknown }
+type HistoryAction = 'resume' | 'fork' | 'copy-resume-command'
+const COMMAND_RESUME = 'command:quirky.session-info/resume'
+const COMMAND_FORK = 'command:quirky.session-info/fork'
+const COMMAND_COPY_RESUME = 'command:quirky.session-info/copy-resume-command'
 const VIEW_STYLE = { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', overflowY: 'auto', overflowWrap: 'anywhere' } as const
 const CONTENT_STYLE = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-12)', minWidth: '0', overflowWrap: 'anywhere' } as const
 const ACTIONS_STYLE = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)', minWidth: '0' } as const
@@ -33,7 +37,7 @@ export function HistoryView({ context, input }: Props) {
   const aliveRef = useRef(true)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const load = useCallback(async (value: string) => {
+  async function load(value: string): Promise<void> {
     const request = ++requestRef.current
     setLoading(true)
     setError(null)
@@ -47,12 +51,12 @@ export function HistoryView({ context, input }: Props) {
       setLoading(false)
       setError(messageOf(cause))
     }
-  }, [context])
+  }
 
   useEffect(() => {
     void load(query)
     return () => { requestRef.current++ }
-  }, [load, query, refreshVersion])
+  }, [context, query, refreshVersion])
 
   useEffect(() => {
     const unsubscribe = context.subscribe((event) => {
@@ -70,11 +74,11 @@ export function HistoryView({ context, input }: Props) {
     }
   }, [])
 
-  const runAction = useCallback(async (name: 'resume' | 'fork' | 'copy-resume-command', session: string) => {
+  async function track(name: HistoryAction, session: string, pending: Promise<unknown>): Promise<void> {
     const key = `${session}:${name}`
     setActionErrors((current) => ({ ...current, [key]: '' }))
     try {
-      await context.executeCommand(`command:quirky.session-info/${name}`, { session })
+      await pending
       if (name === 'copy-resume-command' && aliveRef.current) {
         setCopied(session)
         clearTimeout(copiedTimerRef.current)
@@ -86,7 +90,7 @@ export function HistoryView({ context, input }: Props) {
     } catch (cause) {
       if (aliveRef.current) setActionErrors((current) => ({ ...current, [key]: messageOf(cause) }))
     }
-  }, [context])
+  }
 
   return (
     <main aria-label="Session history" style={VIEW_STYLE}>
@@ -100,11 +104,8 @@ export function HistoryView({ context, input }: Props) {
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
           />
-          {loading && <p role="status">Searching session history…</p>}
-          {error && <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: '0', overflowWrap: 'anywhere' }}>
-            <p>Could not load session history: {error}</p>
-            <Button aria-label="Retry" onClick={() => void load(query)}>Retry</Button>
-          </div>}
+          {loading && <NoticeLine>Searching session history…</NoticeLine>}
+          {error && <InlineError message={`Could not load session history: ${error}`} action={{ label: 'Retry', onAction: () => void load(query) }} />}
           {!loading && !error && records.length === 0 && <EmptyState message="No matching sessions." />}
           {!loading && !error && records.length > 0 && <ol aria-label="Session results" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>
             {records.map((record) => <li key={record.id} data-session={record.id} style={{ minWidth: '0' }}>
@@ -118,13 +119,13 @@ export function HistoryView({ context, input }: Props) {
                   </span>}
                 />
                 <div style={ACTIONS_STYLE}>
-                  <Button aria-label={`Resume ${record.id}`} variant="primary" onClick={() => void runAction('resume', record.id)}>Resume</Button>
-                  <Button aria-label={`Fork ${record.id}`} onClick={() => void runAction('fork', record.id)}>Fork</Button>
-                  <Button aria-label={`Copy resume command ${record.id}`} onClick={() => void runAction('copy-resume-command', record.id)}>{copied === record.id ? 'Copied' : 'Copy resume command'}</Button>
+                  <Button aria-label={`Resume ${record.id}`} variant="primary" onClick={() => void track('resume', record.id, context.executeCommand(COMMAND_RESUME, { session: record.id }))}>Resume</Button>
+                  <Button aria-label={`Fork ${record.id}`} onClick={() => void track('fork', record.id, context.executeCommand(COMMAND_FORK, { session: record.id }))}>Fork</Button>
+                  <Button aria-label={`Copy resume command ${record.id}`} onClick={() => void track('copy-resume-command', record.id, context.executeCommand(COMMAND_COPY_RESUME, { session: record.id }))}>{copied === record.id ? 'Copied' : 'Copy resume command'}</Button>
                 </div>
                 {(['resume', 'fork', 'copy-resume-command'] as const).map((name) => {
                   const rowError = actionErrors[`${record.id}:${name}`]
-                  return rowError ? <p key={name} role="alert" style={{ overflowWrap: 'anywhere' }}>{rowError}</p> : null
+                  return rowError ? <InlineError key={name} message={rowError} /> : null
                 })}
               </article>
             </li>)}

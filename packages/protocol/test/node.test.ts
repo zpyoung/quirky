@@ -1,9 +1,20 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { daemonEntryHash, ensureDaemon, ensureHome, openPrivateLog, readRuntime } from '../src/node'
+import {
+  daemonEntryHash,
+  ensureDaemon,
+  ensureHome,
+  isDaemonAlive,
+  openPrivateLog,
+  readDaemonHealth,
+  readRuntime,
+  signalDaemon,
+  waitForDaemonExit,
+  type RuntimeInfo
+} from '../src/node'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -17,6 +28,111 @@ function tempDir(): string {
 }
 
 const modeOf = (path: string) => statSync(path).mode & 0o777
+
+describe('readDaemonHealth', () => {
+  let server: Bun.Server<undefined>
+  let responseStatus = 200
+  let responseBody = ''
+  let neverRespond = false
+  const pendingResponses: (() => void)[] = []
+
+  beforeAll(() => {
+    server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => {
+        const body = responseBody
+        const status = responseStatus
+        if (neverRespond) {
+          const { promise, resolve } = Promise.withResolvers<Response>()
+          pendingResponses.push(() => resolve(new Response(body, { status })))
+          return promise
+        }
+        return new Response(body, { status })
+      }
+    })
+  })
+
+  afterAll(async () => {
+    for (const release of pendingResponses.splice(0)) release()
+    await server.stop(true)
+  })
+
+  const info = (): RuntimeInfo => ({
+    pid: 4242,
+    port: server.port!,
+    token: 'rpc-token',
+    hookToken: 'hook-token',
+    daemonVersion: 'test',
+    protocolVersion: 1,
+    startedAt: 0
+  })
+
+  function respond(body: unknown, status = 200): void {
+    responseStatus = status
+    responseBody = JSON.stringify(body)
+    neverRespond = false
+  }
+
+  async function checkHealth(runtime: RuntimeInfo | null = info(), timeoutMs = 100) {
+    const health = await readDaemonHealth(runtime, timeoutMs)
+    expect(await isDaemonAlive(runtime, timeoutMs)).toBe(health !== null)
+    return health
+  }
+
+  test('parses settled state and keeps a string daemon version', async () => {
+    respond({ ok: true, pid: 4242, daemonVersion: '1.2.3', startupSettled: false })
+    expect(await checkHealth()).toEqual({
+      pid: 4242,
+      daemonVersion: '1.2.3',
+      startupSettled: false
+    })
+  })
+
+  test('omits startupSettled when the health body has no boolean value', async () => {
+    respond({ ok: true, pid: 4242 })
+    const health = await checkHealth()
+    expect(health).toEqual({ pid: 4242 })
+    expect(health?.startupSettled).toBeUndefined()
+
+    respond({ ok: true, pid: 4242, daemonVersion: '1.2.3', startupSettled: 'yes' })
+    const invalidStartupState = await checkHealth()
+    expect(invalidStartupState).toEqual({ pid: 4242, daemonVersion: '1.2.3' })
+    expect(invalidStartupState?.startupSettled).toBeUndefined()
+  })
+
+  test('returns null when the health pid does not match', async () => {
+    respond({ ok: true, pid: 4243 })
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null for an unsuccessful health response', async () => {
+    respond({ ok: true, pid: 4242 }, 503)
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null for a non-JSON health response', async () => {
+    responseStatus = 200
+    responseBody = 'not json'
+    neverRespond = false
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null when the health handler does not answer before timeout', async () => {
+    respond({ ok: true, pid: 4242 })
+    neverRespond = true
+    const startedAt = Date.now()
+    expect(await checkHealth(info(), 100)).toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(1000)
+    for (const release of pendingResponses.splice(0)) release()
+    neverRespond = false
+  })
+
+  test('returns null when runtime info is absent', async () => {
+    respond({ ok: true, pid: 4242 })
+    expect(await checkHealth(null)).toBeNull()
+  })
+})
 
 describe('ensureHome', () => {
   test('creates the home private', () => {
@@ -106,18 +222,29 @@ describe('ensureDaemon', () => {
 })
 
 describe('replacing a daemon from another build', () => {
-  /** A stand-in daemon: answers /health with its pid, reports an entry hash and exits on SIGTERM. */
-  function fakeDaemonEntry(home: string, name: string, reports: 'own-hash' | 'other-build' | 'no-hash'): string {
+  /** A stand-in daemon with a selectable SIGTERM behavior. */
+  function fakeDaemonEntry(
+    home: string,
+    name: string,
+    reports: 'own-hash' | 'other-build' | 'no-hash',
+    signalMode: 'exit' | 'quiet' | 'ignore' = 'exit'
+  ): string {
     const entry = join(home, name)
     const hash =
       reports === 'own-hash'
         ? `, entryHash: require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync(__filename)).digest('hex').slice(0, 16)`
         : reports === 'other-build' ? `, entryHash: 'other-build'` : ''
+    const onSigterm =
+      signalMode === 'exit'
+        ? `process.on('SIGTERM', () => process.exit(0))`
+        : signalMode === 'quiet'
+          ? `process.on('SIGTERM', () => server.stop(true))`
+          : `process.on('SIGTERM', () => {})`
     writeFileSync(
       entry,
       `const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => Response.json({ pid: process.pid }) })
 require('node:fs').writeFileSync(${JSON.stringify(join(home, 'runtime.json'))}, JSON.stringify({ pid: process.pid, port: server.port, token: 't', hookToken: 'h', daemonVersion: '0', protocolVersion: 1, startedAt: Date.now()${hash} }))
-process.on('SIGTERM', () => process.exit(0))
+${onSigterm}
 setInterval(() => {}, 1000)
 `
     )
@@ -286,5 +413,217 @@ setInterval(() => {}, 1000)
     started.push(old.pid)
     const again = await ensureDaemon({ home, daemonEntry: fakeDaemonEntry(home, 'current.js', 'own-hash') })
     expect(again.pid).toBe(old.pid)
+  })
+  // These integration tests exercise real OS signals, which fake timers cannot advance.
+  test('replaces a stale daemon that ignores SIGTERM within the configured stop timeout', async () => {
+    const home = tempDir()
+    const old = await ensureDaemon({
+      home,
+      daemonEntry: fakeDaemonEntry(home, 'old.js', 'other-build', 'ignore')
+    })
+    started.push(old.pid)
+
+    const stopStartedAt = Date.now()
+    const next = await ensureDaemon({
+      home,
+      daemonEntry: fakeDaemonEntry(home, 'current.js', 'own-hash'),
+      replaceStale: true,
+      stopTimeoutMs: 300,
+      killWaitMs: 2000
+    })
+    started.push(next.pid)
+    expect(Date.now() - stopStartedAt).toBeLessThan(5000)
+
+    expect(next.pid).not.toBe(old.pid)
+    expect(alive(old.pid)).toBe(false)
+    expect(readRuntime(home)?.pid).toBe(next.pid)
+  })
+
+  test('kills a daemon whose health server closes but whose process stays alive', async () => {
+    const home = tempDir()
+    const old = await ensureDaemon({
+      home,
+      daemonEntry: fakeDaemonEntry(home, 'quiet.js', 'other-build', 'quiet')
+    })
+    started.push(old.pid)
+
+    expect(signalDaemon(old.pid, 'SIGTERM')).toBe(true)
+    expect(await waitForDaemonExit(old.pid, { timeoutMs: 300, killWaitMs: 2000 })).toBe('killed')
+    expect(alive(old.pid)).toBe(false)
+    expect(signalDaemon(old.pid, 'SIGTERM')).toBe(false)
+  })
+
+  test('does not send SIGKILL when a daemon exits on SIGTERM', async () => {
+    const home = tempDir()
+    const daemon = await ensureDaemon({
+      home,
+      daemonEntry: fakeDaemonEntry(home, 'normal.js', 'other-build')
+    })
+    started.push(daemon.pid)
+
+    const nativeKill = process.kill.bind(process)
+    const signals: unknown[] = []
+    const kill = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === daemon.pid) signals.push(signal)
+      return nativeKill(pid, signal)
+    })
+    try {
+      expect(signalDaemon(daemon.pid, 'SIGTERM')).toBe(true)
+      expect(await waitForDaemonExit(daemon.pid, { timeoutMs: 300, killWaitMs: 200 })).toBe('exited')
+    } finally {
+      kill.mockRestore()
+    }
+
+    expect(signals).not.toContain('SIGKILL')
+    expect(alive(daemon.pid)).toBe(false)
+  })
+
+  test('refuses to signal this process from either helper and while replacing a daemon', async () => {
+    const home = tempDir()
+    const entry = join(home, 'replacement.js')
+    writeFileSync(entry, '')
+    const server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: () => Response.json({ pid: process.pid })
+    })
+    writeFileSync(
+      join(home, 'runtime.json'),
+      JSON.stringify({
+        pid: process.pid,
+        port: server.port,
+        token: 't',
+        hookToken: 'h',
+        daemonVersion: '0',
+        protocolVersion: 1,
+        startedAt: Date.now(),
+        entryHash: 'old-build'
+      })
+    )
+    const kill = spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('process API should not be called')
+    })
+    try {
+      expect(() => signalDaemon(process.pid, 'SIGTERM')).toThrow(
+        `refusing to signal this process (pid ${process.pid})`
+      )
+      await expect(waitForDaemonExit(process.pid)).rejects.toThrow(
+        `refusing to signal this process (pid ${process.pid})`
+      )
+      await expect(ensureDaemon({ home, daemonEntry: entry, replaceStale: true })).rejects.toThrow(
+        `refusing to signal this process (pid ${process.pid})`
+      )
+      expect(kill).not.toHaveBeenCalled()
+    } finally {
+      kill.mockRestore()
+      server.stop(true)
+    }
+  })
+
+  test('rejects invalid daemon pids before calling a process API', async () => {
+    const pids: unknown[] = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '123']
+    const calls: unknown[] = []
+    const kill = spyOn(process, 'kill').mockImplementation((pid) => {
+      calls.push(pid)
+      throw new Error('process API reached')
+    })
+    try {
+      for (const pid of pids) {
+        expect(() => signalDaemon(pid as number, 'SIGTERM')).toThrow('invalid daemon pid')
+        await expect(waitForDaemonExit(pid as number)).rejects.toThrow('invalid daemon pid')
+      }
+      expect(calls).toEqual([])
+    } finally {
+      kill.mockRestore()
+    }
+  })
+
+  test('rejects a string pid read from runtime.json before signaling', async () => {
+    const home = tempDir()
+    const entry = join(home, 'replacement.js')
+    writeFileSync(entry, '')
+    const server = Bun.serve({
+      port: 0,
+      hostname: '127.0.0.1',
+      fetch: () => Response.json({ pid: '123' })
+    })
+    writeFileSync(
+      join(home, 'runtime.json'),
+      JSON.stringify({
+        pid: '123',
+        port: server.port,
+        token: 't',
+        hookToken: 'h',
+        daemonVersion: '0',
+        protocolVersion: 1,
+        startedAt: Date.now(),
+        entryHash: 'old-build'
+      })
+    )
+    const calls: unknown[] = []
+    const kill = spyOn(process, 'kill').mockImplementation((pid) => {
+      calls.push(pid)
+      throw new Error('process API reached')
+    })
+    try {
+      await expect(ensureDaemon({ home, daemonEntry: entry, replaceStale: true })).rejects.toThrow(
+        'invalid daemon pid'
+      )
+      expect(calls).toEqual([])
+    } finally {
+      kill.mockRestore()
+      server.stop(true)
+    }
+  })
+
+  test('rethrows signal errors other than ESRCH', () => {
+    const pid = process.pid + 1
+    const failure = Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+    const calls: unknown[][] = []
+    const kill = spyOn(process, 'kill').mockImplementation((receivedPid, signal) => {
+      calls.push([receivedPid, signal])
+      throw failure
+    })
+    try {
+      let thrown: unknown
+      try {
+        signalDaemon(pid, 'SIGTERM')
+      } catch (error) {
+        thrown = error
+      }
+      expect(thrown).toBe(failure)
+      expect(calls).toEqual([[pid, 'SIGTERM']])
+    } finally {
+      kill.mockRestore()
+    }
+  })
+
+  test('reports when SIGKILL is denied', async () => {
+    const home = tempDir()
+    const daemon = await ensureDaemon({
+      home,
+      daemonEntry: fakeDaemonEntry(home, 'unkillable.js', 'other-build', 'ignore')
+    })
+    started.push(daemon.pid)
+
+    const nativeKill = process.kill.bind(process)
+    const signals: unknown[] = []
+    const kill = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === daemon.pid) signals.push(signal)
+      if (pid === daemon.pid && signal === 'SIGKILL') {
+        throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+      }
+      return nativeKill(pid, signal)
+    })
+    try {
+      await expect(waitForDaemonExit(daemon.pid, { timeoutMs: 0, killWaitMs: 100 })).rejects.toThrow(
+        `quirkyd (pid ${daemon.pid}) did not stop within 0s and could not be killed`
+      )
+    } finally {
+      kill.mockRestore()
+    }
+
+    expect(signals).toContain('SIGKILL')
+    expect(alive(daemon.pid)).toBe(true)
   })
 })

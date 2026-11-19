@@ -8,6 +8,7 @@
     "./testing": "./src/testing.ts"
   },
   "dependencies": {
+    "@quirky/process": "workspace:*",
     "@quirky/protocol": "workspace:*"
   }
 }

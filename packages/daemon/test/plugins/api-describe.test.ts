@@ -43,7 +43,12 @@ const lazyPlugin: Manifest = {
   id: 'acme.tools',
   contributes: {
     method: [{ id: 'refresh', description: 'Refreshes the widgets.' }, { id: 'bare' }],
-    event: [{ id: 'refreshed', description: 'A refresh finished.' }],
+    event: [
+      { id: 'changed', coalesce: [] },
+      { id: 'refreshed', description: 'A refresh finished.' },
+      { id: 'row', coalesce: ['sessionId'] },
+      { id: 'tree', worktree: 'worktreeId' }
+    ],
     command: [{ id: 'go', title: 'Go there', description: 'Navigates.' }, { id: 'untitled' }]
   }
 }
@@ -76,6 +81,7 @@ describe('api.describe', () => {
     expect(description.methods.some((m) => m.name === 'api.describe')).toBe(true)
     expect(description.events.map((e) => e.name)).toEqual(Object.keys(KERNEL_EVENT_SCHEMAS).sort())
     expect(description.events.every((e) => e.plugin === null)).toBe(true)
+    expect(description.events.every((event) => !('coalesce' in event) && !('worktree' in event))).toBe(true)
     expect(description.events.find((e) => e.name === 'plugin.changed')).toEqual({
       name: 'plugin.changed',
       plugin: null,
@@ -105,7 +111,10 @@ describe('api.describe', () => {
       }
     ])
     expect(description.events.filter((e) => e.plugin !== null)).toEqual([
-      { name: 'acme.tools/refreshed', plugin: 'acme.tools', description: 'A refresh finished.', data: null }
+      { name: 'acme.tools/changed', plugin: 'acme.tools', data: null, coalesce: [] },
+      { name: 'acme.tools/refreshed', plugin: 'acme.tools', description: 'A refresh finished.', data: null },
+      { name: 'acme.tools/row', plugin: 'acme.tools', data: null, coalesce: ['sessionId'] },
+      { name: 'acme.tools/tree', plugin: 'acme.tools', data: null, worktree: 'worktreeId' }
     ])
     expect(description.uiCommands).toEqual([
       { id: 'command:acme.tools/go', plugin: 'acme.tools', title: 'Go there', description: 'Navigates.', args: { type: 'object' } },
@@ -115,17 +124,34 @@ describe('api.describe', () => {
     expect(s.lines()).toEqual([])
   })
 
-  test('SC-8: an installed plugin overriding a built-in method is the listed plugin', async () => {
+  test('SC-8: an installed plugin overriding a built-in method and event is listed', async () => {
     const s = await boot({
-      builtin: [{ id: 'quirky.sample', contributes: { method: [{ id: 'ping', description: 'Built-in ping.' }] } }],
+      builtin: [{
+        id: 'quirky.sample',
+        contributes: {
+          method: [{ id: 'ping', description: 'Built-in ping.' }],
+          event: [{ id: 'changed', coalesce: ['baseId'], worktree: 'base.worktreeId' }]
+        }
+      }],
       installed: [
-        { id: 'acme.better', overrides: [{ id: 'method:quirky.sample/ping', description: 'Better ping.' }] }
+        {
+          id: 'acme.better',
+          overrides: [
+            { id: 'method:quirky.sample/ping', description: 'Better ping.' },
+            { id: 'event:quirky.sample/changed', coalesce: [], worktree: 'worktreeId' }
+          ]
+        }
       ]
     })
-    const entries = (await s.describe()).methods.filter((m) => m.name === 'quirky.sample/ping')
+    const description = await s.describe()
+    const methods = description.methods.filter((m) => m.name === 'quirky.sample/ping')
+    const events = description.events.filter((event) => event.name === 'quirky.sample/changed')
 
-    expect(entries).toEqual([
+    expect(methods).toEqual([
       { name: 'quirky.sample/ping', plugin: 'acme.better', description: 'Better ping.', params: { type: 'object' }, result: {} }
+    ])
+    expect(events).toEqual([
+      { name: 'quirky.sample/changed', plugin: 'acme.better', data: null, coalesce: [], worktree: 'worktreeId' }
     ])
   })
 

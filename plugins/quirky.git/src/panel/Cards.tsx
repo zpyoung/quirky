@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
-import { Badge, Button, EmptyState, InlineAgentCard } from '@quirky/ui'
+import { Button, InlineAgentCard, InlineError } from '@quirky/ui'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
@@ -73,7 +73,7 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
     const timer = setTimeout(() => setSlow(true), 1000)
     return () => clearTimeout(timer)
   }, [retrying])
-  const retry = async () => {
+  const onRetryClick = async () => {
     setRetrying(true)
     try {
       await onRetry()
@@ -87,47 +87,11 @@ export function HugeBanner({ onStageAll, onRetry }: { onStageAll(): void; onRetr
         title="Too many changes detected. Only the first 1000 are shown."
         status="needs-you"
         description={
-          <Button disabled={retrying} onClick={() => void retry()}>
+          <Button disabled={retrying} onClick={onRetryClick}>
             {slow ? <span role="status" aria-label="Refreshing">◌</span> : 'Retry'}
           </Button>
         }
         action={{ label: 'Stage All', onAction: onStageAll }}
-      />
-    </div>
-  )
-}
-
-type BlockedProps = {
-  title: 'Commit blocked' | 'Push blocked'
-  pill: 'Lint' | 'Hook' | 'Failed'
-  summary: string
-  /** Null when the summary says everything the output does. */
-  onDetails: (() => void) | null
-  /** AI Fix for the failure. */
-  fix?: FixButtonProps
-}
-
-/** The card for a commit or push a hook refused, or a commit failure, with its summary and Details when available. */
-export function BlockedCard({ title, pill, summary, onDetails, fix }: BlockedProps) {
-  return (
-    <div role="alert">
-      <InlineAgentCard
-        title={title}
-        status="failing"
-        description={
-          <div className="ui-stack">
-            <div className="ui-cluster">
-              <Badge tone="failing" label={pill}>{pill}</Badge>
-              <span>{summary}</span>
-            </div>
-            {(fix || onDetails) && (
-              <div className="ui-cluster">
-                {fix && <FixSplitButton {...fix} />}
-                {onDetails && <Button onClick={onDetails}>Details</Button>}
-              </div>
-            )}
-          </div>
-        }
       />
     </div>
   )
@@ -151,7 +115,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   if (!standalone) {
     return (
       <div className="ui-stack" role="status">
-        <p>{message}</p>
+        <InlineError message={message} />
         {controls}
       </div>
     )
@@ -163,7 +127,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
         status="failing"
         description={
           <div className="ui-stack">
-            <p>{message}</p>
+            <InlineError message={message} />
             {controls}
           </div>
         }
@@ -172,7 +136,3 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   )
 }
 
-/** The clean-workspace message. */
-export function CleanState({ onOpenTerminal }: { onOpenTerminal(): void }) {
-  return <EmptyState message="No changes" action={{ label: 'Open terminal', onAction: onOpenTerminal }} />
-}

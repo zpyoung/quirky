@@ -10,7 +10,7 @@ export type UiAction = { label: string; onAction: () => void; disabled?: boolean
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'destructive'; ref?: Ref<HTMLButtonElement> }
 export type IconButtonProps = Omit<ButtonProps, 'children'> & { label: string; children: ReactNode }
 export type ExpandingIconButtonProps = Omit<ButtonProps, 'children' | 'variant'> & { label: string; children: ReactNode }
-export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: string; error?: string; ref?: Ref<HTMLInputElement> }
+export type TextFieldProps = InputHTMLAttributes<HTMLInputElement> & { label: string; help?: string; error?: string; ref?: Ref<HTMLInputElement>; hideLabel?: boolean }
 export type TextAreaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; help?: string; error?: string }
 export type SelectFieldProps = SelectHTMLAttributes<HTMLSelectElement> & { label: string; help?: string; error?: string }
 export type StatusDotProps = { status: UiStatus; label?: string; progress?: number }
@@ -32,15 +32,35 @@ export type ListRowProps = {
 }
 export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: ReactNode; titleTooltip?: string; actions?: ReactNode }
 export type TabItem = { id: string; label: string; count?: number; disabled?: boolean; panelId?: string }
-export type TabsProps = { label: string; items: readonly TabItem[]; value: string; onChange: (id: string) => void }
+export type TabsProps = {
+  label: string
+  items: readonly TabItem[]
+  value: string
+  onChange: (id: string) => void
+  /** `boxed` (default): bordered tabs. `underline`: flat tabs with an accent underline on the selected one, as in the center tab strip. */
+  variant?: 'boxed' | 'underline'
+}
 export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
 export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuItem[] }
 /** Nonmodal anchored dialog; outside pointer and Escape dismiss without trapping focus. */
 export type PopoverProps = { open: boolean; label: string; anchor: RefObject<HTMLElement | null>; boundary?: HTMLElement | null; onClose(): void; children: ReactNode }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }
-export type DialogProps = { open: boolean; title: string; children: ReactNode; actions?: ReactNode; onClose?: () => void; variant?: 'dialog' | 'sheet'; placement?: 'center' | 'top'; size?: 'default' | 'wide'; closeOnBackdrop?: boolean; scrollBody?: boolean }
+export type DialogProps = {
+  open: boolean
+  title: string
+  children: ReactNode
+  actions?: ReactNode
+  onClose?: () => void
+  variant?: 'dialog' | 'sheet'
+  /** `top`: a search popup. It has no scrim and a popup shadow, and the title is for screen readers only. */
+  placement?: 'center' | 'top'
+  size?: 'default' | 'wide' | 'xwide'
+  description?: ReactNode
+  closeOnBackdrop?: boolean
+  scrollBody?: boolean
+}
 export type EmptyStateProps = { message: string; action?: UiAction; icon?: ReactNode }
-export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode }
+export type FormRowProps = { label: string; htmlFor: string; help?: string; error?: string; children: ReactNode; layout?: 'stacked' | 'inline' }
 export type ToolPanelFrameProps = { title: string; tabs?: ReactNode; tools?: ReactNode; actions?: ReactNode; onMinimize?: () => void; children: ReactNode }
 /** Plugin-owned controls portaled into their nearest shared tool frame header. */
 export type ToolPanelActionsProps = { children: ReactNode }
@@ -78,3 +98,63 @@ export type PopupMenuProps = {
  * `label`); without them it is plain, non-interactive content. `label` names the control for assistive tech.
  */
 export type StatusBarItemProps = { label: string; items?: PopupItem[]; popupTitle?: string; children: ReactNode }
+
+/** One choice in a {@link ReachMeterProps} or {@link SegmentedControlProps}; `caution` tints its name for the choice with the widest consequences. */
+export type ChoiceOption = { value: string; label: string; title?: string; caution?: boolean }
+export type ReachMeterProps = { label: string; options: ChoiceOption[]; value: string; onChange: (value: string) => void; className?: string }
+export type SegmentedControlProps = { label: string; options: ChoiceOption[]; value?: string | null; onChange: (value: string) => void; className?: string }
+export type AffixInputProps = InputHTMLAttributes<HTMLInputElement> & { prefixText?: string; suffix?: ReactNode; mono?: boolean; ref?: Ref<HTMLInputElement> }
+export type LinkButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'failing' }
+export type TagButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
+export type DisclosureButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-expanded'> & { label: string; expanded: boolean }
+export type ReviewMarkState = 'none' | 'reviewed' | 'changed'
+export type ReviewMarkProps = { state: ReviewMarkState; label?: string }
+export type SplitButtonProps = {
+  label: ReactNode
+  onClick(): void
+  disabled?: boolean
+  busy?: boolean
+  title?: string
+  /** Accessible name of the caret that opens the item menu. */
+  menuLabel: string
+  /** Items the button uses for its own menu; omit when the caller owns the menu. */
+  items?: ContextMenuItem[]
+  /** Called when an item with an `id` is selected from the button's own menu. */
+  onChoose?(id: string): void
+  /** When provided, the caller owns the menu; receives the caret's bottom-right corner. */
+  onOpenMenu?(anchor: { x: number; y: number }): void
+  /** Whether the caller-owned menu is open; controls the caret's `aria-expanded`. */
+  menuOpen?: boolean
+}
+export type InlineErrorProps = {
+  message: string
+  action?: { label: string; onAction(): void }
+  /** Without it there is no dismiss button. */
+  onDismiss?(): void
+}
+export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }
+
+export type UiTagColor = 'blue' | 'violet' | 'teal' | 'coral' | 'magenta' | 'mint' | 'sand' | 'rose'
+export type UiActivityMarkState = 'running' | 'waiting' | 'error' | 'idle' | 'asleep'
+export type UiTag = { id: string; name: string; color: UiTagColor | null }
+export type ActivityMarkProps = { state: UiActivityMarkState; label: string; ring?: 'accent' | 'needs-you'; title?: string }
+export type TagChipProps = { name: string; color: UiTagColor | null }
+export type TagChipsProps = { tags: UiTag[]; max?: number }
+export type CheckboxProps = {
+  checked: boolean
+  indeterminate?: boolean
+  label: string
+  onChange: (checked: boolean) => void
+  hideLabel?: boolean
+  id?: string
+  disabled?: boolean
+  'aria-describedby'?: string
+  'aria-invalid'?: InputHTMLAttributes<HTMLInputElement>['aria-invalid']
+  tone?: 'needs-you'
+  /** The input's accessible name when it must say more than the visible label, which it should contain. */
+  accessibleName?: string
+}
+export type SwatchGroupProps = { value: UiTagColor | null; onChange: (color: UiTagColor | null) => void; label: string }
+export type NoticeLineProps = { children: ReactNode; actions?: UiAction[] }
+export type HoverCardProps = { anchor: HTMLElement | null; open: boolean; children: ReactNode }
+export type BulkBarProps = { count: number; actions: UiAction[]; onClear: () => void }

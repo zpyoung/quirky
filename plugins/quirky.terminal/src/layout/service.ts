@@ -9,7 +9,7 @@ import { checkExternalTarget, openExternal } from '../open-external'
 import { defaultPs, runningChildOf } from '../processes'
 import * as ops from './ops'
 import type { OpResult } from './ops'
-import { reconcileWorkspace } from './reconcile'
+import { isAutoAdopted, reconcileWorkspace } from './reconcile'
 import { CounterIds } from './store'
 import type { LayoutStore, UnreadableRow } from './store'
 import { displayTitle, nextTerminalTitle } from './titles'
@@ -26,7 +26,6 @@ const ID_IN_TEXT = /"(?:tab|grp|pane|split)-(\d+)"/g
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const isNotFound = (error: unknown) => (error as { code?: number } | null)?.code === RpcErrorCode.NotFound
-const isTabbed = (session: Session) => session.background !== true && session.kind === 'terminal'
 function countGroupTabs(node: GroupNode): number {
   if (node.kind === 'group') return node.tabs.length
   return countGroupTabs(node.first) + countGroupTabs(node.second)
@@ -321,8 +320,13 @@ export class LayoutService {
       bound = { groupId: location.group.id, tabId: location.tab.id }
     }
 
-    if (bound?.groupId === groupId) return { workspace }
     const ids = this.ids()
+    if (bound?.groupId === groupId) {
+      // reconciliation may have adopted the session first; the caller still expects its tab in front
+      const group = findGroup(workspace.root, groupId)
+      if (workspace.activeGroup === groupId && group?.activeTab === bound.tabId) return { workspace }
+      return { workspace: this.commit(workspace, this.unwrap(ops.activateTab(workspace, bound.tabId)), ids) }
+    }
     if (bound) {
       const moved = this.unwrap(ops.moveTabToGroup(workspace, bound.tabId, groupId))
       return { workspace: this.commit(workspace, moved, ids) }
@@ -530,10 +534,19 @@ export class LayoutService {
     }
   }
 
+  /**
+   * Ends and forgets each session; throws when the session plugin fails or declines to close one,
+   * so a tab is never removed while its session stays listed for reconciliation to adopt back.
+   */
   private async closeSessions(sessionIds: readonly string[]): Promise<void> {
     const results = await Promise.allSettled(sessionIds.map((id) => this.context.call('quirky.session/close', { session: id })))
     const failed = results.find((result) => result.status === 'rejected' && !isNotFound(result.reason))
     if (failed) throw (failed as PromiseRejectedResult).reason
+    const refused = results.findIndex((result) => result.status === 'fulfilled' && (result.value as { ok?: unknown } | null)?.ok === false)
+    if (refused >= 0) {
+      const reason = ((results[refused] as PromiseFulfilledResult<{ reason?: unknown }>).value.reason as string | undefined) ?? 'refused'
+      throw this.context.error('conflict', `session ${sessionIds[refused]} did not close: ${reason}`)
+    }
   }
 
   private async closeQuietly(sessionId: string): Promise<void> {
@@ -1158,15 +1171,16 @@ export class LayoutService {
   private async describeClose(params: Params): Promise<string | null> {
     const targets = this.closeTargets(params)
     const running = new Map((await this.context.pty.list().catch(() => [])).map((info) => [info.sessionId, info]))
-    let table: string | undefined
+    let table: Promise<string> | undefined
     let psFailed = false
-    const ps = () => {
-      try {
-        return (table ??= defaultPs())
-      } catch (error) {
-        psFailed = true
-        throw error
+    const ps = (): Promise<string> => {
+      if (!table) {
+        table = defaultPs(this.context.process).catch((error) => {
+          psFailed = true
+          throw error
+        })
       }
+      return table
     }
     const lines: string[] = []
     for (const { tab, leaf } of targets) {
@@ -1188,7 +1202,7 @@ export class LayoutService {
         lines.push(unknown)
         continue
       }
-      const child = info.alive ? runningChildOf(info.pid, ps) : null
+      const child = info.alive ? await runningChildOf(info.pid, ps) : null
       if (child) lines.push(`Stop ${child.command} in ${displayTitle(tab)}?`)
       else if (psFailed) lines.push(unknown)
     }
@@ -1255,7 +1269,7 @@ export class LayoutService {
   private openExternal(params: Params): { ok: true } {
     const problem = checkExternalTarget(params.target)
     if (problem) throw this.context.error('invalid-params', problem)
-    openExternal({ target: params.target as string, reveal: params.reveal === true })
+    openExternal(this.context.process, { target: params.target as string, reveal: params.reveal === true }, (message) => this.context.log(message))
     return { ok: true }
   }
 
@@ -1320,7 +1334,7 @@ export class LayoutService {
     this.inputs.retain(known)
     for (const map of [this.titles, this.cwds, this.titleAt, this.cwdAt]) for (const id of map.keys()) if (!known.has(id)) map.delete(id)
 
-    const ids = new Set([...this.workspaces.keys(), ...this.unreadable.keys(), ...sessions.filter(isTabbed).map((session) => session.worktreeId)])
+    const ids = new Set([...this.workspaces.keys(), ...this.unreadable.keys(), ...sessions.filter(isAutoAdopted).map((session) => session.worktreeId)])
     for (const id of ids) {
       if (only && !only.includes(id)) continue
       await this.reconcileOne(id, sessions)

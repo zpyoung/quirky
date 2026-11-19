@@ -164,7 +164,7 @@ export function externalMethods(context: PluginContext): AutomationMethods {
     const snapshot = await assertCurrentJob(context, owner, jobId)
     cache.delete(LOCAL_AUTHORITY_KEY)
     try {
-      await runOpenClawCommand(snapshot.executable!, snapshot.home, jobId, action)
+      await runOpenClawCommand(context.process, snapshot.executable!, snapshot.home, jobId, action)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw context.error('conflict', message)

@@ -1,0 +1,195 @@
+import { expect, test } from 'bun:test'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { createProcessScope } from '../test-support/process-scope'
+import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
+import type { CliParityReport, CliParityRow, CliReceipt } from './cli-run'
+import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
+
+const checkout = join(import.meta.dir, '../..')
+
+test('CLI parity rehearses owned command groups and preserves unproved mappings', async () => {
+  const scope = createProcessScope()
+  const env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot: checkout })
+  mkdirSync(env.TMPDIR!, { recursive: true })
+  // This external process must remain alive until teardown; fake timers cannot keep a child alive.
+  const sentinel = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { env, stdout: 'ignore', stderr: 'ignore' })
+  try {
+    const child = scope.spawn([process.execPath, join(import.meta.dir, 'cli.ts'), '--json'], {
+      cwd: checkout, env, stdout: 'pipe', stderr: 'pipe', timeout: 370_000
+    })
+    const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    expect(exit, stderr + '\n' + stdout).toBe(0)
+    const report: CliParityReport = JSON.parse(stdout)
+    expect(report).toMatchObject({ schemaVersion: 1, scope: 'goal-11-cli-commands', ok: true, parityComplete: false, providerMode: 'local-stand-ins', cleanup: { ok: true } })
+    expect(report.elapsedMs).toBeLessThan(360_000)
+    console.info(`CLI parity elapsedMs: ${report.elapsedMs}`)
+    const rows = new Map<string, CliParityRow>(report.rows.map(row => [row.id, row]))
+    for (const id of [
+      'worktree-create', 'worktree-rm', 'agent-launch', 'terminal-send', 'terminal-wait', 'loop-edit', 'loop-resume',
+      'repo-set', 'repo-set-base-ref',
+      'ask', 'ask-cancel', 'ask-wait', 'automations-run', 'orchestration-task-update', 'orchestration-gate-resolve',
+      'orchestration-inbox', 'file-open', 'account-list', 'skills-update', 'status', 'agent-context', 'serve',
+      'account-add', 'account-rm', 'agent-hooks-on', 'agent-hooks-off', 'agent-hooks-status',
+      'project-setup-clone', 'project-setup-create', 'project-setup-delete', 'project-setup-update',
+      'repo-search-refs', 'terminal-list', 'terminal-rename', 'terminal-set-pane-title', 'terminal-show',
+      'terminal-split', 'terminal-switch', 'worktree-current', 'worktree-ps', 'worktree-ps-summary',
+      'orchestration-run-use', 'orchestration-dispatch', 'orchestration-dispatch-show',
+      'orchestration-worker-start', 'orchestration-worker-show',
+      'orchestration-worker-list', 'orchestration-worker-read', 'orchestration-worker-stop', 'orchestration-worker-abandon',
+      'orchestration-worker-retain', 'orchestration-worker-release', 'orchestration-ask',
+      'orchestration-reply', 'orchestration-request-show', 'orchestration-reset'
+    ]) {
+      expect(rows.get(id), id).toMatchObject({ status: 'passed', executed: true })
+    }
+    expect(rows.get('repo-set')!.catalogRefs).toContain('command:worktree project-set')
+    const excludedIds = ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall']
+    for (const id of excludedIds) {
+      expect(rows.get(id), id).toMatchObject({ status: 'excluded', executed: false, checks: [], catalogRefs: [] })
+      expect(rows.get(id)!.reason!.trim()).not.toBe('')
+      expect(rows.get(id)).not.toHaveProperty('followUp')
+    }
+    expect(report.receipts.filter(receipt => excludedIds.includes(receipt.id))).toEqual([])
+    const rendererIds = ['file-diff', 'file-open-changed', 'file-open-render']
+    for (const id of rendererIds) {
+      expect(rows.get(id), id).toMatchObject({ status: 'separate-run', executed: false, checks: [] })
+      expect(rows.get(id)!.reason).toBeTruthy()
+    }
+    for (const [id, observations] of Object.entries(CLI_FILE_OBSERVATION_BINDINGS)) {
+      expect(rows.get(id)!.observations).toEqual({
+        checks: [...observations], command: 'bun scripts/parity/cli-files.ts --json', executed: false
+      })
+    }
+    const observationIds = new Set(Object.values(CLI_FILE_OBSERVATION_BINDINGS).flat())
+    expect(report.receipts.filter(receipt => observationIds.has(receipt.id))).toEqual([])
+    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(92)
+    expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
+    expect(report.rows.filter(row => row.status === 'gap')).toEqual([])
+    expect(report.rows.filter(row => row.status === 'separate-run')).toHaveLength(3)
+    expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
+    expect(report.rows.filter(row => row.status === 'failed' || row.status === 'not-run')).toEqual([])
+    for (const row of report.rows.filter(row => row.status === 'passed')) {
+      for (const id of row.checks) expect(report.receipts.some(receipt => receipt.id === id && receipt.exitCode === 0), id).toBe(true)
+    }
+    const receipt = (id: string) => {
+      const value = report.receipts.find(item => item.id === id) as CliReceipt
+      expect(value, id).toBeTruthy()
+      expect(value.exitCode).toBe(0)
+      expect(value.stdoutBytes).toBeGreaterThan(0)
+      expect(value.elapsedMs).toBeGreaterThanOrEqual(0)
+      expect(value.argv).toContain('--json')
+      expect(value.argv).toContain('local')
+      return value.evidence
+    }
+    expect(receipt('catalog')).toMatchObject({ schemaVersion: 2 })
+    expect(receipt('repo-add')).toMatchObject({ kind: 'git' })
+    expect(receipt('repo-set-base-ref')).toMatchObject({
+      id: expect.any(String), defaultBase: 'main', externalVisibility: 'inherit', effectiveExternalVisibility: 'hide'
+    })
+    expect(receipt('repo-set')).toEqual({
+      repoId: expect.any(String), externalWorktreeId: expect.any(String), selector: 'path',
+      steps: [
+        { step: 'baseline', global: 'hide', project: 'inherit', effective: 'hide', externalVisible: false, inboxHidden: true },
+        { step: 'show', global: 'hide', project: 'show', effective: 'show', externalVisible: true, inboxHidden: false },
+        { step: 'hide', global: 'show', project: 'hide', effective: 'hide', externalVisible: false, inboxHidden: true },
+        { step: 'inherit', global: 'show', project: 'inherit', effective: 'show', externalVisible: true, inboxHidden: false },
+        { step: 'restored', global: 'hide', project: 'inherit', effective: 'hide', externalVisible: false, inboxHidden: true }
+      ],
+      invalidValue: { code: 'usage' }, removed: true
+    })
+    expect(receipt('folder-add')).toMatchObject({ kind: 'folder' })
+    expect(receipt('worktree-create')).toMatchObject({ parentId: null })
+    expect(receipt('loop-show')).toMatchObject({ iterationsCompleted: 1, state: 'paused', pauseReason: 'cap-iterations', nextIterationAt: null })
+    expect(receipt('loop-resume')).toMatchObject({ iterationsCompleted: 2, state: 'paused', pauseReason: 'cap-iterations', nextIterationAt: null })
+    expect(receipt('loop-stop')).toMatchObject({ state: 'stopped' })
+    expect(receipt('file-read')).toMatchObject({ content: 'first\nsecond λ\n' })
+    expect(receipt('terminal-exit')).toMatchObject({ status: 'matched', state: 'exited' })
+    expect(receipt('ask-wait')).toMatchObject({ status: 'declined' })
+    expect(receipt('automation-runs')).toMatchObject({ status: 'completed', trigger: 'manual', sessionKind: 'structured', content: 'Codex: cli-parity-auto', promptCount: 1 })
+    expect(receipt('skill-update')).toMatchObject({ state: 'up-to-date', bytesEqual: true })
+    expect(receipt('status')).toMatchObject({ owned: true })
+    expect(receipt('local-search-refs')).toMatchObject({ names: ['cli-parity-both', 'cli-parity-topic', 'cli-parity-both', 'cli-parity-v1'], truncated: false, allTargetHead: true })
+    expect(receipt('local-hooks-remove')).toMatchObject({ userHookPreserved: true, status: 'not-installed', pathsUnderHome: true })
+    expect(receipt('startup-ready')).toMatchObject({ owned: true, portHonored: true, secretsInOutput: false, runtimeRemoved: true, daemonGone: true })
+    expect(receipt('startup-already-running')).toMatchObject({ refusal: 'already-running' })
+    expect(receipt('startup-port-in-use')).toMatchObject({ refusal: 'port-in-use', started: false })
+    expect(receipt('startup-concurrent')).toMatchObject({ readyCount: 1, loserNamedWinner: true })
+    expect(receipt('startup-parent-loss')).toMatchObject({ orphanExited: true, restarted: true })
+    expect(receipt('local-account-login-codex')).toMatchObject({ status: 'complete', label: 'CLI parity Codex', email: 'codex-parity@example.invalid', needsSignIn: false })
+    expect(receipt('local-worktree-current')).toMatchObject({ nestedId: expect.any(String), mainIsMain: true, outside: 'not-found' })
+    const takeover = receipt('workers-run-use')
+    const coordinatorSessionId = takeover!.coordinator
+    expect(takeover).toMatchObject({ runId: expect.any(String), coordinator: expect.any(String), controllerRefusal: 'consumer_fenced' })
+    const generation = takeover!.generation as { before: number; after: number }
+    expect(generation.after).toBe(generation.before + 1)
+    const coordinatorLayout = receipt('workers-coordinator-tab-layout')
+    expect({ ...coordinatorLayout }).toMatchObject({
+      worktreeId: expect.any(String), tabId: expect.any(String), paneId: expect.any(String), sessionId: expect.any(String),
+      creationMatched: true
+    })
+    for (const key of ['worktreeId', 'tabId', 'paneId', 'sessionId'] as const) {
+      expect(coordinatorLayout[key]).toMatch(/./s)
+    }
+    const createdWorktree = receipt('worktree-create')
+    expect(coordinatorLayout.worktreeId).toBe(createdWorktree.id)
+    expect(coordinatorLayout.sessionId).toBe(coordinatorSessionId)
+    expect(receipt('workers-reply-replay')).toMatchObject({ replayed: true, sameAnswer: true, mismatch: 'request_mismatch' })
+    expect(receipt('workers-stop')).toMatchObject({ state: 'stopped', processAction: 'closed_agent_terminal', ptyAlive: false, unauthorized: 'consumer_fenced' })
+    expect(receipt('workers-abandon')).toMatchObject({ state: 'abandoned', processAction: 'none', ptyAlive: true, pidAlive: true })
+    expect(receipt('workers-release')).toMatchObject({ state: 'released', archive: 'captured', ptyAlive: false })
+    const liveRead = receipt('workers-read-live')
+    expect(liveRead).toMatchObject({
+      dispatchId: expect.any(String), sessionId: expect.any(String), source: 'terminal',
+      archived: false, sourceExact: true, completionMarker: true, viewportMarker: true,
+      historyPageMarker: false, fallbackReason: 'session_not_reported', contentComplete: false
+    })
+    expect(receipt('workers-read-terminal')).toEqual({
+      ...liveRead, fallbackReason: null, contentComplete: true
+    })
+    expect(receipt('workers-read-archived')).toEqual({
+      dispatchId: liveRead.dispatchId, sessionId: liveRead.sessionId, source: 'terminal',
+      archived: true, sourceExact: true, completionMarker: true
+    })
+    expect(receipt('workers-ps-tasks')).toMatchObject({
+      correlation: { worktreeToSession: true, sessionToWorker: true, taskToDispatch: true, cardToTask: false, worktreePath: false, hostScope: false }
+    })
+    receipt('workers-ps-worktrees')
+    receipt('workers-ps-sessions')
+    const summaryEvidence = receipt('workers-ps-summary')
+    expect(summaryEvidence).toMatchObject({
+      worktreeId: expect.any(String),
+      metadataMatched: true,
+      sessionsMatched: true,
+      displaysMatched: true,
+      runsMatched: true,
+      tasksMatched: true,
+      dispatchesMatched: true,
+      workerStatesMatched: true,
+      terminalStatesMatched: true,
+      scope: 'local'
+    })
+    const summaryReceipt = report.receipts.find(item => item.id === 'workers-ps-summary')!
+    expect(summaryReceipt.argv).toEqual(expect.arrayContaining(['orchestration', 'ps', '--limit', '100', '--json']))
+    expect(receipt('workers-start-abandon')).toMatchObject({
+      workerLog: '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings\n'.repeat(3)
+    })
+    expect(rows.get('worktree-ps-summary')).toMatchObject({
+      status: 'passed', executed: true, checks: ['workers-ps-summary']
+    })
+    expect(rows.get('orchestration-worker-read')).toMatchObject({
+      status: 'passed', executed: true,
+      checks: ['workers-read-live', 'workers-read-terminal', 'workers-read-archived']
+    })
+    const status = receipt('status')
+    for (const pid of [status.pid, status.ptyHostPid]) {
+      expect(typeof pid).toBe('number')
+      expect(() => process.kill(Number(pid), 0)).toThrow()
+    }
+    expect(sentinel.exitCode).toBeNull()
+  } finally {
+    sentinel.kill('SIGKILL')
+    await sentinel.exited
+    await scope.cleanup()
+  }
+}, 370_000)
+

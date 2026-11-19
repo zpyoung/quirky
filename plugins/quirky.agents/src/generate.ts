@@ -191,7 +191,7 @@ export class Generator {
       if (job.cancelled) throw this.refuse('conflict', 'cancelled', 'Generation was stopped.')
       const { argv, stdin } = target.build(strictMcp)
       const words = [...target.command, ...argv]
-      const run = startOneShot({ argv: this.deps.context.launch.commandArgv(joinCommand(words)), cwd, env, stdin, timeoutMs })
+      const run = startOneShot(this.deps.context.process, { argv: this.deps.context.launch.commandArgv(joinCommand(words)), cwd, env, stdin, timeoutMs })
       job.run = run
       const outcome = await run.done
       job.run = null

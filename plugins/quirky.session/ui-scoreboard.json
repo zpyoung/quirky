@@ -1,0 +1,3142 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.session/structured": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.session/worktree": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "overlay:quirky.session/chat-dialogs": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The picker always lists the four chat agents, each ready or disabled with its reason, so the dialog has no empty read.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+            "quote": "/** The four agents a chat can run, in the order the picker shows them. */"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'missing') return <EmptyState message=\"Session not found\" />"
+      },
+      "anchor": "if (loaded.status === 'missing')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Session not found\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'loading') return <EmptyState message=\"Loading session…\" />"
+      },
+      "anchor": "if (loaded.status === 'loading')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Loading session…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (loaded.status === 'failed') {\n    return <InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />\n  }"
+      },
+      "anchor": "if (loaded.status === 'failed')",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<InlineError message={`Could not load the session: ${loaded.failure}`} action={{ label: 'Retry', onAction: load }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "if (worktree === null) {\n      root.render(<EmptyState message=\"Pick a worktree to see its sessions.\" />)\n      report?.({ worktree: null, tabs: [], active: null, visibleSessions: [] })\n      return () => root.unmount()\n    }"
+      },
+      "anchor": "if (worktree === null)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "<EmptyState message=\"Pick a worktree to see its sessions.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "if (!connected) return <EmptyState message=\"Reconnecting…\" />"
+      },
+      "anchor": "if (!connected)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/SessionView.tsx",
+          "quote": "<EmptyState message=\"Reconnecting…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/SessionView.tsx",
+          "quote": "import { EmptyState } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'loading' && <EmptyState message=\"Loading sessions…\" />"
+      },
+      "anchor": "status === 'loading' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState message=\"Loading sessions…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'missing' && <EmptyState message=\"Worktree not found\" />"
+      },
+      "anchor": "status === 'missing' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState message=\"Worktree not found\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'failed' && failure !== null && (\n          <InlineError\n            message={`Could not load sessions: ${failure}`}\n            action={{ label: 'Retry', onAction: () => store.retry() }}\n          />\n        )"
+      },
+      "anchor": "status === 'failed' && failure !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<InlineError\n            message={`Could not load sessions: ${failure}`}\n            action={{ label: 'Retry', onAction: () => store.retry() }}\n          />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "status === 'ready' && !active && (\n          <EmptyState\n            message=\"No sessions in this worktree.\"\n            action={{ label: 'New shell', onAction: () => void store.create('shell', '', false) }}\n          />\n        )"
+      },
+      "anchor": "status === 'ready' && !active &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "<EmptyState\n            message=\"No sessions in this worktree.\"\n            action={{ label: 'New shell', onAction: () => void store.create('shell', '', false) }}\n          />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not start session', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not start session', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not close session', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not close session', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/model.ts",
+        "quote": "this.context.toast('Could not load sessions', messageOf(error))"
+      },
+      "anchor": "this.context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.toast('Could not load sessions', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/worktree",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "context.toast('Could not start chat', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+          "quote": "context.toast('Could not start chat', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "if (phase.status === 'off') return <EmptyState message=\"Structured sessions are off\" />"
+      },
+      "anchor": "if (phase.status === 'off')",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<EmptyState message=\"Structured sessions are off\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{phase.status === 'loading' && turns.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}"
+      },
+      "anchor": "phase.status === 'loading' && turns.length === 0 &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<NoticeLine>Loading messages…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{phase.status === 'failed' && ("
+      },
+      "anchor": "phase.status === 'failed' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{phase.status === 'ready' && turns.length === 0 && <EmptyState message=\"No messages yet.\" />}"
+      },
+      "anchor": "phase.status === 'ready' && turns.length === 0 &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<EmptyState message=\"No messages yet.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "context.toast('Could not restart', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+          "quote": "context.toast('Could not restart', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "context.toast('Could not open a terminal', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+          "quote": "context.toast('Could not open a terminal', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "context.toast('Could not open link', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+          "quote": "context.toast('Could not open link', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "context.toast('Could not open file in editor', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+          "quote": "context.toast('Could not open file in editor', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.session/chat-dialogs",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "cards === null &&"
+      },
+      "anchor": "cards === null &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+          "quote": "<NoticeLine><span role=\"status\">Loading agents…</span></NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+          "quote": "import { Button, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.session/chat-dialogs",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "dialog.error !== null &&"
+      },
+      "anchor": "dialog.error !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+          "quote": "<InlineError\n          message={dialog.error}\n          action={created === null ? undefined : { label: 'Retry', onAction: () => void adoptNewChat(context, dialog, created) }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+          "quote": "import { Dialog, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "const problem = failure && ("
+      },
+      "anchor": "failure &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "<InlineError message={failure.message} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (unavailable) return <div style={list}><InlineError message={unavailable} /></div>"
+      },
+      "anchor": "if (unavailable)",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "<InlineError message={unavailable} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "import { EmptyState, FileIcon, InlineError, ListRow, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
+      },
+      "anchor": "if (items.length === 0)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "<EmptyState message={empty} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "import { EmptyState, FileIcon, InlineError, ListRow, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{problem !== null && <InlineError message={problem} />}"
+      },
+      "anchor": "problem !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "<InlineError message={problem} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "import { Button, ControlIcon, EmptyState, IconButton, InlineError, NoticeLine, TextArea } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "context.toast('Could not open plan file', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.toast('Could not open plan file', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{version.empty === true ? <EmptyState message=\"Claude sent an empty plan\" /> : <Prose context={context} session={session} text={version.text} />}"
+      },
+      "anchor": "version.empty === true ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "<EmptyState message=\"Claude sent an empty plan\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "import { Button, ControlIcon, EmptyState, IconButton, InlineError, NoticeLine, TextArea } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.error !== null && ("
+      },
+      "anchor": "older.error !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "<InlineError message={`Could not load earlier messages: ${older.error}`} action={{ label: 'Retry', onAction: showEarlier }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "case 'tool':\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>tool</Badge>\n          <details>\n            <summary>{firstLine(message.text) || 'tool'}</summary>\n            <pre style={code}>{message.text}</pre>\n          </details>\n        </article>\n      )"
+      },
+      "anchor": "case 'tool':",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "firstLine(message.text) || 'tool'"
+      },
+      "anchor": "firstLine(message.text) ||",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "case 'system':\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>{message.role}</Badge>\n          <div style={body}>{message.text}</div>\n        </article>\n      )"
+      },
+      "anchor": "case 'system':",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/MessageRow.tsx",
+        "quote": "default:\n      return (\n        <article aria-label={`${message.role} message`} style={row}>\n          <Badge>{message.role}</Badge>\n          <div style={body}>{message.text}</div>\n        </article>\n      )"
+      },
+      "anchor": "default:",
+      "reason": "Message role selects transcript layout, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active && activePresentation && (\n        <div style={summary} role=\"status\">\n          {active.unread ? <UnreadBell reason={active.unread} /> : <StatusDot session={active} now={now} />}\n          <span>{active.unread ? `${UNREAD_LABELS[active.unread]} · ${activePresentation.label}` : activePresentation.label}</span>\n          {activePresentation.progress !== null && (\n            <Badge tone=\"accent\" label={`Progress ${activePresentation.progress}%`}>\n              {activePresentation.progress}%\n            </Badge>\n          )}\n        </div>\n      )"
+      },
+      "anchor": "active && activePresentation &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active.unread ? <UnreadBell reason={active.unread} /> : <StatusDot session={active} now={now} />"
+      },
+      "anchor": "active.unread ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "active.unread ? `${UNREAD_LABELS[active.unread]} · ${activePresentation.label}` : activePresentation.label"
+      },
+      "anchor": "active.unread ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "activePresentation.progress !== null && (\n            <Badge tone=\"accent\" label={`Progress ${activePresentation.progress}%`}>\n              {activePresentation.progress}%\n            </Badge>\n          )"
+      },
+      "anchor": "activePresentation.progress !== null &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "sessions.length > 0 && (\n        <div style={sessionControls} role=\"group\" aria-label=\"Session actions\">\n          {sessions.map((session) => (\n            <div key={session.id} style={sessionControlGroup} role=\"group\" aria-label={`Actions for ${session.title}`}>\n              <span style={sessionName}>{session.title}</span>\n              {Object.entries(session.badges ?? {}).map(([key, badge]) => badge.command ? (\n                <Button key={key} type=\"button\" title={badge.tooltip} onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}>\n                  {badge.label}\n                </Button>\n              ) : (\n                <span key={key} title={badge.tooltip}>\n                  <Badge label={badge.tooltip ?? badge.label}>{badge.label}</Badge>\n                </span>\n              ))}\n              <IconButton\n                label={`Close ${session.title}`}\n                title={`Close ${session.title}`}\n                onClick={() => void store.close(session)}\n              >\n                ×\n              </IconButton>\n            </div>\n          ))}\n        </div>\n      )"
+      },
+      "anchor": "sessions.length > 0 &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "badge.command ? (\n                <Button key={key} type=\"button\" title={badge.tooltip} onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}>\n                  {badge.label}\n                </Button>\n              ) : (\n                <span key={key} title={badge.tooltip}>\n                  <Badge label={badge.tooltip ?? badge.label}>{badge.label}</Badge>\n                </span>\n              )"
+      },
+      "anchor": "badge.command ?",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "pending && (\n        <PromptDialog\n          request={pending}\n          store={store}\n          onClose={() => setPending((current) => current === pending ? null : current)}\n        />\n      )"
+      },
+      "anchor": "pending &&",
+      "reason": "Session metadata and available per-session controls select tab presentation; whole-view states live in WorktreeView."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "if (session.kind === 'structured') return <ChatView context={context} session={session} />"
+      },
+      "anchor": "if (session.kind === 'structured')",
+      "reason": "Session kind and lifecycle select the active pane or ended-session controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "session.status === 'exited' && <ExitedBar session={session} onClose={onClose} />"
+      },
+      "anchor": "session.status === 'exited' &&",
+      "reason": "Session kind and lifecycle select the active pane or ended-session controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "worktree ? (\n          <>\n            <strong style={title}>{worktree.name}</strong>\n            <span style={path}>{worktree.path}</span>\n          </>\n        ) : (\n          <span style={path}>Quirky</span>\n        )"
+      },
+      "anchor": "worktree ?",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "worktree && <SessionTabs context={context} store={store} sessions={sessions} active={active} />"
+      },
+      "anchor": "worktree &&",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "active && (\n          <SessionView\n            key={`${active.id}:${epoch}`}\n            context={context}\n            themeSource={themeSource}\n            session={active}\n            connected={connected}\n            onClose={() => void store.close(active)}\n          />\n        )"
+      },
+      "anchor": "active &&",
+      "reason": "Loaded worktree identity and active session select the header, tabs and pane, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/ExitedBar.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "Accessible live status announces session activity or exit rather than a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "Accessible live status announces session activity or exit rather than a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "{choosing && ("
+      },
+      "anchor": "choosing &&",
+      "reason": "Shows the New chat dialog while it is open; it is a chooser, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
+        "quote": "<span aria-hidden=\"true\">{open ? '\\u25be' : '\\u25b8'}</span>"
+      },
+      "anchor": "open ?",
+      "reason": "Chooses the disclosure glyph for the folded tool activity."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
+        "quote": "more={call.item.detail ? <pre style={detail}>{call.item.detail}</pre> : undefined}"
+      },
+      "anchor": "call.item.detail ?",
+      "reason": "Passes a tool call's output to its row only when the call reported output."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "<span style={note}>{readiness.ready ? `${readiness.model} · ready` : readiness.reason}</span>"
+      },
+      "anchor": "readiness.ready ?",
+      "reason": "Shows the agent's default model when it can start, otherwise why it cannot; both come from the agent catalog."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "{heading && <h3 style={title}>New chat</h3>}"
+      },
+      "anchor": "heading &&",
+      "reason": "Drops the picker's own title when a dialog already titles it; it is layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{paneViews > 0 && ("
+      },
+      "anchor": "paneViews > 0 &&",
+      "reason": "Renders the Views pane only when the agent placed a view there; it is layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Embedded.tsx",
+        "quote": "if (missing) return <div role=\"note\" style={quiet}>{fallback}</div>"
+      },
+      "anchor": "if (missing)",
+      "reason": "The caller-supplied fallback is a plain-text stand-in for an embedded view whose plugin is off; it is transcript content, not the result of a read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "<div role=\"alert\">"
+      },
+      "anchor": "role=\"alert\"",
+      "reason": "Announces the agent-exit row; an agent exit is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "label=\"Error\""
+      },
+      "anchor": "\"Error\"",
+      "reason": "Labels the agent-exit card; the exit is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "ariaLabel=\"Agent error\""
+      },
+      "anchor": "\"Agent error\"",
+      "reason": "Labels the agent-exit card; the exit is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "{item.stderrTail.length > 0 && <pre style={tail}>{item.stderrTail.join('\\n')}</pre>}"
+      },
+      "anchor": "item.stderrTail.length > 0 &&",
+      "reason": "Shows the agent's last stderr lines only when it left any."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "<span style={muted}>{reason ?? 'Your transcript is kept either way.'}</span>"
+      },
+      "anchor": "reason ??",
+      "reason": "Shows why Restart is off, or that the transcript is kept either way."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (parts.length === 0) return text"
+      },
+      "anchor": "if (parts.length === 0)",
+      "reason": "Maps mention-split text to markup, returning the plain text when no mention is found; not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (node.type === 'text') return mentions && !inPre ? withMentions(node.value ?? '') : (node.value ?? '')"
+      },
+      "anchor": "if (node.type === 'text')",
+      "reason": "Maps one markdown node to its element; the node type selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (node.type !== 'element' || !node.tagName || !TAGS.includes(node.tagName)) return null"
+      },
+      "anchor": "if (node.type !== 'element' || !node.tagName || !TAGS.includes(node.tagName))",
+      "reason": "Maps one markdown node to its element; the node type selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (tag === 'a') {"
+      },
+      "anchor": "if (tag === 'a')",
+      "reason": "Maps one markdown node to its element; the node type selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (typeof href !== 'string') return children"
+      },
+      "anchor": "if (typeof href !== 'string')",
+      "reason": "Maps one markdown node to its element; the node type selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{behind && ("
+      },
+      "anchor": "behind &&",
+      "reason": "Shows the Jump to latest pill only while the reader is scrolled away from the end; it is a scroll affordance, not loading, empty or failed content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'prose':"
+      },
+      "anchor": "case 'prose':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'activity':"
+      },
+      "anchor": "case 'activity':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'file-change':"
+      },
+      "anchor": "case 'file-change':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'tests':"
+      },
+      "anchor": "case 'tests':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'steps':"
+      },
+      "anchor": "case 'steps':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'ask': {"
+      },
+      "anchor": "case 'ask':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'view':"
+      },
+      "anchor": "case 'view':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'changes':"
+      },
+      "anchor": "case 'changes':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'view-error':"
+      },
+      "anchor": "case 'view-error':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'error':"
+      },
+      "anchor": "case 'error':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'status':"
+      },
+      "anchor": "case 'status':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'legacy':"
+      },
+      "anchor": "case 'legacy':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.user && ("
+      },
+      "anchor": "data.user &&",
+      "reason": "Shows the user's message only when the turn began with one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.user.images.length > 0 && ("
+      },
+      "anchor": "data.user.images.length > 0 &&",
+      "reason": "Shows attached image names only when the message had images."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.end?.state === 'stopped' && <div style={quiet}>{duration ? `Stopped after ${duration}` : 'Stopped'}</div>}"
+      },
+      "anchor": "data.end?.state === 'stopped' &&",
+      "reason": "Closing note for how the agent's turn ended; the outcome is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.end?.state === 'stopped' && <div style={quiet}>{duration ? `Stopped after ${duration}` : 'Stopped'}</div>}"
+      },
+      "anchor": "duration ?",
+      "reason": "Appends the turn duration to the closing note when it is known."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.end?.state === 'failed' && <div style={failed}>{duration ? `Turn failed after ${duration}` : 'Turn failed'}</div>}"
+      },
+      "anchor": "data.end?.state === 'failed' &&",
+      "reason": "Closing note for how the agent's turn ended; the outcome is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{data.end?.state === 'failed' && <div style={failed}>{duration ? `Turn failed after ${duration}` : 'Turn failed'}</div>}"
+      },
+      "anchor": "duration ?",
+      "reason": "Appends the turn duration to the closing note when it is known."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{children !== undefined && <div style={body}>{children}</div>}"
+      },
+      "anchor": "children !== undefined &&",
+      "reason": "Renders the card body only when the card has content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{plus !== undefined && <span style={added}>{`+${plus}`}</span>}"
+      },
+      "anchor": "plus !== undefined &&",
+      "reason": "Shows each line count only when the agent reported it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{minus !== undefined && <span style={removed}>{`−${minus}`}</span>}"
+      },
+      "anchor": "minus !== undefined &&",
+      "reason": "Shows each line count only when the agent reported it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/FileChange.tsx",
+        "quote": "{item.state !== 'done' && ("
+      },
+      "anchor": "item.state !== 'done' &&",
+      "reason": "Shows the tool call's own progress while it is not done; that is agent activity shown in the transcript, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Steps.tsx",
+        "quote": "{state !== 'done' && ("
+      },
+      "anchor": "state !== 'done' &&",
+      "reason": "Shows the tool call's own progress while it is not done; that is agent activity shown in the transcript, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{item.state !== 'done' && ("
+      },
+      "anchor": "item.state !== 'done' &&",
+      "reason": "Shows the tool call's own progress while it is not done; that is agent activity shown in the transcript, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{hasCounts ? ("
+      },
+      "anchor": "hasCounts ?",
+      "reason": "Chooses between the count summary and the run state when the runner reported no counts."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{passed !== undefined && <span style={{ ...big, color: 'var(--ui-working)' }}>{`${passed} passed`}</span>}"
+      },
+      "anchor": "passed !== undefined &&",
+      "reason": "Shows each count only when the runner reported it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{failed !== undefined && failed > 0 && <span style={{ ...big, color: 'var(--ui-failing)' }}>{`${failed} failed`}</span>}"
+      },
+      "anchor": "failed !== undefined && failed > 0 &&",
+      "reason": "Shows each count only when the runner reported it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{skipped !== undefined && skipped > 0 && <span style={muted}>{`${skipped} skipped`}</span>}"
+      },
+      "anchor": "skipped !== undefined && skipped > 0 &&",
+      "reason": "Shows each count only when the runner reported it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "<span style={muted}>{item.state === 'running' ? 'Running tests' : callStateLabel[item.state]}</span>"
+      },
+      "anchor": "item.state === 'running' ?",
+      "reason": "Labels a run with no counts by its call state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/TestResults.tsx",
+        "quote": "{item.tail && failing && <pre style={tail}>{item.tail}</pre>}"
+      },
+      "anchor": "item.tail && failing &&",
+      "reason": "Shows the output tail only for a failing run."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/ViewError.tsx",
+        "quote": "{agent && <Badge>{`by ${agent}`}</Badge>}"
+      },
+      "anchor": "agent &&",
+      "reason": "Shows the agent's name when it is known."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/ViewError.tsx",
+        "quote": "<Badge tone=\"failing\">{\"couldn't show\"}</Badge>"
+      },
+      "anchor": "\"couldn't show\"",
+      "reason": "Labels a view the daemon refused; the refusal is transcript content the agent caused, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "if (dialog === null) return null"
+      },
+      "anchor": "if (dialog === null)",
+      "reason": "Renders nothing while no dialog is open; that is visibility, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "created === null &&"
+      },
+      "anchor": "created === null &&",
+      "reason": "Shows the agent picker until the chat exists; selects content, not a loading, empty or failed read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "if (ended) {"
+      },
+      "anchor": "if (ended)",
+      "reason": "An ended session swaps the editor for the ended card; it reports the session lifecycle, not a loading, empty or failed read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={{ ...endedCard, borderRadius: queue.length > 0 ? '0 0 var(--ui-radius-window) var(--ui-radius-window)' : 'var(--ui-radius-window)' }} role=\"status\">"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announces the ended card classified at the branch above."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{capabilities?.resume.ok === true && <Button variant=\"primary\" onClick={() => void resume()}>Resume</Button>}"
+      },
+      "anchor": "capabilities?.resume.ok === true &&",
+      "reason": "Shows Resume only when the agent can resume a conversation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{listOpen ? ("
+      },
+      "anchor": "listOpen ?",
+      "reason": "Swaps the queued rows for the suggestion list while an @ or / token is being typed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{(images.length > 0 || pastes.length > 0) && ("
+      },
+      "anchor": "(images.length > 0 || pastes.length > 0) &&",
+      "reason": "Shows the attachment chips only when the unsent message has images or pasted text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{working && (\n              <span style={running} role=\"timer\" aria-label=\"Elapsed time\">"
+      },
+      "anchor": "working &&",
+      "reason": "Shows the pulsing dot and elapsed time only while the agent works."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{working && (\n              <IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
+      },
+      "anchor": "working &&",
+      "reason": "Shows Stop only while the agent works."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{(!working || canSend) && ("
+      },
+      "anchor": "(!working || canSend) &&",
+      "reason": "Shows the Send arrow when idle, and beside Stop once text is typed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "if (queue.length === 0 && steered.length === 0) return null"
+      },
+      "anchor": "if (queue.length === 0 && steered.length === 0)",
+      "reason": "With nothing queued or steered the rows render nothing, so there is no empty-state message to show."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{!readOnly && ("
+      },
+      "anchor": "!readOnly &&",
+      "reason": "Shows the reorder handle only on rows that can still be moved."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{readOnly ? ("
+      },
+      "anchor": "readOnly ?",
+      "reason": "An ended session shows its leftover rows with a note and Delete only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{working ? ("
+      },
+      "anchor": "working ?",
+      "reason": "Offers Steer now while the agent works and Send next once it is idle."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "The status wrapper announces the empty-list message classified above; it is not a separate content state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "{item.source === 'file' && <FileIcon path={item.path} />} {item.label}"
+      },
+      "anchor": "item.source === 'file' &&",
+      "reason": "Shows a file icon only on file suggestions."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+      },
+      "anchor": "item.tag ?",
+      "reason": "Shows the acts-now or sent mark when the row has one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+      },
+      "anchor": "item.source !== 'agent' && item.detail ?",
+      "reason": "Prefixes the mark with a Quirky command's description; agent rows show theirs on a second line."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "description={item.source === 'agent' && item.detail ? <span style={oneLine}>{item.detail}</span> : undefined}"
+      },
+      "anchor": "item.source === 'agent' && item.detail ?",
+      "reason": "Shows an agent command's description on a second line when it has one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/editor/pills.ts",
+        "quote": "if (this.pill.kind === 'file') {"
+      },
+      "anchor": "if (this.pill.kind === 'file')",
+      "reason": "Chooses the pill glyph by whether it names a file or a command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "image.preview ? ("
+      },
+      "anchor": "image.preview ?",
+      "reason": "Shows a thumbnail for an image the composer holds the bytes of, and the name chip otherwise."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason !== undefined && <span className=\"ui-help-text\">{reason}</span>}"
+      },
+      "anchor": "reason !== undefined &&",
+      "reason": "Shows why a setting is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{note !== undefined && <span className=\"ui-help-text\" data-settings-note=\"plan\">{note}</span>}"
+      },
+      "anchor": "note !== undefined &&",
+      "reason": "Shows why Plan is missing under the Permissions row of an agent with no permission modes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}"
+      },
+      "anchor": "reason === undefined &&",
+      "reason": "Shows a setting's current value only while it can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{effortOff && <span className=\"ui-help-text\">{settings.effortReason}</span>}"
+      },
+      "anchor": "effortOff &&",
+      "reason": "Shows why Effort is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && ("
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Shows the effort stepper only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && <span>←→ effort</span>}"
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Mentions the effort keys only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searchable && settings.modelReason === undefined && <span>type to find a model</span>}"
+      },
+      "anchor": "searchable && settings.modelReason === undefined &&",
+      "reason": "Mentions type-to-search only when the model list has a search field."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searching && <span style={rowValue}>{settings.modelList.length}</span>}"
+      },
+      "anchor": "searching &&",
+      "reason": "Counts the models beside the title when the list is long enough to search."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{view === 'model' && modelItems.length === 0 && <div className=\"ui-help-text\" style={empty}>No models match</div>}"
+      },
+      "anchor": "view === 'model' && modelItems.length === 0 &&",
+      "reason": "Says no model matches the typed search; a local filter, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div ref={body}>{view === 'summary' ? summary : list}</div>"
+      },
+      "anchor": "view === 'summary' ?",
+      "reason": "Swaps between the settings summary and one setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'plan':"
+      },
+      "anchor": "case 'plan':",
+      "reason": "Dispatches one transcript block kind to its renderer; the kind selects markup, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{newest && ("
+      },
+      "anchor": "newest &&",
+      "reason": "Shows the Plan chip only once the chat has a plan version; it is a header control, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "panelOpen && shown ? ("
+      },
+      "anchor": "panelOpen && shown ?",
+      "reason": "Builds the plan panel only while the user has it open on a version; the open choice selects layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{planPanel !== null && fits && ("
+      },
+      "anchor": "planPanel !== null && fits &&",
+      "reason": "Places the open plan panel beside the transcript when the body is wide enough; width selects layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{planPanel !== null && !fits && ("
+      },
+      "anchor": "planPanel !== null && !fits &&",
+      "reason": "Places the open plan panel in a sheet when the body is too narrow for a side panel; width selects layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{framed ? ("
+      },
+      "anchor": "framed ?",
+      "reason": "Chooses between the panel's own header and the bare marker a sheet shows under its title; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{restarted && ("
+      },
+      "anchor": "restarted &&",
+      "reason": "Shows the restart notice only on a version that closed because Quirky restarted; it is plan status, not a read of the chat."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "<NoticeLine actions="
+      },
+      "anchor": "<NoticeLine",
+      "reason": "The restart notice of a plan version, classified with its condition above."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{version.filePath !== undefined && ("
+      },
+      "anchor": "version.filePath !== undefined &&",
+      "reason": "Shows Open plan file only when the plan was read from a plan file."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{(exits || problem !== null) && ("
+      },
+      "anchor": "(exits || problem !== null) &&",
+      "reason": "Shows the action area only while the version can be answered or a failure needs showing."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{exits && feedback === null && ("
+      },
+      "anchor": "exits && feedback === null &&",
+      "reason": "Shows the exits while the plan waits and no feedback is being typed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{exits && feedback !== null && ("
+      },
+      "anchor": "exits && feedback !== null &&",
+      "reason": "Shows the feedback box in place of the exits once the user chose Keep planning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "{version.empty !== true && ("
+      },
+      "anchor": "version.empty !== true &&",
+      "reason": "Offers the approve exits only when the plan has text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "if (defaultMode === null || mode === '' || mode === defaultMode) return null"
+      },
+      "anchor": "if (defaultMode === null || mode === '' || mode === defaultMode)",
+      "reason": "Shows the permission badge only while the mode is not the default."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.more && ("
+      },
+      "anchor": "older.more &&",
+      "reason": "Shows Load earlier messages only while older messages remain to page in; it is a paging control over content already shown, not loading, empty or failed content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "{older.loading ? 'Loading earlier messages…' : 'Load earlier messages'}"
+      },
+      "anchor": "older.loading ?",
+      "reason": "Relabels the Load earlier messages button while its page is fetched; the transcript already shown stays, so this is a control label, not a loading state of the view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{lead !== undefined && <span style={lineBox}>{lead}</span>}"
+      },
+      "anchor": "lead !== undefined &&",
+      "reason": "Shows the leading status dot only when the caller passes one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{expandable ? ("
+      },
+      "anchor": "expandable ?",
+      "reason": "Makes a command line a disclosure button only when it is cut off or has output to show."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{open && more}"
+      },
+      "anchor": "open &&",
+      "reason": "Shows a command's output only while its line is expanded."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/ui.tsx",
+        "quote": "onAction: load"
+      },
+      "route": {
+        "target": "quirky.session/get",
+        "invoke": {
+          "file": "plugins/quirky.session/src/ui.tsx",
+          "quote": "context.call('quirky.session/get', { session: id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/ui.tsx",
+            "quote": "function load(): void {\n    if (id === null) return\n    setLoaded((current) => current.status === 'failed' ? { status: 'loading' } : current)\n    const attempt = ++latest.current\n    void readSession(context, id).then((result) => {\n      if (cancelled.current || attempt !== latest.current) return\n      setLoaded((current) => result.status === 'failed' && current.status === 'ready' ? current : result)\n    })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/ui.tsx",
+            "quote": "async function readSession(context: UiPluginContext, id: string): Promise<Exclude<Loaded, { status: 'loading' }>> {\n  try {\n    const session = (await context.call('quirky.session/get', { session: id })) as Session\n    return { status: 'ready', session }\n  } catch (error) {\n    if ((error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound) return { status: 'missing' }\n    return { status: 'failed', failure: messageOf(error) }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/ExitedBar.tsx",
+        "quote": "onClick={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+        "quote": "onAction: () => context.openView(AGENTS_VIEW_ID)"
+      },
+      "route": {
+        "target": "view:quirky.agents/settings",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+          "quote": "context.openView(AGENTS_VIEW_ID)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+        "quote": "onAction: () => onPick(entry.request)"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onClose={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onClick={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onSubmit={(event) => { event.preventDefault(); void submit() }}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+            "quote": "const submit = async () => {\n    if (!canSubmit) return\n    setSubmitting(true)\n    try {\n      if (await store.create(request.agent, prompt, request.background)) onClose()\n    } finally {\n      setSubmitting(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onChange={(event) => setPrompt(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent message draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+        "quote": "onKeyDown={(event) => {\n              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {\n                event.preventDefault()\n                void submit()\n              }\n            }}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/PromptDialog.tsx",
+            "quote": "const submit = async () => {\n    if (!canSubmit) return\n    setSubmitting(true)\n    try {\n      if (await store.create(request.agent, prompt, request.background)) onClose()\n    } finally {\n      setSubmitting(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onChange={(id) => store.open(id)}"
+      },
+      "route": {
+        "target": "view:quirky.session/worktree",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "open(session?: string): void {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onPick={pick}"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+            "quote": "const pick = (request: NewSessionRequest) => {\n    if (request.agent === 'shell') void store.create('shell', '', false)\n    else setPending(request)\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}"
+      },
+      "route": {
+        "target": "command:quirky.session/run-badge",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+          "quote": "context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClick={() => void store.close(session)}"
+      },
+      "route": {
+        "target": "quirky.session/close",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/close', { session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async close(session: Session): Promise<void> {\n    if (session.status !== 'exited') {\n      const ok = await this.context.confirm({\n        title: 'Close session',\n        body: `\"${session.title}\" is still running. Close it?`,\n        confirmLabel: 'Close'\n      })\n      if (!ok) return\n    }\n    try {\n      await this.context.call('quirky.session/close', { session: session.id })\n    } catch (error) {\n      this.context.toast('Could not close session', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onClose={() => setPending((current) => current === pending ? null : current)}"
+      },
+      "transient": "draft",
+      "reason": "Cancels the unsent new-session draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionView.tsx",
+        "quote": "onClose={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the action to its owning handler without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/TerminalPane.tsx",
+        "quote": "onLagged: () => handleLag(id)"
+      },
+      "notAction": "subscription",
+      "reason": "Terminal stream lag is a subscription callback, not a user action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onAction: () => store.retry()"
+      },
+      "route": {
+        "target": "quirky.session/list",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/list', { worktree: worktree.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "retry(): void {\n    if (this.stopped || this.snapshot.status !== 'failed') return\n    this.queued = []\n    this.commit({ status: 'loading', failure: null, worktree: null, sessions: [] })\n    void this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async load(): Promise<void> {\n    if (this.loading) {\n      this.reloadAfter = true\n      return\n    }\n    this.loading = true\n    try {\n      do {\n        this.reloadAfter = false\n        await this.loadOnce()\n      } while (this.reloadAfter && !this.stopped)\n    } finally {\n      this.loading = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async loadOnce(): Promise<void> {\n    let worktree: Worktree\n    let sessions: Session[]\n    try {\n      worktree = (await this.context.call('quirky.worktree/resolve', { selector: this.selector })) as Worktree\n      sessions = (await this.context.call('quirky.session/list', { worktree: worktree.id })) as Session[]\n    } catch (error) {\n      if (this.stopped) return\n      const gone = (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound\n      this.queued = []\n      if (gone) this.commit({ status: 'missing', failure: null, worktree: null, sessions: [] })\n      else if (this.snapshot.status === 'ready') this.context.toast('Could not load sessions', messageOf(error))\n      else this.commit({ status: 'failed', failure: messageOf(error), worktree: null, sessions: [] })\n      return\n    }\n    if (this.stopped) return\n    const byId = new Map(sessions.map((session) => [session.id, session]))\n    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id, true)\n    const loadedSessions = [...byId.values()]\n    pruneShowAllEvents(worktree.id, loadedSessions)\n    this.commit({\n      status: 'ready',\n      failure: null,\n      worktree: { id: worktree.id, name: worktree.name, path: worktree.path },\n      sessions: loadedSessions\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onAction: () => void store.create('shell', '', false)"
+      },
+      "route": {
+        "target": "quirky.session/create",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async create(agent: AgentKind, prompt: string, background: boolean): Promise<boolean> {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    const text = prompt.trim()\n    try {\n      const session = (\n        background\n          ? await this.context.call('quirky.structured/create', { worktree, agent, prompt: text })\n          : await this.context.call('quirky.session/create', { worktree, agent, ...(text === '' ? {} : { prompt: text }) })\n      ) as Session\n      this.open(session.id)\n      return true\n    } catch (error) {\n      this.context.toast('Could not start session', messageOf(error))\n      return false\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onClose={() => void store.close(active)}"
+      },
+      "route": {
+        "target": "quirky.session/close",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/close', { session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "async close(session: Session): Promise<void> {\n    if (session.status !== 'exited') {\n      const ok = await this.context.confirm({\n        title: 'Close session',\n        body: `\"${session.title}\" is still running. Close it?`,\n        confirmLabel: 'Close'\n      })\n      if (!ok) return\n    }\n    try {\n      await this.context.call('quirky.session/close', { session: session.id })\n    } catch (error) {\n      this.context.toast('Could not close session', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/NewSessionMenu.tsx",
+        "quote": "if (entry.kind === 'chat') return { ...item, onAction: onChat }"
+      },
+      "anchor": "onAction",
+      "notAction": "forwarded",
+      "reason": "Forwards the menu choice to the onChat handler of its owner, which only opens the New chat chooser."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "<div style={actions}><NewSessionMenu context={context} onPick={pick} onChat={() => setChoosing(true)} /></div>"
+      },
+      "anchor": "onChat",
+      "transient": "draft",
+      "reason": "Opens the New chat chooser; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "<Dialog open title=\"New chat\" onClose={() => setChoosing(false)}>"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Dismisses the New chat chooser; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/SessionTabs.tsx",
+        "quote": "onCreated={(created) => {"
+      },
+      "anchor": "onCreated",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })"
+        },
+        "target": "view:quirky.session/worktree",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "open(session?: string): void {\n    const worktree = this.snapshot.worktree?.id ?? this.selector\n    this.context.openView(WORKTREE_VIEW_ID, session === undefined ? { worktree } : { worktree, session })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
+        "quote": "<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} aria-label=\"Tool activity\">"
+      },
+      "anchor": "onToggle",
+      "transient": "draft",
+      "reason": "Expands or collapses the folded tool activity; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "onClick={() => void start(id)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })"
+        },
+        "target": "quirky.structured/create",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+            "quote": "const start = async (agent: string) => {\n    setStarting(agent)\n    try {\n      onCreated(await createChat(context, agent, worktree, picks))\n    } catch (error) {\n      if (onError) onError(messageOf(error))\n      else context.toast('Could not start chat', messageOf(error))\n    } finally {\n      setStarting(null)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })) as Session\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onChange={(event) => {"
+      },
+      "anchor": "onChange",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })"
+        },
+        "target": "command:quirky.session/show-all-events",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "aria-label=\"Transcript\" onScroll={(event) =>"
+      },
+      "anchor": "onScroll",
+      "transient": "draft",
+      "reason": "Tracks only whether the transcript follows new content; no data is read or written."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<button type=\"button\" style={jump} aria-label=\"Jump to latest\" onClick={onJumpToLatest}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onJumpToLatest, which only scrolls the transcript to its end and resumes following; no data is read or written."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "onOpenLink={openLink}"
+      },
+      "anchor": "onOpenLink",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+          "quote": "context.call('quirky.terminal/openExternal', { target: href })"
+        },
+        "target": "quirky.terminal/openExternal",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+            "quote": "const openLink = (href: string) => {\n    void context\n      .confirm({ title: 'Open link', body: href, confirmLabel: 'Open' })\n      .then((ok) => (ok ? context.call('quirky.terminal/openExternal', { target: href }) : undefined))\n      .catch((error) => context.toast('Could not open link', messageOf(error)))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
+        },
+        "target": "quirky.structured/messages",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "function load(): void {\n    const attempt = ++latest.current\n    const firstLoad = !loadedOnce.current\n    if (firstLoad) setPhase({ status: 'loading' })\n    ;(firstLoad ? loadNewest(attempt) : catchUp(attempt)).catch((error: { code?: unknown }) => {\n      if (cancelled.current || attempt !== latest.current) return\n      if (error?.code === RpcErrorCode.MethodNotFound) {\n        loadedOnce.current = false\n        setPhase({ status: 'off' })\n      } else if (!loadedOnce.current) {\n        setPhase({ status: 'failed', message: messageOf(error) })\n      }\n    })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadNewest(attempt: number): Promise<void> {\n    const { messages: page, limit } = await fetchPage(context, { session: session.id, tail: true }, CHAT_PAGE_SIZE)\n    if (cancelled.current || attempt !== latest.current) return\n    loadedOnce.current = true\n    setPhase({ status: 'ready' })\n    add(page)\n    const oldest = page[0]?.seq ?? 1\n    cursor.current = { record: session, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n    if (page.length < limit) await loadEarlier(CHAT_PAGE_SIZE - page.length)\n    else setOlder({ more: true, loading: false, error: null })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "<Button variant=\"primary\" disabled={!item.resumable || busy} title={reason} onClick={() => void restart()}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+          "quote": "context.call('quirky.structured/resume', { session: session.id })"
+        },
+        "target": "quirky.structured/resume",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+            "quote": "const restart = async () => {\n    setBusy(true)\n    try {\n      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })\n    } catch (error) {\n      context.toast('Could not restart', messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+        "quote": "<Button onClick={() => void openTerminal()}>Open in terminal</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+          "quote": "context.call('quirky.terminal/newTab', { workspace: session.worktreeId, agent: session.agent })"
+        },
+        "target": "quirky.terminal/newTab",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
+            "quote": "const openTerminal = async () => {\n    try {\n      await context.call('quirky.terminal/newTab', { workspace: session.worktreeId, agent: session.agent })\n    } catch (error) {\n      context.toast('Could not open a terminal', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onClose={() => closeNewChatDialog(dialog.id)}"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Dismisses the New chat dialog before any chat exists; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onAction: () => void adoptNewChat(context, dialog, created)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.terminal/adoptSession",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+          "quote": "context.call('quirky.terminal/adoptSession', { group, session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+            "quote": "export async function adoptNewChat(context: UiPluginContext, dialog: NewChatDialogState, session: Session): Promise<void> {\n  try {\n    let group = dialog.group\n    if (group === null) {\n      const result = await context.call('quirky.terminal/workspace', { workspace: dialog.workspace })\n      const active = isRecord(result) && isRecord(result.workspace) ? result.workspace.activeGroup : undefined\n      if (typeof active !== 'string' || active === '') throw new Error('the workspace has no active group')\n      group = active\n    }\n    await context.call('quirky.terminal/adoptSession', { group, session: session.id })\n    closeNewChatDialog(dialog.id)\n  } catch (error) {\n    failNewChat(dialog.id, `Chat ${session.id} was created, but its tab could not be opened: ${messageOf(error)}`)\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onError={(message) => failNewChat(dialog.id, message)}"
+      },
+      "anchor": "onError",
+      "transient": "draft",
+      "reason": "Shows a failed create in the dialog; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onCreated={(session) => {"
+      },
+      "anchor": "onCreated",
+      "route": {
+        "target": "quirky.terminal/adoptSession",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+          "quote": "context.call('quirky.terminal/adoptSession', { group, session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+            "quote": "export async function adoptNewChat(context: UiPluginContext, dialog: NewChatDialogState, session: Session): Promise<void> {\n  try {\n    let group = dialog.group\n    if (group === null) {\n      const result = await context.call('quirky.terminal/workspace', { workspace: dialog.workspace })\n      const active = isRecord(result) && isRecord(result.workspace) ? result.workspace.activeGroup : undefined\n      if (typeof active !== 'string' || active === '') throw new Error('the workspace has no active group')\n      group = active\n    }\n    await context.call('quirky.terminal/adoptSession', { group, session: session.id })\n    closeNewChatDialog(dialog.id)\n  } catch (error) {\n    failNewChat(dialog.id, `Chat ${session.id} was created, but its tab could not be opened: ${messageOf(error)}`)\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onEdit={(entry) => void pullBack(entry)}"
+      },
+      "anchor": "onEdit",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pullBack = async (entry: QueuedMessage) => {\n    try {\n      await context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })\n    } catch (error) {\n      fail(`Could not update the queue: ${messageOf(error)}`)\n      return\n    }\n    setText((current) => (current.trim() === '' ? entry.text : `${entry.text}\\n\\n${current}`))\n    addImages((entry.images ?? []).map((path) => ({ name: basename(path), path })))\n    editor.current?.focus()\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onSteered={(entry) => setSteered((current) => [...current, { id: entry.id, text: entry.text }])}"
+      },
+      "anchor": "onSteered",
+      "transient": "draft",
+      "reason": "Records that a steered row is waiting for the agent; no data changes until it arrives."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onError={fail}"
+      },
+      "anchor": "onError",
+      "transient": "draft",
+      "reason": "Only shows the inline error under the card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<InlineError message={failure.message} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />"
+      },
+      "anchor": "onAction",
+      "notAction": "forwarded",
+      "reason": "Forwards the Retry click to the retry handler held with the error, which sends the restored message again; the send itself is routed separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{capabilities?.resume.ok === true && <Button variant=\"primary\" onClick={() => void resume()}>Resume</Button>}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/resume', { session: session.id })"
+        },
+        "target": "quirky.structured/resume",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const resume = async () => {\n    try {\n      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session\n      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks })\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })\n    } catch (error) {\n      fail(`Could not resume: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<Button onClick={() => void newChat()}>New chat</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })"
+        },
+        "target": "quirky.structured/create",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const newChat = async () => {\n    try {\n      const created = await createChat(context, session.agent, session.worktreeId, picks)\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: created.id })\n    } catch (error) {\n      fail(`Could not start a chat: ${messageOf(error)}`)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(effort === null ? {} : { options: { effort } }),\n    ...(picks.mode === null ? {} : { permissionMode: picks.mode })\n  })) as Session\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDragOver={(event) => {"
+      },
+      "anchor": "onDragOver",
+      "transient": "hover",
+      "reason": "Marks the composer as a drop target while files are dragged over it; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDrop={(event) => {"
+      },
+      "anchor": "onDrop",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onPick={choose}"
+      },
+      "anchor": "onPick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const choose = (item: Suggestion) => {\n    if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })\n    else if (item.source === 'agent') editor.current?.insertPill({ kind: 'command', name: item.name })\n    else {\n      if (trigger) setText(text.slice(0, trigger.from) + text.slice(trigger.to))\n      setTrigger(null)\n      runCommand(item.command)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const runCommand = (name: QuirkyCommandName) => {\n    if (name === 'model' || name === 'effort' || name === 'mode') openSettings(name)\n    else if (name === 'plan') togglePlan()\n    else if (name === 'new') void newChat()\n    else if (name === 'stop') void stop()\n    else if (ended) void resume()\n    else fail('The session has not ended')\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={card(attached, working || focused)} onFocusCapture={() => setFocused(true)} onBlurCapture={() => setFocused(false)}>"
+      },
+      "anchor": "onFocusCapture",
+      "transient": "hover",
+      "reason": "Marks the card as focused so its border shows the accent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={card(attached, working || focused)} onFocusCapture={() => setFocused(true)} onBlurCapture={() => setFocused(false)}>"
+      },
+      "anchor": "onBlurCapture",
+      "transient": "hover",
+      "reason": "Clears the focused mark on the card border."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ImageChip key={image.path} name={image.name} preview={image.preview} onRemove={() => removeImage(image)} />"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ScopeChip key={image.path} label={image.name} removeLabel={`Remove ${image.name}`} onRemove={() => removeImage(image)} />"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ImageChip.tsx",
+        "quote": "<IconButton label={`Remove ${name}`} style={remove} onClick={onRemove}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onRemove, which the composer routes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onRemove={() => setPastes((current) => current.filter((existing) => existing !== paste))}"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onChange={(value) => {"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only the unsent message text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onSubmit={(kind) => void submit(kind)}"
+      },
+      "anchor": "onSubmit",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onTrigger={trackTrigger}"
+      },
+      "anchor": "onTrigger",
+      "transient": "caret",
+      "reason": "Tracks the @ or / token under the caret to open the suggestion list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onKeyNav={navigate}"
+      },
+      "anchor": "onKeyNav",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const navigate = (key: NavKey): boolean => {\n    if (!listOpen) return false\n    if (key === 'escape') {\n      setDismissed(listKey)\n      return true\n    }\n    if (items.length === 0) return false\n    if (key === 'up' || key === 'down') {\n      setActive((current) => (current + (key === 'down' ? 1 : -1) + items.length) % items.length)\n      return true\n    }\n    choose(items[Math.min(active, items.length - 1)]!)\n    return true\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const choose = (item: Suggestion) => {\n    if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })\n    else if (item.source === 'agent') editor.current?.insertPill({ kind: 'command', name: item.name })\n    else {\n      if (trigger) setText(text.slice(0, trigger.from) + text.slice(trigger.to))\n      setTrigger(null)\n      runCommand(item.command)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const runCommand = (name: QuirkyCommandName) => {\n    if (name === 'model' || name === 'effort' || name === 'mode') openSettings(name)\n    else if (name === 'plan') togglePlan()\n    else if (name === 'new') void newChat()\n    else if (name === 'stop') void stop()\n    else if (ended) void resume()\n    else fail('The session has not ended')\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onEscape={() => {"
+      },
+      "anchor": "onEscape",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onUpInEmpty={() => {"
+      },
+      "anchor": "onUpInEmpty",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pullBack = async (entry: QueuedMessage) => {\n    try {\n      await context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })\n    } catch (error) {\n      fail(`Could not update the queue: ${messageOf(error)}`)\n      return\n    }\n    setText((current) => (current.trim() === '' ? entry.text : `${entry.text}\\n\\n${current}`))\n    addImages((entry.images ?? []).map((path) => ({ name: basename(path), path })))\n    editor.current?.focus()\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onPasteFiles={(files) => void takeFiles(files)}"
+      },
+      "anchor": "onPasteFiles",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDropFiles={(files) => void takeFiles(files)}"
+      },
+      "anchor": "onDropFiles",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onLongPaste={(pasted) => setPastes((current) => [...current, { id: `paste-${Date.now().toString(36)}-${pasteSeq++}`, text: pasted }])}"
+      },
+      "anchor": "onLongPaste",
+      "transient": "draft",
+      "reason": "Turns a long paste into an unsent chip."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />"
+      },
+      "anchor": "onPicks",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />"
+      },
+      "anchor": "onOpenChange",
+      "transient": "draft",
+      "reason": "Opens or closes the settings popover; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ModeBadges settings={settings} picks={picks} onPicks={(next) => void pick(next)} />"
+      },
+      "anchor": "onPicks",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Attach images\" style={round} disabled={attachReason !== undefined} title={attachReason ?? 'Attach images'} onClick={onAttach}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onAttach, which opens the native image picker and only adds the chosen paths to the unsent message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Send\" variant=\"primary\" style={round} disabled={!canSend} title={working ? 'Queue (Enter)' : 'Send (Enter)'} onClick={() => void submit('send')}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragStart={(event) => {"
+      },
+      "anchor": "onDragStart",
+      "transient": "hover",
+      "reason": "Starts dragging a queued row; nothing changes until it is dropped."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragOver={(event) => {"
+      },
+      "anchor": "onDragOver",
+      "transient": "hover",
+      "reason": "Allows a dragged row to be dropped here; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDrop={(event) => {"
+      },
+      "anchor": "onDrop",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/reorderQueued', { session: session.id, ids })"
+        },
+        "target": "quirky.structured/reorderQueued",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const reorder = (id: string, target: number) => {\n    const ids = queue.map((entry) => entry.id)\n    const from = ids.indexOf(id)\n    if (from < 0 || target < 0 || target >= ids.length || from === target) return\n    ids.splice(from, 1)\n    ids.splice(target, 0, id)\n    void act(() => context.call('quirky.structured/reorderQueued', { session: session.id, ids }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragEnd={() => setDragging(null)}"
+      },
+      "anchor": "onDragEnd",
+      "transient": "hover",
+      "reason": "Clears the dragged-row mark."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<button type=\"button\" style={handle} aria-label=\"Reorder queued message (drag, or Up and Down arrows)\" title=\"Drag to reorder\" onKeyDown={(event) => onHandleKey(event, entry.id, index)}>"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/reorderQueued', { session: session.id, ids })"
+        },
+        "target": "quirky.structured/reorderQueued",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const onHandleKey = (event: KeyboardEvent, id: string, index: number) => {\n    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return\n    event.preventDefault()\n    reorder(id, index + (event.key === 'ArrowUp' ? -1 : 1))\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const reorder = (id: string, target: number) => {\n    const ids = queue.map((entry) => entry.id)\n    const from = ids.indexOf(id)\n    if (from < 0 || target < 0 || target >= ids.length || from === target) return\n    ids.splice(from, 1)\n    ids.splice(target, 0, id)\n    void act(() => context.call('quirky.structured/reorderQueued', { session: session.id, ids }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onClick={() => void act(() => context.call('quirky.structured/steer', { session: session.id, id: entry.id }).then(() => onSteered?.(entry)))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/steer', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/steer",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<Button onClick={() => void act(() => context.call('quirky.structured/sendQueued', { session: session.id, id: entry.id }))}>Send next</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/sendQueued', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/sendQueued",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<Button aria-label=\"Edit queued message\" onClick={() => onEdit?.(entry)}>Edit</Button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onEdit, which moves the queued message back into the editor; the dequeue is routed from the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<IconButton label=\"Delete queued message\" onClick={() => void remove(entry)}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const remove = (entry: QueuedMessage) => act(() => context.call('quirky.structured/dequeue', { session: session.id, id: entry.id }))"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<Button style={chipButton} aria-haspopup=\"dialog\" aria-expanded={open} onClick={() => onOpenChange(!open)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpenChange, which only shows or hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<Popover open={open} label=\"Turn settings\" anchor={anchor} onClose={() => onOpenChange(false)}>"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onOpenChange, which only hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, mode: defaultMode })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "<div key={item.id} role=\"option\" aria-selected={index === active} style={option} onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(item)}>"
+      },
+      "anchor": "onMouseDown",
+      "transient": "caret",
+      "reason": "Keeps the editor's caret and focus while an option is clicked."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "<div key={item.id} role=\"option\" aria-selected={index === active} style={option} onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(item)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onPick, which the composer routes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "data-opens={name} disabled={reason !== undefined} title={reason} onClick={onOpen}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpen, which only opens that setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChange={(event) => setQuery(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Filters the model list by the typed search text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div style={panel} onKeyDown={onSummaryKeyDown}>"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onSummaryKeyDown, which moves focus or opens a setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('model')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the model list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('mode')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the permission list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onKeyDown={onEffortKeyDown}"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onEffortKeyDown, which steps effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"Less effort\" disabled={effortIndex <= 0} onClick={() => onStepEffort(-1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the lower effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"More effort\" disabled={effortIndex >= settings.choices.length - 1} onClick={() => onStepEffort(1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the higher effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label={`${title}, back to all settings`} onClick={onShowSummary}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowSummary, which only returns to the settings summary."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onBack={searching ? undefined : onShowSummary}"
+      },
+      "anchor": "onBack",
+      "transient": "draft",
+      "reason": "Steps back to the settings summary; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChoose={onPickRow}"
+      },
+      "anchor": "onChoose",
+      "notAction": "forwarded",
+      "reason": "Forwards the chosen row to onPickRow, which applies it through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClose={() => onOpenChange(false)}\n"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onOpenChange, which only hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "window.addEventListener('keydown', escape, true)"
+      },
+      "anchor": "window.addEventListener('keydown'",
+      "transient": "draft",
+      "reason": "Escape steps back to the settings summary; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanChip.tsx",
+        "quote": "onClick={onToggle}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onToggle, which only shows or hides the plan panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "<IconButton label=\"Close plan\" onClick={onClose}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onClose, which only hides the plan panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onClick={() => onShowPlan?.(block.item.version)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onShowPlan, which only shows the plan panel on that version."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onShowPlan={onOpenPlan}"
+      },
+      "anchor": "onShowPlan",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to the block renderer without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onToggle={() => {"
+      },
+      "anchor": "onToggle",
+      "transient": "draft",
+      "reason": "Shows or hides the plan panel; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onOpenPlan={(version) => {"
+      },
+      "anchor": "onOpenPlan",
+      "transient": "draft",
+      "reason": "Shows the plan panel on the chosen version; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onClose={closePanel}\n        framed={fits}"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Hides the plan panel; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<Dialog open title=\"Plan\" variant=\"sheet\" scrollBody onClose={closePanel}>"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Hides the plan sheet; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onChange={(event) => setFeedback(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only the unsent feedback text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={onKeepPlanning}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onKeepPlanning, which only opens the unsent feedback box."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={onCancelFeedback}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onCancelFeedback, which only closes the unsent feedback box."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={() => void answer(AUTO)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+            "quote": "const answer = (decision: Decision, reason?: string) =>\n    attempt(() =>\n      context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })\n    )"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={() => void answer(REVIEW)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+            "quote": "const answer = (decision: Decision, reason?: string) =>\n    attempt(() =>\n      context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })\n    )"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={() => void answer(KEEP, feedback.trim())}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+            "quote": "const answer = (decision: Decision, reason?: string) =>\n    attempt(() =>\n      context.call('quirky.ask/answer', {\n        askId: version.askId,\n        answers: {\n          decision: { value: decision.value, label: decision.label, source: 'option' },\n          ...(reason === undefined || reason === '' ? {} : { reason: { value: reason, source: 'input' } })\n        },\n        skipped: []\n      })\n    )"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onAction: () => void presentAgain()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+            "quote": "const presentAgain = () => attempt(() => context.call('quirky.structured/send', { session: session.id, text: PRESENT_AGAIN }))"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+        "quote": "onClick={() => openFile(version.filePath!)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+          "quote": "context.call('quirky.terminal/openExternal', { target: path })"
+        },
+        "target": "quirky.terminal/openExternal",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
+            "quote": "const openFile = (path: string) => {\n    void context\n      .confirm({ title: 'Open plan file', body: path, confirmLabel: 'Open' })\n      .then((ok) => (ok ? context.call('quirky.terminal/openExternal', { target: path }) : undefined))\n      .catch((error) => context.toast('Could not open plan file', messageOf(error)))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onCycleMode={cycleMode}"
+      },
+      "anchor": "onCycleMode",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const cycleMode = () => {\n    const cycle = settings.modes.filter((name) => modeOn(name) && !settings.isDangerous(name))\n    if (cycle.length === 0) {\n      fail(unavailable())\n      return\n    }\n    const from = settings.modes.indexOf(settings.mode)\n    const next = settings.modes.map((_, step) => settings.modes[(from + 1 + step) % settings.modes.length]!).find((name) => cycle.includes(name))\n    if (next !== undefined && next !== settings.mode) void pick({ ...picks, mode: next })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<Button type=\"button\" disabled={older.loading} onClick={showEarlier}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
+        },
+        "target": "quirky.structured/messages",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "function showEarlier(): void {\n    const element = scrollRef.current\n    keepDistanceFromEnd.current = element ? element.scrollHeight - element.scrollTop : null\n    void loadEarlier()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadEarlier(budget = CHAT_PAGE_SIZE): Promise<void> {\n    if (paging.current || cursor.current === null) return\n    paging.current = true\n    const run = generation.current\n    const stale = () => cancelled.current || run !== generation.current\n    setOlder((now) => ({ ...now, loading: true, error: null }))\n    let error: string | null = null\n    try {\n      let left = budget\n      while (left > 0 && cursor.current !== null) {\n        const at: HistoryCursor = cursor.current\n        if (at.exhausted) {\n          const next: string | null | undefined = at.record.resumedFrom\n          if (typeof next !== 'string' || seen.current.has(next)) {\n            cursor.current = null\n            break\n          }\n          seen.current.add(next)\n          try {\n            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }\n          } catch {\n            cursor.current = null\n          }\n          if (stale()) return\n          continue\n        }\n        const { messages: page, limit } = await fetchPage(\n          context,\n          { session: at.record.id, tail: true, ...(at.beforeSeq === undefined ? {} : { beforeSeq: at.beforeSeq }) },\n          left\n        )\n        if (stale()) return\n        if (at.record.id === session.id) add(page)\n        else setEarlier((chats) => prependEarlier(chats, at.record, page))\n        const oldest = page[0]?.seq ?? at.beforeSeq ?? 1\n        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n        left -= page.length\n      }\n    } catch (failure) {\n      error = messageOf(failure)\n    } finally {\n      paging.current = false\n    }\n    if (stale()) return\n    const more = cursor.current !== null && (!cursor.current.exhausted || typeof cursor.current.record.resumedFrom === 'string')\n    setOlder({ more, loading: false, error })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "<InlineError message={`Could not load earlier messages: ${older.error}`} action={{ label: 'Retry', onAction: showEarlier }} />"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/messages', { ...params, limit })"
+        },
+        "target": "quirky.structured/messages",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "function showEarlier(): void {\n    const element = scrollRef.current\n    keepDistanceFromEnd.current = element ? element.scrollHeight - element.scrollTop : null\n    void loadEarlier()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function loadEarlier(budget = CHAT_PAGE_SIZE): Promise<void> {\n    if (paging.current || cursor.current === null) return\n    paging.current = true\n    const run = generation.current\n    const stale = () => cancelled.current || run !== generation.current\n    setOlder((now) => ({ ...now, loading: true, error: null }))\n    let error: string | null = null\n    try {\n      let left = budget\n      while (left > 0 && cursor.current !== null) {\n        const at: HistoryCursor = cursor.current\n        if (at.exhausted) {\n          const next: string | null | undefined = at.record.resumedFrom\n          if (typeof next !== 'string' || seen.current.has(next)) {\n            cursor.current = null\n            break\n          }\n          seen.current.add(next)\n          try {\n            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }\n          } catch {\n            cursor.current = null\n          }\n          if (stale()) return\n          continue\n        }\n        const { messages: page, limit } = await fetchPage(\n          context,\n          { session: at.record.id, tail: true, ...(at.beforeSeq === undefined ? {} : { beforeSeq: at.beforeSeq }) },\n          left\n        )\n        if (stale()) return\n        if (at.record.id === session.id) add(page)\n        else setEarlier((chats) => prependEarlier(chats, at.record, page))\n        const oldest = page[0]?.seq ?? at.beforeSeq ?? 1\n        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }\n        left -= page.length\n      }\n    } catch (failure) {\n      error = messageOf(failure)\n    } finally {\n      paging.current = false\n    }\n    if (stale()) return\n    const more = cursor.current !== null && (!cursor.current.exhausted || typeof cursor.current.record.resumedFrom === 'string')\n    setOlder({ more, loading: false, error })\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "async function fetchPage(\n  context: UiPluginContext,\n  params: Record<string, unknown>,\n  limit: number\n): Promise<{ messages: StructuredMessage[]; limit: number }> {\n  for (;;) {\n    try {\n      return { messages: (await context.call('quirky.structured/messages', { ...params, limit })) as StructuredMessage[], limit }\n    } catch (error) {\n      if (limit <= 1 || !replyTooLarge(error)) throw error\n      limit = Math.ceil(limit / 2)\n    }\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "<button type=\"button\" style={toggleButton} aria-expanded={open} onClick={onToggle}>"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the click to the onToggle handler, which only expands or collapses one command line.",
+      "notAction": "forwarded"
+    }
+  ]
+}

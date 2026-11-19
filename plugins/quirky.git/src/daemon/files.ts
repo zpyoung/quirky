@@ -1,8 +1,10 @@
 import { gitApi, type DiffRequest } from '@quirky/git'
-import type { GitDiffSource } from '@quirky/protocol'
+import type { GitDiffSource, ProcessRunner } from '@quirky/protocol'
 import { readCompare } from './compare'
 import type { DaemonEnv, Handler } from './env'
 import { containedPath } from './paths'
+import { moveMarkToWrite, reviewDiff } from './review'
+import { requireTrees } from './snapshots'
 
 declare global {
   /** Test-only replacement for Finder's `open -R`; production never sets it. */
@@ -19,7 +21,9 @@ function oidParam(env: DaemonEnv, name: string, value: unknown): string | undefi
 
 /**
  * Both sides of a file diff for a source: staged, unstaged, branch (merge base to head, defaulting
- * to the current compare) or commit (first parent to commit). A diff git cannot read fails with
+ * to the current compare), commit (first parent to commit), trees (the `from` tree to the `to`
+ * tree of two snapshots) or review (the merge base, or the reviewed content, to the working file;
+ * see `reviewDiff`). A diff git cannot read fails with
  * git's message instead of looking like "no changes".
  */
 export function diff(env: DaemonEnv): Handler {
@@ -34,6 +38,13 @@ export function diff(env: DaemonEnv): Handler {
     }
     const { rel } = await containedPath(worktree.path, params.path)
     const oldPath = params.oldPath === undefined ? undefined : (await containedPath(worktree.path, params.oldPath)).rel
+    if (source === 'review') {
+      if (params.against !== 'base' && params.against !== 'reviewed') {
+        throw env.context.error('invalid-params', 'against must be base or reviewed for source review.')
+      }
+      return reviewDiff(env, worktree, { path: rel, against: params.against, ...(oldPath !== undefined && { oldPath }) })
+    }
+    if (params.against !== undefined) throw env.context.error('invalid-params', 'against is only available for source review.')
     const request: DiffRequest = {
       path: rel,
       source,
@@ -49,6 +60,13 @@ export function diff(env: DaemonEnv): Handler {
         request.mergeBase ??= current.mergeBase!
         request.head ??= current.headOid!
       }
+    } else if (source === 'trees') {
+      if (typeof params.from !== 'string' || typeof params.to !== 'string') {
+        throw env.context.error('invalid-params', 'from and to are required for source trees.')
+      }
+      await requireTrees(env, worktree, [params.from, params.to])
+      request.from = params.from
+      request.to = params.to
     } else if (source === 'commit') {
       const commit = oidParam(env, 'commit', params.commit)
       if (commit === undefined) throw env.context.error('invalid-params', 'commit is required for source commit.')
@@ -79,12 +97,18 @@ export function serialised<T>(key: string, task: () => Promise<T>): Promise<T> {
 /**
  * Writes a working file atomically; with `expected` it refuses when the file changed on disk.
  * Saves to the same file run one at a time so the hash check and the write cannot interleave.
+ * A review mark that holds the `expected` hash moves to the saved content, so saving keeps a
+ * reviewed file reviewed.
  */
 export function save(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
     const { rel, absolute } = await containedPath(worktree.path, params.path)
-    const result = await serialised(absolute, () => gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected))
+    const result = await serialised(absolute, async () => {
+      const written = await gitApi().saveWorkingFile(worktree.path, rel, params.content, params.expected)
+      if (params.expected !== undefined) moveMarkToWrite(env, worktree, rel, params.expected, new TextEncoder().encode(params.content), written.hash)
+      return written
+    })
     env.changed(worktree)
     return result
   }
@@ -122,9 +146,15 @@ export function ignoreFolder(env: DaemonEnv): Handler {
   }
 }
 
-async function openInFinder(absolute: string): Promise<boolean> {
-  const proc = Bun.spawn(['open', '-R', absolute], { stdout: 'ignore', stderr: 'ignore' })
-  return (await proc.exited) === 0
+async function openInFinder(runner: ProcessRunner, absolute: string): Promise<boolean> {
+  try {
+    const result = await runner.run(['open', '-R', absolute], {
+      timeoutMs: 30_000, maxOutputBytes: 1, overflow: 'truncate', killGraceMs: 2000
+    })
+    return !result.spawnError && !result.stopped && !result.signal && result.exitCode === 0
+  } catch {
+    return false
+  }
 }
 
 /** Shows a file in Finder. */
@@ -134,7 +164,7 @@ export function reveal(env: DaemonEnv): Handler {
     const { absolute } = await containedPath(worktree.path, params.path)
     const hook = globalThis.__QUIRKY_TEST_REVEAL__
     if (hook) await hook(absolute)
-    else if (!(await openInFinder(absolute))) throw env.errors.reasoned('conflict', 'failed', `Could not reveal ${params.path} in Finder.`)
+    else if (!(await openInFinder(env.context.process, absolute))) throw env.errors.reasoned('conflict', 'failed', `Could not reveal ${params.path} in Finder.`)
     return { ok: true }
   }
 }

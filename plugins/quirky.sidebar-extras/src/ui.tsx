@@ -2,8 +2,21 @@ import { Badge, IconButton, StatusDot } from '@quirky/ui'
 import { createElement, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
-import { isPlainRecord } from './daemon/state'
-import type { DirtyResult } from './daemon/dirty'
+
+type DirtyResult = {
+  worktreeId: string | null
+  instanceId: string | null
+  count: number
+  capped: boolean
+  title: string
+  dirty: boolean
+  available: boolean
+  error?: string
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 const SLOT_ID = 'activity-item:quirky.sidebar-extras/source-control'
 const PANEL_ID = 'panel:quirky.git/source-control'
@@ -15,10 +28,6 @@ const REFRESH_EVENTS: Readonly<Partial<Record<string, true>>> = {
   'quirky.git/changed': true,
   'quirky.worktree/changed': true,
   'quirky.repo/changed': true,
-  'quirky.session/changed': true,
-  'quirky.session/removed': true,
-  'quirky.agent-status/changed': true,
-  'quirky.structured/message': true,
   'setting.changed': true
 }
 
@@ -36,6 +45,7 @@ function layoutWorktree(layout: UiLayout): string | null {
 function parseDirtyResult(value: unknown): DirtyResult {
   if (!isPlainRecord(value) ||
     (value.worktreeId !== null && typeof value.worktreeId !== 'string') ||
+    (value.instanceId !== null && typeof value.instanceId !== 'string') ||
     !Number.isSafeInteger(value.count) || (value.count as number) < 0 ||
     typeof value.capped !== 'boolean' || typeof value.title !== 'string' ||
     typeof value.dirty !== 'boolean' || typeof value.available !== 'boolean' ||
@@ -60,6 +70,7 @@ function reportValue(status: DirtyResult): Record<string, unknown> {
 function unavailable(worktreeId: string | null, error: unknown): DirtyResult {
   return {
     worktreeId,
+    instanceId: null,
     count: 0,
     capped: false,
     title: STOCK_TITLE,
@@ -109,7 +120,8 @@ function ActivityItem({ context, report }: { context: UiPluginContext; report?: 
     let pendingRefresh = false
     let pendingForce = false
     let activation: { worktree: string | null; promise: Promise<unknown> } | null = null
-    let activeId: string | null = null
+    let activeId: string | null | undefined
+    let activeInstanceId: string | null = null
 
     const publish = (next: DirtyResult | null) => {
       if (disposed) return
@@ -149,22 +161,30 @@ function ActivityItem({ context, report }: { context: UiPluginContext; report?: 
           if (!stillCurrent(ticket, worktree)) return
           if (!isPlainRecord(state)) throw new Error('sidebar-extras returned an invalid activation state')
           const current = state.active
-          if (current === null) activeId = null
-          else if (isPlainRecord(current) && typeof current.worktreeId === 'string') activeId = current.worktreeId
-          else throw new Error('sidebar-extras returned an invalid active workspace')
+          if (current === null) {
+            activeId = null
+            activeInstanceId = null
+          } else if (isPlainRecord(current) && typeof current.worktreeId === 'string') {
+            activeId = current.worktreeId
+            activeInstanceId = typeof current.instanceId === 'string' ? current.instanceId : null
+          } else throw new Error('sidebar-extras returned an invalid active workspace')
           if (worktree !== null && activeId === null) throw new Error('sidebar-extras did not activate the layout workspace')
 
-          const result = parseDirtyResult(await context.call('quirky.sidebar-extras/dirty'))
+          const result = parseDirtyResult(await context.call('quirky.sidebar-extras/dirty', {
+            worktree: activeId === null ? null : `id:${activeId}`
+          }))
           if (!stillCurrent(ticket, worktree)) return
           if (result.worktreeId !== activeId) {
             publish(unavailable(activeId, new Error('daemon layout and activation identity disagree')))
             return
           }
+          if (result.instanceId !== null && result.instanceId !== activeInstanceId) activation = null
           publish(result)
         } catch (error) {
           if (!stillCurrent(ticket, worktree)) return
           if (activation?.worktree === worktree && activation.promise === activePromise) activation = null
-          publish(unavailable(activeId, error))
+          publish(unavailable(activeId ?? null, error))
+          activeId = undefined
         } finally {
           if (inFlight === flight) {
             inFlight = null
@@ -193,7 +213,8 @@ function ActivityItem({ context, report }: { context: UiPluginContext; report?: 
         const changed = observedWorktree === undefined || observedWorktree !== worktree
         if (changed) {
           observedWorktree = worktree
-          activeId = null
+          activeId = undefined
+          activeInstanceId = null
           publish(null)
         }
         const needsActivation = force || changed
@@ -208,13 +229,15 @@ function ActivityItem({ context, report }: { context: UiPluginContext; report?: 
 
     const removeEvents = context.subscribe((event: QuirkyEvent) => {
       if (!REFRESH_EVENTS[event.type]) return
-      const force = event.type === 'quirky.worktree/changed'
-      if (force) {
-        latestTicket += 1
-        activeId = null
-        publish(null)
+      if (event.type === 'ui.state.changed') {
+        if (observedWorktree !== layoutWorktree(context.getLayout())) schedule(true)
+        return
       }
-      schedule(force)
+      if (event.type === 'quirky.git/changed' || event.type === 'quirky.worktree/changed') {
+        const worktreeId = isPlainRecord(event.data) ? event.data.worktreeId : undefined
+        if (activeId !== undefined && typeof worktreeId === 'string' && worktreeId !== activeId) return
+      }
+      schedule()
     })
     const removeLayout = context.onLayout((layout) => {
       if (observedWorktree === undefined || observedWorktree !== layoutWorktree(layout)) schedule(true)

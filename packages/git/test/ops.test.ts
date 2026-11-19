@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { stopAllProcesses } from '@quirky/process'
 import {
   BranchCheckedOutError,
   GitError,
@@ -99,6 +100,65 @@ function repoWithCommit(name = 'repo', branch = 'main'): string {
   const repo = makeRepo(name, branch)
   commitFile(repo, 'a.txt', 'a\n', 'init')
   return repo
+}
+
+function githubRepo(name: string): string {
+  const repo = repoWithCommit(name)
+  git(repo, 'config', 'user.name', 'Fallback')
+  git(repo, 'remote', 'add', 'origin', 'https://github.com/o/r.git')
+  return repo
+}
+
+function gitOnlyBin(name: string): string {
+  const bin = freshDir(name)
+  symlinkSync(Bun.which('git')!, join(bin, 'git'))
+  return bin
+}
+
+function installGh(bin: string, script: string): void {
+  const gh = join(bin, 'gh')
+  writeFileSync(gh, `#!/bin/sh\n${script}\n`)
+  chmodSync(gh, 0o755)
+}
+
+async function waitForFile(path: string, operation: Promise<unknown>): Promise<void> {
+  if (existsSync(path)) return
+  const { promise, resolve, reject } = Promise.withResolvers<void>()
+  const watcher = watch(dirname(path), (_event, filename) => {
+    if (filename?.toString() === basename(path) && existsSync(path)) resolve()
+  })
+  watcher.on('error', reject)
+  if (existsSync(path)) resolve()
+  try {
+    await Promise.race([
+      promise,
+      operation.then(() => { throw new Error('gh completed before the background PID was written') })
+    ])
+  } finally {
+    watcher.close()
+  }
+}
+
+async function expectPidGone(path: string): Promise<void> {
+  const pid = Number(readFileSync(path, 'utf8').trim())
+  expect(pid).toBeGreaterThan(0)
+  // Process-group termination is a kernel event, so probe for ESRCH rather than guessing a fixed delay.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      process.kill(pid, 0)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return
+      throw error
+    }
+    await Bun.sleep(10)
+  }
+  throw new Error(`process ${pid} is still alive`)
+}
+
+
+async function restorePath(path: string | undefined): Promise<void> {
+  if (path === undefined) delete process.env.PATH
+  else process.env.PATH = path
 }
 
 /** A repo with a bare `origin` it has pushed `main` to, with `refs/remotes/origin/*` populated. */
@@ -516,6 +576,106 @@ describe('gitUsername', () => {
     expect(await gitUsername(repo, { gh: failing })).toBe('Zed')
     expect(failures).toBe(1)
     resetGhFailureCache()
+  })
+
+  test('missing gh is cached after spawn failure and uses the config fallback', async () => {
+    resetGhFailureCache()
+    const repo = githubRepo('missing-gh')
+    const bin = gitOnlyBin('missing-gh-bin')
+    const original = process.env.PATH
+    const marker = join(bin, 'unexpected')
+    try {
+      process.env.PATH = bin
+      expect(await gitUsername(repo)).toBe('Fallback')
+
+      installGh(bin, `printf called > '${marker}'`)
+      expect(await gitUsername(repo)).toBe('Fallback')
+      expect(existsSync(marker)).toBe(false)
+    } finally {
+      await restorePath(original)
+      resetGhFailureCache()
+    }
+  })
+
+  test('successful gh output is returned after its process group is cleaned up', async () => {
+    resetGhFailureCache()
+    const repo = githubRepo('successful-gh')
+    const bin = gitOnlyBin('successful-gh-bin')
+    const original = process.env.PATH
+    const pidFile = join(bin, 'background.pid')
+    installGh(bin, `/bin/sleep 10 &\necho $! > '${pidFile}'\nprintf 'octocat\\n'`)
+    try {
+      process.env.PATH = bin
+      expect(await gitUsername(repo)).toBe('octocat')
+      await expectPidGone(pidFile)
+    } finally {
+      await restorePath(original)
+      resetGhFailureCache()
+    }
+  })
+
+  // This deliberately exercises the real 2.5 s child timeout; fake timers cannot stop the OS process.
+  test('gh timeout cleans up its process group and caches the fallback', async () => {
+    resetGhFailureCache()
+    const repo = githubRepo('timeout-gh')
+    const bin = gitOnlyBin('timeout-gh-bin')
+    const original = process.env.PATH
+    const pidFile = join(bin, 'background.pid')
+    const calls = join(bin, 'calls')
+    installGh(bin, `echo called >> '${calls}'\n/bin/sleep 10 &\necho $! > '${pidFile}'\nwait`)
+    try {
+      process.env.PATH = bin
+      expect(await gitUsername(repo)).toBe('Fallback')
+      await expectPidGone(pidFile)
+      expect(await gitUsername(repo)).toBe('Fallback')
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual(['called'])
+    } finally {
+      await restorePath(original)
+      resetGhFailureCache()
+    }
+  }, 10_000)
+
+  test('signalled gh cleans up children and caches its fallback', async () => {
+    resetGhFailureCache()
+    const repo = githubRepo('signal-gh')
+    const bin = gitOnlyBin('signal-gh-bin')
+    const original = process.env.PATH
+    const pidFile = join(bin, 'background.pid')
+    const calls = join(bin, 'calls')
+    installGh(bin, `echo called >> '${calls}'\n/bin/sleep 10 &\necho $! > '${pidFile}'\nkill -TERM $$`)
+    try {
+      process.env.PATH = bin
+      expect(await gitUsername(repo)).toBe('Fallback')
+      await expectPidGone(pidFile)
+      expect(await gitUsername(repo)).toBe('Fallback')
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual(['called'])
+    } finally {
+      await restorePath(original)
+      resetGhFailureCache()
+    }
+  })
+
+  test('aborted gh cleans up children and caches its fallback', async () => {
+    resetGhFailureCache()
+    const repo = githubRepo('aborted-gh')
+    const bin = gitOnlyBin('aborted-gh-bin')
+    const original = process.env.PATH
+    const pidFile = join(bin, 'background.pid')
+    const calls = join(bin, 'calls')
+    installGh(bin, `echo called >> '${calls}'\n/bin/sleep 10 &\necho $! > '${pidFile}'\nwait`)
+    try {
+      process.env.PATH = bin
+      const pending = gitUsername(repo)
+      await waitForFile(pidFile, pending)
+      await stopAllProcesses()
+      expect(await pending).toBe('Fallback')
+      await expectPidGone(pidFile)
+      expect(await gitUsername(repo)).toBe('Fallback')
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual(['called'])
+    } finally {
+      await restorePath(original)
+      resetGhFailureCache()
+    }
   })
 
   test('user.name is used only when it forms a valid branch prefix; else null', async () => {

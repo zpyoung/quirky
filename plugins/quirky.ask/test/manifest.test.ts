@@ -15,6 +15,8 @@ describe('SC-17/SC-18: quirky.ask as a built-in plugin', () => {
     expect(info.state).not.toBe('invalid')
     const contributions = await client.call('plugin.contributions', { kind: 'panel' } as never)
     expect(JSON.stringify(contributions)).toContain('panel:quirky.ask/questions')
+    const views = await client.call('plugin.contributions', { kind: 'view' } as never)
+    expect(JSON.stringify(views)).toContain('view:quirky.ask/card')
   })
 
   test('SC-18: the catalog lists its methods, events and CLI commands', async () => {

@@ -1,39 +1,73 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { Button, ContextMenu, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
-import { TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
+import { Button, Checkbox, ControlIcon, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { TASKS_TOOL, TASKS_VIEW, TASKS_SETTINGS_VIEW, type TasksState, type TaskPreferences } from './contracts'
+import { CompactTasks } from './list/CompactTasks'
+import { place } from './list/place'
+import { object as record, parseTasksState } from './list/model'
 import { TasksList, WorkspaceComposer } from './list/TasksList'
+import { effectiveList } from './list/useCompactList'
 import { IssueSurface } from './issue/IssueSurface'
 import { NewIssueDialog } from './issue/NewIssueDialog'
 import { ProjectsSurface } from './projects/ProjectsSurface'
+import { ROW_MENU_COMMAND, runRowMenu } from './list/row-menu'
+import { LIST_CONTROL_COMMAND, runListControl } from './list/list-control'
+import { PROJECTS_CONTROL_COMMAND, runProjectsControl } from './projects/control'
+import { ISSUE_CONTROL_COMMAND, runIssueControl } from './issue/issue-control'
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
 async function readState(context: UiPluginContext): Promise<TasksState> {
-  const value = await context.call('quirky.tasks/state', {})
-  if (!object(value) || !object(value.navigation) || !object(value.preferences) || typeof value.revision !== 'number') throw new Error('Invalid Tasks state from daemon')
-  return value as TasksState
+  const next = parseTasksState(await context.call('quirky.tasks/state', {}))
+  if (!next) throw new Error('Invalid Tasks state from daemon')
+  return next
 }
 function useTasksState(context: UiPluginContext) {
   const [state, setState] = useState<TasksState | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const generation = useRef(0)
-  const refresh = useCallback(async () => {
+  const adopt = useCallback((next: TasksState) => {
+    setState(previous => !previous || next.revision >= previous.revision ? next : previous)
+    setError(null)
+  }, [])
+  const reload = async () => {
     const request = ++generation.current
     try {
       const next = await readState(context)
-      if (request !== generation.current) return
-      setState(previous => !previous || next.revision >= previous.revision ? next : previous)
-      setError('')
-    } catch (cause) { if (request === generation.current) setError(message(cause)) }
-  }, [context])
+      if (request === generation.current) adopt(next)
+    } catch (cause) {
+      if (request === generation.current) setError(message(cause))
+    }
+  }
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const refresh = useCallback(() => reloadRef.current(), [])
   useEffect(() => {
     void refresh()
-    const off = context.subscribe(event => { if (event.type === 'quirky.tasks/changed' || event.type.startsWith('setting.')) void refresh() })
+    const off = context.subscribe(event => {
+      if (event.type === 'quirky.tasks/changed' || event.type.startsWith('setting.')) void refresh()
+    })
     return () => { generation.current++; off() }
   }, [context, refresh])
-  return { state, error, refresh }
+  return { state, error, adopt, refresh, reload }
+}
+
+function collapseTasks(context: UiPluginContext) {
+  place.requestFocus('row')
+  void context.call('ui.tool.open', { id: TASKS_TOOL }).catch(cause => context.toast('Could not collapse Tasks', message(cause)))
+}
+
+async function diagnoseSource(context: UiPluginContext, repoIds: string[] | null): Promise<Record<string, unknown>> {
+  const repositories = await context.call('quirky.tasks/repositories', {})
+  if (!Array.isArray(repositories)) throw new Error('Repository list is unavailable')
+  const repository = repositories.find(entry => object(entry) && typeof entry.worktree === 'string' && (repoIds === null || repoIds.includes(String(entry.id))))
+  if (!object(repository) || typeof repository.worktree !== 'string') throw new Error('Select a Git project to diagnose this source.')
+  const diagnosis = await context.call('quirky.hosting/diagnoseAuth', { worktree: repository.worktree })
+  if (!object(diagnosis) || typeof diagnosis.ghAvailable !== 'boolean' || typeof diagnosis.requiredHostAuthenticated !== 'boolean') {
+    throw new Error('GitHub availability is unknown')
+  }
+  return diagnosis
 }
 
 function TasksSettings({ context, state, refresh, report }: { context: UiPluginContext; state: TasksState; refresh(): Promise<void>; report?: (state: unknown) => void }) {
@@ -41,22 +75,32 @@ function TasksSettings({ context, state, refresh, report }: { context: UiPluginC
   const [availabilityError, setAvailabilityError] = useState('')
   const [diagnosis, setDiagnosis] = useState<Record<string, unknown> | null>(null)
   const [checking, setChecking] = useState(false)
-  const [checkNonce, setCheckNonce] = useState(0)
+  const diagnosisGeneration = useRef(0)
   const selectionKey = JSON.stringify(state.navigation.repoIds)
-  useEffect(() => {
-    let active = true
+  const runCheck = async () => {
+    const request = ++diagnosisGeneration.current
     setChecking(true)
     setAvailabilityError('')
-    void context.call('quirky.tasks/repositories', {}).then(async value => {
-      if (!Array.isArray(value)) throw new Error('Repository list is unavailable')
-      const repo = value.find(entry => object(entry) && typeof entry.worktree === 'string' && (state.navigation.repoIds === null || state.navigation.repoIds.includes(String(entry.id))))
-      if (!object(repo) || typeof repo.worktree !== 'string') throw new Error('Select a Git project to diagnose this source.')
-      const next = await context.call('quirky.hosting/diagnoseAuth', { worktree: repo.worktree })
-      if (!object(next) || typeof next.ghAvailable !== 'boolean' || typeof next.requiredHostAuthenticated !== 'boolean') throw new Error('GitHub availability is unknown')
-      if (active) setDiagnosis(next)
-    }).catch(cause => { if (active) { setDiagnosis(null); setAvailabilityError(message(cause)) } }).finally(() => { if (active) setChecking(false) })
-    return () => { active = false }
-  }, [context, selectionKey, checkNonce])
+    try {
+      const next = await diagnoseSource(context, state.navigation.repoIds)
+      if (request === diagnosisGeneration.current) {
+        setDiagnosis(next)
+      }
+    } catch (cause) {
+      if (request === diagnosisGeneration.current) {
+        setDiagnosis(null)
+        setAvailabilityError(message(cause))
+      }
+    } finally {
+      if (request === diagnosisGeneration.current) setChecking(false)
+    }
+  }
+  const runCheckRef = useRef(runCheck)
+  runCheckRef.current = runCheck
+  useEffect(() => {
+    void runCheckRef.current()
+    return () => { diagnosisGeneration.current += 1 }
+  }, [context, selectionKey])
   useEffect(() => { report?.({ preferences: state.preferences, diagnosis, checking, error, availabilityError }) }, [state.preferences, diagnosis, checking, error, availabilityError, report])
   const save = async (patch: Partial<TaskPreferences>) => {
     try { await context.call('quirky.tasks/preferences', patch); await refresh(); setError('') }
@@ -64,39 +108,114 @@ function TasksSettings({ context, state, refresh, report }: { context: UiPluginC
   }
   const integrations = async () => {
     try {
-      const model = await context.call('ui.contributions', {})
-      const view = object(model) && Array.isArray(model.views) ? model.views.find(entry => object(entry) && entry.plugin === 'quirky.reviews' && entry.settings === true && typeof entry.module === 'string') : null
-      if (!object(view) || typeof view.id !== 'string') throw new Error('Provider integration settings are unavailable. Enable GitHub Reviews to use its settings page.')
-      await context.call('ui.view.open', { id: view.id })
+      await context.call('ui.view.open', { id: 'view:quirky.reviews/settings' })
     } catch (cause) { setError(message(cause)) }
   }
   const sourceStatus = checking ? 'Checking…' : diagnosis ? diagnosis.ghAvailable !== true ? 'Not installed' : diagnosis.requiredHostAuthenticated === true ? 'Ready' : 'Connect required' : 'Unavailable'
   return <section className="tasks-settings" aria-label="Task Sources settings">
-    <FormRow label="Show Tasks button" htmlFor="tasks-show-button">
-      <input type="checkbox" checked={state.preferences.showTasksButton} onChange={event => void save({ showTasksButton: event.target.checked })} />
+    <FormRow label="Show Tasks button" htmlFor="tasks-show-button" layout="inline">
+      <Checkbox checked={state.preferences.showTasksButton} label="Show Tasks button" onChange={checked => void save({ showTasksButton: checked })} hideLabel />
     </FormRow>
     <SectionHeader title="Visible providers" />
-    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => <FormRow key={provider} label={provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'} htmlFor={`tasks-provider-${provider}`}><input type="checkbox" checked={state.preferences.visibleTaskProviders.includes(provider)} disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)} onChange={event => void save({ visibleTaskProviders: event.target.checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })} /></FormRow>)}</div>
-    <div className="tasks-row"><strong>GitHub · {sourceStatus}</strong><Button disabled={checking} onClick={() => setCheckNonce(value => value + 1)}>Re-check GitHub</Button></div>
-    {availabilityError && <p role="alert">{availabilityError}</p>}
+    <div className="tasks-row">{['github', 'gitlab', 'linear', 'jira'].map(provider => {
+      const label = provider === 'github' ? 'GitHub' : provider === 'gitlab' ? 'GitLab' : provider === 'linear' ? 'Linear' : 'Jira'
+      return <FormRow key={provider} label={label} htmlFor={`tasks-provider-${provider}`} layout="inline">
+        <Checkbox
+          checked={state.preferences.visibleTaskProviders.includes(provider)}
+          label={label}
+          disabled={state.preferences.visibleTaskProviders.length === 1 && state.preferences.visibleTaskProviders.includes(provider)}
+          onChange={checked => void save({ visibleTaskProviders: checked ? [...state.preferences.visibleTaskProviders, provider] : state.preferences.visibleTaskProviders.filter(value => value !== provider) })}
+          hideLabel
+        />
+      </FormRow>
+    })}</div>
+    <div className="tasks-row"><strong>GitHub · {sourceStatus}</strong><Button disabled={checking} onClick={() => void runCheck()}>Re-check GitHub</Button></div>
+    {availabilityError && <InlineError message={availabilityError} action={{ label: 'Retry', onAction: () => { void runCheck() } }} />}
     {diagnosis?.ghAvailable === false && <Button onClick={() => void context.executeCommand('command:quirky.tasks/open-link', { url: 'https://cli.github.com' }).catch(cause => setError(message(cause)))}>Install GitHub CLI</Button>}
     {diagnosis?.ghAvailable === true && diagnosis.requiredHostAuthenticated !== true && <p>Authenticate with <code>gh auth login</code> <Button onClick={() => void context.executeCommand('command:quirky.tasks/copy-text', { text: 'gh auth login' }).catch(cause => setError(message(cause)))}>Copy sign-in command</Button></p>}
     <p>GitHub uses your installed gh CLI and its authenticated account. Other task sources appear when their provider plugin is available.</p>
     <FormRow label="Default source" htmlFor="tasks-default-source"><select value={state.preferences.defaultTaskSource} onChange={event => void save({ defaultTaskSource: event.target.value })}>{['github', 'gitlab', 'linear', 'jira'].map(provider => <option key={provider} value={provider} disabled={provider !== 'github'}>{provider}{provider === 'github' ? '' : ' — provider plugin required'}</option>)}</select></FormRow>
     <Button onClick={() => void integrations()}>Provider integration settings</Button>
-    {error && <p role="alert">{error}</p>}
+    {error && <InlineError message={error} />}
   </section>
 }
 
 function TasksSettingsView({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
-  const { state, error, refresh } = useTasksState(context)
-  return <div className="quirky-tasks"><ToolPanelFrame title="Task Sources" actions={<Button onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))}>Back to Tasks</Button>}><main className="tasks-body">{error && <p role="alert">{error}<Button onClick={() => void refresh()}>Retry</Button></p>}{state ? <TasksSettings context={context} state={state} refresh={refresh} report={report} /> : <p role="status">Loading task settings…</p>}</main></ToolPanelFrame></div>
+  const { state, error: loadError, refresh, reload } = useTasksState(context)
+  return <div className="quirky-tasks">
+    <ToolPanelFrame title="Task Sources" actions={<Button onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))}>Back to Tasks</Button>}>
+      <main className="tasks-body">
+        {loadError && !state && <InlineError message={loadError} action={{ label: 'Retry', onAction: () => { void reload() } }} />}
+        {loadError && state && <div role="status" className="tasks-settings__notice">
+          <NoticeLine actions={[{ label: 'Retry', onAction: () => { void reload() } }]}>Couldn't refresh task settings. Showing the last loaded settings. {loadError}</NoticeLine>
+        </div>}
+        {!state && !loadError && <div role="status"><NoticeLine>Loading task settings…</NoticeLine></div>}
+        {state && <TasksSettings context={context} state={state} refresh={refresh} report={report} />}
+      </main>
+    </ToolPanelFrame>
+  </div>
+}
+
+type TabCounts = { issues: number | null; prs: number | null }
+
+function countOf(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+}
+
+/**
+ * Reads the Issues and PRs tab counts for the list the tabs sit over; an unreadable count stays null.
+ * `reload` reads them again, and a read superseded by a newer one never overwrites it.
+ */
+function useTabCounts(context: UiPluginContext, navigation: TasksState['navigation'] | null): { counts: TabCounts; reload(): void; reloadCounts(): void } {
+  const [counts, setCounts] = useState<TabCounts>({ issues: null, prs: null })
+  const generation = useRef(0)
+  const view = navigation ? effectiveList(navigation) : null
+  const repoIds = navigation?.repoIds ?? null
+  const key = view ? JSON.stringify([view.mode, view.query, repoIds]) : null
+  const reloadCounts = () => {
+    if (!view) return
+    const request = ++generation.current
+    void context.call('quirky.tasks/counts', { mode: view.mode, query: view.query, repoIds })
+      .then(raw => {
+        const value = record(raw)
+        const next = value ? { issues: countOf(value.issues), prs: countOf(value.prs) } : { issues: null, prs: null }
+        if (request === generation.current) setCounts(next)
+      })
+      .catch(() => {
+        if (request === generation.current) setCounts({ issues: null, prs: null })
+      })
+  }
+  const reloadRef = useRef(reloadCounts)
+  reloadRef.current = reloadCounts
+  const reload = useCallback(() => reloadRef.current(), [])
+  useEffect(() => {
+    if (!view) return
+    reloadRef.current()
+    return () => { generation.current += 1 }
+  }, [context, key])
+  return { counts, reload, reloadCounts }
 }
 
 function TasksApp({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
-  const { state, error, refresh } = useTasksState(context)
+  const { state, error: loadError, adopt, refresh, reload } = useTasksState(context)
   const root = useRef<HTMLDivElement>(null)
+  const { counts, reload: reloadCountsForRefresh, reloadCounts } = useTabCounts(context, state?.navigation ?? null)
+  const refreshAndCount = useCallback(async () => {
+    await refresh()
+    reloadCountsForRefresh()
+  }, [refresh, reloadCountsForRefresh])
+  const [listRefreshToken, setListRefreshToken] = useState(0)
+  const refreshAfterIssueCreate = useCallback(async () => {
+    await refreshAndCount()
+    setListRefreshToken((value) => value + 1)
+  }, [refreshAndCount])
+  const focusRow = useRef<boolean | null>(null)
+  const initialFocus = focusRow.current ?? (focusRow.current = place.takeFocus() === 'row')
+  if (state) focusRow.current = false
   useEffect(() => { if (state) report?.({ navigation: state.navigation, revision: state.revision }) }, [state, report])
+  useEffect(() => {
+    void context.call('quirky.tasks/prepare', {}).then(() => refresh()).catch(() => undefined)
+  }, [context, refresh])
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"], [data-tasks-popover]')) return
@@ -106,68 +225,52 @@ function TasksApp({ context, report }: { context: UiPluginContext; report?: (sta
         return
       }
       if (event.key !== 'Escape' || event.defaultPrevented) return
-      if (state?.navigation.detail || state?.navigation.newIssue) return
+      if (state?.navigation.newIssue) return
       const active = document.activeElement
       if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement) { active.blur(); event.preventDefault(); return }
       event.preventDefault()
-      void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))
+      if (state?.navigation.detail) {
+        void context.call('quirky.tasks/navigate', { detail: null }).then(value => {
+          const next = parseTasksState(value)
+          if (next) adopt(next)
+          else void refresh()
+        }).catch(cause => context.toast('Could not close the task', message(cause)))
+        return
+      }
+      collapseTasks(context)
     }
     document.addEventListener('keydown', key)
     return () => document.removeEventListener('keydown', key)
-  }, [context, state?.navigation.detail, state?.navigation.newIssue])
+  }, [context, adopt, refresh, state?.navigation.detail, state?.navigation.newIssue])
   const navigate = async (mode: 'issues' | 'prs' | 'projects') => {
     try { await context.call('quirky.tasks/navigate', { mode, detail: null, newIssue: false }); await refresh() }
     catch (cause) { context.toast('Could not change Tasks view', message(cause)) }
   }
+  const tabs = [
+    { id: 'issues', label: 'Issues', ...(counts.issues !== null ? { count: counts.issues } : {}) },
+    { id: 'prs', label: 'PRs', ...(counts.prs !== null ? { count: counts.prs } : {}) },
+    { id: 'projects', label: 'Projects' }
+  ]
   return <div className="quirky-tasks" ref={root}>
-    <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={[{ id: 'issues', label: 'Issues' }, { id: 'prs', label: 'PRs' }, { id: 'projects', label: 'Projects' }]} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} onMinimize={() => void context.call('quirky.tasks/close', {}).catch(cause => context.toast('Could not close Tasks', message(cause)))} actions={<IconButton label="Task settings" title="Task settings" onClick={() => void context.call('quirky.tasks/settings', {}).catch(cause => context.toast('Could not open task settings', message(cause)))}><ControlIcon name="gear" /></IconButton>}>
-      {error && <EmptyState message={error} action={{ label: 'Retry', onAction: () => void refresh() }} />}
-      {!state ? <p role="status">Loading Tasks…</p> : <>
-        <main className="tasks-body">{state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : state.navigation.mode === 'projects' ? <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refresh} />}</main>
-        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refresh} />}
+    <ToolPanelFrame title="Tasks" tabs={state && <Tabs label="Task mode" items={tabs} value={state.navigation.mode} onChange={mode => void navigate(mode as 'issues' | 'prs' | 'projects')} />} actions={<IconButton label="Collapse Tasks" title="Collapse Tasks" onClick={() => collapseTasks(context)}><ControlIcon name="arrows-in" /></IconButton>}>
+      {!state && loadError && <InlineError message={loadError} action={{ label: 'Retry', onAction: () => { void reload() } }} />}
+      {!state && !loadError && <div role="status"><NoticeLine>Loading Tasks…</NoticeLine></div>}
+      {state && <>
+        {loadError && <div role="status"><NoticeLine actions={[{ label: 'Retry', onAction: () => { void reload() } }]}>Couldn't refresh Tasks. Showing the last loaded tasks. {loadError}</NoticeLine></div>}
+        <main className="tasks-body">{state.navigation.mode === 'projects' ? state.navigation.detail ? <IssueSurface context={context} state={state} refresh={refresh} /> : <ProjectsSurface context={context} state={state} refresh={refresh} /> : <TasksList context={context} state={state} refresh={refreshAndCount} adopt={adopt} initialFocus={initialFocus} onDataChanged={reloadCounts} listRefreshToken={listRefreshToken} />}</main>
+        {state.navigation.newIssue && <NewIssueDialog context={context} state={state} refresh={refreshAfterIssueCreate} />}
       </>}
     </ToolPanelFrame>
   </div>
 }
 
 function TasksComposerOverlay({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
-  const { state, refresh } = useTasksState(context)
-  if (!state) return null
+  const { refresh } = useTasksState(context)
   return <div className="quirky-tasks tasks-overlay-root">
-    <WorkspaceComposer context={context} state={state} refresh={refresh} report={report} />
+    <WorkspaceComposer context={context} refresh={refresh} report={report} />
   </div>
 }
 
-function TasksSidebar({ context, report }: { context: UiPluginContext; report?: (state: unknown) => void }) {
-  const { state } = useTasksState(context)
-  const [hover, setHover] = useState(false)
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
-  const [availability, setAvailability] = useState<string | null>(null)
-  const prefetchedAt = useRef(0)
-  useEffect(() => { report?.({ visible: state?.preferences.showTasksButton ?? true, menu: menu !== null }) }, [state, report, menu])
-  const prefetch = () => {
-    setHover(true)
-    if (!state || Date.now() - prefetchedAt.current < 30_000) return
-    prefetchedAt.current = Date.now()
-    void context.call('quirky.tasks/repositories', {}).then(async repos => {
-      const first = Array.isArray(repos) ? repos.find(repo => object(repo) && typeof repo.worktree === 'string') : undefined
-      if (!object(first) || typeof first.worktree !== 'string') { setAvailability('Select a Git repository'); return }
-      const auth = await context.call('quirky.hosting/diagnoseAuth', { worktree: first.worktree })
-      if (!object(auth) || auth.ghAvailable !== true) setAvailability('GitHub source unavailable: Local Mac source tool unavailable')
-      else if (auth.requiredHostAuthenticated !== true) setAvailability('GitHub source unavailable: Local Mac provider auth needed')
-      else {
-        setAvailability('')
-        if (state.preferences.defaultTaskSource === 'github') await context.call('quirky.tasks/list', { page: 1 })
-      }
-    }).catch(cause => setAvailability(message(cause)))
-  }
-  if (state && !state.preferences.showTasksButton) return null
-  return <div className="tasks-sidebar" onMouseEnter={prefetch} onMouseLeave={() => setHover(false)} onFocus={prefetch} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setHover(false) }}>
-    <Button className="tasks-sidebar-open" onClick={() => void context.call('quirky.tasks/open', {}).catch(cause => context.toast('Could not open Tasks', message(cause)))} onContextMenu={event => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }) }}>☷ Tasks</Button>
-    {hover && state?.preferences.visibleTaskProviders.includes('github') && <Button aria-label="Open GitHub tasks" disabled={availability !== ''} title={availability ?? 'Checking GitHub availability…'} onClick={() => void context.call('quirky.tasks/preferences', { defaultTaskSource: 'github' }).then(() => context.call('quirky.tasks/open', { source: 'github' })).catch(cause => context.toast('Could not open GitHub tasks', message(cause)))}>GH</Button>}
-    {menu && <ContextMenu label="Tasks options" x={menu.x} y={menu.y} onClose={() => setMenu(null)} items={[{ id: 'hide', label: 'Hide from sidebar', onSelect: () => { setMenu(null); void context.call('quirky.tasks/preferences', { showTasksButton: false }).catch(cause => context.toast('Could not hide Tasks', message(cause))) } }]} />}
-  </div>
-}
 
 function linkArgument(raw: unknown): string {
   if (!object(raw) || typeof raw.url !== 'string' || raw.url.length > 8192) throw new Error('A GitHub HTTP(S) URL is required')
@@ -196,11 +299,15 @@ export function activate(context: UiPluginContext): void {
     root.render(<TasksComposerOverlay context={context} report={props.report} />)
     return () => root.unmount()
   })
-  context.provide('sidebar-section:quirky.tasks/tasks', (element: HTMLElement, props: { report?: (state: unknown) => void }) => {
+  context.provide(TASKS_TOOL, (element: HTMLElement, props: { report?: (state: unknown) => void }) => {
     const root = createRoot(element)
-    root.render(<TasksSidebar context={context} report={props.report} />)
+    root.render(<CompactTasks context={context} report={props.report} />)
     return () => root.unmount()
   })
+  context.provide(ROW_MENU_COMMAND, (input: unknown) => runRowMenu(context, input))
+  context.provide(LIST_CONTROL_COMMAND, (input: unknown) => runListControl(context, input))
+  context.provide(PROJECTS_CONTROL_COMMAND, (input: unknown) => runProjectsControl(context, input))
+  context.provide(ISSUE_CONTROL_COMMAND, (input: unknown) => runIssueControl(context, input))
   context.provide('command:quirky.tasks/open', async (raw: unknown) => {
     if (context.getLayout().view?.id === 'view:quirky.notifications/settings') return { opened: false }
     const repositories = await context.call('quirky.tasks/repositories', {})

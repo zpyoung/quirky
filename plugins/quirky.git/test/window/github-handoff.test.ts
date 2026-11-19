@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { delimiter, join } from 'node:path'
 import { git, isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { createProcessScope, type ProcessScope } from '../../../../scripts/test-support/process-scope'
-import { buttonText, click, messageBox, primary, q, text, type } from './dom'
+import { buttonText, byLabel, caretEntry, click, errorLine, messageBox, primary, primaryNow, q, text, type } from './dom'
 import { boot, openView, PANEL, SESSION_VIEW, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -240,26 +240,23 @@ function unsetUpstream(path: string, branch: string): void {
   if (upstream !== '') git(path, 'branch', '--unset-upstream', branch)
 }
 
-function reviewStatus() {
-  return q('[data-scm-review-status]')
-}
-const reviewAction = () =>
-  [...(q('[data-git-create-review]')?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
-    .find((button) => text(button).includes('Create PR')) ?? null
+/** The ship bar's button, which is where the PR step shows. */
+const shipLabel = () => primaryNow().label
 
-async function waitForReviewState(w: World, kind: string, prNumber?: number) {
-  return w.win.waitFor(() => {
-    const status = reviewStatus()
-    return status?.getAttribute('data-state') === kind &&
-      (prNumber === undefined || text(status).includes(`#${prNumber}`)) ? status : undefined
-  })
+/** Puts one commit on the worktree's branch and publishes it, so the branch differs from main and has an upstream. */
+function publishWork(path: string, branch: string): void {
+  writeFileSync(join(path, `${branch.replaceAll('/', '-')}.txt`), 'work\n')
+  git(path, 'add', '-A')
+  git(path, 'commit', '-q', '-m', `work on ${branch}`)
+  git(path, 'push', '-q', '-u', 'origin', branch)
 }
-async function waitForPrimary(w: World, label: string, enabled: boolean): Promise<void> {
+
+/** Waits until the ship bar shows `label`, and for the button to be enabled or not. */
+async function waitForShip(w: World, label: string, enabled: boolean): Promise<void> {
   const reported = await w.win.waitFor(async () => {
     const value = (await w.report())?.primary
-    const shown = primary()
-    return value?.label === label && value.enabled === enabled &&
-      text(shown) === label && shown.disabled === !enabled ? value : undefined
+    const shown = primaryNow()
+    return value?.label === label && value.enabled === enabled && shown.label === label && shown.enabled === enabled ? value : undefined
   })
   expect(reported).toMatchObject({ label, enabled })
 }
@@ -269,16 +266,16 @@ async function openGitHubPanel(w: World): Promise<void> {
   await w.win.waitFor(() => q('[data-git-panel]'))
 }
 
-test('GitHub Source Control reports current PR status, ignores stale worktree replies, and hands off guarded creation to Reviews', async () => {
+test('GitHub Source Control names the PR step, ignores stale worktree replies, and hands off guarded creation to Reviews', async () => {
   const root = scratch()
   fixture = startFixture(join(root, 'github-ui'))
   const w = await boot(scratch, { noPanel: true })
   w.git('remote', 'set-url', 'origin', 'https://github.com/test-owner/test-repo.git')
   fixture.installTransport(w.originDir)
+  publishWork(w.dir, 'zoe/feat')
   await openGitHubPanel(w)
 
-  await waitForReviewState(w, 'no-review')
-  expect(buttonText('Create PR')?.disabled).toBe(false)
+  await waitForShip(w, 'Create PR', true)
   const originalHead = w.git('rev-parse', 'HEAD')
   fixture.setLookup('zoe/feat', { kind: 'found', number: 70, state: 'OPEN' })
   const externalRefresh = await w.agent.callAny('quirky.hosting/refresh', {
@@ -286,49 +283,56 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
     reason: 'manual'
   })
   expect(externalRefresh).toMatchObject({ kind: 'found', review: { number: 70 } })
-  await waitForReviewState(w, 'found', 70)
+  await waitForShip(w, 'View PR #70', true)
   expect(w.git('rev-parse', 'HEAD')).toBe(originalHead)
-  expect(buttonText('Create PR')).toBeUndefined()
+
+  await click(primary())
+  expect(w.problems()).toEqual([])
 
   const linked = await w.addWorktree('linked')
+  publishWork(linked.path, 'zoe/linked')
   fixture.setLookup('zoe/linked', { kind: 'found', number: 71, state: 'OPEN' })
   await selectWorktree(w, linked.id, 'zoe/linked')
-  await waitForReviewState(w, 'found', 71)
-  expect(buttonText('Open PR #71')).toBeDefined()
-  expect(buttonText('Create PR')).toBeUndefined()
+  await waitForShip(w, 'View PR #71', true)
 
   const unavailable = await w.addWorktree('unavailable')
+  publishWork(unavailable.path, 'zoe/unavailable')
   fixture.setLookup('zoe/unavailable', { kind: 'unavailable' })
   await selectWorktree(w, unavailable.id, 'zoe/unavailable')
-  await waitForReviewState(w, 'unavailable')
-  expect(reviewAction()?.disabled).toBe(true)
+  await waitForShip(w, 'Create PR', true)
+  await click(primary())
+  const failure = await w.win.waitFor(() => errorLine())
+  expect(text(failure)).toContain('Could not confirm that this branch has no pull request')
+  expect((await openView(w))?.id).not.toBe('view:quirky.reviews/create')
 
   const merged = await w.addWorktree('merged')
+  publishWork(merged.path, 'zoe/merged')
   fixture.setLookup('zoe/merged', { kind: 'found', number: 73, state: 'MERGED' })
   await selectWorktree(w, merged.id, 'zoe/merged')
-  await waitForReviewState(w, 'found', 73)
-  expect(buttonText('Create PR')).toBeUndefined()
+  await waitForShip(w, 'View PR #73', true)
 
   const closed = await w.addWorktree('closed')
+  publishWork(closed.path, 'zoe/closed')
   fixture.setLookup('zoe/closed', { kind: 'found', number: 74, state: 'CLOSED' })
   await selectWorktree(w, closed.id, 'zoe/closed')
-  await waitForReviewState(w, 'found', 74)
-  expect(buttonText('Create PR')).toBeUndefined()
+  await waitForShip(w, 'View PR #74', true)
 
   const slow = await w.addWorktree('slow')
   const current = await w.addWorktree('current')
+  publishWork(slow.path, 'zoe/slow')
+  publishWork(current.path, 'zoe/current')
   fixture.setLookup('zoe/slow', { kind: 'found', number: 75, state: 'OPEN', hold: true })
   fixture.setLookup('zoe/current', { kind: 'found', number: 76, state: 'OPEN' })
   await selectWorktree(w, slow.id, 'zoe/slow')
   await w.win.waitFor(() => existsSync(fixture!.pending('zoe/slow')))
-  await waitForReviewState(w, 'loading')
-  expect(reviewAction()?.disabled).toBe(true)
+  await waitForShip(w, 'Create PR', false)
+  expect(primaryNow().title).toBe('checking for a pull request…')
 
   await selectWorktree(w, current.id, 'zoe/current')
-  await waitForReviewState(w, 'found', 76)
+  await waitForShip(w, 'View PR #76', true)
   const shownStates: string[] = []
-  const observer = new MutationObserver(() => shownStates.push(text(reviewStatus())))
-  observer.observe(reviewStatus()!.parentElement!, { subtree: true, childList: true, characterData: true })
+  const observer = new MutationObserver(() => shownStates.push(text(q('[data-git-ship]'))))
+  observer.observe(q('[data-git-ship]')!, { subtree: true, childList: true, characterData: true })
   try {
     fixture.release('zoe/slow')
     await w.win.waitFor(() => existsSync(fixture!.done('zoe/slow')))
@@ -338,7 +342,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
     }) as { kind?: string; review?: { number?: number } }
     expect(slowReply).toMatchObject({ kind: 'found', review: { number: 75 } })
     await selectWorktree(w, current.id, 'zoe/current')
-    await w.win.waitFor(() => text(reviewStatus()).includes('#76'))
+    await w.win.waitFor(() => shipLabel() === 'View PR #76')
     expect(shownStates.some((state) => state.includes('#75'))).toBe(false)
   } finally {
     observer.disconnect()
@@ -347,19 +351,19 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   const preparation = await w.addWorktree('prepare')
   unsetUpstream(preparation.path, 'zoe/prepare')
   await selectWorktree(w, preparation.id, 'zoe/prepare')
-  await waitForReviewState(w, 'no-review')
   const before = git(preparation.path, 'rev-parse', 'HEAD')
   writeFileSync(join(preparation.path, 'math.ts'), 'a\nB\nc\nd\ne\n')
-  await w.win.waitFor(() => q('[data-row-path="math.ts"] button[aria-pressed]'))
-  expect(buttonText('Commit, push & Create PR')?.disabled).toBe(true)
+  await waitForShip(w, 'Commit 1 file', true)
+
+  await click(byLabel('More commit and remote actions'))
+  await click(await w.win.waitFor(() => caretEntry('Commit, push & create PR')))
+  const noMessage = await w.win.waitFor(() => errorLine())
+  expect(text(noMessage)).toContain('Write a commit message, or click ✦')
   expect(git(preparation.path, 'rev-parse', 'HEAD')).toBe(before)
 
   await type(messageBox(), 'Prepare guarded pull request')
-  const create = await w.win.waitFor(() => {
-    const button = buttonText('Commit, push & Create PR')
-    return button && !button.disabled ? button : undefined
-  })
-  await click(create)
+  await click(byLabel('More commit and remote actions'))
+  await click(await w.win.waitFor(() => caretEntry('Commit, push & create PR')))
   const view = await w.win.waitFor(async () => {
     const currentView = await openView(w)
     return currentView?.id === 'view:quirky.reviews/create' ? currentView : undefined
@@ -372,7 +376,7 @@ test('GitHub Source Control reports current PR status, ignores stale worktree re
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('SC-28: unpublished primary waits for current GitHub state before publishing', async () => {
+test('SC-28: the publish step waits for current GitHub state before publishing', async () => {
   const root = scratch()
   fixture = startFixture(join(root, 'github-primary'))
   const w = await boot(scratch, { noPanel: true })
@@ -380,39 +384,46 @@ test('SC-28: unpublished primary waits for current GitHub state before publishin
   fixture.installTransport(w.originDir)
   await openGitHubPanel(w)
 
-  const noReview = await w.addWorktree('no-review-primary')
-  unsetUpstream(noReview.path, 'zoe/no-review-primary')
+  /** An unpublished branch with a commit on it, so it differs from main and has nothing upstream. */
+  const unpublished = async (name: string) => {
+    const made = await w.addWorktree(name)
+    writeFileSync(join(made.path, `${name}.txt`), 'work\n')
+    git(made.path, 'add', '-A')
+    git(made.path, 'commit', '-q', '-m', `work on ${name}`)
+    unsetUpstream(made.path, `zoe/${name}`)
+    return made
+  }
+
+  const noReview = await unpublished('no-review-primary')
   fixture.setLookup('zoe/no-review-primary', { kind: 'none' })
   await selectWorktree(w, noReview.id, 'zoe/no-review-primary')
-  await waitForReviewState(w, 'no-review')
-  await waitForPrimary(w, 'Publish Branch', true)
+  await waitForShip(w, 'Publish branch', true)
 
-  const loading = await w.addWorktree('loading-primary')
-  unsetUpstream(loading.path, 'zoe/loading-primary')
+  const loading = await unpublished('loading-primary')
   fixture.setLookup('zoe/loading-primary', { kind: 'found', number: 81, state: 'OPEN', hold: true })
   await selectWorktree(w, loading.id, 'zoe/loading-primary')
   await w.win.waitFor(() => existsSync(fixture!.pending('zoe/loading-primary')))
-  await waitForReviewState(w, 'loading')
-  await waitForPrimary(w, 'Publish Branch', false)
+  await waitForShip(w, 'Publish branch', false)
+  expect(primaryNow().title).toBe('checking for a pull request…')
   fixture.release('zoe/loading-primary')
   await w.win.waitFor(() => existsSync(fixture!.done('zoe/loading-primary')))
-  await waitForReviewState(w, 'found', 81)
+  await waitForShip(w, 'Publish branch', true)
 
-  const unavailable = await w.addWorktree('unavailable-primary')
-  unsetUpstream(unavailable.path, 'zoe/unavailable-primary')
+  const unavailable = await unpublished('unavailable-primary')
   fixture.setLookup('zoe/unavailable-primary', { kind: 'unavailable' })
   await selectWorktree(w, unavailable.id, 'zoe/unavailable-primary')
-  await waitForReviewState(w, 'unavailable')
-  await waitForPrimary(w, 'Publish Branch', false)
+  await waitForShip(w, 'Publish branch', true)
+  await click(primary())
+  const refused = await w.win.waitFor(() => errorLine())
+  expect(text(refused)).toContain('GitHub is temporarily unavailable.')
+  expect(Bun.spawnSync(['git', 'rev-parse', '--verify', '--quiet', 'refs/heads/zoe/unavailable-primary'], { cwd: w.originDir }).exitCode).not.toBe(0)
   writeFileSync(join(unavailable.path, 'math.ts'), 'changed while lookup was unavailable\n')
-  await w.win.waitFor(() => text(primary()) === 'Stage All')
-  expect(primary().disabled).toBe(false)
+  await waitForShip(w, 'Commit 1 file', true)
 
-  const merged = await w.addWorktree('merged-primary')
-  unsetUpstream(merged.path, 'zoe/merged-primary')
+  const merged = await unpublished('merged-primary')
   fixture.setLookup('zoe/merged-primary', { kind: 'found', number: 82, state: 'MERGED' })
   await selectWorktree(w, merged.id, 'zoe/merged-primary')
-  await waitForReviewState(w, 'found', 82)
-  await waitForPrimary(w, 'Publish Branch', false)
+  await w.win.waitFor(() => primaryNow().title === 'the pull request is already merged')
+  expect(primaryNow()).toMatchObject({ label: 'Publish branch', enabled: false })
   expect(w.problems()).toEqual([])
 }, SLOW)

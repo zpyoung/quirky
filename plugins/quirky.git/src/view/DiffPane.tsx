@@ -50,14 +50,23 @@ export type PaneProps = {
   onSaved(content: string, hash: string): void
   /** Refetch the diff and replace this pane with it, dropping the draft. */
   onReload(): Promise<void>
+  /** A mounted view control asks the owner to reload this stale card. */
+  onStaleReload(): void
   onFocus?(): void
   /** Draws and takes notes on the modified side of a text diff; image, binary and too-large diffs never use it. */
   notes?: NotesBinding
+  /**
+   * Offers Revert on each change of a text diff whose modified side is the file on disk: a press
+   * asks for confirmation, puts the change back in the editor and saves the file at once with the
+   * hash the diff was read at. A refused save puts the editor back and says so. With unsaved edits
+   * in an editable pane a press undoes the change in the draft only, without asking or saving.
+   */
+  revertOnDisk?: boolean
 }
 
 const STALE_TEXT = {
   file: 'This file changed on disk since your edits. Use the banner to compare, reload, or overwrite.',
-  section: 'This file changed on disk since this section loaded.'
+  section: 'This file changed on disk since your edits.'
 } as const
 
 /** The banner for a file that changed on disk under unsaved edits, with the two ways out. */
@@ -101,7 +110,7 @@ export function DiffPane(props: PaneProps) {
 
 const NO_NOTES: readonly Note[] = []
 
-function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus, notes }: PaneProps) {
+function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onStaleReload, onFocus, notes, revertOnDisk }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const mergeRef = useRef<MergeHandle | null>(null)
   const base = useRef<{ text: string; hash: string | null | undefined }>({ text: diff.modified, hash: diff.modifiedHash })
@@ -113,8 +122,8 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   const [dirty, setDirty] = useState(false)
   const [stale, setStale] = useState(false)
   const [overflow, setOverflow] = useState<TooLarge | null>(null)
-  const latest = useRef({ onFocus })
-  latest.current = { onFocus }
+  const latest = useRef({ context, worktree, path, diff, onSaved, onReload, onFocus, overflow })
+  latest.current = { context, worktree, path, diff, onSaved, onReload, onFocus, overflow }
   const binding = useRef(notes)
   binding.current = notes
   const withNotes = notes !== undefined
@@ -142,32 +151,103 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
     }
   }
 
-  const save = async (force: boolean) => {
-    const content = overflow ? draft.current : (mergeRef.current?.getModified() ?? null)
-    if (content === null) return
+  async function write(content: string, force: boolean): Promise<void> {
+    const current = latest.current
     const { hash } = base.current
+    const result = (await current.context.call('quirky.git/save', {
+      worktree: current.worktree,
+      path: current.diff.path,
+      content,
+      ...(!force && hash !== undefined ? { expected: hash } : {})
+    })) as { hash: string }
+    base.current = { text: content, hash: result.hash }
+    const now = mergeRef.current?.getModified() ?? draft.current ?? content
+    dirtyRef.current = now !== content
+    setDirty(dirtyRef.current)
+    setStale(false)
+    latest.current.onSaved(content, result.hash)
+  }
+
+  async function save(force: boolean): Promise<void> {
+    if (!dirtyRef.current) return
+    const current = latest.current
+    const content = current.overflow ? draft.current : (mergeRef.current?.getModified() ?? null)
+    if (content === null) return
     try {
-      const result = (await context.call('quirky.git/save', {
-        worktree,
-        path: diff.path,
-        content,
-        ...(!force && hash !== undefined ? { expected: hash } : {})
-      })) as { hash: string }
-      base.current = { text: content, hash: result.hash }
-      const now = mergeRef.current?.getModified() ?? draft.current ?? content
-      dirtyRef.current = now !== content
-      setDirty(dirtyRef.current)
-      setStale(false)
-      onSaved(content, result.hash)
+      await write(content, force)
     } catch (error) {
       if (reasonOf(error) === 'changed-on-disk') setStale(true)
-      else context.toast('Save failed', messageOf(error))
+      else latest.current.context.toast('Save failed', messageOf(error), { kind: 'error' })
     }
   }
 
-  const ifDirty = (force: boolean) => () => (dirtyRef.current ? save(force) : Promise.resolve())
-  const actions = useRef({ save: ifDirty(false), overwrite: ifDirty(true), reload: onReload })
-  actions.current = { save: ifDirty(false), overwrite: ifDirty(true), reload: onReload }
+  const reverting = useRef(false)
+  const ownEdit = useRef(false)
+  /** Runs `change` on the editor without it counting as the user's edit. */
+  const silently = <T,>(change: () => T): T => {
+    ownEdit.current = true
+    try {
+      return change()
+    } finally {
+      ownEdit.current = false
+    }
+  }
+  /**
+   * Runs `apply` on the editor. With unsaved edits that is all it does, so the change reaches disk
+   * with the next save. Otherwise it confirms first and saves the result at once; a refused save
+   * restores the editor unless the user typed meanwhile, in which case their text and the
+   * reverted change stay in the draft.
+   */
+  async function revert(apply: () => boolean): Promise<void> {
+    const merge = mergeRef.current
+    if (reverting.current || !merge) return
+    if (dirtyRef.current) {
+      apply()
+      return
+    }
+    reverting.current = true
+    try {
+      const current = latest.current
+      const confirmed = await current.context.confirm({
+        title: 'Revert this change?',
+        body: `The change is undone in ${current.path} on disk.`,
+        confirmLabel: 'Revert'
+      })
+      if (!confirmed || mergeRef.current !== merge) return
+      if (dirtyRef.current) {
+        apply()
+        return
+      }
+      const before = merge.getModified()
+      if (!silently(apply)) return
+      const reverted = merge.getModified()
+      try {
+        await write(reverted, false)
+      } catch (error) {
+        if (mergeRef.current === merge) {
+          if (merge.getModified() === reverted) silently(() => merge.setModified(before))
+          dirtyRef.current = merge.getModified() !== base.current.text
+          setDirty(dirtyRef.current)
+        }
+        latest.current.context.toast('Revert failed', messageOf(error), { kind: 'error' })
+      }
+    } finally {
+      reverting.current = false
+    }
+  }
+
+  function onRevert(apply: () => boolean): void {
+    void revert(apply)
+  }
+
+  function onSave(): void {
+    void save(false)
+  }
+
+  function overwrite(): Promise<void> {
+    return dirtyRef.current ? save(true) : Promise.resolve()
+  }
+  const canRevert = revertOnDisk === true && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 
   const showEditor = overflow === null
   useEffect(() => {
@@ -182,9 +262,11 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       showWhitespace: settings.showWhitespace,
       collapseUnchanged: settings.collapseUnchanged,
       editable,
+      ...(canRevert ? { onRevert } : {}),
       scrollToFirst: variant === 'file',
-      onSave: () => void actions.current.save(),
+      onSave,
       onDocChange: () => {
+        if (ownEdit.current) return
         dirtyRef.current = true
         setDirty(true)
         if (timer.current !== null) clearTimeout(timer.current)
@@ -226,7 +308,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       mergeRef.current = null
       handle.destroy()
     }
-  }, [showEditor, editable, variant, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
+  }, [showEditor, editable, canRevert, variant, withNotes, path, settings.sideBySide, settings.wrap, settings.showWhitespace, settings.collapseUnchanged])
 
   useEffect(() => {
     mergeRef.current?.setNotes(model)
@@ -245,6 +327,8 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
     []
   )
 
+  const canRevertRef = useRef(canRevert)
+  canRevertRef.current = canRevert
   const handleRef = useRef<PaneHandle | null>(null)
   if (handleRef.current === null) {
     handleRef.current = {
@@ -253,20 +337,20 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       goToChange: (n) => mergeRef.current?.goToChange(n) ?? false,
       currentChange: () => mergeRef.current?.currentChange() ?? null,
       changeCount: () => mergeRef.current?.changeCount() ?? 0,
-      revertChange: () => (editable ? (mergeRef.current?.revertChange() ?? false) : false),
+      revertChange: () => (editable || canRevertRef.current ? (mergeRef.current?.revertChange() ?? false) : false),
       isDirty: () => dirtyRef.current,
-      save: () => actions.current.save(),
+      save: () => save(false),
       reload: () => reload(),
-      overwrite: () => actions.current.overwrite(),
+      overwrite,
       modifiedText: () => draft.current ?? mergeRef.current?.getModified() ?? base.current.text,
       markStale: () => setStale(true)
     }
   }
-  const reload = async () => {
+  async function reload(): Promise<void> {
     try {
-      await actions.current.reload()
+      await latest.current.onReload()
     } catch (error) {
-      context.toast('Reload failed', messageOf(error))
+      latest.current.context.toast('Reload failed', messageOf(error), { kind: 'error' })
     }
   }
   useEffect(() => {
@@ -283,7 +367,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
       {stale && (
-        <StaleBar variant={variant} onReload={() => void reload()} onOverwrite={() => void actions.current.overwrite()} />
+        <StaleBar variant={variant} onReload={onStaleReload} onOverwrite={overwrite} />
       )}
       {overflow ? (
         <div className="ui-stack" role="region" aria-label="This diff is too large to display safely." style={{ padding: 'var(--ui-space-12)' }}>

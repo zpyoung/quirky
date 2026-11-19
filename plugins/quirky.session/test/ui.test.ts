@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { mock as nodeMock } from 'node:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, RpcError, RpcErrorCode, type AgentDisplayState, type AgentStatusSummary, type QuirkyEvent, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
@@ -84,6 +85,7 @@ describe('the plugin module', () => {
     start()
     const declared = [
       ...manifest.contributes.view.map((entry) => `view:quirky.session/${entry.id}`),
+      ...manifest.contributes.overlay.map((entry) => `overlay:quirky.session/${entry.id}`),
       ...manifest.contributes.command.map((entry) => `command:quirky.session/${entry.id}`)
     ]
     expect([...fake.provided.keys()].sort()).toEqual(declared.sort())
@@ -218,10 +220,114 @@ describe('the worktree view', () => {
     expect(view.tabs().map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'true'])
   })
 
+  test('shows a loading state while the worktree is resolving', async () => {
+    const pending = Promise.withResolvers<unknown>().promise
+    start([shell1], { 'quirky.worktree/resolve': () => pending })
+    const view = await open({ worktree: WORKTREE.id })
+
+    expect(view.element.querySelector('main')?.textContent).toContain('Loading sessions…')
+    expect(view.tabs()).toEqual([])
+  })
+
+  test('shows a Retry error on the first load and clears it after retry succeeds', async () => {
+    let resolveCalls = 0
+    const { promise: pending, resolve: finishResolve } = Promise.withResolvers<unknown>()
+    start([shell1], {
+      'quirky.worktree/resolve': () => {
+        if (++resolveCalls === 1) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return pending
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    const alert = view.element.querySelector('[role="alert"]')!
+
+    expect(alert.textContent).toContain('Could not load sessions: boom')
+    expect([...alert.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Retry'])
+    expect(fake.toasts).toEqual([])
+    expect(view.lastReport()).toEqual({ worktree: WORKTREE.id, tabs: [], active: null, visibleSessions: [] })
+
+    await view.click(alert.querySelector('button')!)
+    await settle()
+    expect(view.element.querySelector('main')?.textContent).toContain('Loading sessions…')
+    expect(resolveCalls).toBe(2)
+
+    await act(async () => finishResolve(WORKTREE))
+    await settle()
+    expect(view.tabs()).toHaveLength(1)
+    expect(view.element.querySelector('[role="alert"]')).toBeNull()
+    expect(resolveCalls).toBe(2)
+  })
+
+  test('keeps loaded tabs and toasts when a refresh fails', async () => {
+    let fail = false
+    start([shell1, claude], {
+      'quirky.session/list': () => {
+        if (fail) throw new RpcError(RpcErrorCode.Internal, 'boom')
+        return [shell1, claude]
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+
+    fail = true
+    await fake.emit({ type: 'quirky.worktree/changed', data: {} } as QuirkyEvent)
+    await settle()
+
+    expect(view.tabs()).toHaveLength(2)
+    expect(view.element.querySelector('[role="alert"]')).toBeNull()
+    expect(fake.toasts.at(-1)).toEqual({ title: 'Could not load sessions', body: 'boom' })
+  })
+
+  test('shows a reconnecting state instead of the terminal while disconnected', async () => {
+    start([shell1])
+    const view = await open({ worktree: WORKTREE.id })
+    expect(view.element.querySelector('.terminal-host')).not.toBeNull()
+
+    await fake.setConnection('reconnecting')
+    expect(view.element.querySelector('main')?.textContent).toContain('Reconnecting…')
+    expect(view.element.querySelector('.terminal-host')).toBeNull()
+
+    await fake.setConnection('connected')
+    await settle()
+    expect(view.element.querySelector('main')?.textContent).not.toContain('Reconnecting…')
+    expect(view.element.querySelector('.terminal-host')).not.toBeNull()
+  })
+
+  test('runs a badge through the session command and reads its current daemon definition', async () => {
+    let current = session({
+      id: 's1',
+      badges: { 'acme.tools/k': { label: 'Open', command: 'command:acme.tools/open', args: { x: 1 } } }
+    })
+    start([current], {
+      'quirky.session/get': (params: { session: string }) => {
+        if (params.session !== current.id) throw new RpcError(RpcErrorCode.NotFound, `no such session: ${params.session}`)
+        return current
+      }
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    const openBadge = [...view.element.querySelectorAll('button')].find((button) => button.textContent === 'Open')!
+
+    await view.click(openBadge)
+    expect(fake.executed).toStrictEqual([{
+      id: 'command:quirky.session/run-badge',
+      args: { session: 's1', badge: 'acme.tools/k' }
+    }])
+
+    current = {
+      ...current,
+      badges: { 'acme.tools/k': { label: 'Open', command: 'command:acme.tools/open-latest', args: { latest: true } } }
+    }
+    await fake.command('run-badge', { session: 's1', badge: 'acme.tools/k' })
+    expect(fake.executed.at(-1)).toStrictEqual({ id: 'command:acme.tools/open-latest', args: { latest: true } })
+    await expect(fake.command('run-badge', { session: 's1', badge: 'acme.tools/none' })).rejects.toThrow(
+      'session s1 has no badge acme.tools/none with a command'
+    )
+  })
+
   test('a worktree that does not resolve is reported as missing', async () => {
     start([], { 'quirky.worktree/resolve': () => Promise.reject(new RpcError(RpcErrorCode.NotFound, 'no such worktree')) })
     const view = await open({ worktree: 'nowhere' })
-    expect(view.element.textContent).toContain('Worktree not found')
+    expect(view.element.querySelector('header')?.textContent).toContain('Quirky')
+    expect(view.element.querySelector('main')?.textContent).toContain('Worktree not found')
     expect(view.lastReport()).toEqual({ worktree: 'nowhere', tabs: [], active: null, visibleSessions: [] })
   })
 
@@ -384,11 +490,29 @@ describe('new sessions', () => {
     expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'bg' } })
   })
 
-  test('SC-43: the menu lists Shell, the installed enabled agents, Claude (background) and Manage agents', async () => {
+  test('Chat opens the agent picker, and picking an agent starts a structured chat that opens in the tab', async () => {
+    start([shell1], {
+      'quirky.agents/options': () => ({ models: [{ id: 'opus', label: 'Opus' }], defaultModel: 'opus' }),
+      'quirky.structured/create': () => session({ id: 'chat', kind: 'structured', agent: 'claude' })
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    await pickFromMenu(view, 'Chat')
+    await settle()
+    expect(fake.callsTo('quirky.session/create')).toEqual([])
+    const card = [...document.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.querySelector('strong')?.textContent === 'Claude')!
+    expect(card.textContent).toContain('Opus \u00b7 ready')
+    await view.click(card)
+    await settle()
+    expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({ agent: 'claude', worktree: WORKTREE.id, deferStart: true, model: 'opus' })
+    expect(fake.opened.at(-1)).toEqual({ id: VIEW, input: { worktree: WORKTREE.id, session: 'chat' } })
+    expect(document.body.textContent).not.toContain('Pick an agent')
+  })
+
+  test('SC-43: the menu lists Shell, Chat, the installed enabled agents, Claude (background) and Manage agents', async () => {
     start([shell1])
     const view = await open({ worktree: WORKTREE.id })
     const labels = await openMenu(view)
-    expect(labels()).toEqual(['Shell', 'Claude', 'Codex', 'Goose', 'Claude (background)', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Claude', 'Codex', 'Goose', 'Claude (background)', 'Manage agents'])
     expect(fake.callsTo('quirky.agents/list')).toHaveLength(1)
   })
 
@@ -396,7 +520,7 @@ describe('new sessions', () => {
     const listing = agentListing([agentInfo('claude', 'Claude'), agentInfo('codex', 'Codex'), agentInfo('goose', 'Goose')], 'goose')
     start([shell1], { 'quirky.agents/list': () => listing })
     const labels = await openMenu(await open({ worktree: WORKTREE.id }))
-    expect(labels()).toEqual(['Shell', 'Goose', 'Claude', 'Codex', 'Claude (background)', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Goose', 'Claude', 'Codex', 'Claude (background)', 'Manage agents'])
   })
 
   test('SC-41: disabled and undetected agents are not offered', async () => {
@@ -408,14 +532,14 @@ describe('new sessions', () => {
     ])
     start([shell1], { 'quirky.agents/list': () => listing })
     const labels = await openMenu(await open({ worktree: WORKTREE.id }))
-    expect(labels()).toEqual(['Shell', 'Claude', 'Aider', 'Claude (background)', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Claude', 'Aider', 'Claude (background)', 'Manage agents'])
   })
 
   test('Claude (background) is hidden when Claude is disabled or missing', async () => {
     for (const claudeOver of [{ enabled: false }, { installed: false }]) {
       start([shell1], { 'quirky.agents/list': () => agentListing([agentInfo('claude', 'Claude', claudeOver), agentInfo('codex', 'Codex')]) })
       const view = await open({ worktree: WORKTREE.id })
-      expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+      expect((await openMenu(view))()).toEqual(['Shell', 'Chat', 'Codex', 'Manage agents'])
       await mounted?.unmount()
       mounted = null
       document.body.innerHTML = ''
@@ -439,32 +563,32 @@ describe('new sessions', () => {
     expect(view.element.querySelector('[role="menu"]')).toBeNull()
   })
 
-  test('while the list loads the menu shows Shell and Manage agents only', async () => {
+  test('while the list loads the menu shows Shell, Chat and Manage agents only', async () => {
     let release: (value: unknown) => void = () => {}
     const pending = new Promise((resolve) => (release = resolve))
     start([shell1], { 'quirky.agents/list': () => pending })
     const view = await open({ worktree: WORKTREE.id })
     const labels = await openMenu(view)
-    expect(labels()).toEqual(['Shell', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Manage agents'])
     release(agentListing([agentInfo('codex', 'Codex')]))
     await settle()
-    expect(labels()).toEqual(['Shell', 'Codex', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Codex', 'Manage agents'])
   })
 
-  test('a failed list call leaves Shell and Manage agents', async () => {
+  test('a failed list call leaves Shell, Chat and Manage agents', async () => {
     start([shell1], { 'quirky.agents/list': () => Promise.reject(new Error('down')) })
     const labels = await openMenu(await open({ worktree: WORKTREE.id }))
-    expect(labels()).toEqual(['Shell', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Manage agents'])
   })
 
   test('the list is read again each time the menu opens', async () => {
     let listing = agentListing([agentInfo('codex', 'Codex')])
     start([shell1], { 'quirky.agents/list': () => listing })
     const view = await open({ worktree: WORKTREE.id })
-    expect((await openMenu(view))()).toEqual(['Shell', 'Codex', 'Manage agents'])
+    expect((await openMenu(view))()).toEqual(['Shell', 'Chat', 'Codex', 'Manage agents'])
     await view.click(newSessionTrigger(view))
     listing = agentListing([agentInfo('goose', 'Goose')])
-    expect((await openMenu(view))()).toEqual(['Shell', 'Goose', 'Manage agents'])
+    expect((await openMenu(view))()).toEqual(['Shell', 'Chat', 'Goose', 'Manage agents'])
   })
 
   test('an open menu reads the catalog again on quirky.agents/changed and setting.changed', async () => {
@@ -472,15 +596,15 @@ describe('new sessions', () => {
     start([shell1], { 'quirky.agents/list': () => listing })
     const view = await open({ worktree: WORKTREE.id })
     const labels = await openMenu(view)
-    expect(labels()).toEqual(['Shell', 'Codex', 'Goose', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Codex', 'Goose', 'Manage agents'])
     listing = agentListing([agentInfo('codex', 'Codex')])
     await fake.emit({ type: 'quirky.agents/changed', data: {} } as QuirkyEvent)
     await settle()
-    expect(labels()).toEqual(['Shell', 'Codex', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Codex', 'Manage agents'])
     listing = agentListing([])
     await fake.emit({ type: 'setting.changed', id: 'setting:quirky.agents/anything', value: true })
     await settle()
-    expect(labels()).toEqual(['Shell', 'Manage agents'])
+    expect(labels()).toEqual(['Shell', 'Chat', 'Manage agents'])
   })
 
   test('a closed menu does not listen for catalog changes', async () => {
@@ -641,6 +765,13 @@ describe('terminal pane', () => {
     }
   })
   afterEach(() => restore())
+  async function advanceTime(ms: number) {
+    await act(async () => {
+      nodeMock.timers.tick(ms)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
 
   test('attaches the active terminal session and takes its output from the stream', async () => {
     start([shell1])
@@ -796,6 +927,219 @@ describe('terminal pane', () => {
     expect(terminal.options.theme).toEqual(themeBeforeUnmount)
   })
 
+  test('suppresses generated input during a successful resync replay and resumes input afterward', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    const terminal = terminals[0]!
+    const write = terminal.write.bind(terminal)
+    let completeReplay: (() => void) | undefined
+    let daemonWritesAfterGeneratedInput: number | undefined
+    terminal.write = (data, callback) => {
+      if (decode(data).startsWith('\x18\x1b\\\x1bc')) {
+        terminal.input('generated reply')
+        daemonWritesAfterGeneratedInput = fake.callsTo('quirky.terminal/write').length
+        completeReplay = callback
+        write(data)
+        return
+      }
+      write(data, callback)
+    }
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jok')
+      expect(daemonWritesAfterGeneratedInput).toBe(0)
+      expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+      expect(completeReplay).toBeDefined()
+      completeReplay!()
+      await act(async () => terminal.input('user input'))
+      expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+        { session: 's1', data: 'user input' }
+      ])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('unsubscribes immediately on lag and replays a reset-prefixed resync after 250ms', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('ok')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      expect(fake.streams.has(7)).toBe(false)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      await advanceTime(249)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      await advanceTime(1)
+      expect(fake.callsTo('quirky.terminal/resync').map((call) => call.params)).toEqual([{ streamId: 7, historyLines: 2000 }])
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jok')
+      expect(fake.streams.has(8)).toBe(true)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('rate limits a continuous lag flood to one resync per two seconds', async () => {
+    let nextStreamId = 8
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: nextStreamId++, replay: bytesToBase64(text('fresh')) })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      for (const streamId of [8, 9, 10, 11, 12]) {
+        await act(async () => fake.lag(streamId))
+        await advanceTime(2000)
+      }
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(6)
+      expect(fake.streams.has(13)).toBe(true)
+      expect(writes.at(-1)).toBe('\x18\x1b\\\x1bc\x1b[3Jfresh')
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('falls back to attach when resync returns NotFound', async () => {
+    let attaches = 0
+    start([shell1], {
+      'quirky.terminal/attach': () => {
+        const count = attaches++
+        return count === 0 ? attachResult() : attachResult({ streamId: 9, replay: bytesToBase64(text('attached')) })
+      },
+      'quirky.terminal/resync': () => {
+        throw new RpcError(RpcErrorCode.NotFound, 'no such stream: 7')
+      }
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jattached')
+      expect(fake.streams.has(9)).toBe(true)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('stops after three transient resync retries and reports the error', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => {
+        throw new RpcError(RpcErrorCode.Internal, 'host busy')
+      }
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      for (let retry = 0; retry < 3; retry++) {
+        await advanceTime(1999)
+        expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry + 1)
+        await advanceTime(1)
+        expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry + 2)
+      }
+      await advanceTime(2000)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(4)
+      expect(writes.join('')).toContain('Could not resync: host busy')
+      expect(fake.streams.size).toBe(0)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('a resync to an ended session becomes read-only', async () => {
+    start([shell1], {
+      'quirky.terminal/resync': () => attachResult({ streamId: 8, replay: bytesToBase64(text('final')), live: false })
+    })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(writes).toContain('\x18\x1b\\\x1bc\x1b[3Jfinal')
+      expect(fake.streams.has(8)).toBe(false)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
+      await act(async () => terminals[0]!.input('ignored'))
+      expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+
+  test('clears a pending recovery timer and detaches the current stream on unmount', async () => {
+    start([shell1])
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await mounted!.unmount()
+      mounted = null
+      await advanceTime(1000)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+  test('detaches the replacement stream when resync resolves after unmount', async () => {
+    const { promise, resolve } = Promise.withResolvers<Record<string, unknown>>()
+    start([shell1], { 'quirky.terminal/resync': () => promise })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      await mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        resolve(attachResult({ streamId: 8 }))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([8])
+      expect(fake.streams.size).toBe(0)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
+  test('detaches the original stream when an in-flight resync rejects after unmount', async () => {
+    const { promise, reject } = Promise.withResolvers<Record<string, unknown>>()
+    start([shell1], { 'quirky.terminal/resync': () => promise })
+    await open({ worktree: WORKTREE.id })
+    nodeMock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+    try {
+      await act(async () => fake.lag(7))
+      await advanceTime(250)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+      await mounted!.unmount()
+      mounted = null
+      await act(async () => {
+        reject(new RpcError(RpcErrorCode.Internal, 'host busy'))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toEqual([7])
+      expect(fake.streams.size).toBe(0)
+    } finally {
+      nodeMock.timers.reset()
+    }
+  })
   test('detaches when the view unmounts', async () => {
     start([shell1])
     const view = await open({ worktree: WORKTREE.id })
@@ -838,7 +1182,7 @@ describe('structured sessions', () => {
       'quirky.structured/messages': () => [message(1, 'user', 'hi'), message(2, 'system', 'hook_started: x'), message(3, 'assistant', 'hello')]
     })
     const view = await open({ worktree: WORKTREE.id })
-    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
+    expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg', tail: true, limit: 1000 })
     expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi', 'assistanthello'])
     await fake.emit({ type: 'quirky.structured/message', data: { message: message(4, 'assistant', 'more') } })
     expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(3)
@@ -846,23 +1190,43 @@ describe('structured sessions', () => {
     expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(3)
   })
 
+  test('draws messages that carry chat items as turns', async () => {
+    const item = (seq: number, chatItem: object, role = 'assistant') => ({ sessionId: 'bg', seq, role, text: '', at: 0, item: chatItem })
+    start([bg], {
+      'quirky.structured/messages': () => [
+        item(1, { kind: 'user', text: 'Add backoff' }, 'user'),
+        item(2, { kind: 'prose', text: 'Working on it.' }),
+        item(3, { kind: 'turn-end', state: 'done' })
+      ]
+    })
+    const view = await open({ worktree: WORKTREE.id })
+    expect(view.element.querySelector('[role="log"]')!.textContent).toContain('Add backoff')
+    expect(view.element.querySelector('[role="log"]')!.textContent).toContain('Working on it.')
+    expect(view.element.querySelectorAll('article[aria-label$="message"]')).toHaveLength(0)
+  })
+
+  test('a structured session that is waiting shows waiting on its tab', async () => {
+    start([session({ id: 'bg', kind: 'structured', agent: 'claude', title: 'Claude 1', status: 'waiting' })], { 'quirky.structured/messages': () => [] })
+    const view = await open({ worktree: WORKTREE.id })
+    expect(view.tabs()[0]!.textContent).toContain('waiting')
+    expect(view.element.querySelector('[role="status"]')!.textContent).toContain('waiting')
+  })
+
   test('sends a follow-up with Enter', async () => {
     start([bg], { 'quirky.structured/messages': () => [], 'quirky.structured/send': () => ({ ok: true }) })
     const view = await open({ worktree: WORKTREE.id })
-    const textarea = view.element.querySelector('textarea')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, ' next ')
-      textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => void textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next' })
+    const { EditorView } = await import('@codemirror/view')
+    const editor = EditorView.findFromDOM(view.element.querySelector<HTMLElement>('.cm-editor')!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: ' next ' }, selection: { anchor: 6 } }))
+    await act(async () => void editor.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: ' next ', when: 'now' })
   })
 
   test('says so when quirky.structured is off', async () => {
     start([bg])
     const view = await open({ worktree: WORKTREE.id })
     expect(view.element.textContent).toContain('Structured sessions are off')
-    expect(view.element.querySelector('textarea')).toBeNull()
+    expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   describe('when quirky.structured changes while the transcript is open', () => {
@@ -881,12 +1245,12 @@ describe('structured sessions', () => {
     test('disabling it shows the off state and removes the input', async () => {
       start2(true)
       const view = await open({ worktree: WORKTREE.id })
-      expect(view.element.querySelector('textarea')).not.toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
       on = false
       await fake.emit({ type: 'plugin.changed' })
       await settle()
       expect(view.element.textContent).toContain('Structured sessions are off')
-      expect(view.element.querySelector('textarea')).toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
     })
 
     test('enabling it reloads the transcript and enables the input', async () => {
@@ -898,7 +1262,7 @@ describe('structured sessions', () => {
       await settle()
       expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
       expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi'])
-      expect(view.element.querySelector('textarea')).not.toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
       expect(view.element.textContent).not.toContain('Structured sessions are off')
     })
 

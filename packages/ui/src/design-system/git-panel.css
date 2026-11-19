@@ -1,0 +1,80 @@
+/* Owner: the Changes panel. Panel layout styles live here. */
+
+[data-git-panel] [data-git-ship] {
+  flex: none;
+  max-height: 50%;
+  overflow-y: auto;
+}
+
+[data-git-panel] .git-count-line {
+  font-size: var(--ui-font-label);
+  margin: 0;
+}
+
+[data-git-panel] .git-totals {
+  flex: none;
+  font-size: var(--ui-font-label);
+}
+
+[data-git-panel] .git-totals__added {
+  color: var(--ui-working);
+}
+
+[data-git-panel] .git-totals__removed {
+  color: var(--ui-failing);
+}
+
+[data-git-panel] .git-ship__notes .ui-icon-button {
+  aspect-ratio: auto;
+  padding-inline: var(--ui-space-8);
+}
+
+[data-git-panel] .git-ship__notes .ui-icon-button__icon {
+  font-size: var(--ui-font-label);
+  line-height: 1.25;
+}
+
+[data-git-panel] .git-ship__error .ui-inline-error {
+  align-items: flex-start;
+}
+
+[data-git-panel] .git-ship__error .ui-inline-error__message {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+[data-git-panel] .git-ship__field {
+  position: relative;
+}
+
+[data-git-panel] .git-ship__field .ui-text-field__input {
+  padding-inline-end: calc(var(--ui-space-24) * 2);
+}
+
+[data-git-panel] .git-ship__sparkle {
+  gap: 0;
+  inset-block-start: var(--ui-space-2);
+  inset-inline-end: var(--ui-space-2);
+  position: absolute;
+}
+
+[data-git-panel] .git-ship__quiet {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+[data-git-panel] .git-ship__quiet p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-git-panel] .git-row__check {
+  flex: none;
+  margin: 0;
+}

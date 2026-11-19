@@ -7,8 +7,9 @@ import type { DropZone } from '../../layout/tree'
 import { GROUP_RATIO_MAX, GROUP_RATIO_MIN, isViewTab, TAB_COLOR_HEX } from '../../layout/types'
 import type { Group, GroupNode, Tab } from '../../layout/types'
 import { CollapseIcon, CloseIcon, JumpIcon, PinIcon } from './icons'
-import { hasCommandDrop } from './controller'
+import { hasCommandDrop, requestWorkspaceCommand } from './controller'
 import type { ControllerState, WorkspaceController } from './controller'
+import { WORKSPACE_MENU_COMMAND } from '../window-command'
 import { activeTabOf, byPaneId, groupRects, px } from './model'
 import type { GroupDividerRect } from './model'
 import { InlineField, PaneLayer } from './PaneLayer'
@@ -94,10 +95,20 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
         event.preventDefault()
         void controller.closeTab(tab.id)
       }}
-      onDoubleClick={() => isViewTab(tab) && tab.preview ? void controller.promoteViewTab(tab.id) : controller.renameTab(tab.id)}
+      onDoubleClick={() => isViewTab(tab) && tab.preview
+        ? void controller.promoteViewTab(tab.id)
+        : void requestWorkspaceCommand(
+            controller.context,
+            { command: 'command:quirky.terminal/rename-tab', args: { tab: tab.id } },
+            'Could not rename the tab'
+          )}
       onContextMenu={(event) => {
         event.preventDefault()
-        controller.openMenu('tab', tab.id, { x: event.clientX, y: event.clientY })
+        void requestWorkspaceCommand(
+          controller.context,
+          { command: 'command:quirky.terminal/open-menu', args: { kind: 'tab', target: tab.id, x: event.clientX, y: event.clientY } },
+          'Could not open menu'
+        )
       }}
       onDragStart={(event) => {
         event.dataTransfer?.setData('text/plain', tab.id)
@@ -142,7 +153,9 @@ function TabItem({ controller, state, group, tab, index, others, now, overflow, 
             onBlur={() => collapseBadge(key)}
             onClick={(event) => {
               event.stopPropagation()
-              void controller.context.executeCommand(badge.command!, badge.args)
+              void controller.context
+                .executeCommand('command:quirky.session/run-badge', { session: session!.id, badge: key })
+                .catch((error) => controller.context.toast('Could not run session badge', error instanceof Error ? error.message : String(error)))
             }}
           >
             <JumpIcon />
@@ -195,6 +208,7 @@ function EmptyGroup({ controller, group }: { controller: WorkspaceController; gr
   if (controller.floating) {
     return (
       <div className="qt-empty">
+        <EmptyState message="No terminals open." />
         <Button variant="secondary" onClick={newTerminal}>
           <span>New Terminal</span>
           <span className="qt-menu-key">⌘T</span>
@@ -231,7 +245,6 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
   const measuredLayout = useRef('')
   const [hiddenTabs, setHiddenTabs] = useState<string[]>([])
   const [viewportWidth, setViewportWidth] = useState(0)
-  const [moreOpen, setMoreOpen] = useState(false)
   const updateHiddenTabs = useCallback(() => {
     const navigation = tabNavigation.current
     const viewport = tabViewport.current
@@ -254,6 +267,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
     setViewportWidth(viewport.clientWidth)
   }, [])
   const hasHidden = hiddenTabs.length > 0
+  const moreOpen = hasHidden && state.overflowGroup === group.id
   useLayoutEffect(() => {
     const navigation = tabNavigation.current
     const viewport = tabViewport.current
@@ -269,9 +283,14 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
       viewport.removeEventListener('scroll', updateHiddenTabs)
     }
   }, [group.tabs, hasHidden, updateHiddenTabs])
-  useEffect(() => {
-    if (!hasHidden) setMoreOpen(false)
-  }, [hasHidden])
+  useLayoutEffect(() => {
+    if (hasHidden || state.overflowGroup !== group.id) return
+    void requestWorkspaceCommand(
+      controller.context,
+      { command: WORKSPACE_MENU_COMMAND, args: { action: 'hidden-tabs', target: group.id, open: false } },
+      'Could not close hidden tabs'
+    )
+  }, [controller, group.id, hasHidden, state.overflowGroup])
   const pickHidden = (id: string) => {
     revealTab(tabViewport.current?.querySelector<HTMLElement>(`[data-tab="${id}"]`) ?? null)
     void controller.activateTab(id)
@@ -302,8 +321,11 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
 
   const toggle = (kind: string, event: ReactMouseEvent) => {
     event.stopPropagation()
-    if (menu?.kind === kind && menu.target === group.id) controller.closeMenu()
-    else controller.openMenu(kind, group.id)
+    if (menu?.kind === kind && menu.target === group.id) {
+      void requestWorkspaceCommand(controller.context, { command: 'command:quirky.terminal/close-menu', args: { target: group.id } }, 'Could not close menu')
+    } else {
+      void requestWorkspaceCommand(controller.context, { command: 'command:quirky.terminal/open-menu', args: { kind, target: group.id } }, 'Could not open menu')
+    }
   }
 
   return (
@@ -349,7 +371,11 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
               aria-haspopup="menu"
               aria-expanded={moreOpen}
               onMouseDown={(event) => event.stopPropagation()}
-              onClick={() => setMoreOpen((open) => !open)}
+              onClick={() => void requestWorkspaceCommand(
+                controller.context,
+                { command: WORKSPACE_MENU_COMMAND, args: { action: 'hidden-tabs', target: group.id, open: !moreOpen } },
+                moreOpen ? 'Could not close hidden tabs' : 'Could not open hidden tabs'
+              )}
             >
               <ControlIcon name="caret-down" size={12} />
               <span><span className="qt-tab-more-count" style={{ width: `${String(group.tabs.length).length}ch` }}>{hiddenTabs.length}</span> more</span>
@@ -363,7 +389,7 @@ function GroupView({ controller, state, group }: Common & { group: Group }) {
         <IconButton className="qt-icon qt-actions" data-actions={group.id} label="Pane actions" title="Pane actions" aria-haspopup="menu" aria-expanded={menu?.kind === 'actions' && menu.target === group.id} disabled={!split} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => toggle('actions', event)}>
           …
         </IconButton>
-        {moreOpen && moreButton.current ? <PopupMenu anchor={moreButton.current} items={hiddenItems} title="Hidden tabs" onClose={() => setMoreOpen(false)} /> : null}
+        {moreOpen && moreButton.current ? <PopupMenu anchor={moreButton.current} items={hiddenItems} title="Hidden tabs" onClose={() => void requestWorkspaceCommand(controller.context, { command: WORKSPACE_MENU_COMMAND, args: { action: 'hidden-tabs', target: group.id, open: false } }, 'Could not close hidden tabs')} /> : null}
       </div>
       <div
         ref={body}

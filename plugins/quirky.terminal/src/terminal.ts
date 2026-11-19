@@ -2,6 +2,7 @@ import {
   base64ToBytes,
   RpcErrorCode,
   type ClientStream,
+  type CallerConnection,
   type PluginCaller,
   type PluginContext,
   type PluginEvent,
@@ -18,12 +19,22 @@ const DEFAULT_ENTER_DELAY_MS = 300
 const DEFAULT_READ_LINES = 50
 const DEFAULT_KILL_POLL_MS = 100
 const KILL_POLLS = 65
+const MAX_TAP_BYTES = 4 * 1024 * 1024
+const MOBILE_RECOVERY_COOLDOWN_MS = 2_000
+const RESYNC_COOLDOWN_MS = 2_000
 
-type Attachment = { connectionId: number; stream: ClientStream; sessionId: string; mobile: boolean }
+type Attachment = { connectionId: number; stream: ClientStream; sessionId: string; mobile: boolean; generation: number; resyncing?: boolean }
 type SessionTitleLookup = (sessionIds: readonly string[]) => Promise<ReadonlyMap<string, string>>
-
 /** Output that arrived while a subscribe request was in flight, kept until its response says where the replay ends. */
-type Tap = { chunks: Uint8Array[]; total: number }
+type Tap = { chunks: Uint8Array[]; buffered: number; total: number; overflow: boolean }
+type MobileTap = Tap & { generation: number; subscriptionOffset?: number }
+type ResyncWaiter = {
+  connectionId: number
+  sessionId: string
+  streamId: number
+  cancel(error: Error): void
+  closedError: Error
+}
 
 const encoder = new TextEncoder()
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -36,6 +47,19 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     at += chunk.length
   }
   return out
+}
+
+function pushTap(tap: Tap, bytes: Uint8Array): void {
+  tap.total += bytes.length
+  if (tap.overflow) return
+  if (tap.buffered + bytes.length > MAX_TAP_BYTES) {
+    tap.chunks.length = 0
+    tap.buffered = 0
+    tap.overflow = true
+    return
+  }
+  tap.chunks.push(bytes.slice())
+  tap.buffered += bytes.length
 }
 
 /** The plugin event a PTY host fact is reported as; null for facts only other plugins consume. */
@@ -89,7 +113,16 @@ export class TerminalService {
   private readonly pendingBySession = new Map<string, Set<Attachment>>()
   private readonly received = new Map<string, number>()
   private readonly taps = new Map<string, Tap>()
-  private readonly holds = new Map<string, Uint8Array[]>()
+  private readonly holds = new Map<string, Tap>()
+  private readonly mobileHolds = new Map<string, MobileTap>()
+  private readonly mobileRecoveryAt = new Map<string, number>()
+  private readonly mobileRecoveryTimers = new Map<string, { timer: ReturnType<typeof setTimeout>; reservation: symbol }>()
+  private readonly mobileRecoveryQueued = new Map<string, symbol>()
+  private readonly mobileRecoveryPending = new Set<string>()
+  private readonly mobileRecoveryRunning = new Map<string, symbol>()
+  private readonly sessionGenerations = new Map<string, number>()
+  private readonly resyncAt = new Map<string, number>()
+  private readonly resyncWaiters = new Set<ResyncWaiter>()
   private readonly attaching = new Map<string, number>()
   private readonly attachQueue = new Map<string, Promise<unknown>>()
   private readonly forgotten = new Set<string>()
@@ -119,8 +152,15 @@ export class TerminalService {
       this.refuseWhenClosed()
     }
     const ended = session.status === 'exited'
+    const generation = this.sessionGeneration(session.id)
     const stream = connection.openStream()
-    const attachment: Attachment = { connectionId: connection.id, stream, sessionId: session.id, mobile: caller.role === 'mobile' }
+    const attachment: Attachment = {
+      connectionId: connection.id,
+      stream,
+      sessionId: session.id,
+      mobile: caller.role === 'mobile',
+      generation
+    }
     const pending = this.pendingBySession.get(session.id) ?? new Set<Attachment>()
     pending.add(attachment)
     this.pendingBySession.set(session.id, pending)
@@ -130,18 +170,102 @@ export class TerminalService {
       this.untrackPending(attachment)
       this.drop(attachment)
     })
+    let mobileAttached = false
+    for (;;) {
+      const attemptGeneration = attachment.generation
+      try {
+        const result = await this.enqueue(session.id, async () => {
+          if (!open) throw this.context.error('conflict', 'terminal connection closed while attaching')
+          if (!ended && !mobileAttached) {
+            await this.mobile.attach(session.id, params.cols as number, params.rows as number, caller, params.claim === true)
+            mobileAttached = true
+          }
+          if (!open) throw this.context.error('conflict', 'terminal connection closed while attaching')
+          return this.subscribe(attachment, {
+            historyLines: params.historyLines as number | undefined,
+            isOpen: () => open
+          })
+        })
+        if (this.closed || !open) throw this.context.error('conflict', 'terminal connection closed while attaching')
+        this.untrackPending(attachment)
+        return { ...result, restored }
+      } catch (error) {
+        const currentGeneration = this.sessionGeneration(session.id)
+        if (!this.closed && open && !stream.lagged && currentGeneration !== attemptGeneration) {
+          attachment.generation = currentGeneration
+          continue
+        }
+        stream.close()
+        throw error
+      }
+    }
+  }
+
+  resync = async (params: Record<string, unknown>, caller: PluginCaller) => {
+    this.refuseWhenClosed()
+    const connection = caller.role === 'plugin' ? undefined : caller.connection
+    if (!connection) throw this.context.error('invalid-params', 'quirky.terminal/resync needs a client connection')
+    const streamId = params.streamId as number
+    const existing = this.byConnection.get(connection.id)?.get(streamId)
+    if (!existing) throw this.context.error('not-found', `no such stream: ${streamId}`)
+    const generation = this.sessionGeneration(existing.sessionId)
+    await this.requireTerminal(existing.sessionId)
+    this.refuseWhenClosed()
+    if (this.sessionGeneration(existing.sessionId) !== generation) {
+      throw this.context.error('conflict', 'terminal output changed while resyncing')
+    }
+
+    const key = `${connection.id}:${existing.sessionId}`
+    const now = Date.now()
+    const nextAllowedAt = this.resyncAt.get(key)
+    if (nextAllowedAt === undefined || now >= nextAllowedAt) {
+      this.resyncAt.set(key, now + RESYNC_COOLDOWN_MS)
+    } else {
+      this.resyncAt.set(key, nextAllowedAt + RESYNC_COOLDOWN_MS)
+      await this.waitForResyncSlot(connection, existing.sessionId, streamId, nextAllowedAt - now)
+    }
+    this.refuseWhenClosed()
+    if (this.sessionGeneration(existing.sessionId) !== generation) {
+      throw this.context.error('conflict', 'terminal output changed while resyncing')
+    }
+    if (this.byConnection.get(connection.id)?.get(streamId) !== existing) {
+      throw this.context.error('not-found', `no such stream: ${streamId}`)
+    }
+
+    const stream = connection.openStream()
+    const attachment: Attachment = {
+      connectionId: connection.id,
+      stream,
+      sessionId: existing.sessionId,
+      mobile: existing.mobile,
+      generation
+    }
+    const pending = this.pendingBySession.get(existing.sessionId) ?? new Set<Attachment>()
+    pending.add(attachment)
+    this.pendingBySession.set(existing.sessionId, pending)
+    let open = true
+    stream.onClose(() => {
+      open = false
+      this.untrackPending(attachment)
+      this.drop(attachment)
+    })
     try {
-      const result = await this.enqueue(session.id, async () => {
-        if (!open) throw this.context.error('conflict', 'terminal connection closed while attaching')
-        if (!ended) await this.mobile.attach(session.id, params.cols as number, params.rows as number, caller, params.claim === true)
+      const result = await this.enqueue(existing.sessionId, async () => {
+        if (!open) throw this.context.error('conflict', 'terminal connection closed while resyncing')
+        if (this.byConnection.get(connection.id)?.get(streamId) !== existing) {
+          throw this.context.error('not-found', `no such stream: ${streamId}`)
+        }
         return this.subscribe(attachment, {
           historyLines: params.historyLines as number | undefined,
           isOpen: () => open
         })
       })
       this.untrackPending(attachment)
-      return { ...result, restored }
+      existing.resyncing = true
+      existing.stream.close()
+      return result
     } catch (error) {
+      attachment.resyncing = true
       stream.close()
       throw error
     }
@@ -156,25 +280,26 @@ export class TerminalService {
     return { ok: true }
   }
 
-  /** Claims real user input before bytes are sent; query replies and injected prompts do not call it. */
+  /** Reports a human input claim without sending terminal bytes. */
   userInput = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+    const expectedIncarnation = this.requireExpectedIncarnation(params.expectedIncarnation)
     const session = await this.requireWritable(params.session as string)
-    const identity = await this.context.call('quirky.session/identity', { session: session.id }) as {
-      sessionId: string
-      live: boolean
-      processIncarnation: string
-    }
-    if (!identity.live || identity.sessionId !== session.id || identity.processIncarnation !== params.expectedIncarnation) {
-      throw this.context.error('conflict', 'terminal process changed before user input; reattach before typing')
-    }
-    this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: identity.processIncarnation })
+    const verifiedIncarnation = await this.verifyInputIncarnation(session.id, expectedIncarnation)
+    this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: verifiedIncarnation })
     return { ok: true }
   }
 
   /** Types raw input; the session then counts as touched for the layout's exit rule. */
   write = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
+    const guarded = Object.prototype.hasOwnProperty.call(params, 'expectedIncarnation')
+    const expectedIncarnation = guarded ? this.requireExpectedIncarnation(params.expectedIncarnation) : undefined
     const session = await this.requireWritable(params.session as string)
     this.mobile.assertCanInput(session.id, caller)
+    if (expectedIncarnation !== undefined) {
+      const verifiedIncarnation = await this.verifyInputIncarnation(session.id, expectedIncarnation)
+      this.mobile.assertCanInput(session.id, caller)
+      this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: verifiedIncarnation })
+    }
     this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(params.data as string))
     return { ok: true }
@@ -345,17 +470,22 @@ export class TerminalService {
 
   onData = (sessionId: string, bytes: Uint8Array): void => {
     const tap = this.taps.get(sessionId)
-    if (tap) {
-      tap.chunks.push(bytes.slice())
-      tap.total += bytes.length
-    }
+    if (tap) pushTap(tap, bytes)
     const hold = this.holds.get(sessionId)
     if (hold) {
-      hold.push(bytes.slice())
+      pushTap(hold, bytes)
       return
     }
     const known = this.received.get(sessionId)
     if (known !== undefined) this.received.set(sessionId, known + bytes.length)
+    const mobileHold = this.mobileHolds.get(sessionId)
+    if (mobileHold) {
+      pushTap(mobileHold, bytes)
+      for (const attachment of this.bySession.get(sessionId) ?? []) {
+        if (!attachment.mobile) attachment.stream.send(bytes)
+      }
+      return
+    }
     for (const attachment of this.bySession.get(sessionId) ?? []) attachment.stream.send(bytes)
   }
 
@@ -363,10 +493,14 @@ export class TerminalService {
   onEvent = (event: { type: string }): void => {
     if (event.type !== 'quirky.session/removed') return
     const { sessionId } = (event as PluginEvent).data as { sessionId: string }
+    this.invalidateSession(sessionId)
     const attachments = this.bySession.get(sessionId)
     const silent = this.silent.get(sessionId)
     const pending = this.pendingBySession.get(sessionId)
     if ((attachments?.size ?? 0) > 0 || (silent?.size ?? 0) > 0 || (pending?.size ?? 0) > 0 || (this.attaching.get(sessionId) ?? 0) > 0) this.forgotten.add(sessionId)
+    this.cancelResyncWaitersForSession(sessionId)
+    this.clearResyncReservationsForSession(sessionId)
+    this.clearMobileRecovery(sessionId)
     this.mobile.sessionRemoved(sessionId)
     if (attachments) for (const attachment of [...attachments]) attachment.stream.close()
     if (silent) for (const attachment of [...silent]) attachment.stream.close()
@@ -375,6 +509,8 @@ export class TerminalService {
 
   /** Clears phone leases and streams on PTY exit; desktop panes retain their read-only attachment. */
   onExit = (sessionId: string): void => {
+    this.invalidateSession(sessionId)
+    this.clearMobileRecovery(sessionId)
     this.mobile.sessionExited(sessionId)
     const attachments = this.bySession.get(sessionId)
     const silent = this.silent.get(sessionId)
@@ -383,35 +519,73 @@ export class TerminalService {
     if (silent) for (const attachment of [...silent]) if (attachment.mobile) attachment.stream.close()
     if (pending) for (const attachment of [...pending]) if (attachment.mobile) attachment.stream.close()
   }
+  /** Handles the host output gap after shared subscription state is invalidated. */
+  onLagged = (sessionId: string): void => {
+    this.beginOutputGap(sessionId)
+  }
 
-  /** Re-subscribes every streamed session and sends its streams the output produced while the host was unreachable. */
+  /** Re-subscribes every streamed session and recovers gaps that no longer fit in the host replay buffer. */
   onReconnect = async (): Promise<void> => {
-    for (const [sessionId, attachments] of [...this.bySession]) {
-      if (attachments.size === 0) continue
-      const had = this.received.get(sessionId) ?? 0
-      const hold: Uint8Array[] = []
-      this.holds.set(sessionId, hold)
-      try {
-        const { replay, offset } = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
-        const missed = offset - had
-        if (missed > 0) {
-          const bytes = base64ToBytes(replay)
-          // a gap longer than the host's replay buffer cannot be recovered
-          if (missed <= bytes.length) this.sendAll(attachments, bytes.subarray(bytes.length - missed))
+    if (this.closed) return
+    const sessions = [...this.bySession.keys()].map((sessionId) => [sessionId, this.sessionGeneration(sessionId)] as const)
+    for (const [sessionId, initialGeneration] of sessions) {
+      await this.enqueue(sessionId, async () => {
+        if (this.closed || this.sessionGeneration(sessionId) !== initialGeneration) return
+        let generation = initialGeneration
+        const recoveringMobileGap = this.mobileHolds.has(sessionId)
+        if (recoveringMobileGap) {
+          this.beginOutputGap(sessionId)
+          generation = this.sessionGeneration(sessionId)
         }
-        for (const chunk of hold) this.sendAll(attachments, chunk)
-        this.received.set(sessionId, offset + hold.reduce((sum, chunk) => sum + chunk.length, 0))
-      } catch (error) {
-        this.context.log(`could not resume terminal output of ${sessionId}: ${messageOf(error)}`)
-      } finally {
-        if (this.holds.get(sessionId) === hold) this.holds.delete(sessionId)
-      }
+        if (!(this.bySession.get(sessionId)?.size ?? 0)) return
+        const had = this.received.get(sessionId) ?? 0
+        const hold: Tap = { chunks: [], buffered: 0, total: 0, overflow: false }
+        this.holds.set(sessionId, hold)
+        try {
+          const { replay, offset } = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
+          if (this.closed || this.sessionGeneration(sessionId) !== generation || this.holds.get(sessionId) !== hold) return
+          this.received.set(sessionId, offset + hold.total)
+          if (recoveringMobileGap) {
+            this.mobileHolds.set(sessionId, { ...hold, generation, subscriptionOffset: offset })
+            return
+          }
+          const bytes = base64ToBytes(replay)
+          const missed = offset - had
+          if (hold.overflow || missed < 0 || missed > bytes.length) {
+            this.beginOutputGap(sessionId, { subscriptionOffset: offset, hold })
+            return
+          }
+          const current = this.bySession.get(sessionId)
+          if (!current?.size) return
+          if (missed > 0) this.sendAll(current, bytes.subarray(bytes.length - missed))
+          for (const chunk of hold.chunks) this.sendAll(current, chunk)
+        } catch (error) {
+          if (!this.closed && this.sessionGeneration(sessionId) === generation) {
+            this.context.log(`could not resume terminal output of ${sessionId}: ${messageOf(error)}`)
+          }
+        } finally {
+          if (this.holds.get(sessionId) === hold) this.holds.delete(sessionId)
+        }
+      })
     }
   }
 
   /** Ends every stream and drops the host subscriptions; attaches still in flight are closed when they finish, and new ones are refused. */
   shutdown(): void {
     this.closed = true
+    for (const waiter of [...this.resyncWaiters]) waiter.cancel(waiter.closedError)
+    this.resyncAt.clear()
+    for (const sessionId of new Set([
+      ...this.mobileHolds.keys(),
+      ...this.mobileRecoveryAt.keys(),
+      ...this.mobileRecoveryTimers.keys(),
+      ...this.mobileRecoveryQueued.keys(),
+      ...this.mobileRecoveryPending,
+      ...this.mobileRecoveryRunning.keys()
+    ])) this.clearMobileRecovery(sessionId)
+    this.holds.clear()
+    this.taps.clear()
+    this.mobileHolds.clear()
     this.mobile.shutdown()
     for (const attachments of [...this.bySession.values(), ...this.silent.values()]) {
       for (const attachment of [...attachments]) attachment.stream.close()
@@ -425,6 +599,261 @@ export class TerminalService {
   private sendAll(attachments: Iterable<Attachment>, bytes: Uint8Array): void {
     for (const attachment of attachments) attachment.stream.send(bytes)
   }
+
+  private waitForResyncSlot(
+    connection: CallerConnection,
+    sessionId: string,
+    streamId: number,
+    delay: number
+  ): Promise<void> {
+    const { promise, resolve, reject } = Promise.withResolvers<void>()
+    const closedError = this.context.error('conflict', 'terminal connection closed while resyncing')
+    let timer: ReturnType<typeof setTimeout>
+    let removeClose = () => {}
+    let settled = false
+    let waiter: ResyncWaiter
+    const finish = (error?: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      removeClose()
+      this.resyncWaiters.delete(waiter)
+      if (error) reject(error)
+      else resolve()
+    }
+    waiter = {
+      connectionId: connection.id,
+      sessionId,
+      streamId,
+      closedError,
+      cancel: (error) => finish(error)
+    }
+    this.resyncWaiters.add(waiter)
+    timer = setTimeout(() => finish(), delay)
+    removeClose = connection.onClose(() => {
+      finish(waiter.closedError)
+      this.clearResyncReservationsForConnection(connection.id)
+    })
+    return promise
+  }
+
+  private cancelResyncWaitersForSession(sessionId: string): void {
+    for (const waiter of [...this.resyncWaiters]) {
+      if (waiter.sessionId === sessionId) {
+        waiter.cancel(this.context.error('not-found', `no such stream: ${waiter.streamId}`))
+      }
+    }
+  }
+
+  private clearResyncReservationsForSession(sessionId: string): void {
+    for (const key of this.resyncAt.keys()) {
+      if (key.endsWith(`:${sessionId}`)) this.resyncAt.delete(key)
+    }
+  }
+
+  private clearResyncReservationsForConnection(connectionId: number): void {
+    const prefix = `${connectionId}:`
+    for (const key of this.resyncAt.keys()) {
+      if (key.startsWith(prefix)) this.resyncAt.delete(key)
+    }
+  }
+
+  private lagAttachment(attachment: Attachment): void {
+    if (attachment.mobile) return
+    const streamId = attachment.stream.streamId
+    if (this.byConnection.get(attachment.connectionId)?.get(streamId) !== attachment) return
+    const live = this.bySession.get(attachment.sessionId)
+    if (!live?.delete(attachment)) return
+    if (live.size === 0) this.bySession.delete(attachment.sessionId)
+    const silent = this.silent.get(attachment.sessionId) ?? new Set<Attachment>()
+    silent.add(attachment)
+    this.silent.set(attachment.sessionId, silent)
+    attachment.stream.lag?.()
+    this.releaseIfIdle(attachment.sessionId)
+  }
+  private sessionGeneration(sessionId: string): number {
+    return this.sessionGenerations.get(sessionId) ?? 0
+  }
+
+  private invalidateSession(sessionId: string): number {
+    const generation = this.sessionGeneration(sessionId) + 1
+    this.sessionGenerations.set(sessionId, generation)
+    this.taps.delete(sessionId)
+    this.holds.delete(sessionId)
+    return generation
+  }
+
+  private newMobileTap(generation: number): MobileTap {
+    return { chunks: [], buffered: 0, total: 0, overflow: false, generation }
+  }
+
+  private beginOutputGap(
+    sessionId: string,
+    resumed?: { subscriptionOffset: number; hold: Tap }
+  ): void {
+    if (this.closed) return
+    const generation = this.invalidateSession(sessionId)
+    this.cancelResyncWaitersForSession(sessionId)
+    this.clearResyncReservationsForSession(sessionId)
+
+    const active = [...(this.bySession.get(sessionId) ?? [])]
+    const phones = active.filter((attachment) => attachment.mobile)
+    if (phones.length > 0) {
+      const hold: MobileTap = resumed
+        ? { ...resumed.hold, generation, subscriptionOffset: resumed.subscriptionOffset }
+        : this.newMobileTap(generation)
+      this.mobileHolds.set(sessionId, hold)
+      if (resumed) this.received.set(sessionId, resumed.subscriptionOffset + hold.total)
+      else this.received.delete(sessionId)
+      if (this.mobileRecoveryRunning.has(sessionId)) this.mobileRecoveryPending.add(sessionId)
+    } else {
+      this.clearMobileRecovery(sessionId)
+    }
+
+    for (const attachment of active) {
+      if (!attachment.mobile) this.lagAttachment(attachment)
+    }
+    if (phones.length > 0) this.recoverMobileSession(sessionId)
+    else this.releaseIfIdle(sessionId)
+  }
+
+  private isCurrentMobileRecovery(
+    sessionId: string,
+    generation: number,
+    token: symbol,
+    hold: MobileTap
+  ): boolean {
+    return !this.closed &&
+      this.sessionGeneration(sessionId) === generation &&
+      this.mobileRecoveryRunning.get(sessionId) === token &&
+      this.mobileHolds.get(sessionId) === hold &&
+      [...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)
+  }
+
+  private recoverMobileSession(sessionId: string): void {
+    if (this.closed || ![...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)) return
+    if (!this.mobileHolds.has(sessionId)) {
+      this.mobileHolds.set(sessionId, this.newMobileTap(this.sessionGeneration(sessionId)))
+    }
+    if (this.mobileRecoveryRunning.has(sessionId)) {
+      this.mobileRecoveryPending.add(sessionId)
+      return
+    }
+    if (this.mobileRecoveryQueued.has(sessionId)) return
+    const now = Date.now()
+    const last = this.mobileRecoveryAt.get(sessionId)
+    if (last !== undefined && now - last < MOBILE_RECOVERY_COOLDOWN_MS) {
+      if (!this.mobileRecoveryTimers.has(sessionId)) {
+        const reservation = Symbol()
+        const timer = setTimeout(() => {
+          if (this.mobileRecoveryTimers.get(sessionId)?.reservation !== reservation) return
+          this.mobileRecoveryTimers.delete(sessionId)
+          this.recoverMobileSession(sessionId)
+        }, MOBILE_RECOVERY_COOLDOWN_MS - (now - last))
+        this.mobileRecoveryTimers.set(sessionId, { timer, reservation })
+      }
+      return
+    }
+    const reservation = Symbol()
+    this.mobileRecoveryQueued.set(sessionId, reservation)
+    void this.enqueue(sessionId, async () => {
+      if (this.mobileRecoveryQueued.get(sessionId) !== reservation) return
+      this.mobileRecoveryQueued.delete(sessionId)
+      if (this.closed || ![...(this.bySession.get(sessionId) ?? [])].some((attachment) => attachment.mobile)) {
+        this.clearMobileRecovery(sessionId)
+        return
+      }
+      if (this.mobileRecoveryRunning.has(sessionId)) {
+        this.mobileRecoveryPending.add(sessionId)
+        return
+      }
+      this.mobileRecoveryAt.set(sessionId, Date.now())
+      const token = Symbol()
+      this.mobileRecoveryRunning.set(sessionId, token)
+      await this.runMobileRecovery(sessionId, token)
+    })
+  }
+
+  private async runMobileRecovery(sessionId: string, token: symbol): Promise<void> {
+    const generation = this.sessionGeneration(sessionId)
+    let mobileHold = this.mobileHolds.get(sessionId)
+    if (!mobileHold || mobileHold.generation !== generation) return
+    let offset = mobileHold.subscriptionOffset
+    try {
+      if (offset === undefined) {
+        mobileHold = this.newMobileTap(generation)
+        this.mobileHolds.set(sessionId, mobileHold)
+        const subscription = await this.context.pty.subscribe(sessionId, { mode: 'raw' })
+        if (!this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) {
+          if (
+            (this.bySession.get(sessionId)?.size ?? 0) === 0 &&
+            (this.attaching.get(sessionId) ?? 0) === 0
+          ) this.context.pty.unsubscribe(sessionId).catch(() => {})
+          return
+        }
+        offset = subscription.offset
+        mobileHold.subscriptionOffset = offset
+      }
+      if (mobileHold.overflow) {
+        const knownEnd = offset + mobileHold.total
+        offset = knownEnd
+        mobileHold = this.newMobileTap(generation)
+        mobileHold.subscriptionOffset = offset
+        this.mobileHolds.set(sessionId, mobileHold)
+        this.received.set(sessionId, knownEnd)
+      }
+      if (!this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) return
+      this.received.set(sessionId, offset + mobileHold.total)
+
+      const snap = await this.context.pty.snapshot(sessionId)
+      if (!this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) return
+      const currentEnd = this.received.get(sessionId) ?? (offset + mobileHold.total)
+      const end = Math.max(currentEnd, snap.offset)
+      const after = end - snap.offset
+      const targets = [...(this.bySession.get(sessionId) ?? [])].filter((attachment) => attachment.mobile)
+      if (targets.length === 0) {
+        this.received.delete(sessionId)
+        this.clearMobileRecovery(sessionId)
+        return
+      }
+      if (after > mobileHold.buffered || (after > 0 && mobileHold.overflow)) {
+        this.mobileHolds.set(sessionId, this.newMobileTap(generation))
+        this.mobileRecoveryPending.add(sessionId)
+        return
+      }
+
+      this.received.set(sessionId, end)
+      this.sendAll(targets, encoder.encode('\x18\x1b\\\x1bc\x1b[3J' + snap.ansi))
+      if (after > 0) {
+        const all = concat(mobileHold.chunks)
+        this.sendAll(targets, all.subarray(all.length - after))
+      }
+      if (this.mobileHolds.get(sessionId) === mobileHold) this.mobileHolds.delete(sessionId)
+    } catch (error) {
+      if (this.isCurrentMobileRecovery(sessionId, generation, token, mobileHold)) {
+        this.context.log(`could not recover mobile terminal output of ${sessionId}: ${messageOf(error)}`)
+        this.mobileHolds.set(sessionId, this.newMobileTap(generation))
+        this.mobileRecoveryPending.add(sessionId)
+      }
+    } finally {
+      if (this.mobileRecoveryRunning.get(sessionId) === token) {
+        this.mobileRecoveryRunning.delete(sessionId)
+        if (this.mobileRecoveryPending.delete(sessionId)) this.recoverMobileSession(sessionId)
+      }
+    }
+  }
+
+  private clearMobileRecovery(sessionId: string): void {
+    const scheduled = this.mobileRecoveryTimers.get(sessionId)
+    if (scheduled !== undefined) clearTimeout(scheduled.timer)
+    this.mobileRecoveryTimers.delete(sessionId)
+    this.mobileRecoveryQueued.delete(sessionId)
+    this.mobileRecoveryPending.delete(sessionId)
+    this.mobileRecoveryRunning.delete(sessionId)
+    this.mobileRecoveryAt.delete(sessionId)
+    this.mobileHolds.delete(sessionId)
+  }
+
 
   private sessionOf(params: Record<string, unknown>, caller: PluginCaller | undefined): string {
     const explicit = params.session as string | undefined
@@ -449,6 +878,32 @@ export class TerminalService {
         ? `session ${session.id} ended when the terminal host stopped; run quirky session restore ${session.id}`
         : `session ${session.id} has exited`
     )
+  }
+
+  private requireExpectedIncarnation(value: unknown): string {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw this.context.error('invalid-params', 'expectedIncarnation must be a non-empty string')
+    }
+    return value
+  }
+
+  private async verifyInputIncarnation(sessionId: string, expectedIncarnation: string): Promise<string> {
+    const identity = await this.context.call('quirky.session/identity', { session: sessionId }) as unknown
+    if (
+      !identity ||
+      typeof identity !== 'object' ||
+      !('sessionId' in identity) ||
+      identity.sessionId !== sessionId ||
+      !('live' in identity) ||
+      identity.live !== true ||
+      !('processIncarnation' in identity) ||
+      typeof identity.processIncarnation !== 'string' ||
+      identity.processIncarnation.length === 0 ||
+      identity.processIncarnation !== expectedIncarnation
+    ) {
+      throw this.context.error('conflict', 'terminal process changed before user input; reattach before typing')
+    }
+    return identity.processIncarnation
   }
 
   private async killSession(sessionId: string): Promise<void> {
@@ -476,11 +931,15 @@ export class TerminalService {
   ) {
     const { sessionId, stream } = attachment
     const { isOpen } = options
+    const generation = attachment.generation
     this.attaching.set(sessionId, (this.attaching.get(sessionId) ?? 0) + 1)
     try {
       this.refuseWhenClosed()
+      if (this.sessionGeneration(sessionId) !== generation) {
+        throw this.context.error('conflict', 'terminal output changed while subscribing')
+      }
       const start = this.received.get(sessionId)
-      const tap: Tap = { chunks: [], total: 0 }
+      const tap: Tap = { chunks: [], buffered: 0, total: 0, overflow: false }
       this.taps.set(sessionId, tap)
       let result: PtySubscription
       try {
@@ -489,24 +948,24 @@ export class TerminalService {
           ...(options.historyLines === undefined ? {} : { historyLines: options.historyLines })
         })
       } finally {
-        this.taps.delete(sessionId)
+        if (this.taps.get(sessionId) === tap) this.taps.delete(sessionId)
       }
+      if (this.sessionGeneration(sessionId) !== generation) {
+        throw this.context.error('conflict', 'terminal output changed while subscribing')
+      }
+      const end = start === undefined ? result.offset + tap.total : Math.max(start + tap.total, result.offset)
+      const after = end - result.offset
+      this.received.set(sessionId, end)
       if (this.closed) {
         stream.close()
         this.refuseWhenClosed()
       }
       if (this.forgotten.has(sessionId)) stream.close()
-      // Output after the response is everything the tap holds when this is the first subscription;
-      // otherwise what the running offset has gained beyond the replay's end.
-      const end = start === undefined ? result.offset + tap.total : Math.max(start + tap.total, result.offset)
-      const after = end - result.offset
-      this.received.set(sessionId, end)
       if (isOpen()) {
         const streams = this.byConnection.get(attachment.connectionId) ?? new Map()
         streams.set(stream.streamId, attachment)
         this.byConnection.set(attachment.connectionId, streams)
         if (result.live === false) {
-          // an ended session's stream stays open for the pane but never carries output
           const set = this.silent.get(sessionId) ?? new Set()
           set.add(attachment)
           this.silent.set(sessionId, set)
@@ -514,7 +973,18 @@ export class TerminalService {
           const set = this.bySession.get(sessionId) ?? new Set()
           set.add(attachment)
           this.bySession.set(sessionId, set)
-          if (after > 0) {
+        }
+        if (!attachment.mobile) stream.onLag?.(() => this.lagAttachment(attachment))
+        if (
+          result.live !== false &&
+          this.bySession.get(sessionId)?.has(attachment) &&
+          after > 0 &&
+          !(attachment.mobile && this.mobileHolds.has(sessionId))
+        ) {
+          if (tap.overflow || after > tap.buffered) {
+            if (attachment.mobile) this.recoverMobileSession(sessionId)
+            else this.lagAttachment(attachment)
+          } else {
             const all = concat(tap.chunks)
             stream.send(all.subarray(all.length - after))
           }
@@ -529,7 +999,7 @@ export class TerminalService {
       if (left > 0) this.attaching.set(sessionId, left)
       else this.attaching.delete(sessionId)
       if (!isOpen()) this.drop(attachment)
-      else this.releaseIfIdle(sessionId)
+      else if (this.sessionGeneration(sessionId) === generation) this.releaseIfIdle(sessionId)
     }
   }
 
@@ -548,17 +1018,25 @@ export class TerminalService {
     if (silent?.size === 0) this.silent.delete(attachment.sessionId)
     const streams = this.byConnection.get(attachment.connectionId)
     streams?.delete(attachment.stream.streamId)
-    if (streams?.size === 0) this.byConnection.delete(attachment.connectionId)
+    if (streams?.size === 0) {
+      this.byConnection.delete(attachment.connectionId)
+      this.clearResyncReservationsForConnection(attachment.connectionId)
+    }
     this.releaseIfIdle(attachment.sessionId)
-    if (attachment.mobile) this.mobile.detach(attachment.sessionId, attachment.connectionId)
+    if (attachment.mobile && !attachment.resyncing) {
+      this.mobile.detach(attachment.sessionId, attachment.connectionId)
+      if (![...(this.bySession.get(attachment.sessionId) ?? [])].some((current) => current.mobile)) {
+        this.clearMobileRecovery(attachment.sessionId)
+      }
+    }
   }
 
   private releaseIfIdle(sessionId: string): void {
     if ((this.bySession.get(sessionId)?.size ?? 0) > 0) return
     if ((this.attaching.get(sessionId) ?? 0) > 0) return
-    this.bySession.delete(sessionId)
+    const subscribed = this.received.has(sessionId)
     this.received.delete(sessionId)
-    if (this.forgotten.delete(sessionId)) return
+    if (this.forgotten.delete(sessionId) || !subscribed) return
     this.context.pty.unsubscribe(sessionId).catch(() => {})
   }
 }

@@ -18,7 +18,8 @@ const BROWSER_IMPORTS: Record<string, string> = {
 const STYLESHEETS = [
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
-  'packages/ui/src/design-system/git-rows.css'
+  'packages/ui/src/design-system/git-rows.css',
+  'packages/ui/src/design-system/git-panel.css'
 ]
 const executable = chromium.executablePath()
 let browser: Browser | null = null
@@ -32,7 +33,6 @@ function browserEntry(): string {
     import { BranchRow } from ${JSON.stringify(header)}
 
     const longBranch = 'branch-' + 'x'.repeat(123)
-    const cleanStatus = { branch: longBranch, detached: false, ahead: 0, behind: 0 }
     const panel = document.getElementById('branch-root')
     const root = createRoot(panel)
     window.baseRefClicks = 0
@@ -41,22 +41,25 @@ function browserEntry(): string {
       root.render(createElement('div', null,
         createElement('section', { 'data-branch-case': 'clean' },
           createElement(BranchRow, {
-            status: cleanStatus,
-            compare: { base: 'main', status: 'ready', added: 0, removed: 0 },
+            branch: longBranch,
+            base: 'main',
+            totals: { added: 0, removed: 0 },
             onChangeBase: () => { window.baseRefClicks++ }
           })
         ),
-        createElement('section', { 'data-branch-case': 'with-badges' },
+        createElement('section', { 'data-branch-case': 'with-totals' },
           createElement(BranchRow, {
-            status: { ...cleanStatus, ahead: 4, behind: 2 },
-            compare: { base: 'main', status: 'ready', added: 17, removed: 3 },
+            branch: longBranch,
+            base: 'main',
+            totals: { added: 17, removed: 3 },
             onChangeBase: () => { window.baseRefClicks++ }
           })
         ),
-        createElement('section', { 'data-branch-case': 'wide-badges' },
+        createElement('section', { 'data-branch-case': 'wide-totals' },
           createElement(BranchRow, {
-            status: { ...cleanStatus, ahead: 4000, behind: 2000 },
-            compare: { base: 'origin/release/2026.11', status: 'ready', added: 17000, removed: 3000 },
+            branch: longBranch,
+            base: 'origin/release/2026.11',
+            totals: { added: 17000, removed: 3000 },
             onChangeBase: () => { window.baseRefClicks++ }
           })
         )
@@ -147,7 +150,7 @@ afterAll(async () => {
   await browser?.close()
 }, 60_000)
 
-test.skipIf(!existsSync(executable))('long branch names ellipsize beside a usable base ref with or without status badges', async () => {
+test.skipIf(!existsSync(executable))('long branch names ellipsize beside a usable base ref with or without line totals', async () => {
   const { context, page } = await openPage()
   try {
     await page.evaluate(() => (window as BrowserTestWindow).renderBranchRows())
@@ -161,7 +164,7 @@ test.skipIf(!existsSync(executable))('long branch names ellipsize beside a usabl
       const contentLeft = panelRect.left + parseFloat(panelStyle.borderLeftWidth) + parseFloat(panelStyle.paddingLeft)
       const contentRight = panelRect.right - parseFloat(panelStyle.borderRightWidth) - parseFloat(panelStyle.paddingRight)
 
-      return ['clean', 'with-badges', 'wide-badges'].map((caseName) => {
+      return ['clean', 'with-totals', 'wide-totals'].map((caseName) => {
         const caseElement = document.querySelector<HTMLElement>(`[data-branch-case="${caseName}"]`)
         const row = caseElement?.querySelector<HTMLElement>('[data-branch-row]')
         const branch = row?.querySelector<HTMLElement>('[data-branch-name]')
@@ -196,11 +199,11 @@ test.skipIf(!existsSync(executable))('long branch names ellipsize beside a usabl
           baseCenterY: baseRect.top + baseRect.height / 2,
           baseLeft: baseRect.left,
           baseRight: baseRect.right,
-          badgesWithinRow: Array.from(row.querySelectorAll<HTMLElement>('.ui-badge')).every((badge) => {
-            const rect = badge.getBoundingClientRect()
+          totalsWithinRow: Array.from(row.querySelectorAll<HTMLElement>('.git-totals')).every((totals) => {
+            const rect = totals.getBoundingClientRect()
             return rect.left >= contentLeft && rect.right <= contentRight
           }),
-          badgeLabels: Array.from(row.querySelectorAll<HTMLElement>('.ui-badge')).map((badge) => badge.getAttribute('aria-label'))
+          totalsLabels: Array.from(row.querySelectorAll<HTMLElement>('.git-totals')).map((totals) => totals.getAttribute('aria-label'))
         }
       })
     })
@@ -220,14 +223,13 @@ test.skipIf(!existsSync(executable))('long branch names ellipsize beside a usabl
       expect(layout.baseLeft).toBeGreaterThanOrEqual(layout.arrowRight)
       expect(layout.baseLeft).toBeGreaterThanOrEqual(layout.contentLeft)
       expect(layout.baseRight).toBeLessThanOrEqual(layout.contentRight)
-      expect(layout.badgesWithinRow).toBe(true)
+      expect(layout.totalsWithinRow).toBe(true)
     }
 
-    expect(layouts[1]!.badgeLabels).toContain('4 commit(s) to push')
-    expect(layouts[1]!.badgeLabels).toContain('2 commit(s) to pull')
-    expect(layouts[1]!.badgeLabels).toContain('Lines changed on this branch')
+    expect(layouts[0]!.totalsLabels).toEqual([])
+    expect(layouts[1]!.totalsLabels).toEqual(['Lines changed on this branch'])
 
-    for (const [index, caseName] of ['clean', 'with-badges', 'wide-badges'].entries()) {
+    for (const [index, caseName] of ['clean', 'with-totals', 'wide-totals'].entries()) {
       await page.locator(`[data-branch-case="${caseName}"] [data-base-ref]`).click()
       expect(await page.evaluate(() => (window as BrowserTestWindow).baseRefClicks)).toBe(index + 1)
     }

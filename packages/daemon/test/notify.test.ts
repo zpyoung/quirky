@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import type { QuirkyEvent } from '@quirky/protocol'
-import { notificationScript, sendNotification, type Notifier } from '../src/notify'
+import type { ProcessRunner, QuirkyEvent } from '@quirky/protocol'
+import { createOsascriptNotifier, notificationScript, sendNotification, type Notifier } from '../src/notify'
 
 function setup(options: { desktopClient?: boolean; notifier?: Notifier } = {}) {
   const events: QuirkyEvent[] = []
@@ -72,5 +72,49 @@ describe('notificationScript', () => {
     expect(notificationScript('T', 'B', { file: '/tmp/x.aiff', volume: 50 })).toBe(
       'display notification "B" with title "T"'
     )
+  })
+})
+
+describe('createOsascriptNotifier', () => {
+  test('runs osascript without waiting and ignores runner failures', async () => {
+    const calls: Array<{ argv: readonly string[]; options: unknown }> = []
+    const pending = new Promise<never>(() => {})
+    const runner: ProcessRunner = {
+      run(argv, options) {
+        calls.push({ argv: [...argv], options })
+        return pending
+      }
+    }
+    const notifier = createOsascriptNotifier(runner)
+
+    expect(notifier({ title: 'T', body: 'B' })).toBeUndefined()
+    expect(calls).toEqual([
+      {
+        argv: ['osascript', '-e', 'display notification "B" with title "T"'],
+        options: { timeoutMs: 10_000, killGraceMs: 0, maxOutputBytes: 65_536 }
+      }
+    ])
+
+    const unhandled: unknown[] = []
+    const onUnhandledRejection = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandledRejection)
+    try {
+      const rejectingNotifier = createOsascriptNotifier({
+        run: () => Promise.reject(new Error('rejected'))
+      })
+      const throwingNotifier = createOsascriptNotifier({
+        run() {
+          throw new Error('thrown')
+        }
+      })
+
+      expect(rejectingNotifier({ title: 'T', body: 'B' })).toBeUndefined()
+      expect(throwingNotifier({ title: 'T', body: 'B' })).toBeUndefined()
+      // Unhandled-rejection reporting needs Bun's real event loop for the full 20 ms window.
+      await Bun.sleep(20)
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+    }
   })
 })

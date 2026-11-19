@@ -1,6 +1,6 @@
 {
   "id": "quirky.agents",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.13.0",
   "name": "Agents",
   "version": "0.1.0",
   "description": "The catalog of agent CLIs Quirky can launch, with their detection, launch and resume data.",
@@ -1992,6 +1992,7 @@
       {
         "id": "changed",
         "description": "The catalog, detection, an agent's configuration or a setting changed in a way that alters list.",
+        "coalesce": [],
         "data": { "type": "object" }
       },
       {
@@ -2056,6 +2057,7 @@
               "id": "effort",
               "label": "Effort",
               "type": "select",
+              "default": "high",
               "choices": [
                 {
                   "value": "low",
@@ -2130,6 +2132,7 @@
               "options": []
             }
           ],
+          "defaultModel": "opus",
           "unlisted": "accept",
           "unlistedOptions": [
             {
@@ -3143,7 +3146,8 @@
         "launchOptions": {
           "model": {
             "flag": ["--model", "{value}"],
-            "conflicts": [{ "flags": ["--model"] }]
+            "conflicts": [{ "flags": ["--model"] }],
+            "structured": "model"
           },
           "options": [
             {
@@ -3160,7 +3164,8 @@
                 { "value": "max", "label": "Maximum" }
               ],
               "flag": ["--thinking", "{value}"],
-              "conflicts": [{ "flags": ["--thinking"] }]
+              "conflicts": [{ "flags": ["--thinking"] }],
+              "structured": "effort"
             }
           ],
           "models": []
@@ -3228,9 +3233,32 @@
                   "--model"
                 ]
               }
-            ]
+            ],
+            "structured": "model"
           },
+          "options": [
+            {
+              "id": "effort",
+              "label": "Thinking level",
+              "type": "select",
+              "choices": [
+                { "value": "off", "label": "Off" },
+                { "value": "minimal", "label": "Minimal" },
+                { "value": "low", "label": "Low" },
+                { "value": "medium", "label": "Medium" },
+                { "value": "high", "label": "High" },
+                { "value": "xhigh", "label": "Extra high" },
+                { "value": "max", "label": "Maximum" },
+                { "value": "auto", "label": "Auto" }
+              ],
+              "flag": ["--thinking", "{value}"],
+              "conflicts": [{ "flags": ["--thinking"] }],
+              "structured": "effort"
+            }
+          ],
           "models": [],
+          "unlisted": "accept",
+          "unlistedOptions": [{ "id": "effort" }],
           "extraArgs": {
             "allowed": [
               {
@@ -4298,6 +4326,18 @@
       {
         "id": "new-jcode-tab",
         "title": "New Jcode tab"
+      },
+      {
+        "id": "agent-details",
+        "title": "Show agent details",
+        "args": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "expanded": { "type": "boolean" }
+          },
+          "required": ["agent", "expanded"]
+        }
       }
     ],
     "keybinding": [

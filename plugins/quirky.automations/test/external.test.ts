@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { RpcErrorCode } from '@quirky/protocol'
+import { afterEach, describe, expect, jest, test } from 'bun:test'
+import { RpcErrorCode, type ProcessSpawner, type SpawnExit, type SpawnOptions, type SpawnedProcess, type StopOptions } from '@quirky/protocol'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startPluginHarness, type PluginHarness } from '../../quirky.repo/test/harness'
 import { fakeAsks } from '../../quirky.repo/test/fakes/quirky.ask/main'
-import type { ExternalListResult, ExternalManager } from '../src/ui-contracts'
+import type { ExternalAction, ExternalListResult, ExternalManager } from '../src/ui-contracts'
+import { OpenClawCommandError, runOpenClawCommand } from '../src/external/command'
 
 const fixtures: PluginHarness[] = []
 const roots: string[] = []
@@ -22,6 +23,7 @@ type ExternalFixture = {
   jobs(value: unknown): void
   installCli(): void
   log(): string[][]
+  descendantPid(): number | null
 }
 
 function fixture(): ExternalFixture {
@@ -43,6 +45,9 @@ function fixture(): ExternalFixture {
   setEnv('OPENCLAW_FAIL', undefined)
   setEnv('OPENCLAW_STALL', undefined)
   setEnv('OPENCLAW_LARGE_OUTPUT', undefined)
+  setEnv('OPENCLAW_DESCENDANT_HOLD', undefined)
+  const descendantPidFile = join(root, 'openclaw-descendant.pid')
+  setEnv('OPENCLAW_DESCENDANT_PID_FILE', descendantPidFile)
 
   const envFixture: ExternalFixture = {
     async start() {
@@ -55,7 +60,7 @@ function fixture(): ExternalFixture {
     },
     installCli() {
       const binary = join(bin, 'openclaw')
-      const source = `#!${process.execPath}\nconst fs = require('node:fs')\nconst args = process.argv.slice(2)\nfs.appendFileSync(process.env.OPENCLAW_LOG, JSON.stringify(args) + '\\n')\nif (process.env.OPENCLAW_LARGE_OUTPUT === '1') process.stdout.write('x'.repeat(100_000))\nif (process.env.OPENCLAW_STALL === '1') setInterval(() => {}, 1000)\nif (process.env.OPENCLAW_FAIL === '1') { process.stderr.write('fixture command failed'); process.exit(23) }\nconst file = process.env.OPENCLAW_JOBS_FILE\nconst root = JSON.parse(fs.readFileSync(file, 'utf8'))\nconst job = root.jobs.find((entry) => entry.id === args[2])\nif (!job) process.exit(3)\njob.state ??= {}\nif (args[1] === 'disable') job.enabled = false\nif (args[1] === 'enable') job.enabled = true\nif (args[1] === 'run') { job.state.lastStatus = 'ok'; job.state.lastRunAtMs = 1_800_000_000_000; job.state.runCount = (job.state.runCount ?? 0) + 1 }\nif (args[1] === 'rm') root.jobs = root.jobs.filter((entry) => entry.id !== args[2])\nfs.writeFileSync(file, JSON.stringify(root))\n`
+      const source = `#!${process.execPath}\nconst fs = require('node:fs')\nconst args = process.argv.slice(2)\nfs.appendFileSync(process.env.OPENCLAW_LOG, JSON.stringify(args) + '\\n')\nif (process.env.OPENCLAW_LARGE_OUTPUT === '1') process.stdout.write('x'.repeat(100_000))\nif (process.env.OPENCLAW_STALL === '1') setInterval(() => {}, 1000)\nif (process.env.OPENCLAW_FAIL === '1') { process.stderr.write('fixture command failed'); process.exit(23) }\nconst file = process.env.OPENCLAW_JOBS_FILE\nconst root = JSON.parse(fs.readFileSync(file, 'utf8'))\nconst job = root.jobs.find((entry) => entry.id === args[2])\nif (!job) process.exit(3)\njob.state ??= {}\nif (args[1] === 'disable') job.enabled = false\nif (args[1] === 'enable') job.enabled = true\nif (args[1] === 'run') { job.state.lastStatus = 'ok'; job.state.lastRunAtMs = 1_800_000_000_000; job.state.runCount = (job.state.runCount ?? 0) + 1 }\nif (args[1] === 'rm') root.jobs = root.jobs.filter((entry) => entry.id !== args[2])\nfs.writeFileSync(file, JSON.stringify(root))\nif (process.env.OPENCLAW_DESCENDANT_HOLD === '1') {\n  const { spawn } = require('node:child_process')\n  const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'inherit', 'ignore'] })\n  fs.writeFileSync(process.env.OPENCLAW_DESCENDANT_PID_FILE, String(descendant.pid))\n  descendant.unref()\n}\n`
       writeFileSync(binary, source, { mode: 0o700 })
       chmodSync(binary, 0o700)
     },
@@ -65,9 +70,98 @@ function fixture(): ExternalFixture {
       } catch {
         return []
       }
-    }
+    },
+    descendantPid() {
+      try {
+        const pid = Number(readFileSync(descendantPidFile, 'utf8'))
+        return Number.isInteger(pid) && pid > 0 ? pid : null
+      } catch {
+        return null
+      }
+    },
   }
   return envFixture
+}
+
+const clock = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+const successfulExit: SpawnExit = { exitCode: 0, signal: null, durationMs: 1 }
+
+type SpawnCall = { argv: readonly string[]; options: SpawnOptions }
+
+function byteStream(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+  let index = 0
+  return new ReadableStream({
+    pull(controller) {
+      const chunk = chunks[index++]
+      if (chunk === undefined) controller.close()
+      else controller.enqueue(chunk)
+    }
+  })
+}
+
+function controlledStream(): {
+  stream: ReadableStream<Uint8Array>
+  enqueue(chunk: Uint8Array): void
+  close(): void
+  fail(error: Error): void
+  readonly cancelled: boolean
+} {
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+  let cancelled = false
+  return {
+    stream: new ReadableStream({
+      start(value) { controller = value },
+      cancel() { cancelled = true }
+    }),
+    enqueue(chunk) { controller?.enqueue(chunk) },
+    close() { try { controller?.close() } catch {} },
+    fail(error) { controller?.error(error) },
+    get cancelled() { return cancelled }
+  }
+}
+
+function makeScriptedSpawner(plan: {
+  stdout?: ReadableStream<Uint8Array>
+  stderr?: ReadableStream<Uint8Array>
+  exit?: SpawnExit
+  exited?: Promise<SpawnExit>
+  deferExit?: boolean
+  throwOnSpawn?: Error
+} = {}): {
+  spawner: ProcessSpawner
+  calls: SpawnCall[]
+  stopCalls: StopOptions[]
+  resolveExit(exit: SpawnExit): void
+} {
+  const calls: SpawnCall[] = []
+  const stopCalls: StopOptions[] = []
+  const deferredExit = Promise.withResolvers<SpawnExit>()
+  const exited = plan.exited ?? (plan.deferExit ? deferredExit.promise : Promise.resolve(plan.exit ?? successfulExit))
+  const spawner: ProcessSpawner = {
+    spawn(argv, options) {
+      calls.push({ argv: [...argv], options })
+      if (plan.throwOnSpawn) throw plan.throwOnSpawn
+      const child: SpawnedProcess = {
+        pid: null,
+        stdout: plan.stdout ?? byteStream(),
+        stderr: plan.stderr ?? byteStream(),
+        stderrTail: () => '',
+        write: async () => true,
+        closeInput: async () => {},
+        exited,
+        stop: async (options) => {
+          stopCalls.push(options ?? {})
+          return await exited
+        }
+      }
+      return child
+    }
+  }
+  return { spawner, calls, stopCalls, resolveExit: (exit) => deferredExit.resolve(exit) }
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 5; index++) await Promise.resolve()
 }
 
 const call = (harness: PluginHarness, method: string, params: Record<string, unknown> = {}) =>
@@ -271,4 +365,256 @@ describe('external OpenClaw automation API', () => {
     await expect(call(plugin, 'quirky.automations/externalAction', { owner: manager.owner, jobId: 'task-1', action: 'run' })).rejects.toThrow(/timed out|timeout/i)
     expect(env.log()).toEqual([['cron', 'run', 'task-1']])
   }, 45_000)
+  test('spawns each action with exact OpenClaw argv and process options', async () => {
+    const cases: Array<{ action: ExternalAction; command: string }> = [
+      { action: 'pause', command: 'disable' },
+      { action: 'resume', command: 'enable' },
+      { action: 'run', command: 'run' },
+      { action: 'delete', command: 'rm' }
+    ]
+    for (const { action, command } of cases) {
+      const { spawner, calls } = makeScriptedSpawner()
+      await runOpenClawCommand(spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', action)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toEqual({
+        argv: ['/opt/openclaw', 'cron', command, 'job_123'],
+        options: {
+          cwd: '/Users/test/.openclaw',
+          env: process.env,
+          timeoutMs: 30_000,
+          killGraceMs: 0,
+          stderr: 'pipe'
+        }
+      })
+      expect(calls[0]?.options.env).toBe(process.env)
+      expect(Object.keys(calls[0]!.options).sort()).toEqual(['cwd', 'env', 'killGraceMs', 'stderr', 'timeoutMs'])
+    }
+  })
+
+  test('rejects unsafe IDs asynchronously and throws for unsupported actions synchronously before spawning', async () => {
+    const { spawner, calls } = makeScriptedSpawner()
+    for (const jobId of ['bad/../../id', 'task-1\n']) {
+      const pending = runOpenClawCommand(spawner, '/opt/openclaw', '/Users/test/.openclaw', jobId, 'run')
+      const error = await pending.catch((reason: unknown) => reason)
+      expect(error).toBeInstanceOf(OpenClawCommandError)
+      expect(error).toMatchObject({
+        message: 'OpenClaw job ID must use only letters, numbers, dot, underscore, colon, or hyphen'
+      })
+    }
+    expect(() => runOpenClawCommand(spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'shell' as ExternalAction))
+      .toThrow('Unsupported OpenClaw action')
+    expect(calls).toEqual([])
+  })
+
+  test('counts raw bytes across both streams at N-1 and N, including BOM and invalid UTF-8', async () => {
+    const ascii = (length: number) => new Uint8Array(length).fill(0x61)
+    const cases = [
+      { stdout: [ascii(32_768)], stderr: [ascii(32_767)] },
+      { stdout: [Uint8Array.of(0xef), Uint8Array.of(0xbb, 0xbf)], stderr: [ascii(65_533)] },
+      { stdout: [Uint8Array.of(0xff)], stderr: [ascii(65_535)] }
+    ]
+    for (const { stdout, stderr } of cases) {
+      const scripted = makeScriptedSpawner({
+        stdout: byteStream(...stdout),
+        stderr: byteStream(...stderr)
+      })
+      await runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+      expect(scripted.stopCalls).toEqual([])
+    }
+  })
+
+  test('stops both streams on N+1 raw bytes across stream chunks and BOM output', async () => {
+    const ascii = (length: number) => new Uint8Array(length).fill(0x61)
+    const cases = [
+      {
+        stdout: [ascii(16_384), ascii(16_384)],
+        stderr: [ascii(32_768), ascii(1)]
+      },
+      {
+        stdout: [Uint8Array.of(0xef, 0xbb, 0xbf)],
+        stderr: [ascii(65_534)]
+      }
+    ]
+    for (const { stdout: stdoutChunks, stderr: stderrChunks } of cases) {
+      const stdout = controlledStream()
+      const stderr = controlledStream()
+      const scripted = makeScriptedSpawner({ stdout: stdout.stream, stderr: stderr.stream })
+      const pending = runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+      await flushMicrotasks()
+      for (const chunk of stdoutChunks) stdout.enqueue(chunk)
+      for (const chunk of stderrChunks) stderr.enqueue(chunk)
+      await expect(pending).rejects.toThrow('OpenClaw output exceeded the 65536-byte limit')
+      expect(scripted.stopCalls).toEqual([{ signal: 'SIGKILL' }])
+      expect(stdout.cancelled).toBe(true)
+      expect(stderr.cancelled).toBe(true)
+    }
+  })
+
+  test('reports synchronous runner errors and spawnError exits as start failures', async () => {
+    const synchronous = makeScriptedSpawner({ throwOnSpawn: new Error('Process runner is disposed') })
+    await expect(runOpenClawCommand(synchronous.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run'))
+      .rejects.toThrow('Could not start OpenClaw: Process runner is disposed')
+
+    const spawnError = makeScriptedSpawner({
+      exit: {
+        exitCode: null,
+        signal: null,
+        durationMs: 1,
+        spawnError: {
+          code: 'ENOENT',
+          message: "ENOENT: no such file or directory, posix_spawn '/nonexistent/openclaw'"
+        }
+      }
+    })
+    await expect(runOpenClawCommand(spawnError.spawner, '/nonexistent/openclaw', '/Users/test/.openclaw', 'job_123', 'run'))
+      .rejects.toThrow("Could not start OpenClaw: ENOENT: no such file or directory, posix_spawn '/nonexistent/openclaw'")
+  })
+
+  test('prefers trimmed stderr diagnostics and falls back to stdout', async () => {
+    const cases = [
+      {
+        exit: { exitCode: 2, signal: null, durationMs: 1 },
+        stdout: 'other output',
+        stderr: '  bad flag \n',
+        expected: 'OpenClaw cron run job_123 exited with status 2: bad flag'
+      },
+      {
+        exit: { exitCode: null, signal: 'SIGTERM', durationMs: 1 },
+        stdout: ' fallback detail \n',
+        stderr: ' \n\t ',
+        expected: 'OpenClaw cron run job_123 terminated by SIGTERM: fallback detail'
+      }
+    ] satisfies Array<{ exit: SpawnExit; stdout: string; stderr: string; expected: string }>
+    for (const { exit, stdout, stderr, expected } of cases) {
+      const scripted = makeScriptedSpawner({
+        exit,
+        stdout: byteStream(new TextEncoder().encode(stdout)),
+        stderr: byteStream(new TextEncoder().encode(stderr))
+      })
+      await expect(runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run'))
+        .rejects.toThrow(expected)
+    }
+  })
+
+  test('handles a runner timeout after leader exit while stream drains remain open', async () => {
+    jest.useFakeTimers()
+    const stdout = controlledStream()
+    const stderr = controlledStream()
+    const scripted = makeScriptedSpawner({
+      exit: { exitCode: null, signal: 'SIGTERM', stopped: 'timeout', durationMs: 1 },
+      stdout: stdout.stream,
+      stderr: stderr.stream
+    })
+    try {
+      const pending = runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+      const rejection = expect(pending).rejects.toThrow('OpenClaw command timed out after 30 seconds')
+      await flushMicrotasks()
+      expect(scripted.stopCalls).toEqual([{ signal: 'SIGKILL' }])
+      expect(stdout.cancelled).toBe(true)
+      expect(stderr.cancelled).toBe(true)
+      await rejection
+    } finally {
+      clock.advanceTimersByTime(30_000)
+      jest.useRealTimers()
+    }
+  })
+
+  test('enforces its call-local deadline after the leader exits while output drains remain open', async () => {
+    jest.useFakeTimers()
+    try {
+      const stdout = controlledStream()
+      const stderr = controlledStream()
+      const scripted = makeScriptedSpawner({ stdout: stdout.stream, stderr: stderr.stream })
+      const pending = runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+      await flushMicrotasks()
+      clock.advanceTimersByTime(30_000)
+      await expect(pending).rejects.toThrow('OpenClaw command timed out after 30 seconds')
+      expect(scripted.stopCalls).toEqual([{ signal: 'SIGKILL' }])
+      expect(stdout.cancelled).toBe(true)
+      expect(stderr.cancelled).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('fails closed when a stream rejects before leader exit', async () => {
+    const stdout = controlledStream()
+    const stderr = controlledStream()
+    const scripted = makeScriptedSpawner({ stdout: stdout.stream, stderr: stderr.stream, deferExit: true })
+    const pending = runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+    const outcome = pending.then(() => null, (error: unknown) => error)
+    try {
+      stdout.fail(new Error('pipe broke'))
+      await flushMicrotasks()
+      expect(scripted.stopCalls).toEqual([{ signal: 'SIGKILL' }])
+      expect(stderr.cancelled).toBe(true)
+    } finally {
+      stderr.close()
+      scripted.resolveExit(successfulExit)
+    }
+    const error = await outcome
+    expect(error).toBeInstanceOf(OpenClawCommandError)
+    expect(error).toMatchObject({ message: 'OpenClaw cron run job_123 output stream failed: pipe broke' })
+  })
+  test('fails closed when a stream rejects after leader exit while the other drain is pending', async () => {
+    const stdout = controlledStream()
+    const stderr = controlledStream()
+    const scripted = makeScriptedSpawner({ stdout: stdout.stream, stderr: stderr.stream })
+    const pending = runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run')
+    const outcome = pending.then(() => null, (error: unknown) => error)
+    try {
+      await flushMicrotasks()
+      stderr.fail(new Error('pipe broke'))
+      await flushMicrotasks()
+      expect(scripted.stopCalls).toEqual([{ signal: 'SIGKILL' }])
+      expect(stdout.cancelled).toBe(true)
+    } finally {
+      stdout.close()
+    }
+    const error = await outcome
+    expect(error).toBeInstanceOf(OpenClawCommandError)
+    expect(error).toMatchObject({ message: 'OpenClaw cron run job_123 output stream failed: pipe broke' })
+  })
+
+
+  test('fails closed when a successful leader leaves the process group alive', async () => {
+    const scripted = makeScriptedSpawner({
+      exit: { ...successfulExit, groupSurvived: true },
+      stdout: byteStream(),
+      stderr: byteStream()
+    })
+    await expect(runOpenClawCommand(scripted.spawner, '/opt/openclaw', '/Users/test/.openclaw', 'job_123', 'run'))
+      .rejects.toThrow('OpenClaw cron run job_123 process group could not be stopped')
+  })
+
+  test('kills a pipe-holding OpenClaw descendant immediately after leader success', async () => {
+    const env = fixture()
+    env.jobs({ jobs: [oneJob()] })
+    env.installCli()
+    const plugin = await env.start()
+    const manager = managerOf(await call(plugin, 'quirky.automations/externalList', { noCache: true }) as ExternalListResult)
+    setEnv('OPENCLAW_DESCENDANT_HOLD', '1')
+    const startedAt = performance.now()
+    const action = call(plugin, 'quirky.automations/externalAction', {
+      owner: manager.owner, jobId: 'task-1', action: 'run'
+    })
+    void action.catch(() => {})
+    const deadlineResult = Promise.withResolvers<never>()
+    const deadline = setTimeout(() => deadlineResult.reject(new Error('OpenClaw action did not reap its descendant within 2 seconds')), 2_000)
+    try {
+      // This real subprocess integration needs a wall-clock guard; fake timers cannot drive OS pipe closure.
+      const result = await Promise.race([action, deadlineResult.promise])
+      expect(result).toEqual({ ok: true })
+      expect(performance.now() - startedAt).toBeLessThan(2_000)
+      expect(env.log()).toEqual([['cron', 'run', 'task-1']])
+    } finally {
+      clearTimeout(deadline)
+      const pid = env.descendantPid()
+      if (pid !== null) {
+        try { process.kill(pid, 'SIGKILL') } catch {}
+      }
+      await action.catch(() => undefined)
+    }
+  }, 5_000)
+
 })

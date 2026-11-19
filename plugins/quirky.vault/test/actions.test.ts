@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { RpcErrorCode, type QuirkyEvent } from '@quirky/protocol'
+import { RpcErrorCode } from '@quirky/protocol'
 import type { HostedSession, PublicListResult, SearchResponse } from '../src/types'
 import { VaultRig } from './support/harness'
 import { TrashVolume } from './support/trash-volume'
@@ -12,7 +12,7 @@ let trashVolume: TrashVolume | undefined
 let previousProcessHome: string | undefined
 let processHomeOverridden = false
 
-type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean }
+type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean; reason?: string }
 
 afterEach(async () => {
   try {
@@ -38,7 +38,7 @@ const startWithVolumeTmpdir = async (volume: TrashVolume) => {
   const previousTmpdir = process.env.TMPDIR
   process.env.TMPDIR = volume.tmpDir
   try {
-    const vault = await start()
+    const vault = rig = await VaultRig.start({ scanBarrier: true })
     previousProcessHome = process.env.QUIRKY_HOME
     processHomeOverridden = true
     process.env.QUIRKY_HOME = vault.home
@@ -62,46 +62,6 @@ const agentSession = async (vault: VaultRig, agent: string): Promise<HostedSessi
   if (!session) throw new Error(`${agent} fixture was not discovered`)
   return session
 }
-
-type EventWait = { promise: Promise<void>; cancel(): void }
-
-function waitForEvent(vault: VaultRig, predicate: (event: QuirkyEvent) => boolean, description: string): EventWait {
-  const { promise, resolve, reject } = Promise.withResolvers<void>()
-  let settled = false
-  let unsubscribe = () => {}
-  // This integration wait observes a real Worker event; the guard prevents a missing event from leaking its listener.
-  const timeout = setTimeout(() => {
-    if (settled) return
-    settled = true
-    unsubscribe()
-    reject(new Error(`timed out waiting for ${description}`))
-  }, 30_000)
-  unsubscribe = vault.client.onEvent((event: QuirkyEvent) => {
-    if (settled || !predicate(event)) return
-    settled = true
-    clearTimeout(timeout)
-    unsubscribe()
-    resolve()
-  })
-  return {
-    promise,
-    cancel() {
-      if (settled) return
-      settled = true
-      clearTimeout(timeout)
-      unsubscribe()
-    }
-  }
-}
-
-function waitForScan(vault: VaultRig, filePath: string): EventWait {
-  return waitForEvent(vault, (event) => {
-    if (event.type !== 'quirky.vault/scanProgress') return false
-    const data = event.data as { phase?: unknown; current?: unknown }
-    return data.phase === 'reading' && data.current === filePath
-  }, `scan progress for ${filePath}`)
-}
-
 
 function largeTranscript(sessionId: string, cwd: string): Record<string, unknown>[] {
   const base = Date.UTC(2026, 9, 1, 10, 0, 0)
@@ -175,6 +135,32 @@ describe('vault session actions', () => {
     expect(readFileSync(filePath)).toEqual(originalBytes)
     expect(existsSync(vault.sourceHome)).toBe(true)
   })
+
+  test.skipIf(process.platform !== 'linux')(
+    'refuses confirmed Claude deletion without changing source bytes or listing membership',
+    async () => {
+      const vault = await start()
+      const session = await claudeSession(vault)
+      const filePath = session.source.filePath
+      if (!filePath) throw new Error('Claude source fixture path was redacted')
+      const originalBytes = readFileSync(filePath)
+      const before = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      expect(before.sessions.some((entry) => entry.id === session.id)).toBe(true)
+
+      const result = await vault.call<DeleteResult>('deleteSession', { id: session.id, yes: true })
+      expect(result).toEqual({
+        deleted: false,
+        trashed: 0,
+        alreadyMissing: false,
+        reason: 'OS Trash is supported only on macOS'
+      })
+      expect(existsSync(filePath)).toBe(true)
+      expect(readFileSync(filePath)).toEqual(originalBytes)
+      const after = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      expect(after.sessions.some((entry) => entry.id === session.id)).toBe(true)
+    }
+  )
+
 
   test.skipIf(process.platform !== 'darwin')(
     'APFS Trash rejects symlink swaps and invalidates concurrent scans/indexes while preserving unrelated originals',
@@ -258,7 +244,9 @@ describe('vault session actions', () => {
           message: { role: 'assistant', content: 'pending index response' }
         }
       ])
-      const scanProgress = waitForScan(vault, largePath)
+      const barrier = vault.scanBarrier
+      if (!barrier) throw new Error('scan barrier fixture was not enabled')
+      await barrier.arm(largePath, ['list', 'index'])
       let listSettled = false
       let searchSettled = false
       const inFlightList = vault.call<PublicListResult>('list', { agents: ['claude'], force: true, unlimited: true }).then(
@@ -287,13 +275,15 @@ describe('vault session actions', () => {
       )
       let raceResults: { scanned: PublicListResult; indexed: SearchResponse; deleted: DeleteResult } | undefined
       try {
-        await scanProgress.promise
+        // Wait until both real parse paths are held, independent of coalesced public progress.
+        await Promise.all([barrier.waitUntilBlocked('list'), barrier.waitUntilBlocked('index')])
         expect(listSettled).toBe(false)
         expect(searchSettled).toBe(false)
         const inFlightDelete = vault.call<DeleteResult>('deleteSession', { id: claude.id, yes: true }).then(
           (value) => ({ value }),
           (error: unknown) => ({ error })
         )
+        await barrier.release()
         const [listOutcome, searchOutcome, deleteOutcome] = await Promise.all([
           inFlightList,
           inFlightSearch,
@@ -304,7 +294,7 @@ describe('vault session actions', () => {
         if ('error' in deleteOutcome) throw deleteOutcome.error
         raceResults = { scanned: listOutcome.value, indexed: searchOutcome.value, deleted: deleteOutcome.value }
       } finally {
-        scanProgress.cancel()
+        await barrier.release()
       }
       if (!raceResults) throw new Error('the concurrent deletion work did not settle')
       const { scanned, indexed, deleted } = raceResults

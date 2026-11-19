@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Page } from 'playwright'
 import type { UiModel } from '@quirky/protocol'
-import { PRIMARY_PROJECT, type RegisteredCaptureFixtures } from './fixtures'
+import { CHANGED_SOURCE, CHANGED_SINCE_REVIEW_FILE, PRIMARY_PROJECT, REVIEWED_FILE, REVIEW_NOTE_SOURCE, seedReviewMarks, type RegisteredCaptureFixtures } from './fixtures'
 import { CLONE_ATTRIBUTE, OPEN_POPUP_SELECTOR, cloneOpenPopupExpression, removeClonesExpression, separateClonesExpression } from './popups'
 
 /** What the scenes need from the capture run; `CaptureRuntime` satisfies it. */
@@ -30,6 +30,8 @@ const PROJECT_SWITCHER = 0
 const WORKTREE_SWITCHER = 1
 
 const SEEDED_FILES: readonly (readonly [string, string])[] = [
+  [REVIEWED_FILE, CHANGED_SOURCE],
+  [CHANGED_SINCE_REVIEW_FILE, REVIEW_NOTE_SOURCE],
   ['src/ToolShell.tsx', 'export const toolShell = 1\n'],
   ['src/tool-shell.css', '.tool-shell { display: grid; }\n'],
   ['src/project-tile.ts', 'export const tile = 1\n'],
@@ -103,13 +105,17 @@ async function activateTerminalTab(runtime: SceneRuntime, worktreeId: string, ta
  * tabs open, the four default tools open, and the Worktrees panel focused. Every step goes through
  * the same methods and clicks a person's session would; only the project and worktree data is made up.
  */
-/** Gives the selected worktree uncommitted files and the project ledger entries, so Changes and Ledger show rows as the golden does. */
-async function seedRows(runtime: SceneRuntime, worktree: { id: string; path: string; repoId: string }): Promise<void> {
+/**
+ * Gives the selected worktree uncommitted files, one reviewed file and one changed since its review,
+ * and the project ledger entries, so Changes and Ledger show rows as the golden does.
+ */
+export async function seedRows(runtime: SceneRuntime, worktree: { id: string; path: string; repoId: string }): Promise<void> {
   for (const [path, text] of SEEDED_FILES) {
     const target = join(worktree.path, path)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, text)
   }
+  await seedReviewMarks(runtime.client, worktree, runtime.options)
   for (const title of SEEDED_LEDGER_TITLES) {
     await call(runtime, 'quirky.ledger/file', {
       target: { workspaceId: worktree.id },

@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { CHORD_PLATFORM, type UiPluginContext } from '@quirky/protocol'
+import type { ReviewProvider } from './detail/data'
 
 const OPEN_IN_APP = 'setting:quirky.browser/openLinksInApp'
 const MODIFIER_INVERTS = 'setting:quirky.browser/openLinksInAppModifierInverts'
@@ -20,17 +21,18 @@ function alternateChord(): string {
   return CHORD_PLATFORM === 'darwin' ? 'Shift+Cmd-click' : 'Shift+Ctrl-click'
 }
 
-function routingHint(settings: RoutingSettings): string {
+function routingHint(settings: RoutingSettings, provider: ReviewProvider): string {
   const chord = alternateChord()
+  const host = provider === 'gitlab' ? 'GitLab' : 'GitHub'
   if (settings.openInApp === null || settings.modifierInverts === null) {
-    return `Open on GitHub; ${chord} uses the alternate routing destination.`
+    return `Open on ${host}; ${chord} uses the alternate routing destination.`
   }
 
   const normal = settings.openInApp ? 'Quirky Browser' : 'system browser'
   const alternate = settings.modifierInverts
     ? settings.openInApp ? 'system browser' : 'Quirky Browser'
     : 'system browser'
-  return `Open on GitHub in ${normal}; ${chord} opens in ${alternate}.`
+  return `Open on ${host} in ${normal}; ${chord} opens in ${alternate}.`
 }
 
 function isAlternateClick(event: LinkClickEvent): boolean {
@@ -38,7 +40,7 @@ function isAlternateClick(event: LinkClickEvent): boolean {
   return CHORD_PLATFORM === 'darwin' ? event.metaKey : event.ctrlKey
 }
 
-export function useReviewLinkRouting(context: UiPluginContext) {
+export function useReviewLinkRouting(context: UiPluginContext, provider: ReviewProvider = 'github') {
   const [settings, setSettings] = useState(() => currentSettings(context))
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export function useReviewLinkRouting(context: UiPluginContext) {
   }, [context])
 
   return {
-    title: routingHint(settings),
+    title: routingHint(settings, provider),
     invert: isAlternateClick
   }
 }

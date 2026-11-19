@@ -221,6 +221,8 @@ export type OptionDecl = {
   conflicts: Conflict[]
   composed: boolean
   structured: string | null
+  /** The choice a new launch starts on when nothing is picked; absent when the agent's own default applies. */
+  default?: string
 }
 
 /** An option a model offers; `choices` narrows the declared values (in declared order), null means all. */
@@ -239,6 +241,8 @@ export type LaunchCatalog = {
   models: ModelDecl[]
   unlisted: 'accept' | 'refuse'
   unlistedOptions: OptionUse[]
+  /** The listed model a new launch starts on when nothing is picked; absent when the agent's own default applies. */
+  defaultModel?: string
   composeModel: 'cursor' | null
   valueFlags: string[]
   extraArgs: { allowed: ExtraArgRule[]; placeholder: string } | null

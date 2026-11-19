@@ -1,5 +1,6 @@
 /** Domain types shared by the daemon, the PTY host, the UI, the CLI and the desktop shell. */
 
+import type { ChatItem } from './chat'
 import type { ExitCause } from './pty'
 
 export type Repo = {
@@ -419,6 +420,43 @@ export type GitCompare = {
   removed: number
 }
 
+/** Whether a file's current content matches what the user last marked reviewed. */
+export type ReviewMarkState = 'none' | 'reviewed' | 'changed'
+
+/** One changed file of the review, from the merge base to the working tree. */
+export type ReviewFile = {
+  path: string
+  oldPath?: string
+  status: 'M' | 'A' | 'D' | 'R'
+  /** Null for binary files. */
+  added: number | null
+  removed: number | null
+  binary: boolean
+  uncommitted: boolean
+  staged: boolean
+  conflict?: GitStatusEntry['conflict']
+  mark: ReviewMarkState
+  notes: number
+  submodule?: GitStatusEntry['submodule']
+}
+
+/** Everything the Changes panel and the Review tab show about one worktree's review. */
+export type ReviewModel = {
+  worktreeId: string
+  branch: string | null
+  base: {
+    name: string
+    source: 'param' | 'upstream' | 'worktree' | 'project' | 'detected'
+    isCurrentBranch: boolean
+  }
+  compare: { status: GitCompare['status']; mergeBase: string | null; headOid: string | null; message?: string }
+  totals: { added: number; removed: number }
+  counts: { files: number; reviewed: number; changed: number; uncommitted: number; staged: number }
+  capped: boolean
+  /** Sorted by path, byte order. */
+  files: ReviewFile[]
+}
+
 export type GitCommit = {
   oid: string
   parents: string[]
@@ -435,7 +473,7 @@ export type GitCommit = {
 
 export type GitHistory = { commits: GitCommit[]; hasMore: boolean }
 
-export type GitDiffSource = 'unstaged' | 'staged' | 'branch' | 'commit'
+export type GitDiffSource = 'unstaged' | 'staged' | 'branch' | 'commit' | 'review' | 'trees'
 
 /**
  * Both sides of a file diff. For `staged: true`, original is HEAD and modified is the index;
@@ -535,5 +573,7 @@ export type StructuredMessage = {
   text: string
   /** The agent's raw event, for views that want more than text. */
   data?: unknown
+  /** The typed chat item for this message; absent on journals written before items existed. */
+  item?: ChatItem
   at: number
 }

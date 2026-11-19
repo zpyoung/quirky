@@ -1,4 +1,4 @@
-import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH } from '@quirky/protocol'
+import { GATE_PATH_PREFIX, HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER, RPC_PATH, type QuirkyEvent } from '@quirky/protocol'
 import { HEALTH_PATH } from '@quirky/protocol/node'
 import { servePluginFile } from './plugin-files'
 import { FILE_RESOURCE_ROUTE, type FileResourceRegistry } from './file-resources'
@@ -6,8 +6,11 @@ import { nextConnId, type RpcHandler, tokensMatch } from './rpc-handler'
 import type { Core } from './service'
 import { serveStatic } from './static'
 import type { ClientConn } from './types'
+import { WebSocketOutput } from './websocket-output'
 
-type SocketData = { conn: ClientConn }
+type SocketData = { conn: ClientConn; output?: WebSocketOutput; cleaned?: boolean }
+
+type HookReceived = Extract<QuirkyEvent, { type: 'hook.received' }>
 
 export type ServerOptions = {
   core: Core
@@ -23,6 +26,12 @@ export type ServerOptions = {
   /** Serves activation-scoped file capabilities. */
   fileResources: FileResourceRegistry
   log: (message: string) => void
+  /** Receives each authenticated hook; defaults to core.deliverToPlugins. */
+  deliverHook?: (event: HookReceived, bodyBytes: number) => void
+  /** Module URLs to preload from index.html; omitted means none. */
+  modulePreloads?: () => readonly string[]
+  /** True once startup plugins have settled and RPC is open; omitted means the server has no startup phase. */
+  startupSettled?: () => boolean
 }
 
 function json(body: unknown, status = 200): Response {
@@ -30,6 +39,17 @@ function json(body: unknown, status = 200): Response {
 }
 
 const HOOK_EVENT_NAME = /^[A-Za-z0-9_.-]{1,64}$/
+const HTML_ATTRIBUTE_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '"': '&quot;',
+  "'": '&#39;',
+  '<': '&lt;',
+  '>': '&gt;'
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/[&"'<>]/g, (character) => HTML_ATTRIBUTE_ESCAPES[character]!)
+}
 const HOOK_PSTART = /^[\x20-\x7e]{1,64}$/
 
 /** The agent process identity a hook shim reports in the query; malformed values are left out, never rejected. */
@@ -45,6 +65,51 @@ function agentIdentity(url: URL): { agentPid?: number; agentStart?: string; even
   }
 }
 
+const DEFAULT_GATE_DEADLINE_MS = 30_000
+const MAX_GATE_DEADLINE_MS = 10 * 60_000
+
+/** The `deadline` query value in milliseconds, clamped to a sane range; the default when absent or malformed. */
+function gateDeadline(url: URL): number {
+  const raw = url.searchParams.get('deadline')
+  const ms = raw !== null && /^\d{1,9}$/.test(raw) ? Number(raw) : 0
+  return ms > 0 ? Math.min(ms, MAX_GATE_DEADLINE_MS) : DEFAULT_GATE_DEADLINE_MS
+}
+/** The largest `/gate/` request body in bytes; a larger one is answered 413. */
+export const MAX_GATE_BODY_BYTES = 8 * 1024 * 1024
+
+async function readGateBody(request: Request): Promise<string | null> {
+  const declaredLength = request.headers.get('content-length')
+  if (declaredLength !== null && Number(declaredLength) > MAX_GATE_BODY_BYTES) return null
+
+  const reader = request.body?.getReader()
+  if (!reader) return ''
+
+  const chunks: Uint8Array[] = []
+  let byteLength = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value.byteLength > MAX_GATE_BODY_BYTES - byteLength) {
+        void reader.cancel().catch(() => {})
+        return null
+      }
+      byteLength += value.byteLength
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(byteLength)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
+
 /** The single loopback HTTP server: health, the RPC WebSocket, agent hooks and the static UI. */
 export function startServer(options: ServerOptions) {
   const { core, handle } = options
@@ -57,7 +122,8 @@ export function startServer(options: ServerOptions) {
     const sessionId = url.searchParams.get('session')
     if (!agent || !sessionId) return json({ error: 'agent and session are required' }, 400)
     let payload: unknown = null
-    const body = await request.text()
+    const bodyBytes = await request.arrayBuffer()
+    const body = new TextDecoder().decode(bodyBytes)
     if (body.trim() !== '') {
       try {
         payload = JSON.parse(body)
@@ -65,13 +131,66 @@ export function startServer(options: ServerOptions) {
         return json({ error: 'body must be JSON' }, 400)
       }
     }
+    const event: HookReceived = { type: 'hook.received', agent, sessionId, payload, ...agentIdentity(url) }
     try {
-      core.deliverToPlugins({ type: 'hook.received', agent, sessionId, payload, ...agentIdentity(url) })
+      if (options.deliverHook) options.deliverHook(event, bodyBytes.byteLength)
+      else core.deliverToPlugins(event)
     } catch (error) {
       options.log(`hook.received delivery failed: ${(error as Error)?.stack ?? error}`)
     }
     return json({ ok: true })
   }
+
+  async function handleGate(request: Request, url: URL): Promise<Response> {
+    if (!tokensMatch(core.hookToken, request.headers.get(HOOK_TOKEN_HEADER))) {
+      return json({ error: 'unauthorized' }, 401)
+    }
+    const agent = url.pathname.slice(GATE_PATH_PREFIX.length)
+    const sessionId = url.searchParams.get('session')
+    if (!agent || !sessionId) return json({ error: 'agent and session are required' }, 400)
+    const body = await readGateBody(request)
+    if (body === null) return json({ error: 'body too large' }, 413)
+    let payload: unknown = null
+    if (body.trim() !== '') {
+      try {
+        payload = JSON.parse(body)
+      } catch {
+        return json({ error: 'body must be JSON' }, 400)
+      }
+    }
+    const requestedEvent = url.searchParams.get('event')
+    const payloadEvent = (payload as { hook_event_name?: unknown } | null)?.hook_event_name
+    const event =
+      typeof payloadEvent === 'string' && HOOK_EVENT_NAME.test(payloadEvent)
+        ? payloadEvent
+        : requestedEvent !== null && HOOK_EVENT_NAME.test(requestedEvent)
+          ? requestedEvent
+          : ''
+    return json(await core.requestToolGate({ agent, sessionId, event, deadlineMs: gateDeadline(url), payload }))
+  }
+
+  function transformIndex(html: string): string {
+    const importMap = /<script\b(?=[^>]*\s+type\s*=\s*(["'])importmap\1)[^>]*>/i.test(html)
+    const bodyEnd = /<\/body\s*>/i.exec(html)
+    if (!importMap || bodyEnd === null || options.modulePreloads === undefined) return html
+    try {
+      const modules = options.modulePreloads()
+      if (modules.length === 0) return html
+      const links = modules
+        .map((url) => `<link rel="modulepreload" href="${escapeHtmlAttribute(url)}">`)
+        .join('\n')
+      return `${html.slice(0, bodyEnd.index)}${links}${html.slice(bodyEnd.index)}`
+    } catch {
+      return html
+    }
+  }
+  function removeSocketClient(data: SocketData): void {
+    if (data.cleaned) return
+    data.cleaned = true
+    data.output?.dispose()
+    core.removeClient(data.conn)
+  }
+
 
   const server = Bun.serve<SocketData>({
     hostname: '127.0.0.1',
@@ -79,7 +198,12 @@ export function startServer(options: ServerOptions) {
     async fetch(request, server) {
       const url = new URL(request.url)
       if (url.pathname === HEALTH_PATH) {
-        return json({ ok: true, pid: process.pid, daemonVersion: options.daemonVersion })
+        return json({
+          ok: true,
+          pid: process.pid,
+          daemonVersion: options.daemonVersion,
+          startupSettled: options.startupSettled?.() ?? true
+        })
       }
       if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 })
       if (url.pathname === RPC_PATH) {
@@ -105,6 +229,10 @@ export function startServer(options: ServerOptions) {
         if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
         return handleHook(request, url)
       }
+      if (url.pathname.startsWith(GATE_PATH_PREFIX)) {
+        if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405)
+        return handleGate(request, url)
+      }
       if (url.pathname.startsWith(FILE_RESOURCE_ROUTE)) {
         return options.fileResources.serve(request, url.pathname)
       }
@@ -112,23 +240,50 @@ export function startServer(options: ServerOptions) {
         if (url.pathname.startsWith('/plugins/')) {
           return servePluginFile(options.pluginFile, url.pathname, request.method)
         }
-        return serveStatic(options.uiDir, url.pathname, request.method)
+        return serveStatic(
+          options.uiDir,
+          url.pathname,
+          request.method,
+          options.modulePreloads === undefined ? undefined : { transformIndex }
+        )
       }
       return json({ error: 'method not allowed' }, 405)
     },
     websocket: {
+      backpressureLimit: 16 * 1024 * 1024,
+      closeOnBackpressureLimit: false,
+      perMessageDeflate: false,
       open(ws) {
-        const { conn } = ws.data
-        conn.sendText = (text) => ws.send(text)
-        conn.sendBinary = (bytes) => ws.sendBinary(bytes)
+        const data = ws.data
+        const { conn } = data
+        const output = new WebSocketOutput(ws, () => {
+          try {
+            ws.close(1013, 'WebSocket output stalled')
+          } finally {
+            removeSocketClient(data)
+          }
+        })
+        data.output = output
+        conn.sendText = (text) => output.sendText(text)
+        conn.sendBinary = (bytes) => output.sendBinary(bytes)
+        conn.closeStreamOutput = (streamId) => output.closeStream(streamId)
         core.addClient(conn)
       },
       message(ws, message) {
         if (typeof message !== 'string') return
-        void handle(ws.data.conn, message)
+        const { conn } = ws.data
+        queueMicrotask(() => {
+          if (!conn.closed) void handle(conn, message)
+        })
+      },
+      drain(ws) {
+        const data = ws.data
+        queueMicrotask(() => {
+          if (!data.conn.closed) data.output?.drain()
+        })
       },
       close(ws) {
-        core.removeClient(ws.data.conn)
+        removeSocketClient(ws.data)
       }
     }
   })

@@ -7,7 +7,8 @@
   "contributes": {
     "method": [
       { "id": "resolveLaunch", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
-      { "id": "plan", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }
+      { "id": "plan", "readOnly": true, "params": { "type": "object", "additionalProperties": true } },
+      { "id": "get", "readOnly": true, "params": { "type": "object", "additionalProperties": true } }
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "id": "quirky.session",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.15.0",
   "name": "Sessions",
   "version": "0.1.0",
   "description": "Terminal and structured agent sessions in a worktree.",
@@ -249,6 +249,56 @@
             "createdAt",
             "lastActivityAt",
             "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "markdownAssets",
+        "description": "Which paths named in a chat reply are real files of the session's worktree, and displayable urls for its images. A path that is missing or outside the worktree answers null.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Paths as written, each with an optional `:line` or `:line:col` suffix. At most 200 entries of at most 1024 characters."
+            },
+            "images": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Image sources as written. At most 200 entries of at most 1024 characters."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Each requested path as written to `{ path, line? }` with `path` relative to the worktree root, or null. Always null for a floating session."
+            },
+            "images": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Each requested image source as written to a displayable url, or null."
+            }
+          },
+          "required": [
+            "files",
+            "images"
           ]
         }
       },
@@ -1606,6 +1656,7 @@
       },
       {
         "id": "sleepWorkspace",
+        "timeout": "30m",
         "description": "Durably records recovery intent, stops resumable terminal and structured sessions while retaining PTY or provider history, and returns per-session sleep outcomes.",
         "params": {
           "type": "object",
@@ -1638,6 +1689,7 @@
       },
       {
         "id": "wakeWorkspace",
+        "timeout": "30m",
         "description": "Restores stopped shell history and resumes agents using their saved provider conversation identity; partial failures remain retryable.",
         "params": {
           "type": "object",
@@ -1697,11 +1749,185 @@
             "required": ["worktreeId", "state", "updatedAt", "sessions"]
           }
         }
+      },
+      {
+        "id": "pasteImage",
+        "description": "Saves a pasted image under the plugin data directory and returns its absolute path.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "mime": {
+              "type": "string",
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/gif",
+                "image/webp"
+              ]
+            },
+            "data": {
+              "type": "string",
+              "description": "The image bytes, base64-encoded; at most 20 MB decoded."
+            }
+          },
+          "required": [
+            "session",
+            "mime",
+            "data"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "id": "draft",
+        "description": "The session's saved composer draft, or null when there is none.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "description": "The draft ({text, images, pastes, picks}), or null when none is saved."
+        }
+      },
+      {
+        "id": "saveDraft",
+        "description": "Replaces the session's composer draft; at most 64 KiB of JSON.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "draft": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "images": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "pastes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "text"
+                    ]
+                  }
+                },
+                "picks": {
+                  "type": "object",
+                  "properties": {
+                    "model": {},
+                    "effort": {},
+                    "mode": {},
+                    "plan": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "effort",
+                    "mode",
+                    "plan"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "images",
+                "pastes",
+                "picks"
+              ]
+            }
+          },
+          "required": [
+            "session",
+            "draft"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "clearDraft",
+        "description": "Deletes the session's composer draft.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
       }
     ],
     "event": [
       {
         "id": "changed",
+        "coalesce": ["session.id"],
+        "worktree": "session.worktreeId",
         "description": "A session was created or its state changed.",
         "data": {
           "type": "object",
@@ -1831,6 +2057,15 @@
         }
       }
     ],
+    "setting": [
+      {
+        "id": "send-with-cmd-enter",
+        "type": "boolean",
+        "title": "Send with Cmd+Enter",
+        "description": "Enter inserts a new line and Cmd+Enter sends.",
+        "default": false
+      }
+    ],
     "view": [
       {
         "id": "worktree",
@@ -1841,14 +2076,72 @@
         "title": "Structured session"
       }
     ],
+    "overlay": [
+      {
+        "id": "chat-dialogs",
+        "title": "Chat dialogs"
+      }
+    ],
     "command": [
       {
         "id": "new-shell",
         "title": "New shell"
       },
       {
+        "id": "new-chat",
+        "title": "New chat",
+        "description": "Pick an agent and open a chat as a new tab in a workspace and group.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": { "type": "string" },
+            "workspace": { "type": "string" },
+            "group": { "type": "string" }
+          }
+        }
+      },
+      {
         "id": "close-session",
         "title": "Close session"
+      },
+      {
+        "id": "show-all-events",
+        "title": "Show all events",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "session",
+            "enabled"
+          ]
+        }
+      },
+      {
+        "id": "run-badge",
+        "title": "Run session badge",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            },
+            "badge": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session",
+            "badge"
+          ]
+        }
       },
       {
         "id": "select-tab",
@@ -1900,6 +2193,14 @@
       {
         "id": "select-tab-9",
         "title": "Select tab 9"
+      }
+    ],
+    "menu-item": [
+      {
+        "id": "new-chat",
+        "menu": "quirky.terminal/tab",
+        "title": "Chat…",
+        "command": "new-chat"
       }
     ],
     "keybinding": [

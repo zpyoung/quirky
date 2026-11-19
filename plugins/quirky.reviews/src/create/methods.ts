@@ -2,6 +2,15 @@ import { randomUUID } from 'node:crypto'
 import type { PluginCaller, Schema } from '@quirky/protocol'
 import { CREATE_VIEW, REVIEW_VIEW, SETTINGS_VIEW, type CreationDefaults, type CreationState, type JsonRecord, type MethodSpec, type ReviewMethodTable, type ReviewsEnv } from '../contracts'
 import { isRecord } from './guards'
+import {
+  parseAuthDiagnostics,
+  parseRepoIdentity,
+  repoFromReviewUrl,
+  sameRepo,
+  type RepoIdentity,
+  type ReviewProvider,
+  type ReviewsAuthDiagnostics,
+} from '../detail/data'
 
 const DEFAULTS: CreationDefaults = { draft: false, useTemplate: false, generateDetailsOnOpen: false, openAfterCreate: false }
 const DEFAULT_KEYS = ['draft', 'useTemplate', 'generateDetailsOnOpen', 'openAfterCreate'] as const
@@ -30,7 +39,7 @@ const reviewSchema = objectSchema({
 const accountSchema = objectSchema({
   host: stringSchema,
   user: stringSchema,
-  source: { type: 'string', enum: ['keyring', 'env'] },
+  source: { type: 'string', enum: ['keyring', 'env', 'glab'] },
   active: { type: 'boolean' },
   bindable: { type: 'boolean' },
   scopes: { type: 'array', items: stringSchema }
@@ -58,21 +67,36 @@ const budgetSchema = objectSchema({
   graphql: budgetBucketSchema,
   fetchedAt: { type: 'number' }
 }, ['core', 'search', 'graphql', 'fetchedAt'])
+const diagnosticsSchema = objectSchema({
+  provider: { type: 'string', enum: ['github', 'gitlab'] },
+  ghAvailable: { type: 'boolean' },
+  tokenSource: { description: 'env, glab, or null.' },
+  glabAvailable: { description: 'Boolean or null.' },
+  tokenRejected: { type: 'boolean' },
+  activeAccount: nullableAccountSchema,
+  accounts: { type: 'array', items: accountSchema },
+  envTokenInProcess: { type: 'boolean' },
+  missingScopes: { type: 'array', items: stringSchema },
+  requiredScopes: { type: 'array', items: stringSchema },
+  hasKeyringFallback: { type: 'boolean' },
+  requiredHost: stringSchema,
+  requiredHostAuthenticated: { type: 'boolean' },
+}, ['accounts', 'envTokenInProcess', 'missingScopes', 'requiredScopes', 'hasKeyringFallback', 'requiredHostAuthenticated'])
 
 
 export const createSpecs: MethodSpec[] = [
   { id: 'createOpen', description: 'open the create-review view after refreshing eligibility for this exact worktree', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ worktree: stringSchema, opened: { type: 'boolean' }, stale: { type: 'boolean' }, existingReview: reviewSchema }, ['worktree', 'opened']) },
   { id: 'settingsOpen', description: 'open hosting settings scoped to the caller worktree when available', params: objectSchema({ worktree: worktreeSchema }), result: objectSchema({ opened: { type: 'boolean' }, worktree: stringSchema, error: stringSchema }, ['opened']) },
-  { id: 'createDraft', description: 'update the session-owned create-review draft fields', params: objectSchema({ worktree: worktreeSchema, title: stringSchema, body: stringSchema, draft: { type: 'boolean' }, useTemplate: { type: 'boolean' } }, ['worktree']), result: objectSchema({ updated: { type: 'boolean' } }, ['updated']) },
+  { id: 'createDraft', description: 'update the session-owned create-review draft fields', params: objectSchema({ worktree: worktreeSchema, title: stringSchema, body: stringSchema, draft: { type: 'boolean' }, useTemplate: { type: 'boolean' }, generation: { type: 'integer', minimum: 0 } }, ['worktree']), result: objectSchema({ updated: { type: 'boolean' } }, ['updated']) },
   { id: 'createBases', readOnly: true, description: 'list remote Git branches available as review bases', params: objectSchema({ worktree: worktreeSchema, query: stringSchema }, ['worktree']), result: objectSchema({ bases: { type: 'array', items: stringSchema }, selected: stringSchema }, ['bases', 'selected']) },
-  { id: 'createBase', description: 'select a remote base and refresh exact-context eligibility and stack capability', params: objectSchema({ worktree: worktreeSchema, base: stringSchema, stack: { type: 'boolean' } }, ['worktree', 'base']), result: objectSchema({ base: stringSchema, eligible: { type: 'boolean' }, stackSupported: { type: 'boolean' }, stackParentNumber: { type: 'integer', minimum: 1 }, stackEnabled: { type: 'boolean' } }, ['base', 'eligible', 'stackSupported', 'stackEnabled']) },
+  { id: 'createBase', description: 'select a remote base and refresh exact-context eligibility and stack capability', params: objectSchema({ worktree: worktreeSchema, base: stringSchema, stack: { type: 'boolean' }, generation: { type: 'integer', minimum: 0 } }, ['worktree', 'base']), result: objectSchema({ base: stringSchema, eligible: { type: 'boolean' }, stackSupported: { type: 'boolean' }, stackParentNumber: { type: 'integer', minimum: 1 }, stackEnabled: { type: 'boolean' } }, ['base', 'eligible', 'stackSupported', 'stackEnabled']) },
   { id: 'createGenerate', description: 'generate title and body from the selected worktree branch diff using a public agent', params: objectSchema({ worktree: worktreeSchema, agent: stringSchema }, ['worktree']), result: objectSchema({ generated: { type: 'boolean' }, title: stringSchema, body: stringSchema }, ['generated', 'title', 'body']) },
   { id: 'createCancelGenerate', description: 'cancel only the active review-details generation request', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ cancelled: { type: 'boolean' } }, ['cancelled']) },
   { id: 'createSubmit', description: 'recheck eligibility, push if required, create once, and link confirmed results', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ status: { type: 'string', enum: ['created', 'already_exists', 'partial'] }, review: reviewSchema, error: stringSchema }, ['status', 'review']) },
   { id: 'creationDefaults', readOnly: true, description: 'read global or repository creation defaults; scope explicitly selects global despite a caller worktree', params: objectSchema({ scope: defaultScopeSchema, worktree: worktreeSchema }), result: objectSchema({ scope: defaultScopeSchema, repoId: stringSchema, defaults: defaultsSchema, overrides: objectSchema({ draft: { type: 'boolean' }, useTemplate: { type: 'boolean' }, generateDetailsOnOpen: { type: 'boolean' }, openAfterCreate: { type: 'boolean' } }) }, ['scope', 'defaults']) },
   { id: 'setCreationDefaults', description: 'persist all four global or repository-scoped creation defaults', params: objectSchema({ scope: defaultScopeSchema, worktree: worktreeSchema, defaults: defaultsSchema }, ['defaults']), result: objectSchema({ scope: defaultScopeSchema, repoId: stringSchema, defaults: defaultsSchema }, ['scope', 'defaults']) },
   { id: 'resetCreationDefaults', description: 'reset global defaults to false or remove one repository override', params: objectSchema({ scope: defaultScopeSchema, worktree: worktreeSchema }), result: objectSchema({ scope: defaultScopeSchema, repoId: stringSchema, defaults: defaultsSchema }, ['scope', 'defaults']) },
-  { id: 'hostingDiagnose', readOnly: true, description: 'read canonical GitHub CLI readiness and required scopes', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ ghAvailable: { type: 'boolean' }, activeAccount: nullableAccountSchema, accounts: { type: 'array', items: accountSchema }, envTokenInProcess: { type: 'boolean' }, missingScopes: { type: 'array', items: stringSchema }, requiredScopes: { type: 'array', items: stringSchema }, hasKeyringFallback: { type: 'boolean' }, requiredHost: stringSchema, requiredHostAuthenticated: { type: 'boolean' } }, ['ghAvailable', 'accounts', 'envTokenInProcess', 'missingScopes', 'requiredScopes', 'hasKeyringFallback', 'requiredHostAuthenticated']) },
+  { id: 'hostingDiagnose', readOnly: true, description: 'read canonical hosting provider authentication diagnostics and required scopes', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: diagnosticsSchema },
   { id: 'hostingAccounts', readOnly: true, description: 'list canonical authenticated GitHub account identities and scopes', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: objectSchema({ requiredHost: stringSchema, accounts: { type: 'array', items: accountSchema } }, ['accounts']) },
   { id: 'hostingConfiguration', readOnly: true, description: 'read canonical repository account binding without exposing credentials', params: objectSchema({ worktree: worktreeSchema }, ['worktree']), result: hostingConfigurationSchema },
   { id: 'hostingBudget', readOnly: true, description: 'read canonical host- and account-scoped GitHub API budget', params: objectSchema({ worktree: worktreeSchema, force: { type: 'boolean' } }, ['worktree']), result: budgetSchema },
@@ -95,6 +119,7 @@ type Eligibility = JsonRecord & {
 type ReviewIdentity = { number: number; url: string; title?: string; body?: string; state?: string }
 type StackInfo = { supported: boolean; parentNumber: number | null; error: string | null; enabled: boolean }
 type ExactContext = { id: string; branch: string; head: string; repoId: string }
+type CanonicalRepository = { provider: ReviewProvider; repository: RepoIdentity }
 
 
 function errorText(error: unknown): string {
@@ -120,15 +145,9 @@ function validAuthAccount(value: unknown): boolean {
     (value.bindable === undefined || typeof value.bindable === 'boolean') && isStringArray(value.scopes)
 }
 function parseHostingDiagnostics(env: ReviewsEnv, value: unknown): JsonRecord {
-  if (!isRecord(value) || typeof value.ghAvailable !== 'boolean' || typeof value.requiredHostAuthenticated !== 'boolean' ||
-    typeof value.envTokenInProcess !== 'boolean' || typeof value.hasKeyringFallback !== 'boolean' ||
-    !isStringArray(value.missingScopes) || !isStringArray(value.requiredScopes) ||
-    !Array.isArray(value.accounts) || !value.accounts.every(validAuthAccount) ||
-    (value.activeAccount !== undefined && value.activeAccount !== null && !validAuthAccount(value.activeAccount)) ||
-    (value.requiredHost !== undefined && typeof value.requiredHost !== 'string')) {
-    throw env.invalid('invalid_response', 'GitHub diagnostics returned an invalid response.')
-  }
-  return value
+  const diagnostics = parseAuthDiagnostics(value)
+  if (diagnostics === null) throw env.invalid('invalid_response', 'Hosting diagnostics returned an invalid response.')
+  return diagnostics as unknown as ReviewsAuthDiagnostics & JsonRecord
 }
 
 function parseHostingAccounts(env: ReviewsEnv, value: unknown): JsonRecord {
@@ -190,24 +209,35 @@ function settingsTracker(env: ReviewsEnv, worktree: string, generation: number):
   return tracker
 }
 
-function setSettingsTarget(env: ReviewsEnv, worktree: string | null, error: string | null = null): number {
+function setSettingsTarget(
+  env: ReviewsEnv,
+  worktree: string | null,
+  error: string | null = null,
+  identity?: CanonicalRepository,
+): number {
   let generation = 0
   let nextError: string | null = null
   env.update((state) => {
     const previous = state.settings
     const sameWorktree = previous.worktree === worktree
+    const sameIdentity = identity === undefined || previous.provider === identity.provider
+      && previous.repository !== null && previous.repository !== undefined
+      && sameRepo(previous.repository, identity.repository)
+    const retain = sameWorktree && sameIdentity
     generation = previous.generation + 1
-    nextError = error ?? (sameWorktree ? previous.error : null)
+    nextError = error ?? (retain ? previous.error : null)
     state.settings = {
       worktree,
       generation,
       loading: false,
       error: nextError,
-      diagnostics: sameWorktree ? previous.diagnostics : null,
-      accounts: sameWorktree ? previous.accounts : null,
-      configuration: sameWorktree ? previous.configuration : null,
-      budget: sameWorktree ? previous.budget : null,
-      fetchedAt: sameWorktree ? previous.fetchedAt : 0
+      provider: identity?.provider ?? (sameWorktree ? previous.provider ?? null : null),
+      repository: identity?.repository ?? (sameWorktree ? previous.repository ?? null : null),
+      diagnostics: retain ? previous.diagnostics : null,
+      accounts: retain ? previous.accounts : null,
+      configuration: retain ? previous.configuration : null,
+      budget: retain ? previous.budget : null,
+      fetchedAt: retain ? previous.fetchedAt : 0
     }
   })
   settingsTrackers.set(env, createSettingsTracker(worktree, generation, nextError))
@@ -225,6 +255,8 @@ function beginSettingsRefresh(env: ReviewsEnv, worktree: string): number {
         generation,
         loading: true,
         error: null,
+        provider: null,
+        repository: null,
         diagnostics: null,
         accounts: null,
         configuration: null,
@@ -239,6 +271,32 @@ function beginSettingsRefresh(env: ReviewsEnv, worktree: string): number {
   })
   settingsTrackers.set(env, createSettingsTracker(worktree, generation))
   return generation
+}
+
+function setSettingsIdentity(env: ReviewsEnv, worktree: string, generation: number, identity: CanonicalRepository): number | null {
+  const current = env.read().settings
+  if (current.worktree !== worktree || current.generation !== generation) return null
+  if (current.provider === identity.provider && current.repository !== null && current.repository !== undefined
+    && sameRepo(current.repository, identity.repository)) return generation
+  const nextGeneration = generation + 1
+  env.update((state) => {
+    if (state.settings.worktree !== worktree || state.settings.generation !== generation) return
+    state.settings = {
+      worktree,
+      generation: nextGeneration,
+      loading: current.loading,
+      error: null,
+      provider: identity.provider,
+      repository: identity.repository,
+      diagnostics: null,
+      accounts: null,
+      configuration: null,
+      budget: null,
+      fetchedAt: 0,
+    }
+  })
+  settingsTrackers.set(env, createSettingsTracker(worktree, nextGeneration))
+  return nextGeneration
 }
 
 function settingsGeneration(env: ReviewsEnv, worktree: string): number | null {
@@ -286,6 +344,36 @@ function completeSettingsRead(env: ReviewsEnv, request: SettingsRead, result: Se
   })
 }
 
+function cancelSettingsRead(env: ReviewsEnv, request: SettingsRead): void {
+  const tracker = settingsTrackers.get(env)
+  if (!tracker || tracker.worktree !== request.worktree || tracker.generation !== request.generation) return
+  tracker.pending = Math.max(0, tracker.pending - 1)
+  if (tracker.latest.get(request.field) === request.sequence) tracker.latest.delete(request.field)
+  env.update((state) => {
+    if (state.settings.worktree === request.worktree && state.settings.generation === request.generation) {
+      state.settings.loading = tracker.pending > 0
+      state.settings.error = [...tracker.errors.values()].join(' ') || null
+    }
+  })
+}
+
+async function readSettingsFieldAtRequest(
+  env: ReviewsEnv,
+  request: SettingsRead,
+  label: string,
+  read: () => Promise<unknown>,
+  parse: (env: ReviewsEnv, value: unknown) => JsonRecord,
+): Promise<JsonRecord> {
+  try {
+    const value = parse(env, await read())
+    completeSettingsRead(env, request, { value }, label)
+    return value
+  } catch (error) {
+    completeSettingsRead(env, request, { error }, label)
+    throw error
+  }
+}
+
 async function readSettingsField(
   env: ReviewsEnv,
   worktree: string,
@@ -294,13 +382,34 @@ async function readSettingsField(
   read: () => Promise<unknown>,
   parse: (env: ReviewsEnv, value: unknown) => JsonRecord
 ): Promise<JsonRecord> {
-  const request = beginSettingsRead(env, worktree, field)
+  return readSettingsFieldAtRequest(env, beginSettingsRead(env, worktree, field), label, read, parse)
+}
+
+async function beginCanonicalSettingsRead(
+  env: ReviewsEnv,
+  selector: string,
+  caller: PluginCaller,
+  field: SettingsField,
+): Promise<{ worktree: { id: string; repoId: string }; canonical: CanonicalRepository; request: SettingsRead }> {
+  let request = beginSettingsRead(env, selector, field)
   try {
-    const value = parse(env, await read())
-    completeSettingsRead(env, request, { value }, label)
-    return value
+    const worktree = await resolveRepoContext(env, { worktree: selector }, caller)
+    if (settingsGeneration(env, selector) !== request.generation) {
+      throw env.invalid('stale_target', 'The hosting settings context changed during repository resolution.')
+    }
+    const canonical = await canonicalRepository(env, worktree.id)
+    if (settingsGeneration(env, worktree.id) !== request.generation) {
+      throw env.invalid('stale_target', 'The hosting settings context changed during repository discovery.')
+    }
+    const generation = setSettingsIdentity(env, worktree.id, request.generation, canonical)
+    if (generation === null) throw env.invalid('stale_target', 'The hosting settings context changed during repository discovery.')
+    if (generation !== request.generation) {
+      cancelSettingsRead(env, request)
+      request = beginSettingsReadAtGeneration(env, worktree.id, generation, field)
+    }
+    return { worktree, canonical, request }
   } catch (error) {
-    completeSettingsRead(env, request, { error }, label)
+    completeSettingsRead(env, request, { error }, 'Canonical repository')
     throw error
   }
 }
@@ -365,6 +474,15 @@ function optionalBoolean(env: ReviewsEnv, params: Record<string, unknown>, key: 
   if (typeof params[key] !== 'boolean') throw env.invalid('validation_error', `${key} must be a boolean.`)
   return params[key] as boolean
 }
+
+function optionalGeneration(env: ReviewsEnv, params: Record<string, unknown>): number | undefined {
+  const generation = params.generation
+  if (generation === undefined) return undefined
+  if (typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 0) {
+    throw env.invalid('validation_error', 'generation must be a non-negative integer.')
+  }
+  return generation
+}
 function creationDefaultsScope(env: ReviewsEnv, params: Record<string, unknown>): { scope: 'global' | 'repository'; selector?: string } {
   const requested = optionalString(env, params, 'scope')
   if (requested !== undefined && requested !== 'global' && requested !== 'repository') {
@@ -417,7 +535,13 @@ function parseBranchRefs(env: ReviewsEnv, value: unknown): string[] {
   return [...names].sort((left, right) => left.localeCompare(right))
 }
 
-function parseEligibility(env: ReviewsEnv, value: unknown, worktree: ExactContext, confirmedAt = Date.now()): Eligibility {
+function parseEligibility(
+  env: ReviewsEnv,
+  value: unknown,
+  worktree: ExactContext,
+  canonical: CanonicalRepository,
+  confirmedAt = Date.now(),
+): Eligibility {
   if (!isRecord(value)) throw env.invalid('invalid_response', 'Hosting returned an invalid pull-request eligibility response.')
   const eligible = value.eligible
   const defaultBase = value.defaultBase
@@ -438,7 +562,7 @@ function parseEligibility(env: ReviewsEnv, value: unknown, worktree: ExactContex
     blockers.push({ reason: item.reason, nextAction: item.nextAction, message: item.message })
   }
   if (head !== worktree.branch) throw env.invalid('head_changed', 'The current branch changed while review eligibility was being checked.')
-  return {
+  const result: Eligibility = {
     ...value,
     eligible,
     defaultBase,
@@ -448,8 +572,15 @@ function parseEligibility(env: ReviewsEnv, value: unknown, worktree: ExactContex
     blockers,
     confirmedAt,
     worktreeId: worktree.id,
-    headOid: worktree.head
+    headOid: worktree.head,
+    provider: canonical.provider,
   }
+  if (value.review !== undefined && value.review !== null) {
+    const review = parseMinimalReview(value.review, canonical)
+    if (review === null) throw env.invalid('invalid_response', 'Hosting found an existing review with an invalid or mismatched canonical identity.')
+    result.review = review
+  }
+  return result
 }
 
 function eligibilityBlocker(value: Eligibility): { reason: string; message: string } | null {
@@ -458,15 +589,16 @@ function eligibilityBlocker(value: Eligibility): { reason: string; message: stri
   return { reason: first.reason, message: first.message }
 }
 
-function parseMinimalReview(value: unknown): ReviewIdentity | null {
+function parseMinimalReview(value: unknown, canonical: CanonicalRepository): ReviewIdentity | null {
   if (!isRecord(value) || !Number.isSafeInteger(value.number) || (value.number as number) < 1 || typeof value.url !== 'string') return null
+  const repository = repoFromReviewUrl(value.url, value.number as number, canonical.provider)
+  if (repository === null || canonical.provider === 'gitlab' && !sameRepo(repository, canonical.repository)) return null
   let url: URL
   try {
     url = new URL(value.url)
   } catch {
     return null
   }
-  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username !== '' || url.password !== '') return null
   return {
     number: value.number as number,
     url: url.toString(),
@@ -475,12 +607,17 @@ function parseMinimalReview(value: unknown): ReviewIdentity | null {
     ...(typeof value.state === 'string' ? { state: value.state } : {})
   }
 }
-function parseReviewLookup(env: ReviewsEnv, value: unknown): { kind: 'found'; review: ReviewIdentity & { headRefName: string; state: string } } | { kind: 'none' } | { kind: 'unavailable'; message: string } {
+
+function parseReviewLookup(
+  env: ReviewsEnv,
+  value: unknown,
+  canonical: CanonicalRepository,
+): { kind: 'found'; review: ReviewIdentity & { headRefName: string; state: string } } | { kind: 'none' } | { kind: 'unavailable'; message: string } {
   if (!isRecord(value) || typeof value.kind !== 'string' || !Number.isFinite(value.fetchedAt)) throw env.invalid('invalid_response', 'Hosting returned an invalid branch review lookup.')
   if (value.kind === 'no-review') return { kind: 'none' }
   if (value.kind === 'unavailable') return { kind: 'unavailable', message: typeof value.message === 'string' ? value.message : 'The branch review lookup is unavailable.' }
   if (value.kind !== 'found') throw env.invalid('invalid_response', 'Hosting returned an unknown branch review lookup state.')
-  const review = parseMinimalReview(value.review)
+  const review = parseMinimalReview(value.review, canonical)
   if (!review || !isRecord(value.review) || typeof value.review.headRefName !== 'string' || typeof value.review.state !== 'string') {
     throw env.invalid('invalid_response', 'Hosting returned an invalid pull request identity.')
   }
@@ -525,6 +662,18 @@ async function resolveRepoContext(env: ReviewsEnv, params: Record<string, unknow
   return { id: worktree.id, repoId: worktree.repoId }
 }
 
+async function canonicalRepository(env: ReviewsEnv, worktree: string): Promise<CanonicalRepository> {
+  const value = await env.call('quirky.hosting/repository', { worktree })
+  if (!isRecord(value)) throw env.invalid('invalid_response', 'Hosting returned an invalid canonical repository identity.')
+  const provider = value.provider === undefined ? 'github' : value.provider
+  if (provider !== 'github' && provider !== 'gitlab') {
+    throw env.invalid('invalid_response', 'Hosting returned an invalid canonical repository identity.')
+  }
+  const repository = parseRepoIdentity(value.repository, provider)
+  if (repository === null) throw env.invalid('invalid_response', 'Hosting returned an invalid canonical repository identity.')
+  return { provider, repository }
+}
+
 function assertCurrent(env: ReviewsEnv, worktree: ExactContext, generation?: number): CreationState {
   const creation = env.read().creation
   if (creation.worktree !== worktree.id || (generation !== undefined && creation.generation !== generation)) {
@@ -543,45 +692,52 @@ function isCurrent(env: ReviewsEnv, worktree: ExactContext, generation: number, 
     (requestId === undefined || creation.requestId === requestId)
 }
 
-async function readEligibility(env: ReviewsEnv, worktree: ExactContext, base?: string, title?: string): Promise<Eligibility> {
+async function readEligibility(
+  env: ReviewsEnv,
+  worktree: ExactContext,
+  canonical: CanonicalRepository,
+  base?: string,
+  title?: string,
+): Promise<Eligibility> {
   const params = {
     worktree: worktree.id,
     ...(base === undefined ? {} : { base }),
     head: worktree.branch,
     ...(title === undefined ? {} : { title })
   }
-  return parseEligibility(env, await env.call('quirky.hosting/creationEligibility', params), worktree)
+  return parseEligibility(env, await env.call('quirky.hosting/creationEligibility', params), worktree, canonical)
 }
 
 async function readBases(env: ReviewsEnv, worktree: ExactContext, query = ''): Promise<string[]> {
   return parseBranchRefs(env, await env.call('quirky.git/branches', { worktree: worktree.id, query }))
 }
 
-async function stackInfo(env: ReviewsEnv, worktree: ExactContext, base: string, current?: boolean): Promise<StackInfo> {
-  let supported = false
+async function stackInfo(
+  env: ReviewsEnv,
+  worktree: ExactContext,
+  base: string,
+  canonical: CanonicalRepository,
+  current?: boolean,
+): Promise<StackInfo> {
   let parentNumber: number | null = null
   let lookupError: string | null = null
-  try {
-    const repository = await env.call('quirky.hosting/repository', { worktree: worktree.id })
-    if (!isRecord(repository) || !isRecord(repository.origin) || typeof repository.origin.host !== 'string') {
-      throw env.invalid('invalid_response', 'Hosting returned an invalid repository identity.')
-    }
-    supported = repository.origin.host.toLowerCase() === 'github.com'
-    if (supported && base !== '') {
-      const lookup = parseReviewLookup(env, await env.call('quirky.hosting/forBranch', { worktree: worktree.id, branch: base }))
+  const supported = canonical.provider === 'github' && canonical.repository.host.toLowerCase() === 'github.com'
+  if (supported && base !== '') {
+    try {
+      const lookup = parseReviewLookup(env, await env.call('quirky.hosting/forBranch', { worktree: worktree.id, branch: base }), canonical)
       if (lookup.kind === 'unavailable') lookupError = lookup.message
       else if (lookup.kind === 'found' && lookup.review.headRefName === base && (lookup.review.state === 'open' || lookup.review.state === 'draft')) {
         parentNumber = lookup.review.number
       }
+    } catch (error) {
+      lookupError = errorText(error)
     }
-  } catch (error) {
-    lookupError = errorText(error)
   }
   return {
     supported,
     parentNumber,
     error: lookupError,
-    enabled: current ?? parentNumber !== null
+    enabled: supported && (current ?? parentNumber !== null)
   }
 }
 
@@ -745,8 +901,8 @@ async function runGeneration(
   }
 }
 
-function reviewFromEligibility(eligibility: Eligibility): ReviewIdentity | null {
-  return parseMinimalReview(eligibility.review)
+function reviewFromEligibility(eligibility: Eligibility, canonical: CanonicalRepository): ReviewIdentity | null {
+  return parseMinimalReview(eligibility.review, canonical)
 }
 
 async function publishReview(
@@ -754,10 +910,15 @@ async function publishReview(
   worktree: ExactContext,
   generation: number,
   review: ReviewIdentity,
+  canonical: CanonicalRepository,
   status: 'created' | 'already_exists' | 'partial',
   error?: string
 ): Promise<Record<string, unknown>> {
   if (!isCurrent(env, worktree, generation)) throw env.invalid('stale_target', 'The create-review context changed before the result could be linked.')
+  const reviewRepository = repoFromReviewUrl(review.url, review.number, canonical.provider)
+  if (reviewRepository === null || canonical.provider === 'gitlab' && !sameRepo(reviewRepository, canonical.repository)) {
+    throw env.invalid('invalid_response', 'The review URL does not match the canonical workspace repository.')
+  }
   const result: JsonRecord = {
     status,
     review: { number: review.number, url: review.url, ...(status === 'already_exists' ? { existing: true } : {}) },
@@ -806,9 +967,15 @@ function generationMatches(env: ReviewsEnv, worktree: ExactContext, generation: 
 }
 
 
-async function freshStackParent(env: ReviewsEnv, worktree: ExactContext, base: string, expected: StackInfo): Promise<number | null> {
+async function freshStackParent(
+  env: ReviewsEnv,
+  worktree: ExactContext,
+  base: string,
+  expected: StackInfo,
+  canonical: CanonicalRepository,
+): Promise<number | null> {
   if (!expected.supported || !expected.enabled || expected.parentNumber === null) return null
-  const lookup = parseReviewLookup(env, await env.call('quirky.hosting/forBranch', { worktree: worktree.id, branch: base }))
+  const lookup = parseReviewLookup(env, await env.call('quirky.hosting/forBranch', { worktree: worktree.id, branch: base }), canonical)
   if (lookup.kind === 'unavailable') throw env.invalid('lookup_unavailable', lookup.message)
   if (lookup.kind !== 'found' || lookup.review.number !== expected.parentNumber || lookup.review.headRefName !== base ||
     (lookup.review.state !== 'open' && lookup.review.state !== 'draft')) {
@@ -829,6 +996,7 @@ function applyError(env: ReviewsEnv, worktree: ExactContext, generation: number,
 export function createMethods(env: ReviewsEnv): ReviewMethodTable {
   let openSequence = 0
   let generationSequence = env.read().creation.generation
+  let creationRepository: { generation: number; identity: CanonicalRepository } | null = null
 
   const createOpen = async (params: Record<string, unknown>, caller: PluginCaller) => {
     const selector = requiredString(env, params.worktree, 'worktree')
@@ -846,6 +1014,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
     const sameWorktree = previous.worktree === worktree.id
     const sameHead = sameWorktree && previous.head === worktree.branch && previous.eligibility?.headOid === worktree.head
     const generation = ++generationSequence
+    creationRepository = null
     const defaults = getExactDefaults(env, worktree.repoId).defaults
     env.update((state) => {
       const prior = state.creation
@@ -872,6 +1041,11 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       }
     })
     try {
+      const canonical = await canonicalRepository(env, worktree.id)
+      if (sequence !== openSequence || !generationMatches(env, worktree, generation, worktree.branch, worktree.head)) {
+        return { worktree: worktree.id, opened: false, stale: true }
+      }
+      creationRepository = { generation, identity: canonical }
       const [rawEligibility, bases] = await Promise.all([
         env.call('quirky.hosting/creationEligibility', { worktree: worktree.id, head: worktree.branch }),
         readBases(env, worktree)
@@ -879,17 +1053,24 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       if (sequence !== openSequence || !generationMatches(env, worktree, generation, worktree.branch, worktree.head)) {
         return { worktree: worktree.id, opened: false, stale: true }
       }
-      let eligibility = parseEligibility(env, rawEligibility, worktree)
+      let eligibility = parseEligibility(env, rawEligibility, worktree, canonical)
       const defaultBase = eligibility.defaultBase ?? ''
       const selectedBase = sameWorktree && previous.base !== '' && bases.includes(previous.base) ? previous.base : defaultBase
       const title = sameWorktree && previous.title.trim() !== '' ? previous.title : eligibility.title
       const body = sameWorktree && previous.body !== '' ? previous.body : eligibility.body
-      if (selectedBase !== defaultBase) eligibility = await readEligibility(env, worktree, selectedBase, title)
+      if (selectedBase !== defaultBase) eligibility = await readEligibility(env, worktree, canonical, selectedBase, title)
       if (eligibility.reason === 'lookup_unavailable') {
         throw env.invalid('lookup_unavailable', eligibilityBlocker(eligibility)?.message ?? 'Could not confirm whether this branch already has a pull request.')
       }
-      const stack = await stackInfo(env, worktree, selectedBase)
+      const stack = await stackInfo(env, worktree, selectedBase, canonical)
       await ensureExactHead(env, worktree, caller)
+      const currentCanonical = await canonicalRepository(env, worktree.id)
+      if (sequence !== openSequence || !generationMatches(env, worktree, generation, worktree.branch, worktree.head)) {
+        return { worktree: worktree.id, opened: false, stale: true }
+      }
+      if (currentCanonical.provider !== canonical.provider || !sameRepo(currentCanonical.repository, canonical.repository)) {
+        throw env.invalid('stale_target', 'The workspace repository changed while creation eligibility was being checked.')
+      }
       const enriched = eligibilityWithStack(eligibility, stack)
       env.update((state) => {
         if (state.creation.generation !== generation || state.creation.worktree !== worktree.id) return
@@ -903,8 +1084,8 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
         state.creation.error = stack.error
       })
       if (eligibility.reason === 'existing_review') {
-        const existing = reviewFromEligibility(eligibility)
-        if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing pull request without a valid identity.')
+        const existing = reviewFromEligibility(eligibility, canonical)
+        if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing review without a valid canonical identity.')
         if (sequence !== openSequence) return { worktree: worktree.id, opened: false, stale: true }
         await openReviewForIdentity(env, worktree, existing)
         return { worktree: worktree.id, opened: true, existingReview: { number: existing.number, url: existing.url, existing: true } }
@@ -953,7 +1134,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
 
   const createDraft = async (params: Record<string, unknown>, caller: PluginCaller) => {
     const worktree = await resolveContext(env, params, caller)
-    const creation = assertCurrent(env, worktree)
+    const creation = assertCurrent(env, worktree, optionalGeneration(env, params))
     if (creation.submitting || creation.generating) throw env.invalid('conflict', 'Review details cannot be edited while generation or submission is in progress.')
     const title = optionalString(env, params, 'title')
     const body = optionalString(env, params, 'body')
@@ -982,16 +1163,43 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
   }
 
   const createBase = async (params: Record<string, unknown>, caller: PluginCaller) => {
+    const startingCreation = env.read().creation
+    const startingGeneration = startingCreation.generation
     const worktree = await resolveContext(env, params, caller)
-    const creation = assertCurrent(env, worktree)
+    if (env.read().creation.generation !== startingGeneration || startingCreation.worktree !== worktree.id) {
+      throw env.invalid('stale_target', 'The create-review context changed before the base could be checked.')
+    }
+    const creation = assertCurrent(env, worktree, optionalGeneration(env, params))
     if (creation.submitting || creation.generating) throw env.invalid('conflict', 'Wait for the active review operation to finish before changing its base.')
     const base = requiredString(env, params.base, 'base')
     if (!creation.bases.includes(base)) throw env.invalid('invalid_base', 'Choose a base branch returned by the public Git branch list.')
     if (base.toLowerCase() === creation.head.toLowerCase()) throw env.invalid('same_branch', 'Base branch must differ from the head branch.')
     const stackSelection = optionalBoolean(env, params, 'stack')
+    const openedRepository = creationRepository
+    if (!openedRepository || openedRepository.generation !== creation.generation) {
+      if (stackSelection === true) {
+        throw env.invalid('eligibility_unconfirmed', 'Confirm the canonical repository before selecting a stacked base.')
+      }
+      await ensureExactHead(env, worktree, caller)
+      if (!generationMatches(env, worktree, creation.generation, worktree.branch, worktree.head)) {
+        throw env.invalid('stale_target', 'The create-review context changed before the base could be selected.')
+      }
+      env.update((state) => {
+        if (state.creation.generation !== creation.generation || state.creation.worktree !== worktree.id) return
+        state.creation.base = base
+        state.creation.eligibility = null
+        state.creation.error = null
+      })
+      return { base, eligible: false, stackSupported: false, stackEnabled: false }
+    }
+    const canonical = await canonicalRepository(env, worktree.id)
+    if (openedRepository.identity.provider !== canonical.provider
+      || !sameRepo(openedRepository.identity.repository, canonical.repository)) {
+      throw env.invalid('stale_target', 'The workspace repository changed. Reopen review creation before changing its base.')
+    }
     const raw = await env.call('quirky.hosting/creationEligibility', { worktree: worktree.id, base, head: worktree.branch, title: creation.title })
-    const eligibility = parseEligibility(env, raw, worktree)
-    const detectedStack = await stackInfo(env, worktree, base, stackSelection)
+    const eligibility = parseEligibility(env, raw, worktree, canonical)
+    const detectedStack = await stackInfo(env, worktree, base, canonical, stackSelection)
     await ensureExactHead(env, worktree, caller)
     if (stackSelection === true && detectedStack.parentNumber === null) {
       throw env.invalid('stack_parent_unavailable', detectedStack.error ?? 'The selected base branch is not the head of an open pull request.')
@@ -1041,7 +1249,14 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
   }
 
   const createSubmit = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveContext(env, params, caller)
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const starting = env.read().creation
+    const startingGeneration = starting.generation
+    const startingWorktree = starting.worktree
+    const worktree = await resolveContext(env, { ...params, worktree: selector }, caller)
+    if (env.read().creation.generation !== startingGeneration || startingWorktree !== worktree.id) {
+      throw env.invalid('stale_target', 'The create-review context changed before submission began.')
+    }
     const creation = assertCurrent(env, worktree)
     if (creation.submitting) throw env.invalid('duplicate_submission', 'This pull request is already being submitted.')
     if (creation.generating) throw env.invalid('generation_in_progress', 'Wait for AI generation to finish.')
@@ -1056,12 +1271,22 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       state.creation.error = null
     })
     try {
+      const canonical = await canonicalRepository(env, worktree.id)
+      const openedRepository = creationRepository
+      if (!openedRepository || openedRepository.generation !== generation
+        || openedRepository.identity.provider !== canonical.provider
+        || !sameRepo(openedRepository.identity.repository, canonical.repository)) {
+        throw env.invalid('stale_target', 'The workspace repository changed. Reopen review creation before submitting.')
+      }
+      if (creation.eligibility?.provider !== canonical.provider) {
+        throw env.invalid('stale_target', 'The hosting provider changed. Reopen review creation before submitting.')
+      }
       let latest = assertCurrent(env, worktree, generation)
-      let eligibility = await readEligibility(env, worktree, latest.base, latest.title)
+      let eligibility = await readEligibility(env, worktree, canonical, latest.base, latest.title)
       if (eligibility.reason === 'existing_review') {
-        const existing = reviewFromEligibility(eligibility)
-        if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing pull request without a valid identity.')
-        return await publishReview(env, worktree, generation, existing, 'already_exists')
+        const existing = reviewFromEligibility(eligibility, canonical)
+        if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing review without a valid canonical identity.')
+        return await publishReview(env, worktree, generation, existing, canonical, 'already_exists')
       }
       let blocker = eligibilityBlocker(eligibility)
       if (!eligibility.eligible && blocker && (blocker.reason === 'branch_ahead' || blocker.reason === 'no_upstream')) {
@@ -1075,7 +1300,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
         if (afterPush.id !== worktree.id || afterPush.branch !== worktree.branch || afterPush.head !== worktree.head) {
           throw env.invalid('head_changed', 'The worktree head changed while pushing. Reopen the composer before creating a pull request.')
         }
-        eligibility = await readEligibility(env, worktree, latest.base, latest.title)
+        eligibility = await readEligibility(env, worktree, canonical, latest.base, latest.title)
         blocker = eligibilityBlocker(eligibility)
       }
       if (!eligibility.eligible) throw env.invalid(blocker?.reason ?? 'eligibility_blocked', blocker?.message ?? 'Pull-request creation eligibility could not be confirmed.')
@@ -1085,13 +1310,13 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       if (defaults.generateDetailsOnOpen && !latest.generated) {
         await runGeneration(env, worktree, generation, caller, undefined, true)
         latest = assertCurrent(env, worktree, generation)
-        eligibility = await readEligibility(env, worktree, latest.base, latest.title)
+        eligibility = await readEligibility(env, worktree, canonical, latest.base, latest.title)
         if (!eligibility.eligible) {
           const generationBlocker = eligibilityBlocker(eligibility)
           if (eligibility.reason === 'existing_review') {
-            const existing = reviewFromEligibility(eligibility)
-            if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing pull request without a valid identity.')
-            return await publishReview(env, worktree, generation, existing, 'already_exists')
+            const existing = reviewFromEligibility(eligibility, canonical)
+            if (!existing) throw env.invalid('invalid_response', 'Hosting found an existing review without a valid canonical identity.')
+            return await publishReview(env, worktree, generation, existing, canonical, 'already_exists')
           }
           throw env.invalid(generationBlocker?.reason ?? 'eligibility_blocked', generationBlocker?.message ?? 'Pull-request eligibility changed during generation.')
         }
@@ -1101,13 +1326,17 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       if (finalHead.id !== worktree.id || finalHead.branch !== worktree.branch || finalHead.head !== worktree.head) {
         throw env.invalid('head_changed', 'The worktree head changed before pull-request creation.')
       }
+      const currentCanonical = await canonicalRepository(env, worktree.id)
+      if (currentCanonical.provider !== canonical.provider || !sameRepo(currentCanonical.repository, canonical.repository)) {
+        throw env.invalid('stale_target', 'The workspace repository changed before the review could be created.')
+      }
       const confirmedAt = Number(eligibility.confirmedAt)
       if (!Number.isFinite(confirmedAt) || Date.now() - confirmedAt > 5 * 60_000) {
         throw env.invalid('eligibility_expired', 'Creation eligibility expired before submission. Reopen the composer and try again.')
       }
       let stackParent: number | null = null
       const stack = parseStackInfo(env, latest.eligibility ?? {}, latest.base)
-      if (stack.enabled) stackParent = await freshStackParent(env, worktree, latest.base, stack)
+      if (stack.enabled) stackParent = await freshStackParent(env, worktree, latest.base, stack, canonical)
       await ensureExactHead(env, worktree, caller)
       const payload: JsonRecord = {
         worktree: worktree.id,
@@ -1127,16 +1356,16 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       } catch (error) {
         const data = errorData(error)
         if (errorReason(error) === 'partial_change' && data?.partial === true && Array.isArray(data.completedSteps) && data.completedSteps.includes('create')) {
-          const partialReview = parseMinimalReview(data.createdReview)
+          const partialReview = parseMinimalReview(data.createdReview, canonical)
           if (!partialReview) throw error
-          return await publishReview(env, worktree, generation, partialReview, 'partial', errorText(error))
+          return await publishReview(env, worktree, generation, partialReview, canonical, 'partial', errorText(error))
         }
         throw error
       }
-      const identity = parseMinimalReview(created)
-      if (!identity) throw env.invalid('unknown_completion', 'PR creation returned no confirmed review identity. Do not retry blindly; refresh the branch review state.')
+      const identity = parseMinimalReview(created, canonical)
+      if (!identity) throw env.invalid('unknown_completion', 'Review creation returned no confirmed canonical review identity. Do not retry blindly; refresh the branch review state.')
       const existing = isRecord(created) && created.existing === true
-      return await publishReview(env, worktree, generation, identity, existing ? 'already_exists' : 'created')
+      return await publishReview(env, worktree, generation, identity, canonical, existing ? 'already_exists' : 'created')
     } catch (error) {
       applyError(env, worktree, generation, error)
       throw error
@@ -1182,66 +1411,116 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
   }
 
   const hostingDiagnose = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
-    return readSettingsField(env, worktree.id, 'diagnostics', 'GitHub diagnostics',
-      () => env.call('quirky.hosting/diagnoseAuth', { worktree: worktree.id }), parseHostingDiagnostics)
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'diagnostics')
+    const label = `${prepared.canonical.provider === 'gitlab' ? 'GitLab' : 'GitHub'} diagnostics`
+    return readSettingsFieldAtRequest(env, prepared.request, label,
+      () => env.call('quirky.hosting/diagnoseAuth', { worktree: prepared.worktree.id }), parseHostingDiagnostics)
   }
 
   const hostingAccounts = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
-    return readSettingsField(env, worktree.id, 'accounts', 'GitHub accounts',
-      () => env.call('quirky.hosting/accounts', { worktree: worktree.id }), parseHostingAccounts)
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'accounts')
+    if (prepared.canonical.provider === 'gitlab') {
+      cancelSettingsRead(env, prepared.request)
+      throw env.invalid('unsupported_provider', 'Account binding is unavailable for GitLab.')
+    }
+    return readSettingsFieldAtRequest(env, prepared.request, 'GitHub accounts',
+      () => env.call('quirky.hosting/accounts', { worktree: prepared.worktree.id }), parseHostingAccounts)
   }
 
   const hostingConfiguration = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
-    return readSettingsField(env, worktree.id, 'configuration', 'Repository hosting configuration',
-      () => env.call('quirky.hosting/configuration', { worktree: worktree.id }), parseHostingConfiguration)
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'configuration')
+    if (prepared.canonical.provider === 'gitlab') {
+      cancelSettingsRead(env, prepared.request)
+      throw env.invalid('unsupported_provider', 'Account binding is unavailable for GitLab.')
+    }
+    return readSettingsFieldAtRequest(env, prepared.request, 'Repository hosting configuration',
+      () => env.call('quirky.hosting/configuration', { worktree: prepared.worktree.id }), parseHostingConfiguration)
   }
 
   const hostingBudget = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
     const force = optionalBoolean(env, params, 'force') === true
-    return readSettingsField(env, worktree.id, 'budget', 'GitHub API budget',
-      () => env.call('quirky.hosting/rateLimit', { worktree: worktree.id, force }), parseHostingBudget)
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'budget')
+    if (prepared.canonical.provider === 'gitlab') {
+      cancelSettingsRead(env, prepared.request)
+      throw env.invalid('unsupported_provider', 'API budget is unavailable for GitLab.')
+    }
+    return readSettingsFieldAtRequest(env, prepared.request, 'GitHub API budget',
+      () => env.call('quirky.hosting/rateLimit', { worktree: prepared.worktree.id, force }), parseHostingBudget)
   }
 
   const hostingSettingsRefresh = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
-    const generation = beginSettingsRefresh(env, worktree.id)
+    const selector = requiredString(env, params.worktree, 'worktree')
     const forceBudget = optionalBoolean(env, params, 'forceBudget') === true
-    const observations = [
-      {
-        field: 'diagnostics' as const,
-        label: 'GitHub diagnostics',
-        parse: parseHostingDiagnostics,
-        read: () => env.call('quirky.hosting/diagnoseAuth', { worktree: worktree.id })
-      },
-      {
-        field: 'accounts' as const,
-        label: 'GitHub accounts',
-        parse: parseHostingAccounts,
-        read: () => env.call('quirky.hosting/accounts', { worktree: worktree.id })
-      },
-      {
-        field: 'configuration' as const,
-        label: 'Repository hosting configuration',
-        parse: parseHostingConfiguration,
-        read: () => env.call('quirky.hosting/configuration', { worktree: worktree.id })
-      },
-      {
-        field: 'budget' as const,
-        label: 'GitHub API budget',
-        parse: parseHostingBudget,
-        read: () => env.call('quirky.hosting/rateLimit', { worktree: worktree.id, force: forceBudget })
-      }
-    ]
+    let generation = beginSettingsRefresh(env, selector)
+    const staleResult = () => {
+      const snapshot = currentSettingsResult(env, selector)
+      return { worktree: selector, refreshed: false, stale: true, fetchedAt: snapshot.fetchedAt }
+    }
+    const failureResult = (error: unknown) => {
+      const message = errorText(error)
+      if (settingsGeneration(env, selector) === generation) settingsContextError(env, selector, generation, message)
+      const snapshot = currentSettingsResult(env, selector)
+      return { worktree: selector, refreshed: false, fetchedAt: snapshot.fetchedAt, error: snapshot.error ?? message }
+    }
+    let worktree: { id: string; repoId: string }
+    try {
+      worktree = await resolveRepoContext(env, { worktree: selector }, caller)
+    } catch (error) {
+      return failureResult(error)
+    }
+    if (settingsGeneration(env, worktree.id) !== generation) return staleResult()
+    let canonical: CanonicalRepository
+    try {
+      canonical = await canonicalRepository(env, worktree.id)
+    } catch (error) {
+      return failureResult(error)
+    }
+    if (settingsGeneration(env, worktree.id) !== generation) return staleResult()
+    const identityGeneration = setSettingsIdentity(env, worktree.id, generation, canonical)
+    if (identityGeneration === null) return staleResult()
+    generation = identityGeneration
+
+    type Observation = {
+      field: SettingsField
+      label: string
+      parse: (env: ReviewsEnv, value: unknown) => JsonRecord
+      read: () => Promise<unknown>
+    }
+    const observations: Observation[] = [{
+      field: 'diagnostics',
+      label: `${canonical.provider === 'gitlab' ? 'GitLab' : 'GitHub'} diagnostics`,
+      parse: parseHostingDiagnostics,
+      read: () => env.call('quirky.hosting/diagnoseAuth', { worktree: worktree.id }),
+    }]
+    if (canonical.provider === 'github') {
+      observations.push(
+        {
+          field: 'accounts',
+          label: 'GitHub accounts',
+          parse: parseHostingAccounts,
+          read: () => env.call('quirky.hosting/accounts', { worktree: worktree.id }),
+        },
+        {
+          field: 'configuration',
+          label: 'Repository hosting configuration',
+          parse: parseHostingConfiguration,
+          read: () => env.call('quirky.hosting/configuration', { worktree: worktree.id }),
+        },
+        {
+          field: 'budget',
+          label: 'GitHub API budget',
+          parse: parseHostingBudget,
+          read: () => env.call('quirky.hosting/rateLimit', { worktree: worktree.id, force: forceBudget }),
+        },
+      )
+    }
     const requests = observations.map(({ field }) => beginSettingsReadAtGeneration(env, worktree.id, generation, field))
     const results = await Promise.allSettled(observations.map(({ read }) => read()))
-    if (settingsGeneration(env, worktree.id) !== generation) {
-      const snapshot = currentSettingsResult(env, worktree.id)
-      return { worktree: worktree.id, refreshed: false, stale: true, fetchedAt: snapshot.fetchedAt }
-    }
+    if (settingsGeneration(env, worktree.id) !== generation) return staleResult()
     let contextError: string | null = null
     try {
       const current = await env.resolve({ worktree: worktree.id }, caller)
@@ -1249,10 +1528,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
     } catch (error) {
       contextError = errorText(error)
     }
-    if (settingsGeneration(env, worktree.id) !== generation) {
-      const snapshot = currentSettingsResult(env, worktree.id)
-      return { worktree: worktree.id, refreshed: false, stale: true, fetchedAt: snapshot.fetchedAt }
-    }
+    if (settingsGeneration(env, worktree.id) !== generation) return staleResult()
     if (contextError !== null) {
       settingsContextError(env, worktree.id, generation, contextError)
       const snapshot = currentSettingsResult(env, worktree.id)
@@ -1269,7 +1545,7 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
       requests,
       results,
       observations.map(({ parse }) => parse),
-      observations.map(({ label }) => label)
+      observations.map(({ label }) => label),
     )
     const snapshot = currentSettingsResult(env, worktree.id)
     return {
@@ -1281,20 +1557,30 @@ export function createMethods(env: ReviewsEnv): ReviewMethodTable {
   }
 
   const hostingBindAccount = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
+    const selector = requiredString(env, params.worktree, 'worktree')
     const host = requiredString(env, params.host, 'host')
     const user = requiredString(env, params.user, 'user')
-    return readSettingsField(env, worktree.id, 'configuration', 'Repository hosting configuration', async () => {
-      await env.call('quirky.hosting/configure', { worktree: worktree.id, account: { host, user } })
-      return env.call('quirky.hosting/configuration', { worktree: worktree.id })
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'configuration')
+    if (prepared.canonical.provider === 'gitlab') {
+      cancelSettingsRead(env, prepared.request)
+      throw env.invalid('unsupported_provider', 'Account binding is unavailable for GitLab.')
+    }
+    return readSettingsFieldAtRequest(env, prepared.request, 'Repository hosting configuration', async () => {
+      await env.call('quirky.hosting/configure', { worktree: prepared.worktree.id, account: { host, user } })
+      return env.call('quirky.hosting/configuration', { worktree: prepared.worktree.id })
     }, parseHostingConfiguration)
   }
 
   const hostingUnbindAccount = async (params: Record<string, unknown>, caller: PluginCaller) => {
-    const worktree = await resolveRepoContext(env, params, caller)
-    return readSettingsField(env, worktree.id, 'configuration', 'Repository hosting configuration', async () => {
-      await env.call('quirky.hosting/configure', { worktree: worktree.id, clearAccount: true })
-      return env.call('quirky.hosting/configuration', { worktree: worktree.id })
+    const selector = requiredString(env, params.worktree, 'worktree')
+    const prepared = await beginCanonicalSettingsRead(env, selector, caller, 'configuration')
+    if (prepared.canonical.provider === 'gitlab') {
+      cancelSettingsRead(env, prepared.request)
+      throw env.invalid('unsupported_provider', 'Account binding is unavailable for GitLab.')
+    }
+    return readSettingsFieldAtRequest(env, prepared.request, 'Repository hosting configuration', async () => {
+      await env.call('quirky.hosting/configure', { worktree: prepared.worktree.id, clearAccount: true })
+      return env.call('quirky.hosting/configuration', { worktree: prepared.worktree.id })
     }, parseHostingConfiguration)
   }
 

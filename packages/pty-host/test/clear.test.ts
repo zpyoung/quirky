@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { Terminal } from '@xterm/headless'
 import { base64ToBytes } from '@quirky/protocol'
 import { readCheckpoint } from '../src/history/checkpoint'
-import { readSegments } from '../src/history/log'
+import { LogReader, readSegments } from '../src/history/log'
 import { MODE_RESET } from '../src/history/restore'
 import { type CreateParams, SessionManager, type SessionManagerOptions } from '../src/session'
 import { concat, onCleanup, runCleanups, scopeForHome, tempHome, text, trackSessionProcesses, waitFor } from './helpers'
@@ -122,15 +122,15 @@ describe('clear', () => {
     const start = stream.sub.offset
 
     await manager.clear('c3')
-    const afterClear = manager.list()[0]!.offset
+    const afterClear = (await manager.list())[0]!.offset
     expect(afterClear).toBeGreaterThan(start)
     await manager.clear('c3')
     manager.write('c3', enc('x\n'))
     await readUntil(manager, 'c3', 5, (lines) => lines.includes('x'))
     await waitFor(() => (stream.text().match(/x/g) ?? []).length >= 2, 5000, 'echo and cat output')
 
-    expect(manager.list()[0]!.offset).toBeGreaterThan(afterClear)
-    expect(start + stream.bytes().length).toBe(manager.list()[0]!.offset)
+    expect((await manager.list())[0]!.offset).toBeGreaterThan(afterClear)
+    expect(start + stream.bytes().length).toBe((await manager.list())[0]!.offset)
   })
 
   test('SC-34: rows scrolled after the clear are history, rows before it are not', async () => {
@@ -157,13 +157,13 @@ describe('clear', () => {
     const sub = await manager.subscribe('c5', (_id, bytes) => parts.push(bytes), { mode: 'raw' })
     expect(text(base64ToBytes(sub.replay)).startsWith(`${CLEARED}$ `)).toBe(true)
     expect(text(base64ToBytes(sub.replay))).not.toContain('old-')
-    expect(sub.offset).toBe(manager.list()[0]!.offset)
+    expect(sub.offset).toBe((await manager.list())[0]!.offset)
   })
 
   test('SC-34: the log gets a clear record at the output position and a checkpoint of the cleared screen', async () => {
     const { manager, home } = newManager()
     await busySession(manager, 'c6')
-    const before = manager.list()[0]!.offset
+    const before = (await manager.list())[0]!.offset
 
     await manager.clear('c6')
 
@@ -171,7 +171,7 @@ describe('clear', () => {
     const cleared = records.filter((r) => r.kind === 'clear')
     expect(cleared.map((r) => r.offset)).toEqual([before])
     const checkpoint = readCheckpoint(dirOf(home, 'c6'))!
-    expect(checkpoint.offset).toBe(manager.list()[0]!.offset)
+    expect(checkpoint.offset).toBe((await manager.list())[0]!.offset)
     expect(checkpoint.ansi).not.toContain('old-')
     expect(checkpoint.ansi).toContain('$')
   })
@@ -185,7 +185,7 @@ describe('clear', () => {
     await first.shutdown()
 
     const { manager: second } = newManager({}, home)
-    expect(second.list()[0]).toMatchObject({ sessionId: 'c7', state: 'restorable' })
+    expect((await second.list())[0]).toMatchObject({ sessionId: 'c7', state: 'restorable' })
     const stored = await second.read('c7', 1000)
     expect(stored.lines.some((row) => row.includes('old-'))).toBe(false)
     expect(stored.lines).toContain('post-clear')
@@ -221,21 +221,44 @@ describe('clear', () => {
   test('SC-34: an exited session can be cleared and the clear survives a restart', async () => {
     const { manager, home } = newManager()
     await manager.create(params('c9', sh(`seq -f 'gone-%g' 1 200; exit 0`)))
-    await waitFor(() => manager.list()[0]?.state === 'exited', 5000, 'exit')
+    await waitFor(async () => (await manager.list())[0]?.state === 'exited', 5000, 'exit')
     expect((await manager.history('c9', { lines: 50 })).lines.length).toBeGreaterThan(0)
-    const before = manager.list()[0]!.offset
+    const before = (await manager.list())[0]!.offset
 
     await manager.clear('c9')
 
     expect((await manager.history('c9', { lines: 50 })).lines).toEqual([])
     expect((await manager.read('c9', 1000)).lines.some((row) => row.includes('gone-'))).toBe(false)
-    expect(manager.list()[0]!.offset).toBeGreaterThan(before)
+    expect((await manager.list())[0]!.offset).toBeGreaterThan(before)
     expect(readSegments(dirOf(home, 'c9')).segments.flatMap((s) => s.records).filter((r) => r.kind === 'clear')).toHaveLength(1)
 
     const { manager: second } = newManager({}, home)
-    expect(second.list()[0]).toMatchObject({ sessionId: 'c9', state: 'exited' })
+    expect((await second.list())[0]).toMatchObject({ sessionId: 'c9', state: 'exited' })
     expect((await second.read('c9', 1000)).lines.some((row) => row.includes('gone-'))).toBe(false)
     expect((await second.history('c9', { lines: 50 })).lines).toEqual([])
+  })
+
+  test('an exited session attaches from its reopened index after clear', async () => {
+    const { manager } = newManager()
+    const exited = Promise.withResolvers<void>()
+    manager.onExit((event) => { if (event.sessionId === 'indexed-clear') exited.resolve() })
+    await manager.create(params('indexed-clear', sh(`seq -f 'gone-%g' 1 200; exit 0`)))
+    await exited.promise
+    await manager.clear('indexed-clear')
+    const open = LogReader.open
+    let calls = 0
+    LogReader.open = (dir) => {
+      calls++
+      return open.call(LogReader, dir)
+    }
+    try {
+      const sub = await manager.subscribe('indexed-clear', () => {}, { mode: 'screen' })
+      const pane = await paint(base64ToBytes(sub.replay))
+      expect(rowsOf(pane).some((row) => row.includes('gone-1'))).toBe(false)
+      expect(calls).toBe(0)
+    } finally {
+      LogReader.open = open
+    }
   })
 
   test('an unknown session is the usual not-found error', async () => {
@@ -266,7 +289,7 @@ describe('clear', () => {
     const sent = stream.text()
     expect(sent.lastIndexOf(CLEARED)).toBeGreaterThanOrEqual(0)
     expect(sent.indexOf('burst-4', sent.lastIndexOf(CLEARED))).toBeGreaterThan(0)
-    expect(stream.sub.offset + stream.bytes().length).toBe(manager.list()[0]!.offset)
+    expect(stream.sub.offset + stream.bytes().length).toBe((await manager.list())[0]!.offset)
   })
 })
 
@@ -299,13 +322,13 @@ describe('resetModes', () => {
     await manager.create(params('m2', sh(MODES_ON)))
     await readUntil(manager, 'm2', 0, (lines) => lines.includes('modes-set'))
     const stream = await attach(manager, 'm2')
-    const before = manager.list()[0]!.offset
+    const before = (await manager.list())[0]!.offset
 
     await manager.resetModes('m2')
     await waitFor(() => stream.bytes().length >= MODE_RESET.length, 5000, 'mode reset bytes')
 
     expect(stream.bytes()).toEqual(MODE_RESET)
-    expect(manager.list()[0]!.offset).toBe(before + MODE_RESET.length)
+    expect((await manager.list())[0]!.offset).toBe(before + MODE_RESET.length)
     const logged = readSegments(dirOf(home, 'm2'))
       .segments.flatMap((s) => s.records)
       .filter((r) => r.kind === 'output')
@@ -346,14 +369,14 @@ describe('resetModes', () => {
   test('an exited session can have its modes reset', async () => {
     const { manager, home } = newManager()
     await manager.create(params('m5', sh(`printf '\\033[?2004hdone'; exit 0`)))
-    await waitFor(() => manager.list()[0]?.state === 'exited', 5000, 'exit')
+    await waitFor(async () => (await manager.list())[0]?.state === 'exited', 5000, 'exit')
     expect((await manager.snapshot('m5')).modes.bracketedPaste).toBe(true)
-    const before = manager.list()[0]!.offset
+    const before = (await manager.list())[0]!.offset
 
     await manager.resetModes('m5')
 
     expect((await manager.snapshot('m5')).modes.bracketedPaste).toBe(false)
-    expect(manager.list()[0]!.offset).toBe(before + MODE_RESET.length)
+    expect((await manager.list())[0]!.offset).toBe(before + MODE_RESET.length)
     const { manager: second } = newManager({}, home)
     expect((await second.snapshot('m5')).modes.bracketedPaste).toBe(false)
   })

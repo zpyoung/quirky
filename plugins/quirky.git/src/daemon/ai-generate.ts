@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { readStagedContext } from './ai-context'
+import { readStagedContext, readUncommittedContext } from './ai-context'
 import { cleanGeneratedMessage, splitCommitMessage } from './ai-output'
 import { buildCommitMessagePrompt, renderTemplate } from './ai-prompts'
 import { parseLaunchOptions, pickDefaultAgent } from './ai-recipes'
@@ -31,7 +31,8 @@ export class GenerationLanes {
 const given = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() !== '' ? value : undefined)
 
 /**
- * Asks an AI agent for a commit message for what is staged: the agent, template and arguments of
+ * Asks an AI agent for a commit message for what is staged, or with `scope` all for every
+ * uncommitted change, untracked files included: the agent, template and arguments of
  * the commit message recipe (each overridable for this run), the prompt Orca builds, one run of
  * `quirky.agents/generate`, and its output cleaned and split into subject and body. The commit
  * box is the caller's to fill; nothing is staged, committed or changed here. One run per worktree.
@@ -55,9 +56,14 @@ export function generateCommitMessage(env: DaemonEnv): Handler {
         if (args === '') throw env.errors.reasoned('invalid-params', 'no-custom-command', 'Set a custom command in Source Control AI settings.')
       }
 
-      const staged = await readStagedContext(env, worktree)
-      if (staged === null) throw env.errors.reasoned('conflict', 'nothing-staged', 'No staged changes to summarize.')
-      const basePrompt = buildCommitMessagePrompt({ branch: staged.branch, stagedFiles: staged.stagedFiles, patch: staged.patch, patchOmitted: staged.patchOmitted })
+      const all = params.scope === 'all'
+      const staged = all ? await readUncommittedContext(env, worktree) : await readStagedContext(env, worktree)
+      if (staged === null) {
+        throw all
+          ? env.errors.reasoned('conflict', 'nothing-changed', 'No uncommitted changes to summarize.')
+          : env.errors.reasoned('conflict', 'nothing-staged', 'No staged changes to summarize.')
+      }
+      const basePrompt = buildCommitMessagePrompt({ branch: staged.branch, stagedFiles: staged.stagedFiles, patch: staged.patch, patchOmitted: staged.patchOmitted, scope: all ? 'all' : 'staged' })
       const prompt = renderTemplate(typeof params.template === 'string' ? params.template : recipe.template, {
         basePrompt,
         branch: staged.branch,

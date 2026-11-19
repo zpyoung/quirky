@@ -152,6 +152,8 @@ function testWindow(id: number): ClientConn {
 
 function makeLayoutService(connections: ClientConn[] = []) {
   let stored: unknown
+  let writes = 0
+  const shared: QuirkyEvent[] = []
   const sent = new Map(connections.map((conn) => [conn.id, [] as QuirkyEvent[]]))
   const model: UiModel = {
     sidebarSections: [],
@@ -173,15 +175,15 @@ function makeLayoutService(connections: ClientConn[] = []) {
     plugins: { contributions: () => [], addWarning: () => {} } as unknown as LayoutServiceOptions['plugins'],
     store: {
       getUiState: () => stored,
-      setUiState: (_key: string, value: unknown) => { stored = value }
+      setUiState: (_key: string, value: unknown) => { stored = value; writes += 1 }
     } as unknown as LayoutServiceOptions['store'],
     ui: { contributions: () => model },
     clients: () => connections,
     broadcast: () => {},
-    broadcastNonWindows: () => {},
+    broadcastNonWindows: (event) => { shared.push(event) },
     sendTo: (conn, event) => sent.get(conn.id)?.push(event)
   }
-  return { service: new LayoutService(options), sent, stored: () => stored }
+  return { service: new LayoutService(options), sent, stored: () => stored, model, shared, writes: () => writes }
 }
 
 describe('layout state', () => {
@@ -458,7 +460,7 @@ describe('exact window routes', () => {
 })
 
 describe('layout changes', () => {
-  test('SC-36: methods open and close the view and panel, move focus and the sidebar, and each persists a broadcast', async () => {
+  test('SC-36: methods persist and broadcast changed views, panels, focus and sidebar state', async () => {
     const { harness, caller } = await start()
     const window = await openWindow(harness)
 
@@ -487,11 +489,12 @@ describe('layout changes', () => {
     })
     await caller.call('ui.view.close', {})
 
-    await waitFor(() => changes(window).length === 6)
+    await waitFor(() => changes(window).length === 5)
     const layouts = changes(window).map((event) => event.layout)
     expect(layouts[0]!.view).toEqual({ id: PAGE, input: { note: 'n2' } })
     expect(layouts[2]!.focus).toBe('panel')
-    expect(layouts[5]).toMatchObject({ view: null, viewTabs: [], panel: null, sidebar: false, focus: null })
+    expect(layouts).toHaveLength(5)
+    expect(layouts[4]).toMatchObject({ view: null, viewTabs: [], panel: null, sidebar: false, focus: null })
     const final = (await caller.call('ui.state', {})).layout
     expect(final.view).toBeNull()
     expect(final.viewTabs).toEqual([])
@@ -1176,6 +1179,63 @@ describe('slot reports', () => {
   })
 })
 
+describe('window-bar-item slots', () => {
+  const BAR = 'acme.bar'
+  const EARLY = `window-bar-item:${BAR}/early`
+  const LATE = `window-bar-item:${BAR}/late`
+
+  async function startWithWindowBarItems() {
+    const env = makeEnv()
+    writePlugin(
+      join(env.home, 'plugins'),
+      {
+        id: BAR,
+        name: BAR,
+        version: '1.0.0',
+        ui: 'ui.js',
+        contributes: {
+          'window-bar-item': [
+            { id: 'late', title: 'Late', order: 20 },
+            { id: 'early', title: 'Early', order: 10 }
+          ]
+        }
+      },
+      { 'ui.js': 'export function activate() {}\n' }
+    )
+    const harness = await env.start()
+    return { harness, caller: await harness.connect('cli') }
+  }
+
+  test('ui.state lists sorted slots and ui.report updates and clears reports', async () => {
+    const { harness, caller } = await startWithWindowBarItems()
+    const before = await caller.call('ui.state', {})
+    expect(before.slots.filter((slot) => slot.kind === 'window-bar-item')).toEqual([
+      { id: EARLY, kind: 'window-bar-item', plugin: BAR, title: 'Early', shown: true },
+      { id: LATE, kind: 'window-bar-item', plugin: BAR, title: 'Late', shown: true }
+    ])
+
+    const window = await openWindow(harness)
+    await window.client.call('ui.report', { slot: EARLY, state: { count: 2 } })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY)).toMatchObject({
+      report: { count: 2 },
+      shown: true
+    })
+
+    await window.client.call('ui.report', { slot: EARLY, state: null })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY)).toMatchObject({ shown: true })
+    expect(slotOf(await caller.call('ui.state', {}), EARLY).report).toBeUndefined()
+
+    expect(await failure(window.client.call('ui.report', { slot: 'not-an-id', state: {} }))).toMatchObject({
+      code: RpcErrorCode.InvalidParams,
+      message: 'slot must be a contribution ID, got not-an-id'
+    })
+
+    await caller.call('plugin.disable', { id: BAR })
+    expect((await caller.call('ui.state', {})).slots.filter((slot) => slot.kind === 'window-bar-item')).toEqual([])
+  })
+})
+
+
 describe('overlay slots', () => {
   const FLOAT = 'acme.float'
   const SHELF = `overlay:${FLOAT}/shelf`
@@ -1286,5 +1346,150 @@ describe('command routing timeout', () => {
     })
     const error = await failure(layout.runCommand(BOOM, {}))
     expect(error).toMatchObject({ code: RpcErrorCode.Conflict, message: 'the window did not answer' })
+  })
+})
+
+describe('writes that change nothing', () => {
+  const layoutEvents = (events: QuirkyEvent[] | undefined) =>
+    (events ?? []).filter((event): event is Extract<QuirkyEvent, { type: 'ui.state.changed' }> => event.type === 'ui.state.changed')
+
+  test.each([
+    ['focus', (service: LayoutService) => service.focus('view')],
+    ['setPalette', (service: LayoutService) => service.setPalette(true)],
+    ['recordPaletteRecent', (service: LayoutService) => service.recordPaletteRecent(GREET)],
+    ['openView', (service: LayoutService) => service.openView(PAGE, { note: 'n1' })],
+    ['openWindowView', (service: LayoutService) => service.openWindowView(1, OTHER_PAGE, { note: 'n2' })]
+  ] as const)('%s repeated with the same value stores and sends once', (_name, write) => {
+    const { service, sent, shared, writes, stored } = makeLayoutService([testWindow(1)])
+    const first = write(service)
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    expect(shared).toHaveLength(1)
+    const before = { writes: writes(), stored: stored() }
+
+    expect(write(service)).toEqual(first)
+    expect(write(service)).toEqual(first)
+
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    expect(shared).toHaveLength(1)
+    expect(writes()).toBe(before.writes)
+    expect(stored()).toEqual(before.stored)
+  })
+
+  test('own JSON keys that also name inherited properties are not equal to different keys', () => {
+    const { service, sent, shared, writes, stored } = makeLayoutService([testWindow(1)])
+    service.openView(PAGE, JSON.parse('{"__proto__":{}}'))
+    const before = writes()
+
+    const next = service.openView(PAGE, { note: 'n1' })
+
+    expect(next.view).toEqual({ id: PAGE, input: { note: 'n1' } })
+    expect((stored() as UiLayout).view).toEqual(next.view)
+    expect(Object.hasOwn((stored() as UiLayout).view!.input as object, 'note')).toBe(true)
+    expect(service.state().layout.view).toEqual(next.view)
+    expect(writes()).toBe(before + 1)
+    expect(layoutEvents(sent.get(1)).map((event) => event.layout.view)).toEqual([
+      { id: PAGE, input: JSON.parse('{"__proto__":{}}') },
+      next.view
+    ])
+    expect(shared).toHaveLength(2)
+  })
+
+  test('a window gets its first layout even for an unchanged write, but not repeated unchanged writes', () => {
+    const { service, sent, shared, writes } = makeLayoutService([testWindow(1)])
+    expect(service.setPalette(false).palette).toBeUndefined()
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    expect(shared).toHaveLength(1)
+    const before = writes()
+
+    expect(service.setPalette(false).palette).toBeUndefined()
+    expect(service.closeView().view).toBeNull()
+
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    expect(shared).toHaveLength(1)
+    expect(writes()).toBe(before)
+  })
+
+  test('a repeated window view sends once to its window, then again when its input differs', () => {
+    const { service, sent } = makeLayoutService([testWindow(1), testWindow(2)])
+    service.openWindowView(2, PAGE, { note: 'a' })
+    service.openWindowView(2, PAGE, { note: 'a' })
+    expect(layoutEvents(sent.get(2))).toHaveLength(1)
+    service.openWindowView(2, PAGE, { note: 'b' })
+    expect(layoutEvents(sent.get(2)).map((event) => event.layout.view)).toEqual([
+      { id: PAGE, input: { note: 'a' } },
+      { id: PAGE, input: { note: 'b' } }
+    ])
+    expect(layoutEvents(sent.get(1))).toEqual([])
+  })
+
+  test('a write that leaves storage unchanged reaches the window whose own layout changed', () => {
+    const { service, sent, shared, writes } = makeLayoutService([testWindow(1), testWindow(2)])
+    service.focus('view')
+    service.openWindowView(2, PAGE)
+    service.closeWindowView(2)
+    expect(service.windowState(2).layout.focus).toBeNull()
+    expect(service.windowState(1).layout.focus).toBe('view')
+    for (const events of sent.values()) events.length = 0
+    shared.length = 0
+    const before = writes()
+
+    expect(service.focus('view').focus).toBe('view')
+
+    expect(layoutEvents(sent.get(1))).toEqual([])
+    expect(layoutEvents(sent.get(2)).map((event) => event.layout.focus)).toEqual(['view'])
+    expect(shared).toHaveLength(1)
+    expect(writes()).toBe(before)
+  })
+
+  test('a window that read a different layout since its last event gets the layout again', () => {
+    const { service, sent, model } = makeLayoutService([testWindow(1), testWindow(2)])
+    service.openWindowView(1, PAGE)
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    const views = model.views
+    model.views = []
+    expect(service.windowState(1).layout.view).toBeNull()
+    model.views = views
+
+    service.openWindowView(1, PAGE)
+
+    expect(layoutEvents(sent.get(1)).map((event) => event.layout.view)).toEqual([{ id: PAGE }, { id: PAGE }])
+  })
+
+  test('an unsubscribed window gets nothing until it subscribes, then gets its layout once', () => {
+    const win = { ...testWindow(1), subscribed: false }
+    const { service, sent } = makeLayoutService([win])
+    service.focus('view')
+    expect(layoutEvents(sent.get(1))).toEqual([])
+    win.subscribed = true
+    service.focus('view')
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+    service.focus('view')
+    expect(layoutEvents(sent.get(1))).toHaveLength(1)
+  })
+
+  test('repeated socket calls reach a window and an observer once each', async () => {
+    const { harness, caller } = await start()
+    const window = await openWindow(harness)
+    const observer = await harness.connectWithEvents('cli')
+    const calls: [string, Record<string, unknown>][] = [
+      ['ui.view.open', { id: PAGE, input: { note: 'n1' } }],
+      ['ui.panel.open', { id: OUTLINE }],
+      ['ui.focus', { target: 'panel' }],
+      ['ui.palette.set', { open: true }],
+      ['ui.palette.recent', { id: GREET }]
+    ]
+    for (const [method, params] of calls) {
+      const first = await caller.callAny(method, params)
+      expect(await caller.callAny(method, params)).toEqual(first)
+      expect(await caller.callAny(method, params)).toEqual(first)
+    }
+    await caller.call('ui.sidebar.set', { visible: false })
+    const last = await caller.call('ui.focus', { target: 'view' })
+
+    await waitFor(() => changes(window).some((event) => event.layout.focus === 'view'))
+    await waitFor(() => observer.events.some((event) => event.type === 'ui.state.changed' && event.layout.focus === 'view'))
+    expect(changes(window)).toHaveLength(6)
+    expect(observer.events.filter((event) => event.type === 'ui.state.changed')).toHaveLength(6)
+    expect((await caller.call('ui.state', {})).layout).toEqual(last)
   })
 })

@@ -165,6 +165,7 @@ export function fakeContext(handlers: Record<string, Handler>, options: { confir
   const provided = new Map<string, (...args: any[]) => any>()
   const listeners = new Set<Subscriber>()
   const toasts: { title: string; body: string; options?: unknown }[] = []
+  const executions: { id: string; args?: unknown }[] = []
   const confirms: any[] = []
   const opened: { id: string; input: unknown }[] = []
   const logs: string[] = []
@@ -184,7 +185,10 @@ export function fakeContext(handlers: Record<string, Handler>, options: { confir
       return () => void listeners.delete(listener)
     },
     getSetting: () => undefined,
-    async executeCommand() {},
+    async executeCommand(id: string, args?: unknown) {
+      executions.push({ id, args: args === undefined ? undefined : structuredClone(args) })
+      await provided.get(id)?.(args)
+    },
     openView: (id: string, input?: unknown) => void opened.push({ id, input }),
     closeView() {},
     togglePanel() {},
@@ -204,6 +208,7 @@ export function fakeContext(handlers: Record<string, Handler>, options: { confir
 
   return {
     context,
+    executions,
     calls,
     provided,
     toasts,

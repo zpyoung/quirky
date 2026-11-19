@@ -170,3 +170,122 @@ test('dirty status keeps a structured session bound to its own worktree', async 
     { method: 'quirky.git/status', params: { worktree: 'id:wt-session' } }
   ])
 })
+test('dirty results include the resolved workspace instance across status outcomes', async () => {
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const worktreeId = 'wt_0123456789ab'
+  let resolveValue: unknown = { id: worktreeId, path: '/work/selected', instanceId: 'inst-1' }
+  let resolveError: Error | undefined
+  let statusValue: unknown = { entries: [{ path: 'src/change.ts' }], capped: false }
+  let statusError: Error | undefined
+  const context = {
+    async call(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      if (method === 'quirky.worktree/resolve') {
+        if (resolveError) throw resolveError
+        return resolveValue
+      }
+      if (method === 'quirky.git/status') {
+        if (statusError) throw statusError
+        return statusValue
+      }
+      throw new Error(`unexpected call: ${method}`)
+    }
+  } as unknown as PluginContext
+
+  expect(await readDirty(context, { worktree: `id:${worktreeId}` })).toEqual({
+    worktreeId,
+    instanceId: 'inst-1',
+    count: 1,
+    capped: false,
+    title: 'Source Control — 1 uncommitted change',
+    dirty: true,
+    available: true
+  })
+
+  statusError = new Error('git is busy')
+  expect(await readDirty(context, { worktree: `id:${worktreeId}` })).toEqual({
+    worktreeId,
+    instanceId: 'inst-1',
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: false,
+    error: 'git is busy'
+  })
+
+  statusError = undefined
+  resolveError = new Error(`no worktree matches id:${worktreeId}`)
+  expect(await readDirty(context, { worktree: `id:${worktreeId}` })).toEqual({
+    worktreeId,
+    instanceId: null,
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: false,
+    error: `no worktree matches id:${worktreeId}`
+  })
+
+  resolveError = undefined
+  expect(await readDirty(context, { worktree: null })).toEqual({
+    worktreeId: null,
+    instanceId: null,
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: true
+  })
+
+  statusValue = { entries: [], capped: false }
+  resolveValue = { id: worktreeId, path: '/work/selected' }
+  expect(await readDirty(context, { worktree: `id:${worktreeId}` })).toEqual({
+    worktreeId,
+    instanceId: null,
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: true
+  })
+
+  resolveValue = { id: worktreeId, path: '/work/selected', instanceId: '' }
+  expect(await readDirty(context, { worktree: `id:${worktreeId}` })).toEqual({
+    worktreeId,
+    instanceId: null,
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: true
+  })
+
+  expect(calls).toEqual([
+    { method: 'quirky.worktree/resolve', params: { selector: `id:${worktreeId}` } },
+    { method: 'quirky.git/status', params: { worktree: `id:${worktreeId}` } },
+    { method: 'quirky.worktree/resolve', params: { selector: `id:${worktreeId}` } },
+    { method: 'quirky.git/status', params: { worktree: `id:${worktreeId}` } },
+    { method: 'quirky.worktree/resolve', params: { selector: `id:${worktreeId}` } },
+    { method: 'quirky.worktree/resolve', params: { selector: `id:${worktreeId}` } },
+    { method: 'quirky.git/status', params: { worktree: `id:${worktreeId}` } },
+    { method: 'quirky.worktree/resolve', params: { selector: `id:${worktreeId}` } },
+    { method: 'quirky.git/status', params: { worktree: `id:${worktreeId}` } }
+  ])
+})
+
+test('dirty status returns the instance ID of an explicitly selected created worktree', async () => {
+  env = await boot()
+  const project = await createGitProject(env.client)
+  const worktree = await createWorktree(env.client, project.repo.id, 'instance-id')
+
+  expect(await extras<DirtyResult>(env.client, 'dirty', { worktree: `id:${worktree.id}` })).toEqual({
+    worktreeId: worktree.id,
+    instanceId: worktree.instanceId,
+    count: 0,
+    capped: false,
+    title: 'Source Control',
+    dirty: false,
+    available: true
+  })
+})

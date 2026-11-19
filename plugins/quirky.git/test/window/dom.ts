@@ -19,11 +19,26 @@ export const dialogNamed = (title: string): HTMLElement | undefined =>
     return titleId !== null && document.getElementById(titleId)?.textContent === title
   })
 
-/** The panel's row button for `path` (the main button of the row), optionally within a section. */
-export const rowOf = (path: string, section?: string): HTMLElement | null =>
-  q(`${section ? `[data-section="${section}"] ` : ''}[data-row-path="${path}"] button[aria-pressed]`)
+/**
+ * The Changes list row (`role="option"`) for `path`. The list has no sections, so `section` only
+ * narrows by state: `staged` wants the filled uncommitted dot and `branch` a row with no dot.
+ */
+export const rowOf = (path: string, section?: string): HTMLElement | null => {
+  const row = qa('[role="option"][data-row-path]').find((candidate) => candidate.getAttribute('data-row-path') === path) ?? null
+  if (row === null) return null
+  const staged = q('.git-row__dirty--staged', row) !== null
+  const dirty = q('.git-row__dirty', row) !== null
+  if (section === 'staged') return staged ? row : null
+  if (section === 'branch') return dirty ? null : row
+  return row
+}
 
-export const rowContainerOf = (path: string, section?: string): HTMLElement | null => rowOf(path, section)?.parentElement ?? null
+export const rowContainerOf = (path: string, section?: string): HTMLElement | null => rowOf(path, section)
+
+export const rowPaths = (): string[] => qa('[role="option"][data-row-path]').map((row) => row.getAttribute('data-row-path') ?? '')
+export const selectedPaths = (): string[] =>
+  qa('[role="option"][aria-selected="true"]').map((row) => row.getAttribute('data-row-path') ?? '')
+export const listbox = (): HTMLElement | null => q('[role="listbox"]')
 
 export const sectionHeadings = (): string[] => qa('[data-section] h2').map((el) => text(el))
 
@@ -45,11 +60,24 @@ export async function type(control: HTMLInputElement | HTMLTextAreaElement, valu
   await settle()
 }
 
-export const primary = (): HTMLButtonElement => q('[data-git-primary]') as HTMLButtonElement
+/** The ship button; null while the bar shows the quiet status line, the conflict card or nothing. */
+export const primary = (): HTMLButtonElement => q('.ui-split-button__primary') as HTMLButtonElement
 export const messageBox = (): HTMLTextAreaElement => q('textarea[aria-label="Commit message"]') as HTMLTextAreaElement
 
-/** What the primary button shows now: label, enabled and title. */
-export const primaryNow = () => ({ label: text(primary()), enabled: !primary().disabled, title: primary().title })
+/** What the ship bar shows now: the button's label, enabled and title, or the quiet line's text. */
+export const primaryNow = () => {
+  const button = q('.ui-split-button__primary') as HTMLButtonElement | null
+  if (button) return { label: text(button), enabled: !button.disabled, title: button.title }
+  const quiet = q('[data-git-up-to-date]')
+  return { label: text(quiet), enabled: false, title: quiet?.title ?? '' }
+}
+
+/** The ship bar's error line, or null when none shows. */
+export const errorLine = (): HTMLElement | null => q('.ui-inline-error')
+
+/** The caret entry with this label, once its menu is open. */
+export const caretEntry = (label: string): HTMLButtonElement | undefined =>
+  qa('[role="menuitem"]').find((item) => text(q('.qt-menu-label', item)?.firstChild as Element | null) === label) as HTMLButtonElement | undefined
 
 export async function modEnter(element: Element): Promise<void> {
   await press(element, 'Enter', { metaKey: true })

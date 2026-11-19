@@ -17,7 +17,8 @@ import {
   type OwnerRuntimeCallResult,
   type GitHubWorktreeSource,
   type WorktreeAutomationProvenance,
-  type WorktreeAutomationProvenanceRequest
+  type WorktreeAutomationProvenanceRequest,
+  type ProcessRunner
 } from '@quirky/protocol'
 import type { VmEnvironment, VmEnvironmentRecipe, VmRemoteWorkspace } from '../vm-types'
 import { contains, expandHome, resolveRealPath, worktreeIdForPath } from '../../paths'
@@ -34,6 +35,7 @@ import { openWindowView, preflightCreateWindow, type SelectedWindow } from './wi
 import { requireAvailableHost } from './hosts'
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
+import type { PortBlock, WorktreePorts } from './ports'
 import { filesystemIdentitySource, instanceIdFor } from './identity'
 import { forgetWorktreeOrigins, insertRow, recordWorktreeOrigin, type WorktreeOriginCreator } from './store'
 import {
@@ -109,6 +111,7 @@ export type PendingStart = { label: string; dispose(): void }
 
 /** What the pipeline needs from the plugin: the folder-create environment plus callers, settings and shared state. */
 export type CreateEnv = FolderEnv & {
+  process: ProcessRunner
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   getSetting(name: string): unknown
@@ -125,6 +128,7 @@ export type CreateEnv = FolderEnv & {
   suggestions: Map<string, string>
   /** Agent starts waiting for a Setup session to exit. */
   pending: Set<PendingStart>
+  ports?: WorktreePorts
 }
 
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -148,6 +152,7 @@ type CreateReceipt = {
   sharedDirectories: string[]
   main: MainUpdateReceipt
   preparedCheckout: boolean
+  ports?: PortBlock
   defaultTabs?: Array<{ title: string; tab: string; session: string }>
   agentLaunch?: { sessionId: string; launchSettings: LaunchSettings | null }
   vm?: VmEnvironment
@@ -431,16 +436,18 @@ function decideDefaultTabs(
 }
 
 async function preflightAgentSelection(env: CreateEnv, params: CreateParams): Promise<void> {
-  if (params.model === undefined && params.options === undefined) return
+  if (params.agent === undefined || params.agent === 'shell' || params.host !== undefined) return
+  const hasLaunchSelection = params.model !== undefined || params.options !== undefined
   try {
     await env.call('quirky.agents/resolveLaunch', {
-      agent: params.agent!,
+      agent: params.agent,
       structured: false,
       ...(params.model === undefined ? {} : { model: params.model }),
       ...(params.options === undefined ? {} : { options: params.options })
     })
   } catch (error) {
     if (codeOf(error) === RpcErrorCode.MethodNotFound) {
+      if (!hasLaunchSelection) return
       throw reasoned(
         env,
         'conflict',
@@ -452,32 +459,30 @@ async function preflightAgentSelection(env: CreateEnv, params: CreateParams): Pr
   }
 }
 
-async function gitForCreate(cwd: string, args: string[], input?: string): Promise<string> {
-  const child = Bun.spawn(['git', '-C', cwd, ...args], {
-    stdin: input === undefined ? 'ignore' : 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
+async function gitForCreate(processRunner: ProcessRunner, cwd: string, args: string[], timeoutMs: number, input?: string): Promise<string> {
+  const result = await processRunner.run(['git', '-C', cwd, ...args], {
+    ...(input === undefined ? {} : { input }),
+    timeoutMs,
+    killGraceMs: 2_000,
+    maxOutputBytes: 16 * 1024 * 1024,
+    outputMode: 'separate',
+    overflow: 'stop',
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' }
   })
-  if (input !== undefined) {
-    const stdin = child.stdin
-    if (!stdin) throw new Error('git stdin pipe was not created')
-    stdin.write(input)
-    stdin.end()
+  if (result.stopped || result.spawnError || result.signal !== null || result.exitCode !== 0) {
+    throw new Error(
+      result.stderr.trim() ||
+      result.spawnError?.message ||
+      (result.stopped ? `git ${args[0]} stopped: ${result.stopped}` : `git ${args[0]} failed (exit ${result.exitCode})`)
+    )
   }
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited
-  ])
-  if (exitCode !== 0) throw new Error(stderr.trim() || `git ${args[0]} failed (exit ${exitCode})`)
-  return stdout
+  return result.stdoutText
 }
 
 async function validateSparseTreePaths(env: CreateEnv, repoPath: string, ref: string, paths: string[]): Promise<string[]> {
   const patterns: string[] = []
   for (const path of paths) {
-    const output = await gitForCreate(repoPath, ['ls-tree', '-z', ref, '--', path])
+    const output = await gitForCreate(env.process, repoPath, ['ls-tree', '-z', ref, '--', path], 30_000)
     const entry = output.split('\0').find((line) => {
       const tab = line.indexOf('\t')
       return tab >= 0 && line.slice(tab + 1) === path
@@ -494,16 +499,16 @@ async function validateSparseTreePaths(env: CreateEnv, repoPath: string, ref: st
   return patterns
 }
 
-async function setSparseCheckout(worktreePath: string, patterns: string[]): Promise<void> {
-  await gitForCreate(worktreePath, ['sparse-checkout', 'init', '--no-cone'])
-  await gitForCreate(worktreePath, ['sparse-checkout', 'set', '--no-cone', '--stdin'], `${patterns.join('\n')}\n`)
+async function setSparseCheckout(process: ProcessRunner, worktreePath: string, patterns: string[]): Promise<void> {
+  await gitForCreate(process, worktreePath, ['sparse-checkout', 'init', '--no-cone'], 30_000)
+  await gitForCreate(process, worktreePath, ['sparse-checkout', 'set', '--no-cone', '--stdin'], 86_400_000, `${patterns.join('\n')}\n`)
 }
 
 function mainNotUpdated(reason: string): MainUpdateReceipt {
   return { status: 'not-updated', reason }
 }
 
-async function updatePrimaryMain(repo: Repo, base: ResolvedBase | null, log: (message: string) => void): Promise<MainUpdateReceipt> {
+async function updatePrimaryMain(process: ProcessRunner, repo: Repo, base: ResolvedBase | null, log: (message: string) => void): Promise<MainUpdateReceipt> {
   if (base === null) return mainNotUpdated('create-has-no-resolved-base')
   const refPrefix = 'refs/remotes/'
   if (!base.fullRef.startsWith(refPrefix)) return mainNotUpdated('selected-base-is-not-a-remote-tracking-ref')
@@ -543,7 +548,7 @@ async function updatePrimaryMain(repo: Repo, base: ResolvedBase | null, log: (me
   if (latestBase !== comparison.baseOid) return mainNotUpdated('selected-base-changed-before-fast-forward')
 
   try {
-    await gitForCreate(repo.path, ['merge', '--ff-only', base.fullRef])
+    await gitForCreate(process, repo.path, ['merge', '--ff-only', base.fullRef], 86_400_000)
   } catch (error) {
     log(`could not fast-forward the primary checkout of ${repo.path}: ${messageOf(error)}`)
     return mainNotUpdated('fast-forward-failed')
@@ -718,7 +723,7 @@ export async function prefetchWorktreeCreateBase(
   const repos = reposValue as Repo[]
   const prepared = await env.queue.run(repo.id, () =>
     env.queue.run('prepared-worktree-pool', () => prepareCheckout(
-      { store: env.store, ownerId: env.preparationOwnerId, log: env.log },
+      { store: env.store, ownerId: env.preparationOwnerId, process: env.process, log: env.log },
       repos,
       repo,
       rootOf(env, repo, details.settings),
@@ -839,6 +844,7 @@ type Created = {
   runDefaultTabCommands: boolean
   preparedCheckout: boolean
   mainUpdate: MainUpdateReceipt
+  ports?: PortBlock
   baseFallback?: ResolvedBase['fallback']
 }
 
@@ -1087,7 +1093,7 @@ async function createGit(
     issueCommandDecision = decideIssueCommand(env, repo, hooks, params, source, hooksRef)
     decideDefaultTabs(env, repo, hooks, tabsPlan, params, hooksRef)
   } catch (error) {
-    if (pullPlan) await restorePullRef(repo.path, pullPlan).catch((cleanupError) => env.log(`could not restore GitHub pull ref after a refused create: ${messageOf(cleanupError)}`))
+    if (pullPlan) await restorePullRef(env.process, repo.path, pullPlan).catch((cleanupError) => env.log(`could not restore GitHub pull ref after a refused create: ${messageOf(cleanupError)}`))
     throw error
   }
 
@@ -1112,10 +1118,10 @@ async function createGit(
     if (durable) return
     if (worktreeAdded && folder !== '') await git.removeWorktree(repo.path, folder, true).catch((error) => env.log(`could not remove incomplete worktree ${folder}: ${messageOf(error)}`))
     if (branchCreated) await git.deleteRefIfAt(repo.path, branch, hooksRef).catch((error) => env.log(`could not remove incomplete branch ${branch}: ${messageOf(error)}`))
-    if (branchConfig !== null) await restoreBranchConfig(repo.path, branchConfig).catch((error) => env.log(`could not restore branch config for ${branch}: ${messageOf(error)}`))
+    if (branchConfig !== null) await restoreBranchConfig(env.process, repo.path, branchConfig).catch((error) => env.log(`could not restore branch config for ${branch}: ${messageOf(error)}`))
     if (pullPlan) {
-      if (pushRemoteAdded) await removePushRemote(repo.path, pullPlan).catch((error) => env.log(`could not remove incomplete GitHub remote ${pullPlan.pushTarget.remoteName}: ${messageOf(error)}`))
-      await restorePullRef(repo.path, pullPlan).catch((error) => env.log(`could not restore GitHub tracking ref ${pullPlan.trackingRef}: ${messageOf(error)}`))
+      if (pushRemoteAdded) await removePushRemote(env.process, repo.path, pullPlan).catch((error) => env.log(`could not remove incomplete GitHub remote ${pullPlan.pushTarget.remoteName}: ${messageOf(error)}`))
+      await restorePullRef(env.process, repo.path, pullPlan).catch((error) => env.log(`could not restore GitHub tracking ref ${pullPlan.trackingRef}: ${messageOf(error)}`))
     }
   }
 
@@ -1199,12 +1205,12 @@ async function createGit(
       if (holder) throw branchCheckedOut(env, branch, holder.path)
     }
 
-    if (pullPlan || mode === 'new' || mode === 'tracking') branchConfig = await snapshotBranchConfig(repo.path, branch)
-    if (pullPlan) pushRemoteAdded = await addPushRemote(repo.path, pullPlan)
+    if (pullPlan || mode === 'new' || mode === 'tracking') branchConfig = await snapshotBranchConfig(env.process, repo.path, branch)
+    if (pullPlan) pushRemoteAdded = await addPushRemote(env.process, repo.path, pullPlan)
     const canClaimPrepared = pullPlan === null && mode === 'new' && sparsePatterns.length === 0 && base !== null
     if (canClaimPrepared) {
       preparedCheckout = await env.queue.run('prepared-worktree-pool', () => claimPreparedCheckout(
-        { store: env.store, ownerId: env.preparationOwnerId, log: env.log },
+        { store: env.store, ownerId: env.preparationOwnerId, process: env.process, log: env.log },
         repo,
         root,
         base!.fullRef,
@@ -1221,7 +1227,7 @@ async function createGit(
       worktreeAdded = true
       branchCreated = mode === 'new' || mode === 'tracking'
     }
-    if (sparsePatterns.length > 0) await setSparseCheckout(folder, sparsePatterns)
+    if (sparsePatterns.length > 0) await setSparseCheckout(env.process, folder, sparsePatterns)
 
     if (pullPlan) await configurePullBranch(repo.path, pullPlan)
     else await configureBranch(env, repo, branch, mode === 'tracking' || existing !== null ? null : base!)
@@ -1270,7 +1276,7 @@ async function createGit(
     let mainUpdate = MAIN_NOT_REQUESTED
     if (params.keepMain === true) {
       try {
-        mainUpdate = await updatePrimaryMain(repo, base, env.log)
+        mainUpdate = await updatePrimaryMain(env.process, repo, base, env.log)
       } catch (error) {
         env.log(`could not check the primary checkout of ${repo.path} for a safe fast-forward: ${messageOf(error)}`)
         mainUpdate = mainNotUpdated('primary-check-failed')
@@ -1492,7 +1498,7 @@ async function runIssueCommand(
   setupSession: string | undefined
 ): Promise<NonNullable<WorktreeCreateResult['issueCommand']>> {
   const { worktree } = created
-  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path }
+  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path, ports: created.ports }
   const expanded = script
     .replaceAll('{{issue}}', String(source.item.number))
     .replaceAll('{{artifact_url}}', source.item.url)
@@ -1541,7 +1547,7 @@ async function runIssueCommand(
   }
 
   try {
-    const outcome = await runHookInDaemon(runner, target)
+    const outcome = await runHookInDaemon(env.process, runner, target)
     if (outcome.exitCode !== 0 || outcome.timedOut) {
       warnings.push(`issue command for #${source.item.number} in ${worktree.path} ${outcome.timedOut ? 'timed out' : `exited with ${outcome.exitCode}`}`)
     }
@@ -1555,6 +1561,13 @@ async function runIssueCommand(
 /** Steps 12 to 14: setup, the agent, and opening the view. */
 async function finish(env: CreateEnv, created: Created, params: CreateParams, selectedWindow: SelectedWindow | null): Promise<CreateResult> {
   const { worktree, hooks, warnings } = created
+  if (env.ports) {
+    try {
+      created.ports = await env.ports.ensure(worktree.id)
+    } catch (error) {
+      warnings.push(`could not reserve ports for ${worktree.path}: ${messageOf(error)}`)
+    }
+  }
   const result: CreateResult = {
     worktree,
     warnings,
@@ -1563,7 +1576,8 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams, se
       sparsePaths: created.sparsePaths,
       sharedDirectories: created.sharedDirectories,
       preparedCheckout: created.preparedCheckout,
-      main: created.mainUpdate
+      main: created.mainUpdate,
+      ...(created.ports ? { ports: created.ports } : {})
     },
     ...(created.baseFallback ? { baseFallback: created.baseFallback } : {})
   }
@@ -1630,7 +1644,7 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams, se
 /** Step 12: setup in a "Setup" terminal, or in the daemon when sessions are off. */
 async function runSetup(env: CreateEnv, created: Created, script: string, warnings: string[], onSession?: (session: SessionLike) => void): Promise<WorktreeCreateResult['setup']> {
   const { worktree } = created
-  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path }
+  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path, ports: created.ports }
   let runner: string
   try {
     runner = worktree.kind === 'git' ? await gitRunnerPath(worktree.path, 'setup') : dataRunnerPath(env.dataDir, worktree.id, 'setup')
@@ -1649,7 +1663,7 @@ async function runSetup(env: CreateEnv, created: Created, script: string, warnin
       return { ran: 'none' }
     }
   }
-  const outcome = await runHookInDaemon(runner, target)
+  const outcome = await runHookInDaemon(env.process, runner, target)
   if (outcome.exitCode !== 0 || outcome.timedOut) env.log(`setup for ${worktree.path} ${outcome.timedOut ? 'timed out' : `exited with ${outcome.exitCode}`}:\n${outcome.output.slice(-2000)}`)
   return { ran: 'daemon', exitCode: outcome.exitCode, timedOut: outcome.timedOut }
 }

@@ -1,9 +1,14 @@
+import { jest } from 'bun:test'
 import {
   RpcErrorCode,
+  type GitChangeStatus,
   type GitCompare,
   type GitStatus,
   type GitStatusEntry,
   type QuirkyEvent,
+  type ReviewFile,
+  type ReviewMarkState,
+  type ReviewModel,
   type UiLayout,
   type UiPluginContext
 } from '@quirky/protocol'
@@ -12,6 +17,7 @@ import { createNativeBrowserCapability } from '../../../../packages/ui/src/nativ
 // the caller registers happy-dom first, then imports this module
 const { act } = await import('react')
 const { activate } = await import('../../src/ui')
+const { selectPath } = await import('../../src/review/selection')
 
 export { act }
 
@@ -69,8 +75,87 @@ export const compareOf = (overrides: Partial<GitCompare> = {}): GitCompare => ({
   ...overrides
 })
 
+const LETTERS: Record<GitChangeStatus, ReviewFile['status']> = {
+  modified: 'M',
+  added: 'A',
+  deleted: 'D',
+  renamed: 'R',
+  copied: 'R',
+  untracked: 'A'
+}
+
+/**
+ * The review model the daemon would build from a status and a compare: one file per path, the
+ * compare's change winning over the status row, marks and note counts looked up by path.
+ */
+export function reviewOf(
+  status: GitStatus,
+  compare: GitCompare,
+  marks: Record<string, ReviewMarkState> = {},
+  notes: Record<string, number> = {}
+): ReviewModel {
+  const byPath = new Map<string, ReviewFile>()
+  if (compare.status === 'ready') {
+    for (const change of compare.entries) {
+      byPath.set(change.path, {
+        path: change.path,
+        ...(change.oldPath === undefined ? {} : { oldPath: change.oldPath }),
+        status: LETTERS[change.status],
+        added: change.binary ? null : change.added ?? null,
+        removed: change.binary ? null : change.removed ?? null,
+        binary: change.binary,
+        uncommitted: false,
+        staged: false,
+        mark: marks[change.path] ?? 'none',
+        notes: notes[change.path] ?? 0
+      })
+    }
+  }
+  for (const row of status.entries) {
+    const known = byPath.get(row.path)
+    byPath.set(row.path, {
+      path: row.path,
+      ...(row.oldPath === undefined ? {} : { oldPath: row.oldPath }),
+      status: known?.status ?? LETTERS[row.status],
+      added: known ? known.added : row.added ?? null,
+      removed: known ? known.removed : row.removed ?? null,
+      binary: known?.binary ?? false,
+      uncommitted: true,
+      staged: known?.staged === true || row.area === 'staged',
+      ...(row.conflict === undefined ? {} : { conflict: row.conflict }),
+      ...(row.submodule === undefined ? {} : { submodule: row.submodule }),
+      mark: marks[row.path] ?? 'none',
+      notes: notes[row.path] ?? 0
+    })
+  }
+  const encoder = new TextEncoder()
+  const files = [...byPath.values()].sort((a, b) => Buffer.compare(encoder.encode(a.path), encoder.encode(b.path)))
+  const count = (mark: ReviewMarkState) => files.filter((file) => file.mark === mark).length
+  return {
+    worktreeId: 'feat',
+    branch: status.branch,
+    base: { name: compare.base ?? 'origin/main', source: 'detected', isCurrentBranch: false },
+    compare: { status: compare.status, mergeBase: compare.mergeBase, headOid: compare.headOid },
+    totals: compare.status === 'ready'
+      ? { added: compare.added, removed: compare.removed }
+      : { added: files.reduce((sum, file) => sum + (file.added ?? 0), 0), removed: files.reduce((sum, file) => sum + (file.removed ?? 0), 0) },
+    counts: {
+      files: files.length,
+      reviewed: count('reviewed'),
+      changed: count('changed'),
+      uncommitted: files.filter((file) => file.uncommitted).length,
+      staged: files.filter((file) => file.staged).length
+    },
+    capped: status.capped,
+    files
+  }
+}
+
 export type Call = { method: string; params: Record<string, unknown> }
 type Handler = (params: Record<string, unknown>) => unknown | Promise<unknown>
+let nextFakeConnectionId = 1
+const fakesByConnectionId = new Map<number, Fake>()
+
 type HostedTab = {
   kind: 'view'
   id: string
@@ -89,10 +174,14 @@ type HostedRoot = HostedGroup | { kind: 'split'; id: string; direction: 'right';
 type HostedWorkspace = { id: string; revision: number; activeGroup: string; root: HostedRoot }
 
 export type Fake = {
+  connId: number
   context: UiPluginContext
   calls: Call[]
+  provided: Map<string, unknown>
   reports: any[]
   toasts: Array<[string, string]>
+  /** The options each toast was shown with, parallel to `toasts`. */
+  toastOptions: unknown[]
   views: Array<{ id: string; input: unknown }>
   badges: Array<[string, number | null, string | undefined]>
   settings: Record<string, unknown>
@@ -100,6 +189,10 @@ export type Fake = {
   statuses: Record<string, GitStatus>
   status: GitStatus
   compare: GitCompare
+  /** Review marks by path; the default `quirky.git/review` and `setReviewMark` read and write these. */
+  marks: Record<string, ReviewMarkState>
+  /** Note counts by path for the default review model. */
+  noteCounts: Record<string, number>
   /** Scripted results by method; a handler may throw to fail the call. */
   on(method: string, handler: Handler): void
   setLayout(layout: UiLayout): void
@@ -113,7 +206,9 @@ export type Fake = {
 export const failure = (message: string, data: Record<string, unknown> = {}): Error => Object.assign(new Error(message), { data })
 
 /** A fake `UiPluginContext` that records what the panel does and answers methods from scripts. */
-export function fakeContext(initial: UiLayout): Fake {
+export function fakeContext(initial: UiLayout, requestedConnectionId?: number): Fake {
+  const connId = requestedConnectionId ?? nextFakeConnectionId++
+  nextFakeConnectionId = Math.max(nextFakeConnectionId, connId + 1)
   let layout = initial
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
@@ -240,15 +335,20 @@ export function fakeContext(initial: UiLayout): Fake {
     throw new Error(`unexpected terminal method ${method}`)
   }
   const fake: Fake = {
+    connId,
     calls: [],
+    provided: new Map(),
     reports: [],
     toasts: [],
+    toastOptions: [],
     views: [],
     badges: [],
     settings: {},
     statuses: {},
     status: statusOf(),
     compare: compareOf(),
+    marks: {},
+    noteCounts: {},
     on: (method, handler) => void handlers.set(method, handler),
     setLayout(next) {
       layout = next
@@ -265,11 +365,31 @@ export function fakeContext(initial: UiLayout): Fake {
       nativeDropPaths: async () => null,
       readClipboardText: async () => '',
       log() {},
-      provide() {},
+      provide: (id, implementation) => void fake.provided.set(id, implementation),
       async call(method, params = {}) {
         fake.calls.push({ method, params })
         const scripted = handlers.get(method)
+        if (method === 'ui.window.self') {
+          const identity = scripted ? await scripted(params) : { connId }
+          if (typeof identity === 'object' && identity !== null && !Array.isArray(identity) &&
+              'connId' in identity && typeof identity.connId === 'number' &&
+              Number.isSafeInteger(identity.connId) && identity.connId > 0) {
+            fakesByConnectionId.set(identity.connId, fake)
+          }
+          return identity
+        }
         if (scripted) return scripted(params)
+        if (method === 'ui.window.command.run') {
+          const targetConnId = params.connId
+          const id = params.id
+          if (typeof targetConnId !== 'number' || !Number.isSafeInteger(targetConnId) || targetConnId < 1 ||
+              typeof id !== 'string') throw new Error('invalid fake exact-window command request')
+          const target = fakesByConnectionId.get(targetConnId) ?? fake
+          const command = target.provided.get(id)
+          if (typeof command !== 'function') throw new Error(`No provided command ${id} in window ${targetConnId}`)
+          const handler = command as (args?: unknown) => unknown
+          return { result: await handler(params.args) }
+        }
         if (method.startsWith('quirky.terminal/')) return terminalCall(method, params)
         switch (method) {
           case 'quirky.git/status':
@@ -282,6 +402,28 @@ export function fakeContext(initial: UiLayout): Fake {
             throw Object.assign(new Error(`unknown method: ${method}`), { code: RpcErrorCode.MethodNotFound })
           case 'quirky.git/compare':
             return fake.compare
+          case 'quirky.git/review':
+            return reviewOf(fake.statuses[params.worktree as string] ?? fake.status, fake.compare, fake.marks, fake.noteCounts)
+          case 'quirky.git/setReviewMark':
+            fake.marks[params.path as string] = params.reviewed === true ? 'reviewed' : 'none'
+            return { mark: fake.marks[params.path as string] }
+          case 'quirky.editor/open':
+            return {}
+          case 'quirky.git/save':
+            return { hash: 'e'.repeat(64) }
+          case 'quirky.git/diff':
+            return {
+              path: params.path,
+              staged: false,
+              original: 'base\n',
+              modified: 'now\n',
+              binary: false,
+              source: 'review',
+              kind: 'text',
+              modifiedHash: `hash:${String(params.path)}`
+            }
+          case 'quirky.editor/mutate':
+            return { path: params.path }
           case 'quirky.worktree/resolve':
             return { path: `/repo/${params.selector}` }
           case 'quirky.git/conflictFile':
@@ -339,12 +481,16 @@ export function fakeContext(initial: UiLayout): Fake {
       onStream: () => () => {},
       onConnection: () => () => {},
       confirm: async () => true,
-      toast: (title, body) => void fake.toasts.push([title, body]),
+      toast: (title, body, options) => {
+        fake.toasts.push([title, body])
+        fake.toastOptions.push(options)
+      },
       setPanelBadge: (panel, count, title) => void fake.badges.push([panel, count, title]),
       setContext() {},
       mountView: () => () => {}
     }
   }
+  fakesByConnectionId.set(connId, fake)
   return fake
 }
 
@@ -352,6 +498,8 @@ type Mount = (element: HTMLElement, props: { input?: unknown; report?(state: unk
 
 /** Mounts the panel `activate` provides into a fresh element. */
 export function mountPanel(fake: Fake): { element: HTMLElement; unmount: () => void } {
+  // the selection is shared per worktree across the whole process
+  for (const worktree of ['feat', 'other']) selectPath(worktree, null, 'review')
   let mount: Mount | undefined
   const provide = fake.context.provide
   fake.context.provide = (id, implementation) => {
@@ -380,6 +528,14 @@ export function mountPanel(fake: Fake): { element: HTMLElement; unmount: () => v
 /** Lets pending promises and effects run. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) await act(async () => {})
+}
+
+/** Advances only the explicitly requested fake-clock interval, then flushes pending work. */
+export async function settleAfter(ms: number, rounds = 6): Promise<void> {
+  await act(async () => {
+    ;(jest as unknown as { advanceTimersByTime(ms: number): void }).advanceTimersByTime(ms)
+  })
+  for (let i = 0; i < rounds; i++) await act(async () => {})
 }
 
 /** Wait for a rendered state change without coupling tests to async lookup timing. */
@@ -425,13 +581,29 @@ export const byLabel = (root: ParentNode, label: string): HTMLElement | null => 
 export const byText = (root: ParentNode, selector: string, text: string): HTMLElement | undefined =>
   qa(root, selector).find((el) => el.textContent === text)
 export const buttonText = (root: ParentNode, text: string) => byText(root, 'button', text) as HTMLButtonElement | undefined
-/** The selected file's shared list-row button, found by its stable row path. */
-export const rowOf = (root: ParentNode, path: string, section?: string): HTMLElement | null =>
-  root.querySelector<HTMLElement>(`${section ? `[data-section="${section}"] ` : ''}[data-row-path="${path}"] button[aria-pressed]`)
-export const rowContainerOf = (root: ParentNode, path: string, section?: string): HTMLElement | null =>
-  rowOf(root, path, section)?.parentElement ?? null
+/**
+ * A file's row (`role="option"`) in the Changes list, found by its path. The list has no sections,
+ * so `section` only narrows by state: `staged` wants the filled uncommitted dot and `branch` a row
+ * with no dot.
+ */
+export const rowOf = (root: ParentNode, path: string, section?: string): HTMLElement | null => {
+  const row = qa(root, '[role="option"][data-row-path]').find((candidate) => candidate.getAttribute('data-row-path') === path) ?? null
+  if (row === null) return null
+  const staged = q(row, '.git-row__dirty--staged') !== null
+  const dirty = q(row, '.git-row__dirty') !== null
+  if (section === 'staged') return staged ? row : null
+  if (section === 'branch') return dirty ? null : row
+  return row
+}
+export const rowContainerOf = rowOf
+export const listboxOf = (root: ParentNode): HTMLElement | null => root.querySelector<HTMLElement>('[role="listbox"]')
+/** The paths of the file rows in display order. */
+export const rowPaths = (root: ParentNode): string[] =>
+  qa(root, '[role="option"][data-row-path]').map((row) => row.getAttribute('data-row-path') ?? '')
+/** The paths of the rows marked selected. */
+export const selectedPaths = (root: ParentNode): string[] =>
+  qa(root, '[role="option"][aria-selected="true"]').map((row) => row.getAttribute('data-row-path') ?? '')
 
-export const sectionHeadings = (root: ParentNode): string[] => qa(root, '[data-section] .ui-section-header__title').map((el) => el.textContent ?? '')
 export const noticesOf = (root: ParentNode): HTMLElement[] =>
   qa(root, '[aria-label="Source control notices"] > [role="status"], [aria-label="Source control notices"] > [role="alert"]')
 export const noticeOf = (root: ParentNode): HTMLElement | null => noticesOf(root)[0] ?? null

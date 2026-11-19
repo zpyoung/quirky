@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process'
 import { lstat, readdir, stat } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from 'node:path'
-import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore } from '@quirky/protocol'
+import { RpcErrorCode, type PluginCaller, type PluginContext, type PluginStore, type ProcessRunner } from '@quirky/protocol'
 import type { ExplorerEntry, ExplorerInteraction, ExplorerNavigationKey, ExplorerParams } from '../types'
 import { FileInventory, QUICK_OPEN_MAX_ENTRIES } from './inventory'
 import { KeyedQueue } from './queue'
@@ -410,7 +409,7 @@ export class ExplorerService {
       return showDotfiles || !entry.name.startsWith('.') || entry.name === '.'
     })
     const relativePaths = candidates.map((entry) => relative(worktreeRoot, join(directory, entry.name)).split(sep).join('/'))
-    const ignored = await ignoredPaths(worktreeRoot, relativePaths)
+    const ignored = await ignoredPaths(this.context.process, worktreeRoot, relativePaths)
     const entries: ExplorerEntry[] = []
     for (const entry of candidates) {
       const absolute = join(directory, entry.name)
@@ -469,13 +468,15 @@ function normalizeRelativePath(path: string): string {
   return path.split(sep).join('/')
 }
 
-async function ignoredPaths(root: string, paths: string[]): Promise<Set<string>> {
+/** Resolves ignored paths conservatively through bounded, independently cancellable batches. */
+export async function ignoredPaths(runner: ProcessRunner, root: string, paths: string[], timeoutMs = 5000): Promise<Set<string>> {
   const ignored = new Set<string>()
   let chunk: string[] = []
   let bytes = 0
   const batches: string[][] = []
   for (const path of paths) {
     const size = Buffer.byteLength(path, 'utf8') + 1
+    if (size > 1024 * 1024) continue
     if (chunk.length > 0 && bytes + size > 1024 * 1024) {
       batches.push(chunk)
       chunk = []
@@ -486,17 +487,26 @@ async function ignoredPaths(root: string, paths: string[]): Promise<Set<string>>
   }
   if (chunk.length > 0) batches.push(chunk)
   for (const batch of batches) {
-    const child = spawn('git', ['check-ignore', '-z', '--stdin'], { cwd: root, stdio: ['pipe', 'pipe', 'ignore'] })
-    const { promise, resolve } = Promise.withResolvers<void>()
-    let output = ''
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (part: string) => { output += part })
-    child.once('close', () => resolve())
-    child.once('error', () => resolve())
-    child.stdin.on('error', () => resolve())
-    child.stdin.end(`${batch.join('\0')}\0`)
-    await promise
-    for (const path of output.split('\0').filter(Boolean)) ignored.add(path)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const result = await runner.run(['git', 'check-ignore', '-z', '--stdin'], {
+        cwd: root,
+        input: `${batch.join('\0')}\0`,
+        timeoutMs,
+        killGraceMs: 0,
+        maxOutputBytes: 1024 * 1024,
+        signal: controller.signal
+      })
+      if (controller.signal.aborted || result.exitCode !== 0 || result.spawnError || result.stopped ||
+        result.truncated?.stdout || result.truncated?.stderr) continue
+      for (const path of result.stdoutText.split('\0').slice(0, -1)) {
+        if (path) ignored.add(path)
+      }
+    } catch {
+    } finally {
+      clearTimeout(timer)
+    }
   }
   return ignored
 }

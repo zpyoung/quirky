@@ -33,10 +33,20 @@ quirky agents configure claude --host 'runtime:dev-laptop' --command claude
 
 Custom agent declarations must include a prompt mode. Their `homepage` and `install` links accept only HTTP(S) URLs; invalid links exclude that declaration from the catalog and appear in `agents list --all`.
 
-Provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
+Interactive provider process creation remains owned by `quirky.session`. To launch remotely, call `quirky.cli/runtimeCall` for the saved target with `method: "quirky.session/create"`; do not return a target launch plan to a local session owner or relabel local execution as remote.
+
+Model-probe and one-shot processes use the shared runner owned by `quirky.agents` (plugin API 1.11.0). Timeouts and disposal cannot turn partial probe output into success; Pi discovery also requires a natural exit with code zero. One-shot generation retains at most 4 MiB of stdout and the original first and last 16 KiB of stderr, separated by a newline when truncated. Cancellation and timeout give the entire process group two seconds after SIGTERM before forced cleanup.
 
 ## Desktop configuration
 
 The Agents center view uses the shared graphite controls and theme tokens. Default agent, permissions, detection/refresh, enable switches, command/argument/environment overrides and workspace trust keep their existing public APIs. Fields save on Enter or blur (Cmd/Ctrl+Enter for multiline environment values); Reset removes that override. Appearance follows the host's dark/light choice.
 
 The settings frame fills the center panel's width. Default-agent choices wrap as the panel narrows; installed-agent names and commands stay readable, with Enabled, Set default, Docs, and the expansion control together on a separate row when needed.
+
+Agent details can also be expanded or collapsed through the active UI owner:
+
+```sh
+quirky ui run command:quirky.agents/agent-details --args '{"agent":"claude","expanded":true}'
+```
+
+The command accepts installed agents only. Disclosure state is shared by mounted Agents views for that plugin activation; it is not saved in daemon configuration.

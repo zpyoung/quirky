@@ -212,14 +212,35 @@ export class VaultWindowModel {
     for (const listener of [...this.listeners]) listener()
   }
 
+  /** Keeps the window on the highest numeric revision while preserving revisionless views. */
+  private applyView(view: ViewState, patch: Partial<Omit<VaultSnapshot, 'view' | 'viewReady'>> = {}): void {
+    if (
+      typeof view.revision === 'number' &&
+      typeof this.snapshot.view.revision === 'number' &&
+      view.revision < this.snapshot.view.revision
+    ) {
+      this.update({ ...patch, viewReady: true })
+      return
+    }
+    this.update({ ...patch, view, viewReady: true })
+  }
+
   start(): void {
     if (this.started) return
     this.started = true
     this.unsubs.push(
       this.context.subscribe((event) => {
         if (event.type === 'quirky.vault/viewChanged') {
-          const view = viewOf((event as { data?: unknown }).data)
-          if (view) this.update({ view, viewReady: true })
+          const data = asRecord(event.data)
+          const eventRevision = asRecord(data.view).revision
+          const currentRevision = this.snapshot.view.revision
+          if (
+            typeof eventRevision !== 'number' ||
+            typeof currentRevision !== 'number' ||
+            eventRevision > currentRevision
+          ) {
+            void this.readViewAfterEvent()
+          }
         } else if (event.type === 'quirky.vault/scanProgress') {
           const progress = asRecord((event as { data?: unknown }).data)
           if (progress.phase === 'discovering' || progress.phase === 'reading' || progress.phase === 'complete') {
@@ -268,10 +289,10 @@ export class VaultWindowModel {
     try {
       const view = viewOf(await this.context.call('quirky.vault/getView', {}))
       if (!view) throw new Error('The vault returned an invalid view state.')
-      this.update({ view, viewReady: true, list: { result: null, loading: false, error: null } })
+      this.applyView(view, { list: { result: null, loading: false, error: null } })
       if (this.stopped) return
       const layout = this.context.getLayout()
-      await Promise.all([this.resolveScope(layout), this.refreshSearchStatus(view.host), this.loadRepositories()])
+      await Promise.all([this.resolveScope(layout), this.refreshSearchStatus(this.snapshot.view.host), this.loadRepositories()])
       if (this.stopped) return
       void this.discoverHosts()
     } catch (error) {
@@ -283,7 +304,7 @@ export class VaultWindowModel {
     try {
       const value = viewOf(await this.context.call('quirky.vault/setView', patch as Record<string, unknown>))
       if (!value) throw new Error('The vault returned an invalid view state.')
-      this.update({ view: value, viewReady: true, actionError: null })
+      this.applyView(value, { actionError: null })
       return value
     } catch (error) {
       this.update({ actionError: errorMessage(error) })
@@ -295,10 +316,20 @@ export class VaultWindowModel {
     try {
       const value = viewOf(await this.context.call('quirky.vault/resetView', {}))
       if (!value) throw new Error('The vault returned an invalid view state.')
-      this.update({ view: value, viewReady: true, actionError: null })
+      this.applyView(value, { actionError: null })
     } catch (error) {
       this.update({ actionError: errorMessage(error) })
       throw error
+    }
+  }
+
+  /** Reads this caller's view instead of applying another caller's event body. */
+  private async readViewAfterEvent(): Promise<void> {
+    try {
+      const view = viewOf(await this.context.call('quirky.vault/getView', {}))
+      if (view) this.applyView(view)
+    } catch {
+      return
     }
   }
 

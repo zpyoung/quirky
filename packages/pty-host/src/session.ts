@@ -11,10 +11,11 @@ import {
   type PtySessionInfo,
   type PtySnapshot
 } from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner, type ProcessRunner } from '@quirky/process'
 import { makePtyWriteError, ShellReadyBarrier } from './barrier'
-import { descendantsOf } from './descendants'
+import { createProcessTables, descendantsIn, type ProcessTable, type ProcessTables } from './descendants'
 import { writeCheckpoint } from './history/checkpoint'
-import { DEFAULT_SEGMENT_BYTES, HistoryLog } from './history/log'
+import { DEFAULT_SEGMENT_BYTES, HistoryLog, type StoredIndexOptions, type StoredLogIndex } from './history/log'
 import { type SessionMeta, writeMeta } from './history/meta'
 import { composeReplay, pageBefore, parseCursor, textRowsAbove } from './history/reader'
 import { CheckpointScheduler, GROUND, MODE_RESET, rebuildScreen, type RestoredScreen } from './history/restore'
@@ -27,6 +28,8 @@ import { TailBuffer } from './tail'
 export const DEFAULT_TAIL_BYTES = 256 * 1024
 export const DEFAULT_CHECKPOINT_INTERVAL_MS = 5000
 export const DEFAULT_SHELL_READY_TIMEOUT_MS = 15000
+export const STOP_POLL_MS = 50
+export const SHUTDOWN_DRAIN_MS = 5000
 
 const ERASE_SCREEN_AND_SCROLLBACK = new TextEncoder().encode('\x1b[H\x1b[2J\x1b[3J')
 
@@ -44,6 +47,14 @@ export type SessionManagerOptions = {
   checkpointIntervalMs?: number
   /** Ready-marker timeout for sessions whose create request does not set one. */
   shellReadyTimeoutMs?: number
+  /** Options for bounded stored-session index loads. */
+  storedIndex?: StoredIndexOptions
+  /** Runs the process-table scans; omitted creates an owned `pty-host` runner. */
+  processRunner?: Pick<ProcessRunner, 'run'>
+  /** Maximum wait for kills, forgets and stops before shutdown closes the scan source. */
+  shutdownDrainMs?: number
+  /** Live check run immediately before path writes and removals. */
+  ownsHome?: () => boolean
 }
 
 export type CreateParams = Omit<Extract<PtyRequest, { type: 'create' }>, 'id' | 'type'>
@@ -129,6 +140,7 @@ const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const PTY_CLOSE_GRACE_MS = 500
 const META_WRITE_DELAY_MS = 250
 const SHUTTING_DOWN = 'Terminal host is shutting down'
+export const HOME_LOST = 'Terminal host lost its home'
 
 /**
  * Owns every PTY session: the process, its on-disk history, the hot tail and the screen emulator,
@@ -139,6 +151,12 @@ export class SessionManager {
   private readonly sessions = new Map<string, Session>()
   private readonly starting = new Set<string>()
   private readonly stored: StoredSessions
+  private readonly processTables: ProcessTables
+  private readonly ownedProcessRunner?: OwnedProcessRunner
+  private readonly shutdownDrainMs: number
+  private readonly forgetting = new Map<string, Promise<void>>()
+  private readonly treeOperations = new Set<Promise<void>>()
+  private shutdownPromise?: Promise<void>
   private readonly exitListeners = new Set<Listener>()
   private readonly factListeners = new Set<Listener>()
   private readonly maxSegmentBytes: number
@@ -146,17 +164,34 @@ export class SessionManager {
   private readonly checkpointIntervalMs: number
   private readonly shellReadyTimeoutMs: number
   private readonly home: string
+  private readonly ownsHome?: () => boolean
+  private homeIsLost = false
   private stopping = false
   /** Descendants retained across a failed stop attempt so a retry can still verify teardown. */
   private readonly stoppingDescendants = new Map<string, Set<number>>()
 
   constructor(options: SessionManagerOptions) {
     this.home = options.home
+    this.ownsHome = options.ownsHome
     this.maxSegmentBytes = options.logMaxBytes ?? DEFAULT_SEGMENT_BYTES
     this.tailBytes = options.tailBytes ?? DEFAULT_TAIL_BYTES
     this.checkpointIntervalMs = options.checkpointIntervalMs ?? DEFAULT_CHECKPOINT_INTERVAL_MS
     this.shellReadyTimeoutMs = options.shellReadyTimeoutMs ?? DEFAULT_SHELL_READY_TIMEOUT_MS
-    this.stored = new StoredSessions(options.home)
+    this.shutdownDrainMs = options.shutdownDrainMs ?? SHUTDOWN_DRAIN_MS
+    if (options.processRunner) {
+      this.processTables = createProcessTables(options.processRunner)
+    } else {
+      const runner = createProcessRunner({ owner: 'pty-host' })
+      this.ownedProcessRunner = runner
+      this.processTables = createProcessTables(runner)
+    }
+    this.stored = new StoredSessions(options.home, options.storedIndex)
+  }
+  /** Permanently disables history writes after the manager loses its home. */
+  homeLost(): void {
+    if (this.homeIsLost) return
+    this.homeIsLost = true
+    for (const session of this.sessions.values()) session.log.disable(HOME_LOST)
   }
 
   /** Calls `listener` whenever a session has ended and its history is on disk. */
@@ -181,6 +216,13 @@ export class SessionManager {
     if (!Array.isArray(argv) || argv.length === 0 || argv.some((a) => typeof a !== 'string')) throw new Error('argv must be a non-empty string array')
     assertSize(cols, rows)
     if (this.stopping) throw new Error(SHUTTING_DOWN)
+    this.assertCanWrite()
+    const pendingForget = this.forgetting.get(sessionId)
+    if (pendingForget) {
+      await pendingForget
+      if (this.stopping) throw new Error(SHUTTING_DOWN)
+    }
+    this.assertCanWrite()
     if (params.restore) return this.restore(params)
     if (this.sessions.has(sessionId) || this.starting.has(sessionId)) throw new Error(`session already exists: ${sessionId}`)
     return this.createFresh(params)
@@ -192,7 +234,7 @@ export class SessionManager {
    */
   write(sessionId: string, bytes: Uint8Array): void {
     const session = this.sessions.get(sessionId)
-    if (session?.alive) session.barrier.input(bytes)
+    if (session?.alive && !session.forgotten) session.barrier.input(bytes)
   }
 
   /** Waits until all input bytes reach the child PTY write boundary. */
@@ -233,21 +275,36 @@ export class SessionManager {
    * reaches every descendant (jobs run in their own groups), and the exit that follows is recorded
    * as requested, so it is not offered for restore.
    */
-  kill(sessionId: string, signal?: string, reason?: 'killed'): void {
-    const { live } = this.locate(sessionId)
-    const name = normalizeSignal(signal ?? (reason ? 'SIGKILL' : 'SIGTERM'))
-    if (!live?.alive) return
-    if (reason) live.killRequested = true
-    if (reason) signalTree(live.proc, name)
-    else signalGroup(live.proc, name)
+  kill(sessionId: string, signal?: string, reason?: 'killed'): Promise<void> {
+    try {
+      const { live } = this.locate(sessionId)
+      const name = normalizeSignal(signal ?? (reason ? 'SIGKILL' : 'SIGTERM'))
+      if (!live?.alive) return Promise.resolve()
+      if (!reason) {
+        signalGroup(live.proc, name)
+        return Promise.resolve()
+      }
+      live.killRequested = true
+      return this.trackTreeOperation((async () => {
+        const table = await this.processTables.fresh()
+        signalTree(live, name, table)
+      })())
+    } catch (error) {
+      return Promise.reject(error)
+    }
   }
 
   /**
    * Stops a session and its complete descendant tree while retaining its history for restore.
    * Unlike `kill`, this is explicitly restorable and does not discard terminal state.
    */
-  async stopWithHistory(sessionId: string): Promise<void> {
+  stopWithHistory(sessionId: string): Promise<void> {
+    return this.trackTreeOperation(this.stopWithHistoryOperation(sessionId))
+  }
+
+  private async stopWithHistoryOperation(sessionId: string): Promise<void> {
     if (this.stopping) throw new Error(SHUTTING_DOWN)
+    this.assertCanWrite()
     const { live, stored } = this.locate(sessionId)
     if (stored) {
       if (stored.state === 'restorable') return
@@ -259,32 +316,38 @@ export class SessionManager {
 
     const descendants = this.stoppingDescendants.get(sessionId) ?? new Set<number>()
     this.stoppingDescendants.set(sessionId, descendants)
-    const remember = () => {
-      for (const pid of descendantsOf(live.proc.pid, descendants)) descendants.add(pid)
+    const remember = (table: ProcessTable) => {
+      for (const pid of descendantsIn(table, live.proc.pid, descendants)) descendants.add(pid)
+    }
+    const signalRound = async (signal: string) => {
+      const table = await this.processTables.fresh()
+      remember(table)
+      signalTree(live, signal, table, descendants)
     }
     if (live.alive) {
       live.stopRequested = true
-      remember()
-      signalTree(live.proc, 'SIGTERM')
-      await waitForSessionExit(live, 1000, remember)
+      await signalRound('SIGTERM')
+      await waitForSessionExit(live, 1000, this.processTables, remember)
       if (live.alive) {
-        remember()
-        signalTree(live.proc, 'SIGKILL')
+        await signalRound('SIGKILL')
         signalKnownProcesses(descendants, 'SIGKILL')
-        await waitForSessionExit(live, 1000, remember)
+        await waitForSessionExit(live, 1000, this.processTables, remember)
       }
     }
     if (live.alive) throw new Error(`session ${sessionId} process did not stop`)
     await live.finished
 
+    const finalTable = await this.processTables.fresh()
+    remember(finalTable)
     signalKnownProcesses(descendants, 'SIGKILL')
-    const survivors = await waitForProcesses(descendants, 2000, remember)
+    const survivors = await waitForProcesses(descendants, 2000, this.processTables, remember)
     if (survivors.length > 0) {
       throw new Error(`session ${sessionId} descendants did not stop: ${survivors.join(', ')}`)
     }
 
+    this.assertCanWrite()
     writeMeta(live.dir, this.metaOf(live))
-    this.stored.reload(sessionId)
+    this.stored.reload(sessionId, live.log.offset)
     const saved = this.stored.get(sessionId)
     if (!saved || saved.state !== 'restorable') {
       throw new Error(`session ${sessionId} history was not retained for restore`)
@@ -295,22 +358,51 @@ export class SessionManager {
   }
 
   /** Drops a session's state and history, live or stored, killing its process first if it is running. */
-  forget(sessionId: string): void {
-    const { live, stored } = this.locate(sessionId)
-    if (stored) {
-      this.stored.forget(sessionId)
-      return
+  forget(sessionId: string): Promise<void> {
+    const pending = this.forgetting.get(sessionId)
+    if (pending) return pending
+    try {
+      this.assertCanWrite()
+      const { live, stored } = this.locate(sessionId)
+      if (stored) {
+        this.assertCanWrite()
+        this.stored.forget(sessionId)
+        return Promise.resolve()
+      }
+      live.forgotten = true
+      for (const pendingSub of live.pendingSubs) pendingSub.cancelled = true
+      if (!live.alive) {
+        this.assertCanWrite()
+        this.sessions.delete(sessionId)
+        this.teardown(live)
+        this.assertCanWrite()
+        rmSync(live.dir, { recursive: true, force: true })
+        return Promise.resolve()
+      }
+
+      const operation = (async () => {
+        try {
+          const table = await this.processTables.fresh()
+          signalTree(live, 'SIGKILL', table)
+          this.assertCanWrite()
+          this.sessions.delete(sessionId)
+          this.teardown(live)
+          this.assertCanWrite()
+          rmSync(live.dir, { recursive: true, force: true })
+        } finally {
+          this.forgetting.delete(sessionId)
+        }
+      })()
+      this.forgetting.set(sessionId, operation)
+      return this.trackTreeOperation(operation)
+    } catch (error) {
+      return Promise.reject(error)
     }
-    live.forgotten = true
-    for (const pending of live.pendingSubs) pending.cancelled = true
-    if (live.alive) signalTree(live.proc, 'SIGKILL')
-    this.sessions.delete(sessionId)
-    this.teardown(live)
-    rmSync(live.dir, { recursive: true, force: true })
   }
 
-  list(): PtySessionInfo[] {
-    return [...[...this.sessions.values()].map(infoOf), ...this.stored.list()]
+  async list(): Promise<PtySessionInfo[]> {
+    await this.stored.offsetsKnown()
+    return [...[...this.sessions.values()].filter((session) => !session.forgotten).map(infoOf), ...this.stored.list()]
   }
 
   /**
@@ -355,13 +447,13 @@ export class SessionManager {
     if (live) {
       const grab = await this.atRest(live, () => {
         const visible = live.screen.lines()
-        return { visible, above: textRowsAbove(live.dir, lines, visible.length), alt: live.screen.isAlternate }
+        return { visible, above: textRowsAbove(live.log, lines, visible.length), alt: live.screen.isAlternate }
       })
       return readResult(await grab.above, grab.visible, live.cols, grab.visible.length, grab.alt, unwrap)
     }
-    return this.withRebuilt(stored, async (screen, rebuilt) => {
+    return this.withRebuilt(stored, async (screen, rebuilt, index) => {
       const visible = screen.lines()
-      return readResult(await textRowsAbove(stored.dir, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, screen.isAlternate, unwrap)
+      return readResult(await textRowsAbove(index, lines, visible.length), visible, rebuilt.cols, rebuilt.rows, screen.isAlternate, unwrap)
     })
   }
 
@@ -397,8 +489,12 @@ export class SessionManager {
     const format = options.format ?? 'text'
     if (format !== 'text' && format !== 'ansi') throw new Error(`invalid history format: ${format}`)
     const before = options.before === undefined ? undefined : parseCursor(options.before)
-    const source = live ? { dir: live.dir, rows: live.rows } : { dir: stored.dir, rows: stored.meta.rows }
-    return pageBefore(source.dir, { before, lines, format, screenRows: source.rows })
+    if (live) return pageBefore(live.log, { before, lines, format, screenRows: live.rows })
+    const index = await this.stored.index(stored)
+    this.assertStored(stored)
+    const page = await pageBefore(index, { before, lines, format, screenRows: stored.meta.rows })
+    this.assertStored(stored)
+    return page
   }
 
   /**
@@ -411,6 +507,7 @@ export class SessionManager {
   async clear(sessionId: string): Promise<void> {
     const session = this.inMemory(sessionId)
     await this.atRest(session, () => {
+      this.assertCanWrite()
       session.screen.clear()
       const screen = session.screen.snapshot()
       const bytes = concatBytes(ERASE_SCREEN_AND_SCROLLBACK, new TextEncoder().encode(screen.ansi))
@@ -432,6 +529,7 @@ export class SessionManager {
   async resetModes(sessionId: string): Promise<void> {
     const session = this.inMemory(sessionId)
     await this.atRest(session, () => {
+      this.assertCanWrite()
       session.screen.write(MODE_RESET)
       this.withLog(session, (log) => log.appendOutput(MODE_RESET))
       session.tail.append(MODE_RESET)
@@ -452,21 +550,69 @@ export class SessionManager {
    * Ends every running session as `host-restart`, so each can be restored by the next host:
    * SIGHUP first, SIGKILL for any that ignore it. Stored sessions are left as they are.
    */
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise
     this.stopping = true
-    const running = [...this.sessions.values()].filter((s) => s.alive)
+    this.shutdownPromise = this.finishShutdown()
+    return this.shutdownPromise
+  }
+
+  private async finishShutdown(): Promise<void> {
+    const drainDeadline = Date.now() + this.shutdownDrainMs
+    while (Date.now() < drainDeadline) {
+      await this.drainTreeOperations(drainDeadline)
+      if (this.treeOperations.size === 0) break
+    }
+    if (this.treeOperations.size > 0) {
+      this.processTables.close()
+      await this.waitForTreeOperations()
+    }
+
+    const running = [...this.sessions.values()].filter((session) => session.alive)
     for (const session of running) signalGroup(session.proc, 'SIGHUP')
     await settle(running, 1000)
-    const stubborn = running.filter((s) => s.alive)
+    const stubborn = running.filter((session) => session.alive)
     for (const session of stubborn) signalGroup(session.proc, 'SIGKILL')
     await settle(stubborn, 1000)
     await settle([...this.sessions.values()], 2000)
     for (const session of this.sessions.values()) this.teardown(session)
+
+    this.processTables.close()
+    if (this.ownedProcessRunner) await this.ownedProcessRunner.dispose()
+  }
+
+  private async drainTreeOperations(deadline: number): Promise<void> {
+    while (this.treeOperations.size > 0) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) return
+      const { promise, resolve } = Promise.withResolvers<void>()
+      const timer = setTimeout(resolve, remaining)
+      void Promise.allSettled([...this.treeOperations]).then(() => {
+        clearTimeout(timer)
+        resolve()
+      })
+      await promise
+    }
+  }
+
+  private async waitForTreeOperations(): Promise<void> {
+    while (this.treeOperations.size > 0) {
+      await Promise.allSettled([...this.treeOperations])
+    }
+  }
+
+  private trackTreeOperation(operation: Promise<void>): Promise<void> {
+    this.treeOperations.add(operation)
+    void operation.then(
+      () => this.treeOperations.delete(operation),
+      () => this.treeOperations.delete(operation)
+    )
+    return operation
   }
 
   private locate(sessionId: string): Located {
     const live = this.sessions.get(sessionId)
-    if (live) return { live }
+    if (live && !live.forgotten) return { live }
     const stored = this.stored.get(sessionId)
     if (stored) return { stored }
     throw new Error(`unknown session: ${sessionId}`)
@@ -486,8 +632,16 @@ export class SessionManager {
       write(session.log)
       return
     }
-    const log = HistoryLog.openForAppend(session.dir, { cols: session.cols, rows: session.rows, maxSegmentBytes: this.maxSegmentBytes })
+    this.assertCanWrite()
+    const log = HistoryLog.openForAppend(session.dir, {
+      cols: session.cols,
+      rows: session.rows,
+      maxSegmentBytes: this.maxSegmentBytes,
+      canWrite: () => this.canWriteHome()
+    })
     try {
+      this.assertCanWrite()
+      session.log = log
       write(log)
     } finally {
       log.close()
@@ -497,6 +651,7 @@ export class SessionManager {
   /** Writes a checkpoint of `screen` at the current output position, unless the parser is mid-sequence there. */
   private checkpointNow(session: Session, screen: { ansi: string; cols: number; rows: number }): void {
     if (!session.scanner.atBoundary) return
+    this.assertCanWrite()
     try {
       writeCheckpoint(session.dir, {
         version: 1,
@@ -527,12 +682,21 @@ export class SessionManager {
   private createFresh(params: CreateParams): PtyResults['create'] {
     const { sessionId, cwd, argv, env, cols, rows } = params
     const dir = this.dirOf(sessionId)
+    this.assertCanWrite()
     this.stored.forget(sessionId)
+    this.assertCanWrite()
     rmSync(dir, { recursive: true, force: true })
     const route: ReplyRoute = {}
     const screen = this.openScreen(cols, rows, route)
-    const log = HistoryLog.create(dir, { cols, rows, maxSegmentBytes: this.maxSegmentBytes })
+    this.assertCanWrite()
+    const log = HistoryLog.create(dir, {
+      cols,
+      rows,
+      maxSegmentBytes: this.maxSegmentBytes,
+      canWrite: () => this.canWriteHome()
+    })
     try {
+      this.assertCanWrite()
       const session = this.start({
         sessionId,
         argv,
@@ -556,6 +720,7 @@ export class SessionManager {
     } catch (error) {
       log.close()
       screen.dispose()
+      this.assertCanWrite()
       rmSync(dir, { recursive: true, force: true })
       throw error
     }
@@ -572,11 +737,21 @@ export class SessionManager {
     const screen = this.openScreen(params.cols, params.rows, route)
     let log: HistoryLog | undefined
     try {
-      const rebuilt = await rebuildScreen(stored.dir, screen, { cols: params.cols, rows: params.rows, cwd: params.cwd })
+      const index = await this.stored.index(stored)
+      if (this.stopping) throw new Error(SHUTTING_DOWN)
+      if (this.stored.get(sessionId) !== stored) throw new Error(`session ${sessionId} is not restorable`)
+      const rebuilt = await rebuildScreen(index, screen, { cols: params.cols, rows: params.rows, cwd: params.cwd })
       if (this.stopping) throw new Error(SHUTTING_DOWN)
       if (this.stored.get(sessionId) !== stored) throw new Error(`session ${sessionId} is not restorable`)
       const cwd = isDirectory(rebuilt.cwd) ? rebuilt.cwd : params.cwd
-      log = HistoryLog.openForAppend(stored.dir, { cols: rebuilt.cols, rows: rebuilt.rows, maxSegmentBytes: this.maxSegmentBytes })
+      this.assertCanWrite()
+      log = HistoryLog.openForAppend(stored.dir, {
+        cols: rebuilt.cols,
+        rows: rebuilt.rows,
+        maxSegmentBytes: this.maxSegmentBytes,
+        canWrite: () => this.canWriteHome()
+      })
+      this.assertCanWrite()
       const session = this.start({
         sessionId,
         argv,
@@ -605,6 +780,7 @@ export class SessionManager {
       return { pid: session.proc.pid, restored: true, cwd, cols: rebuilt.cols, rows: rebuilt.rows }
     } catch (error) {
       log?.close()
+      if (log && this.stored.get(sessionId) === stored) this.stored.reload(sessionId, log.offset)
       screen.dispose()
       throw error
     } finally {
@@ -690,6 +866,7 @@ export class SessionManager {
         offset: () => created.tail.total,
         log: (message) => console.error(message),
         writeCheckpoint: (dir, checkpoint) => {
+          if (!this.canWriteHome()) return
           writeCheckpoint(dir, checkpoint)
           this.persistMeta(created)
         }
@@ -819,7 +996,7 @@ export class SessionManager {
       session.subscribers.add(sink)
       const live = session.screen.snapshot()
       // composeReplay reads the log window before it first awaits, so the window ends at `offset`
-      return { offset, live, composed: composeReplay(session.dir, { historyLines, live }) }
+      return { offset, live, composed: composeReplay(session.log, { historyLines, live }) }
     }).finally(() => session.pendingSubs.delete(pending))
     try {
       const { replay, historyCursor } = await taken.composed
@@ -852,9 +1029,9 @@ export class SessionManager {
   }
 
   private subscribeStored(stored: StoredSession, historyLines: number): Promise<PtyResults['subscribe']> {
-    return this.withRebuilt(stored, async (screen, rebuilt) => {
+    return this.withRebuilt(stored, async (screen, rebuilt, index) => {
       const live = screen.snapshot()
-      const { replay, historyCursor } = await composeReplay(stored.dir, { historyLines, live })
+      const { replay, historyCursor } = await composeReplay(index, { historyLines, live })
       return {
         replay: bytesToBase64(replay),
         offset: rebuilt.offset,
@@ -867,16 +1044,32 @@ export class SessionManager {
     })
   }
 
-  /** Runs `use` against a scratch screen rebuilt from a stored session's files, then discards it. */
-  private async withRebuilt<T>(stored: StoredSession, use: (screen: Screen, rebuilt: RestoredScreen) => T | Promise<T>): Promise<T> {
+  /** Runs `use` against a scratch screen rebuilt from one stored entry's index, then discards it. */
+  private async withRebuilt<T>(
+    stored: StoredSession,
+    use: (screen: Screen, rebuilt: RestoredScreen, index: StoredLogIndex) => T | Promise<T>
+  ): Promise<T> {
+    const index = await this.stored.index(stored)
+    this.assertStored(stored)
     const { meta } = stored
     const screen = new Screen({ cols: meta.cols, rows: meta.rows })
     try {
-      const rebuilt = await rebuildScreen(stored.dir, screen, { cols: meta.cols, rows: meta.rows, cwd: meta.cwd })
-      return await use(screen, rebuilt)
+      const rebuilt = await rebuildScreen(index, screen, { cols: meta.cols, rows: meta.rows, cwd: meta.cwd })
+      this.assertStored(stored)
+      const result = await use(screen, rebuilt, index)
+      this.assertStored(stored)
+      return result
     } finally {
       screen.dispose()
     }
+  }
+
+  private assertStored(stored: StoredSession): void {
+    if (this.stored.get(stored.sessionId) === stored) return
+    if (!this.stored.get(stored.sessionId) && !this.sessions.has(stored.sessionId)) {
+      throw new Error(`unknown session: ${stored.sessionId}`)
+    }
+    throw new Error(`session ${stored.sessionId} changed while it was being read`)
   }
 
   /** Records how the process ended, writes the final checkpoint and meta, then announces the exit. */
@@ -941,6 +1134,18 @@ export class SessionManager {
     }
   }
 
+  private canWriteHome(): boolean {
+    if (this.homeIsLost) return false
+    if (this.ownsHome && !this.ownsHome()) {
+      this.homeLost()
+      return false
+    }
+    return true
+  }
+
+  private assertCanWrite(): void {
+    if (!this.canWriteHome()) throw new Error(HOME_LOST)
+  }
   private dirOf(sessionId: string): string {
     return join(this.home, 'sessions', sessionId)
   }
@@ -966,6 +1171,7 @@ export class SessionManager {
   /** Meta is best effort: a disk error is reported once and the terminal goes on. */
   private persistMeta(session: Session): void {
     if (session.forgotten) return
+    if (!this.canWriteHome()) return
     try {
       writeMeta(session.dir, this.metaOf(session))
     } catch (error) {
@@ -1079,10 +1285,11 @@ function signalGroup(proc: PtyProcess, signal: string): void {
   }
 }
 
-function signalTree(proc: PtyProcess, signal: string): void {
-  const descendants = descendantsOf(proc.pid)
-  signalGroup(proc, signal)
-  for (const pid of descendants) {
+function signalTree(session: Session, signal: string, table: ProcessTable, trackedRoots: Iterable<number> = []): void {
+  if (session.alive && session.proc.exitCode === null && session.proc.signalCode === null) {
+    signalGroup(session.proc, signal)
+  }
+  for (const pid of descendantsIn(table, session.proc.pid, trackedRoots)) {
     for (const target of [-pid, pid]) {
       try {
         process.kill(target, signal)
@@ -1093,12 +1300,16 @@ function signalTree(proc: PtyProcess, signal: string): void {
   }
 }
 
-
-async function waitForSessionExit(session: Session, timeoutMs: number, observeDescendants: () => void): Promise<void> {
+async function waitForSessionExit(
+  session: Session,
+  timeoutMs: number,
+  tables: ProcessTables,
+  observeDescendants: (table: ProcessTable) => void
+): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (session.alive && Date.now() < deadline) {
-    observeDescendants()
-    await Bun.sleep(50)
+    observeDescendants(await tables.recent(STOP_POLL_MS))
+    await Bun.sleep(STOP_POLL_MS)
   }
 }
 
@@ -1112,14 +1323,19 @@ function signalKnownProcesses(processes: Set<number>, signal: string): void {
   }
 }
 
-async function waitForProcesses(processes: Set<number>, timeoutMs: number, observe: () => void): Promise<number[]> {
+async function waitForProcesses(
+  processes: Set<number>,
+  timeoutMs: number,
+  tables: ProcessTables,
+  observeDescendants: (table: ProcessTable) => void
+): Promise<number[]> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
-    observe()
+    observeDescendants(await tables.recent(STOP_POLL_MS))
     signalKnownProcesses(processes, 'SIGKILL')
     const survivors = [...processes].filter(processExists)
     if (survivors.length === 0 || Date.now() >= deadline) return survivors
-    await Bun.sleep(50)
+    await Bun.sleep(STOP_POLL_MS)
   }
 }
 

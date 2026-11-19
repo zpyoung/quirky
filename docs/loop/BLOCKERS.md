@@ -710,6 +710,7 @@ Retained ownership, NOT cleared by blocking: sa-browser-pane D23 assigns base-pa
 - **Needed to resume:** an authorized source-of-truth amendment permitting interactive native-chat and dictation/voice with owned public lifecycle/transcript/send/attachment/queue/options/task and speech/model/settings contracts. Native mirroring independently needs a supported actual page-frame/control producer bound to the exact hosted worktree/tab/view generation with completion/errors, plus authenticated phone lease/grants, bounded frames, loaded-frame ACK/input and hide/detach/disconnect/takeover/revoke invalidation. Requeue the preserved item when a prerequisite changes. No human ask issued.
 - **Preserved:** terminal/ask, canonical view Sleep/Hide sleeping, distinct session stop/history/resume, origin filters, Markdown and explicit Chrome Watch are unchanged. No silent Native-to-Chrome conversion, host screenshot, private FFI, DOM pixel reconstruction, fake model/attachment/queue, generic mobile grant widening or duplicate follow-up.
 - **Verification:** investigation/specification only. No product mutation, suite/typecheck, dogfood, model review, actual native capture, device or runtime behavior pass is claimed. All research work returned; no owned service/process remains running.
+- **Desktop chat:** authorized by docs/quirk/specs/2026-11-16-agent-chat. Mobile chat, voice and native mirroring remain blocked.
 
 ## fix-flaky-quirky-worktree-create: baseline suite failures retained for end-phase triage
 

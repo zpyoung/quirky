@@ -102,6 +102,68 @@ describe('method and event entries', () => {
     ])
     expect(result(contributes('method', { id: 'go', description: 'd' })).ok).toBe(true)
   })
+
+  test('accepts method timeouts on entries and overrides', () => {
+    expect(result(contributes('method', { id: 'wait', timeout: '75s' })).ok).toBe(true)
+    expect(result({ overrides: [{ id: 'method:acme.tools/wait', timeout: '75s' }] }).ok).toBe(true)
+  })
+
+  test('rejects method timeouts outside 1s to 24h', () => {
+    const message = ['method wait: timeout must be between 1s and 24h']
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: '500ms' }))).toEqual(message)
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: '25h' }))).toEqual(message)
+  })
+
+  test('requires method timeouts to be duration strings', () => {
+    const message = ['method wait: timeout must be a duration such as 30s, 5m or 2h']
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: 'soon' }))).toEqual(message)
+    expect(errorsOf(contributes('method', { id: 'wait', timeout: 75 }))).toEqual(message)
+  })
+
+  test('accepts event coalesce and worktree declarations, including overrides', () => {
+    expect(result(contributes('event', { id: 'changed', coalesce: [] })).ok).toBe(true)
+    expect(result(contributes('event', { id: 'changed', coalesce: ['sessionId', 'session.id'] })).ok).toBe(true)
+    expect(result(contributes('event', { id: 'changed', worktree: 'session.worktreeId' })).ok).toBe(true)
+    expect(
+      result({
+        overrides: [{ id: 'event:acme.tools/changed', coalesce: ['session.id'], worktree: 'session.worktreeId' }],
+      }).ok
+    ).toBe(true)
+  })
+
+  test('rejects coalesce values that are not lists of at most four key paths', () => {
+    for (const coalesce of ['sessionId', {}, ['a', 'b', 'c', 'd', 'e']]) {
+      expect(errorsOf(contributes('event', { id: 'changed', coalesce }))).toEqual([
+        'event changed: coalesce must be an array of at most 4 key paths',
+      ])
+    }
+  })
+
+  test('rejects malformed and repeated coalesce key paths', () => {
+    for (const path of ['a..b', '1a', 'a.b.c.d.e', '', 5, 'a b']) {
+      expect(errorsOf(contributes('event', { id: 'changed', coalesce: [path] }))).toEqual([
+        'event changed: coalesce[0] is not a key path',
+      ])
+    }
+    expect(errorsOf(contributes('event', { id: 'changed', coalesce: ['a', 'a'] }))).toEqual([
+      'event changed: coalesce[1] repeats `a`',
+    ])
+  })
+
+  test('rejects malformed worktree paths', () => {
+    for (const worktree of [5, '', 'a b', ['worktreeId']]) {
+      expect(errorsOf(contributes('event', { id: 'changed', worktree }))).toEqual([
+        'event changed: worktree is not a key path',
+      ])
+    }
+  })
+
+  test('rejects event metadata on methods as unknown fields', () => {
+    expect(errorsOf(contributes('method', { id: 'go', coalesce: [] }))).toEqual([
+      'method go: unknown field `coalesce`',
+    ])
+  })
+
 })
 
 describe('overrides and other kinds', () => {

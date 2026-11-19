@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 
 const PLUGIN_ID = 'quirky.git'
@@ -9,14 +9,12 @@ export type SettingName =
   | 'diffWordWrap'
   | 'diffShowWhitespace'
   | 'diffCollapseUnchanged'
-  | 'combinedDiffFileTree'
 
 export type DiffSettings = {
   sideBySide: boolean
   wrap: boolean
   showWhitespace: boolean
   collapseUnchanged: boolean
-  fileTree: boolean
 }
 
 function read(context: UiPluginContext): DiffSettings {
@@ -24,8 +22,7 @@ function read(context: UiPluginContext): DiffSettings {
     sideBySide: context.getSetting('diffDefaultView') === 'side-by-side',
     wrap: context.getSetting('diffWordWrap') === true,
     showWhitespace: context.getSetting('diffShowWhitespace') === true,
-    collapseUnchanged: context.getSetting('diffCollapseUnchanged') === true,
-    fileTree: context.getSetting('combinedDiffFileTree') === 'shown'
+    collapseUnchanged: context.getSetting('diffCollapseUnchanged') === true
   }
 }
 
@@ -39,8 +36,6 @@ function applyValue(settings: DiffSettings, name: string, value: unknown): DiffS
       return { ...settings, showWhitespace: value === true }
     case 'diffCollapseUnchanged':
       return { ...settings, collapseUnchanged: value === true }
-    case 'combinedDiffFileTree':
-      return { ...settings, fileTree: value === 'shown' }
     default:
       return settings
   }
@@ -65,16 +60,13 @@ export function useDiffSettings(context: UiPluginContext): {
     })
   }, [context])
 
-  const setSetting = useCallback(
-    (name: SettingName, value: boolean | string) => {
-      setSettings((current) => applyValue(current, name, value))
-      context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error) => {
-        setSettings(read(context))
-        context.toast('Setting failed', error instanceof Error ? error.message : String(error))
-      })
-    },
-    [context]
-  )
+  function setSetting(name: SettingName, value: boolean | string) {
+    setSettings((current) => applyValue(current, name, value))
+    void context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error) => {
+      setSettings(read(context))
+      context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })
+    })
+  }
 
   return { settings, setSetting }
 }

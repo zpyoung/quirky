@@ -1,13 +1,14 @@
 import type { MethodHandler, Schema } from '@quirky/protocol'
 import {
   REVIEW_VIEW,
+  type ChecksEntry,
   type JsonRecord,
   type MethodSpec,
   type ReviewData,
   type ReviewMethodTable,
   type ReviewTab,
   type ReviewsEnv,
-  type ReviewsState,
+  type ReviewsStore,
 } from '../contracts'
 import {
   isRecord,
@@ -20,6 +21,7 @@ import {
   parseReviewStackResult,
   repoFromReviewUrl,
   sameRepo,
+  type ReviewProvider,
   type ChangedFile,
   type CommentsResult,
   type RepoIdentity,
@@ -122,7 +124,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
   {
     id: 'detailSetFilesView',
     description: 'Set file selection, filtering, collapse, and diff mode.',
-    params: strictObject({ ...targetIdentity,
+    params: strictObject({ ...targetIdentity, generation: { type: 'integer', minimum: 0 },
       fileFilter: stringShape,
       diffMode: { type: 'string', enum: ['inline', 'side-by-side'] },
       selectedFile: { description: 'String or null.' },
@@ -213,7 +215,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     destructive: true,
     confirm: 'Reopen pull request #{number}?',
     params: strictObject(surfaceNumber, ['surface', 'number']),
-    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
+    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open', 'draft'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
   },
   {
     id: 'detailMerge',
@@ -291,7 +293,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
 ]
 
 type Surface = 'detail' | 'checks'
-type ReviewTargetWithRepo = ReviewsState['detail']['target'] & { prRepo?: RepoIdentity }
+type ReviewTargetWithRepo = ReviewsStore['detail']['target'] & { prRepo?: RepoIdentity }
 type Selection = {
   surface: Surface
   worktree: string
@@ -302,6 +304,7 @@ type Selection = {
   head: string | null
   identity: string
 }
+type SurfaceTarget = Pick<Selection, 'surface' | 'worktree'>
 type Ticket = { selection: Selection; operation: string; key: string; sequence: number }
 
 type RepoLookupResult = { kind: 'found'; review: ReviewData; fetchedAt: number } | { kind: 'no-review'; fetchedAt: number } | { kind: 'unavailable'; message: string; reason: string; fetchedAt: number }
@@ -314,17 +317,109 @@ type SurfaceSnapshot = {
   repo: RepoIdentity | null
 }
 
+/** The Checks entry for a worktree the caller has already validated as the owner of its selection. */
+function checksOf(state: ReviewsStore, worktree: string): ChecksEntry {
+  const entry = state.checksByWorktree[worktree]
+  if (!entry) throw new Error(`No Checks state is held for ${worktree}.`)
+  return entry
+}
+
 function parseSurface(env: ReviewsEnv, value: unknown): Surface {
   if (value === 'detail' || value === 'checks') return value
   throw env.invalid('invalid_input', 'surface must be detail or checks.')
 }
-function selectionIdentity(worktree: string, number: number, repo: RepoIdentity | null): string {
-  return `${worktree}\u0000${number}\u0000${repo?.host.toLowerCase() ?? ''}/${repo?.owner.toLowerCase() ?? ''}/${repo?.repo.toLowerCase() ?? ''}`
+type CanonicalRepository = { provider: ReviewProvider; repository: RepoIdentity }
+
+function repoIdentity(value: unknown, provider?: ReviewProvider): RepoIdentity | null {
+  return provider === undefined
+    ? parseRepoIdentity(value, 'gitlab') ?? parseRepoIdentity(value, 'github')
+    : parseRepoIdentity(value, provider)
+}
+
+async function canonicalRepository(env: ReviewsEnv, worktree: string): Promise<CanonicalRepository> {
+  const value = await env.call('quirky.hosting/repository', { worktree })
+  if (!isRecord(value)) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  const provider = value.provider === undefined ? 'github' : value.provider
+  if (provider !== 'github' && provider !== 'gitlab') {
+    throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  }
+  const repository = parseRepoIdentity(value.repository, provider)
+  if (repository === null) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid canonical repository.')
+  return { provider, repository }
+}
+
+function isReviewMetadataScalar(value: unknown): value is string | number | null {
+  return typeof value === 'string' || typeof value === 'number' || value === null
+}
+
+function reviewForSurface(env: ReviewsEnv, review: ReviewData, repository: RepoIdentity): ReviewData {
+  if (review.provider !== 'gitlab') return { ...review, prRepo: repository }
+  const projected: ReviewData = {
+    provider: 'gitlab',
+    number: review.number,
+    url: review.url,
+    title: review.title,
+    body: review.body,
+    state: review.state,
+    headRefName: review.headRefName,
+    baseRefName: review.baseRefName,
+    headRefOid: review.headRefOid,
+    baseRefOid: review.baseRefOid,
+    mergeable: 'UNKNOWN',
+    checksStatus: 'neutral',
+    reviewDecision: review.reviewDecision,
+    mergeStateStatus: 'UNKNOWN',
+    autoMergeRequest: null,
+    stack: null,
+    mergeMethods: { default: null, allowed: [] },
+    mergeQueueRequired: false,
+    autoMergeAllowed: null,
+    mergeMetadataKnown: false,
+    repository,
+    prRepo: repository,
+  }
+  if (typeof review.updatedAt === 'string') projected.updatedAt = review.updatedAt
+  if (review.requestedReviewers !== undefined) {
+    const values = review.requestedReviewers
+    if (!Array.isArray(values) || !values.every((value) => typeof value === 'string')) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid requestedReviewers.')
+    }
+    projected.requestedReviewers = [...values]
+  }
+  if (review.assignees !== undefined) {
+    const values = review.assignees
+    if (!Array.isArray(values) || !values.every((value) => typeof value === 'string')) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid assignees.')
+    }
+    projected.assignees = [...values]
+  }
+  if (review.reviews !== undefined) {
+    if (!Array.isArray(review.reviews) || !review.reviews.every(isRecord)) {
+      throw env.invalid('invalid_upstream', 'The GitLab review returned invalid review history.')
+    }
+    projected.reviews = review.reviews.map((entry) => {
+      const safe: JsonRecord = {}
+      if (isReviewMetadataScalar(entry.id)) safe.id = entry.id
+      if (isReviewMetadataScalar(entry.author)) safe.author = entry.author
+      if (isReviewMetadataScalar(entry.state)) safe.state = entry.state
+      if (isReviewMetadataScalar(entry.body)) safe.body = entry.body
+      if (isReviewMetadataScalar(entry.submittedAt)) safe.submittedAt = entry.submittedAt
+      if (isReviewMetadataScalar(entry.updatedAt)) safe.updatedAt = entry.updatedAt
+      if (isReviewMetadataScalar(entry.url)) safe.url = entry.url
+      if (isReviewMetadataScalar(entry.commitOid)) safe.commitOid = entry.commitOid
+      return safe
+    })
+  }
+  return projected
+}
+
+function selectionIdentity(worktree: string, number: number, repo: RepoIdentity | null, provider?: ReviewProvider): string {
+  return `${provider ?? ''}\u0000${worktree}\u0000${number}\u0000${repo?.host.toLowerCase() ?? ''}/${repo?.owner.toLowerCase() ?? ''}/${repo?.repo.toLowerCase() ?? ''}`
 }
 
 
 
-function selectionFromState(env: ReviewsEnv, state: ReviewsState, surface: Surface, needsReview: boolean): Selection {
+function selectionFromState(env: ReviewsEnv, state: ReviewsStore, surface: Surface, needsReview: boolean, checksWorktree: unknown): Selection {
   let worktree: string | null
   let number: number | null
   let generation: number
@@ -336,38 +431,46 @@ function selectionFromState(env: ReviewsEnv, state: ReviewsState, surface: Surfa
     generation = state.detail.generation
     review = state.detail.review
     const rawSource = (target as ReviewTargetWithRepo | null)?.prRepo
-    if (rawSource !== undefined && parseRepoIdentity(rawSource) === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+    if (rawSource !== undefined && repoIdentity(rawSource, review?.provider as ReviewProvider | undefined) === null) {
+      throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+    }
   } else {
-    worktree = state.checks.worktree
-    review = state.checks.review
+    const entry = typeof checksWorktree === 'string' ? state.checksByWorktree[checksWorktree] : undefined
+    worktree = entry?.worktree ?? null
+    review = entry?.review ?? null
     number = review?.number ?? null
-    generation = state.checks.generation
+    generation = entry?.generation ?? 0
   }
   if (typeof worktree !== 'string' || worktree.length === 0 || number === null || !Number.isSafeInteger(number) || number < 1) {
     throw env.invalid('no_target', `No pull request is selected on the ${surface} surface.`)
   }
   if (needsReview && review === null) throw env.invalid('no_review', `Pull request #${number} is not available on the ${surface} surface.`)
-  if (review !== null && review.number !== number) throw env.invalid('invalid_state', 'The selected pull request identity does not match its review data.')
-  let repo: RepoIdentity | null
+  if (review !== null && (review.number !== number || review.provider !== 'github' && review.provider !== 'gitlab')) {
+    throw env.invalid('invalid_state', 'The selected pull request identity does not match its review data.')
+  }
+  const provider = review?.provider as ReviewProvider | undefined
   const rawSource = surface === 'detail'
     ? (state.detail.target as ReviewTargetWithRepo | null)?.prRepo
     : review?.prRepo
-  if (rawSource !== undefined) {
-    repo = parseRepoIdentity(rawSource)
-    if (repo === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
-  } else {
-    repo = review === null ? null : repoFromReviewUrl(review.url, number)
-  }
-  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number)
-  if (repo !== null && urlRepo !== null && !sameRepo(repo, urlRepo)) {
+  const explicitRepo = rawSource === undefined ? null : repoIdentity(rawSource, provider)
+  if (rawSource !== undefined && explicitRepo === null) throw env.invalid('invalid_state', 'The selected review repository source is invalid.')
+  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number, provider)
+  if (review !== null && urlRepo === null) throw env.invalid('invalid_state', 'The selected review URL is invalid.')
+  const rawRepository = review?.repository
+  const repository = rawRepository === undefined ? null : repoIdentity(rawRepository, provider)
+  if (rawRepository !== undefined && repository === null) throw env.invalid('invalid_state', 'The normalized review repository is invalid.')
+  if (explicitRepo !== null && urlRepo !== null && !sameRepo(explicitRepo, urlRepo)
+    || repository !== null && urlRepo !== null && !sameRepo(repository, urlRepo)
+    || explicitRepo !== null && repository !== null && !sameRepo(explicitRepo, repository)) {
     throw env.invalid('source_mismatch', 'The selected pull request URL does not match its trusted repository source.')
   }
-  const identity = selectionIdentity(worktree, number, repo)
-  return { surface, worktree, number, generation, review, repo: repo ?? urlRepo, head: review?.headRefOid ?? null, identity }
+  const repo = explicitRepo ?? repository ?? urlRepo
+  const identity = selectionIdentity(worktree, number, repo, provider)
+  return { surface, worktree, number, generation, review, repo, head: review?.headRefOid ?? null, identity }
 }
 
 function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surface, needsReview: boolean): Selection {
-  let selected = selectionFromState(env, env.read(), surface, needsReview)
+  let selected = selectionFromState(env, env.read(), surface, needsReview, params.worktree)
   if (params.worktree !== selected.worktree || params.number !== selected.number) {
     throw env.invalid('stale_target', 'The review method target does not match the selected surface.')
   }
@@ -375,66 +478,84 @@ function selectionFromParams(env: ReviewsEnv, params: JsonRecord, surface: Surfa
     throw env.invalid('stale_target', 'The selected review surface changed before this action.')
   }
   if (params.prRepo !== undefined) {
-    const requestedRepo = parseRepoIdentity(params.prRepo)
+    const provider = selected.review?.provider as ReviewProvider | undefined
+    const requestedRepo = repoIdentity(params.prRepo, provider)
     if (requestedRepo === null || selected.repo !== null && !sameRepo(selected.repo, requestedRepo)) {
       throw env.invalid('source_mismatch', 'The requested repository source does not match the selected review.')
     }
-    selected = { ...selected, repo: requestedRepo, identity: selectionIdentity(selected.worktree, selected.number, requestedRepo) }
+    selected = { ...selected, repo: requestedRepo, identity: selectionIdentity(selected.worktree, selected.number, requestedRepo, selected.review?.provider as ReviewProvider | undefined) }
   }
   return selected
 }
 
-function snapshotFor(state: ReviewsState, surface: Surface): SurfaceSnapshot {
+function snapshotFor(state: ReviewsStore, surface: Surface, worktree: string): SurfaceSnapshot {
   if (surface === 'detail') {
     const target = state.detail.target
+    const review = state.detail.review
+    const provider = review?.provider === 'github' || review?.provider === 'gitlab' ? review.provider : undefined
+    const explicitRepo = repoIdentity((target as ReviewTargetWithRepo | null)?.prRepo, provider)
+    const normalizedRepo = review?.repository === undefined ? null : repoIdentity(review.repository, provider)
+    const urlRepo = review ? repoFromReviewUrl(review.url, review.number, provider) : null
     return {
       worktree: target?.worktree ?? null,
       number: target?.number ?? null,
       generation: state.detail.generation,
-      review: state.detail.review,
-      repo: parseRepoIdentity((target as ReviewTargetWithRepo | null)?.prRepo) ?? (state.detail.review ? repoFromReviewUrl(state.detail.review.url, state.detail.review.number) : null),
+      review,
+      repo: explicitRepo ?? normalizedRepo ?? urlRepo,
     }
   }
+  const entry = state.checksByWorktree[worktree]
+  const review = entry?.review ?? null
+  const provider = review?.provider === 'github' || review?.provider === 'gitlab' ? review.provider : undefined
+  const explicitRepo = repoIdentity(review?.prRepo, provider)
+  const normalizedRepo = review?.repository === undefined ? null : repoIdentity(review.repository, provider)
+  const urlRepo = review ? repoFromReviewUrl(review.url, review.number, provider) : null
   return {
-    worktree: state.checks.worktree,
-    number: state.checks.review?.number ?? null,
-    generation: state.checks.generation,
-    review: state.checks.review,
-    repo: parseRepoIdentity(state.checks.review?.prRepo) ?? (state.checks.review ? repoFromReviewUrl(state.checks.review.url, state.checks.review.number) : null),
+    worktree: entry?.worktree ?? null,
+    number: review?.number ?? null,
+    generation: entry?.generation ?? 0,
+    review,
+    repo: explicitRepo ?? normalizedRepo ?? urlRepo,
   }
 }
 
-function ownerMatches(state: ReviewsState, selection: Selection): boolean {
-  const snapshot = snapshotFor(state, selection.surface)
+function ownerMatches(state: ReviewsStore, selection: Selection): boolean {
+  const snapshot = snapshotFor(state, selection.surface, selection.worktree)
   return snapshot.worktree === selection.worktree && snapshot.number === selection.number && snapshot.generation === selection.generation
     && (selection.repo === null || snapshot.repo === null || sameRepo(selection.repo, snapshot.repo))
+    && (selection.review === null || snapshot.review?.provider === selection.review.provider)
 }
 
-function selectionMatches(state: ReviewsState, selection: Selection): boolean {
+function selectionMatches(state: ReviewsStore, selection: Selection): boolean {
   if (!ownerMatches(state, selection)) return false
-  const current = snapshotFor(state, selection.surface).review
+  const current = snapshotFor(state, selection.surface, selection.worktree).review
   return selection.head === null || current === null || current.headRefOid.toLowerCase() === selection.head.toLowerCase()
 }
 
-function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsState) => void): boolean {
+function applyIfOwner(env: ReviewsEnv, selection: Selection, change: (state: ReviewsStore) => void, scope?: 'shared'): boolean {
   let applied = false
   env.update((state) => {
     if (!ownerMatches(state, selection)) return
     change(state)
     applied = true
-  })
+  }, selection.surface === 'checks' && scope !== 'shared' ? selection.worktree : undefined)
   return applied
 }
 
 function surfaceError(env: ReviewsEnv, selection: Selection, message: string | null): void {
   applyIfOwner(env, selection, (state) => {
     if (selection.surface === 'detail') state.detail.error = message
-    else state.checks.error = message
+    else checksOf(state, selection.worktree).error = message
   })
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+function errorReason(error: unknown): string | null {
+  return isRecord(error) && isRecord(error.data) && typeof error.data.reason === 'string'
+    ? error.data.reason
+    : null
 }
 
 function positiveNumber(env: ReviewsEnv, value: unknown, label: string): number {
@@ -445,6 +566,11 @@ function positiveNumber(env: ReviewsEnv, value: unknown, label: string): number 
 function requireMatchingNumber(env: ReviewsEnv, selection: Selection, value: unknown): void {
   if (positiveNumber(env, value, 'number') !== selection.number) {
     throw env.invalid('target_mismatch', 'The requested pull request does not match the selected review surface.')
+  }
+}
+function rejectUnsupportedGitLab(env: ReviewsEnv, selection: Selection): void {
+  if (selection.review?.provider === 'gitlab') {
+    throw env.invalid('unsupported_provider', 'This operation is unavailable for GitLab merge requests.')
   }
 }
 
@@ -466,52 +592,52 @@ function hostingParams(selection: Selection): JsonRecord {
   }
 }
 
-function surfaceReview(state: ReviewsState, surface: Surface): ReviewData | null {
-  return surface === 'detail' ? state.detail.review : state.checks.review
+function surfaceReview(state: ReviewsStore, target: SurfaceTarget): ReviewData | null {
+  return target.surface === 'detail' ? state.detail.review : state.checksByWorktree[target.worktree]?.review ?? null
 }
 
-function assignReview(state: ReviewsState, surface: Surface, review: ReviewData | null): void {
-  if (surface === 'detail') state.detail.review = review
-  else state.checks.review = review
+function assignReview(state: ReviewsStore, target: SurfaceTarget, review: ReviewData | null): void {
+  if (target.surface === 'detail') state.detail.review = review
+  else checksOf(state, target.worktree).review = review
 }
 
-function assignChecks(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
-  if (surface === 'detail') state.detail.checks = value
-  else state.checks.checks = value
+function assignChecks(state: ReviewsStore, target: SurfaceTarget, value: JsonRecord | null): void {
+  if (target.surface === 'detail') state.detail.checks = value
+  else checksOf(state, target.worktree).checks = value
 }
 
-function assignComments(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
-  if (surface === 'detail') state.detail.comments = value
-  else state.checks.comments = value
+function assignComments(state: ReviewsStore, target: SurfaceTarget, value: JsonRecord | null): void {
+  if (target.surface === 'detail') state.detail.comments = value
+  else checksOf(state, target.worktree).comments = value
 }
 
-function assignFiles(state: ReviewsState, surface: Surface, value: JsonRecord | null): void {
+function assignFiles(state: ReviewsStore, surface: Surface, value: JsonRecord | null): void {
   if (surface === 'detail') state.detail.files = value
 }
 
-function addPending(state: ReviewsState, surface: Surface, operation: string): void {
+function addPending(state: ReviewsStore, surface: Surface, operation: string): void {
   if (surface !== 'detail' || state.detail.pending.includes(operation)) return
   state.detail.pending = [...state.detail.pending, operation]
 }
 
-function removePending(state: ReviewsState, surface: Surface, operation: string): void {
+function removePending(state: ReviewsStore, surface: Surface, operation: string): void {
   if (surface === 'detail') state.detail.pending = state.detail.pending.filter((entry) => entry !== operation)
 }
 
-function commentState(state: ReviewsState, surface: Surface): JsonRecord | null {
-  return surface === 'detail' ? state.detail.comments : state.checks.comments
+function commentState(state: ReviewsStore, target: SurfaceTarget): JsonRecord | null {
+  return target.surface === 'detail' ? state.detail.comments : state.checksByWorktree[target.worktree]?.comments ?? null
 }
 
-function fileState(state: ReviewsState): JsonRecord | null {
+function fileState(state: ReviewsStore): JsonRecord | null {
   return state.detail.files
 }
 
-function checkState(state: ReviewsState, surface: Surface): JsonRecord | null {
-  return surface === 'detail' ? state.detail.checks : state.checks.checks
+function checkState(state: ReviewsStore, target: SurfaceTarget): JsonRecord | null {
+  return target.surface === 'detail' ? state.detail.checks : state.checksByWorktree[target.worktree]?.checks ?? null
 }
 
 function commentsFromState(env: ReviewsEnv, selection: Selection): ReviewComment[] {
-  const value = commentState(env.read(), selection.surface)
+  const value = commentState(env.read(), selection)
   const parsed = value === null ? null : parseCommentsResult(value, selection.number)
   if (parsed === null) throw env.invalid('comments_unavailable', 'Comments have not been loaded for this pull request.')
   return parsed.comments
@@ -559,6 +685,7 @@ function parseNumberResult(raw: unknown, number: number): raw is JsonRecord {
 
 
 export function reviewMethods(review: ReviewData): { allowed: string[]; defaultMethod: string | null; known: boolean } {
+  if (review.provider === 'gitlab') return { allowed: [], defaultMethod: null, known: true }
   if (review.mergeMetadataKnown === false || !isRecord(review.mergeMethods)) return { allowed: [], defaultMethod: null, known: false }
   const allowedValue = review.mergeMethods.allowed
   const defaultValue = review.mergeMethods.default
@@ -572,6 +699,7 @@ export function reviewMethods(review: ReviewData): { allowed: string[]; defaultM
 }
 
 export function directMergeAllowed(review: ReviewData): boolean {
+  if (review.provider === 'gitlab') return false
   if (review.state !== 'open' || review.mergeable === 'CONFLICTING'
     || review.mergeStateStatus === 'CONFLICTING' || review.mergeStateStatus === 'DIRTY'
     || review.mergeStateStatus === 'BEHIND' || review.mergeStateStatus === 'BLOCKED'
@@ -583,6 +711,7 @@ export function directMergeAllowed(review: ReviewData): boolean {
 }
 
 export function queueMergeAllowed(review: ReviewData): boolean {
+  if (review.provider === 'gitlab') return false
   const policy = reviewMethods(review)
   return review.state === 'open' && review.mergeQueueRequired === true
     && review.mergeable !== 'CONFLICTING' && review.mergeStateStatus !== 'CONFLICTING'
@@ -594,7 +723,7 @@ export function queueMergeAllowed(review: ReviewData): boolean {
 function includedStackEntries(env: ReviewsEnv, selection: Selection): ReviewStackEntry[] {
   if (selection.review === null || selection.review.stack === null || selection.review.stack === undefined) return []
   const state = env.read()
-  const details = selection.surface === 'detail' ? state.detail.details : state.checks.conflicts
+  const details = selection.surface === 'detail' ? state.detail.details : state.checksByWorktree[selection.worktree]?.conflicts
   let raw = isRecord(details) ? details.reviewStack : undefined
   if (raw === undefined && isRecord(selection.review.stackDetails)) raw = selection.review.stackDetails
   const stack = parseReviewStackResult(raw, selection.number)
@@ -612,8 +741,16 @@ function includedStackEntries(env: ReviewsEnv, selection: Selection): ReviewStac
 }
 
 
-function parseReviewUpdate(raw: unknown, number: number, expectedState: 'open' | 'closed'): boolean {
-  return isRecord(raw) && raw.number === number && raw.updated === true && raw.state === expectedState
+function parseReviewUpdate(
+  raw: unknown,
+  number: number,
+  allowedStates: readonly ('open' | 'draft' | 'closed')[],
+  provider: ReviewProvider,
+): { state: 'open' | 'draft' | 'closed'; updated: boolean } | null {
+  if (!isRecord(raw) || raw.number !== number || typeof raw.updated !== 'boolean') return null
+  if (raw.state !== 'open' && raw.state !== 'draft' && raw.state !== 'closed') return null
+  if (!allowedStates.includes(raw.state) || (provider === 'github' && raw.updated !== true)) return null
+  return { state: raw.state, updated: raw.updated }
 }
 
 function withReviewChange(review: ReviewData, change: Partial<ReviewData>): ReviewData {
@@ -763,7 +900,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (typeof params.worktree !== 'string' || params.worktree.trim() === '') throw env.invalid('invalid_input', 'worktree must be a non-empty selector.')
       const requestedTab = params.tab === undefined ? 'conversation' : params.tab
       if (!tabs.includes(requestedTab as ReviewTab)) throw env.invalid('invalid_input', 'tab must be conversation, checks, or files.')
-      const repo = params.prRepo === undefined ? null : parseRepoIdentity(params.prRepo)
+      const repo = params.prRepo === undefined ? null : repoIdentity(params.prRepo)
       if (params.prRepo !== undefined && repo === null) throw env.invalid('invalid_input', 'prRepo must include a valid host, owner, and repository.')
       const worktree = await env.resolve({ worktree: params.worktree }, caller)
       const target = {
@@ -819,35 +956,101 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           state.detail.loading = true
           state.detail.error = null
         } else {
-          state.checks.loading = true
-          state.checks.error = null
+          checksOf(state, selected.worktree).loading = true
+          checksOf(state, selected.worktree).error = null
         }
       })
       const loaded = { review: false, details: false, checks: false, comments: false, files: false }
       const errors: string[] = []
       const noData = () => ({ surface: selectedSurface, number: selected.number, ok: false, errors, loaded, fetchedAt: Date.now() })
-      const hostParams = hostingParams(selected)
+      let canonical: CanonicalRepository
+      if (selected.review?.provider === 'github' && selected.repo !== null) {
+        canonical = { provider: 'github', repository: selected.repo }
+      } else {
+        try {
+          canonical = await canonicalRepository(env, selected.worktree)
+        } catch (error) {
+          const message = errorMessage(error)
+          errors.push(message)
+          if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
+            surfaceError(env, selected, message)
+            applyIfOwner(env, selected, (state) => {
+              if (selectedSurface === 'detail') state.detail.loading = false
+              else checksOf(state, selected.worktree).loading = false
+            })
+          }
+          return noData()
+        }
+      }
+      if (reads.get(readKey) !== request || !ownerMatches(env.read(), selected)) return noData()
+      if (selected.review !== null && selected.review.provider !== canonical.provider
+        || canonical.provider === 'gitlab' && selected.repo !== null && !sameRepo(selected.repo, canonical.repository)) {
+        const message = 'The selected review source does not match this workspace repository.'
+        errors.push(message)
+        applyIfOwner(env, selected, (state) => {
+          if (selectedSurface === 'detail') {
+            state.detail.error = message
+            state.detail.loading = false
+          } else {
+            checksOf(state, selected.worktree).error = message
+            checksOf(state, selected.worktree).loading = false
+          }
+        })
+        throw env.invalid('source_mismatch', message)
+      }
+      const source = canonical.provider === 'github' && selected.repo !== null ? selected.repo : canonical.repository
+      const sourceSelection: Selection = {
+        ...selected,
+        repo: source,
+        identity: selectionIdentity(selected.worktree, selected.number, source, canonical.provider),
+      }
+      const hostParams: JsonRecord = { worktree: selected.worktree, number: selected.number, prRepo: source }
       let lookup: RepoLookupResult | null = null
       try {
         const raw = await env.call('quirky.hosting/review', hostParams)
+        if (isRecord(raw) && raw.kind === 'found' && isRecord(raw.review)) {
+          const rawReview = raw.review
+          if (rawReview.number !== selected.number) {
+            throw env.invalid('invalid_upstream', 'The hosting API returned a different numbered review.')
+          }
+          if (rawReview.provider !== 'github' && rawReview.provider !== 'gitlab') {
+            throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request provider.')
+          }
+          const urlRepo = repoFromReviewUrl(rawReview.url, selected.number, rawReview.provider)
+          if (urlRepo === null) throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request URL.')
+          if (rawReview.provider !== canonical.provider || !sameRepo(urlRepo, source)) {
+            throw env.invalid('source_mismatch', 'The pull request URL did not match the selected trusted repository.')
+          }
+          for (const candidate of [rawReview.repository, rawReview.prRepo]) {
+            if (candidate === undefined) continue
+            const reportedRepo = repoIdentity(candidate, rawReview.provider)
+            if (reportedRepo === null || !sameRepo(reportedRepo, source)) {
+              throw env.invalid('source_mismatch', 'The hosting API review repository did not match its canonical URL identity.')
+            }
+          }
+        }
         lookup = parseReviewLookup(raw)
         if (lookup === null || lookup.kind === 'found' && lookup.review.number !== selected.number) {
           throw env.invalid('invalid_upstream', 'The hosting API returned an invalid pull request response.')
         }
       } catch (error) {
         const message = errorMessage(error)
-        errors.push(message)
+        const reason = errorReason(error)
+        const structuralRefusal = reason === 'source_mismatch'
+          || reason === 'invalid_upstream' && message === 'The hosting API returned a different numbered review.'
         if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
           applyIfOwner(env, selected, (state) => {
             if (selectedSurface === 'detail') {
               state.detail.loading = false
               state.detail.error = message
             } else {
-              state.checks.loading = false
-              state.checks.error = message
+              checksOf(state, selected.worktree).loading = false
+              checksOf(state, selected.worktree).error = message
             }
           })
         }
+        if (structuralRefusal) throw error
+        errors.push(message)
         return noData()
       }
       if (!lookup || lookup.kind !== 'found') {
@@ -855,15 +1058,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         errors.push(message)
         if (reads.get(readKey) === request && ownerMatches(env.read(), selected)) {
           applyIfOwner(env, selected, (state) => {
-            if (lookup?.kind === 'no-review') assignReview(state, selectedSurface, null)
+            if (lookup?.kind === 'no-review') assignReview(state, selected, null)
             if (selectedSurface === 'detail') {
               state.detail.loading = false
               state.detail.error = message
               state.detail.fetchedAt = lookup?.fetchedAt ?? Date.now()
             } else {
-              state.checks.loading = false
-              state.checks.error = message
-              state.checks.fetchedAt = lookup?.fetchedAt ?? Date.now()
+              checksOf(state, selected.worktree).loading = false
+              checksOf(state, selected.worktree).error = message
+              checksOf(state, selected.worktree).fetchedAt = lookup?.fetchedAt ?? Date.now()
             }
           })
         }
@@ -871,30 +1074,18 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       loaded.review = true
       const review = lookup.review
-      const urlRepo = repoFromReviewUrl(review.url, review.number)
-      if (urlRepo === null || selected.repo !== null && !sameRepo(selected.repo, urlRepo)) {
-        const message = 'The pull request URL did not match the selected trusted repository.'
-        errors.push(message)
-        surfaceError(env, selected, message)
-        return noData()
-      }
-      const source = selected.repo ?? urlRepo
-      const sourceSelection: Selection = {
-        ...selected,
-        repo: source,
-        identity: selectionIdentity(selected.worktree, selected.number, source),
-      }
-      const nextReview = { ...review, prRepo: source } as ReviewData
-      const selectedArgs = { worktree: selected.worktree, number: selected.number, prRepo: source }
+      const nextReview = reviewForSurface(env, review, source)
+      const selectedArgs = { ...hostParams, noCache: true }
       const detailArgs = { worktree: selected.worktree, kind: 'pullRequest', reference: review.url }
-      const stackRequested = review.stack !== null && review.stack !== undefined
+      const isGitLab = review.provider === 'gitlab'
+      const stackRequested = !isGitLab && review.stack !== null && review.stack !== undefined
       const results = await Promise.allSettled([
-        env.call('quirky.hosting/workItemDetails', detailArgs),
-        env.call('quirky.hosting/checks', { ...selectedArgs, noCache: true }),
-        env.call('quirky.hosting/comments', { ...selectedArgs, noCache: true }),
-        env.call('quirky.hosting/files', { ...selectedArgs, noCache: true }),
+        isGitLab ? Promise.resolve(null) : env.call('quirky.hosting/workItemDetails', detailArgs),
+        env.call('quirky.hosting/checks', selectedArgs),
+        env.call('quirky.hosting/comments', selectedArgs),
+        isGitLab ? Promise.resolve(null) : env.call('quirky.hosting/files', selectedArgs),
         stackRequested
-          ? env.call('quirky.hosting/reviewStack', { ...selectedArgs, noCache: true })
+          ? env.call('quirky.hosting/reviewStack', selectedArgs)
           : Promise.resolve(null),
       ])
       const detailsResult = results[0]
@@ -906,11 +1097,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       let checks: JsonRecord | null = null
       let comments: JsonRecord | null = null
       let files: JsonRecord | null = null
-      if (detailsResult?.status === 'fulfilled' && isRecord(detailsResult.value) && isRecord(detailsResult.value.item)
+      if (!isGitLab && detailsResult?.status === 'fulfilled' && isRecord(detailsResult.value) && isRecord(detailsResult.value.item)
         && detailsResult.value.item.number === selected.number) {
         details = detailsResult.value
         loaded.details = true
-      } else {
+      } else if (!isGitLab) {
         errors.push(detailsResult?.status === 'rejected' ? errorMessage(detailsResult.reason) : 'The hosting API returned invalid pull request details.')
       }
       let stack: ReviewStackResult | null = null
@@ -923,10 +1114,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (stack !== null) details = { ...(details ?? {}), reviewStack: stack }
       }
-      const priorReview = surfaceReview(env.read(), selectedSurface)
+      const priorReview = surfaceReview(env.read(), selected)
+      const previousRepo = priorReview === null ? null : repoIdentity(priorReview.prRepo, priorReview.provider as ReviewProvider)
+      const identityChanged = priorReview?.number !== review.number
+        || priorReview?.provider !== review.provider
+        || previousRepo === null || !sameRepo(previousRepo, source)
       const headChanged = priorReview !== null && priorReview.headRefOid.toLowerCase() !== review.headRefOid.toLowerCase()
+      const resetReviewData = identityChanged || headChanged
       const overlay = getOverlay(sourceSelection)
-      if (headChanged) {
+      if (resetReviewData) {
         for (const [key, comment] of overlay) if (comment?.kind === 'review_comment') overlay.delete(key)
       }
       const parsedChecks = checksResult?.status === 'fulfilled' ? parseChecksResult(checksResult.value, selected.number) : null
@@ -939,9 +1135,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           errors.push('Check data belongs to a different pull request head; refresh before using it.')
         }
       } else {
-        errors.push(checksResult?.status === 'rejected' ? errorMessage(checksResult.reason) : 'The hosting API returned invalid check data.')
+        errors.push(checksResult?.status === 'rejected'
+          ? isGitLab && errorReason(checksResult.reason) === 'unsupported_provider'
+            ? 'Checks are unavailable for GitLab merge requests.'
+            : errorMessage(checksResult.reason)
+          : 'The hosting API returned invalid check data.')
       }
-      const parsedComments = commentsResult?.status === 'fulfilled' ? parseCommentsResult(commentsResult.value, selected.number) : null
+      const parsedComments = commentsResult?.status === 'fulfilled'
+        ? parseCommentsResult(commentsResult.value, selected.number, review.provider as ReviewProvider)
+        : null
       if (parsedComments !== null) {
         const rawComments = parsedComments.comments
         comments = { ...parsedComments, comments: mergeOverlay(rawComments, overlay, true) }
@@ -949,10 +1151,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       } else {
         errors.push(commentsResult?.status === 'rejected' ? errorMessage(commentsResult.reason) : 'The hosting API returned invalid comment data.')
       }
-      const parsedFiles = filesResult?.status === 'fulfilled' ? parseFilesResult(filesResult.value, selected.number) : null
+      const parsedFiles = !isGitLab && filesResult?.status === 'fulfilled' ? parseFilesResult(filesResult.value, selected.number) : null
       if (parsedFiles !== null) {
         files = parsedFiles
         loaded.files = true
+      } else if (isGitLab) {
+        errors.push('Changed files are unavailable for GitLab merge requests.')
       } else {
         errors.push(filesResult?.status === 'rejected' ? errorMessage(filesResult.reason) : 'The hosting API returned invalid changed-file data.')
       }
@@ -962,39 +1166,44 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (fresh && writesUnchanged) {
         const errorsText = errors.length === 0 ? null : errors.join(' ')
         applyIfOwner(env, sourceSelection, (state) => {
-          assignReview(state, selectedSurface, nextReview)
+          assignReview(state, selected, nextReview)
           if (selectedSurface === 'detail') {
             const target = state.detail.target as ReviewTargetWithRepo | null
             if (target !== null) state.detail.target = { ...target, prRepo: source }
-            state.detail.details = details ?? state.detail.details
-            state.detail.checks = checks ?? (headChanged ? null : state.detail.checks)
-            state.detail.comments = comments ?? (headChanged ? withoutInlineComments(state.detail.comments, selected.number) : state.detail.comments)
-            state.detail.files = files ?? (headChanged ? null : state.detail.files)
+            state.detail.details = details ?? (resetReviewData ? null : state.detail.details)
+            state.detail.checks = checks ?? (resetReviewData ? null : state.detail.checks)
+            state.detail.comments = comments ?? (resetReviewData ? null : state.detail.comments)
+            state.detail.files = files ?? (resetReviewData ? null : state.detail.files)
             state.detail.error = errorsText
             state.detail.loading = false
             state.detail.fetchedAt = now
-            if (headChanged) {
+            if (resetReviewData) {
               state.detail.selectedFile = null
               state.detail.expandedChecks = []
+              state.detail.commentDraft = ''
+              state.detail.bodyDraft = null
+              state.detail.pending = []
               state.detail.queuedComments = []
               state.detail.collapsedFiles = []
             }
           } else {
-            state.checks.checks = checks ?? (headChanged ? null : state.checks.checks)
-            state.checks.comments = comments ?? (headChanged ? withoutInlineComments(state.checks.comments, selected.number) : state.checks.comments)
-            state.checks.error = errorsText
-            state.checks.loading = false
-            state.checks.fetchedAt = now
-            if (headChanged) {
-              state.checks.expandedChecks = []
-              state.checks.queuedComments = []
+            checksOf(state, selected.worktree).checks = checks ?? (resetReviewData ? null : checksOf(state, selected.worktree).checks)
+            checksOf(state, selected.worktree).comments = comments ?? (resetReviewData ? null : checksOf(state, selected.worktree).comments)
+            checksOf(state, selected.worktree).error = errorsText
+            checksOf(state, selected.worktree).loading = false
+            checksOf(state, selected.worktree).fetchedAt = now
+            if (resetReviewData) {
+              checksOf(state, selected.worktree).expandedChecks = []
+              checksOf(state, selected.worktree).queuedComments = []
+              checksOf(state, selected.worktree).commentDraft = ''
+              checksOf(state, selected.worktree).titleDraft = null
             }
           }
         })
       } else if (fresh) {
         applyIfOwner(env, selected, (state) => {
           if (selectedSurface === 'detail') state.detail.loading = false
-          else state.checks.loading = false
+          else checksOf(state, selected.worktree).loading = false
         })
         errors.push('A newer review mutation completed while this refresh was in flight; stale data was discarded.')
       }
@@ -1019,8 +1228,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (!isAudience(audience)) throw env.invalid('invalid_input', 'audience must be all, humans, or bots.')
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.audience = audience
-        else state.checks.audience = audience
-      })
+        else state.audience = audience
+      }, 'shared')
       return { surface: selectedSurface, audience }
     },
 
@@ -1031,8 +1240,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (!isGrouping(grouping)) throw env.invalid('invalid_input', 'grouping must be grouped or timeline.')
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.grouping = grouping
-        else state.checks.grouping = grouping
-      })
+        else state.grouping = grouping
+      }, 'shared')
       return { surface: selectedSurface, grouping }
     },
 
@@ -1050,7 +1259,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         draftRevisions.set(key, params.draftVersion)
         applyIfOwner(env, selected, (state) => {
           if (selectedSurface === 'detail') state.detail.commentDraft = params.body as string
-          else state.checks.commentDraft = params.body as string
+          else checksOf(state, selected.worktree).commentDraft = params.body as string
         })
       }
       return { surface: selectedSurface, body: params.body, draftVersion: params.draftVersion, applied }
@@ -1110,12 +1319,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const queueId = params.commentId
       applyIfOwner(env, selected, (state) => {
-        const queue = selectedSurface === 'detail' ? state.detail.queuedComments : state.checks.queuedComments
+        const queue = selectedSurface === 'detail' ? state.detail.queuedComments : checksOf(state, selected.worktree).queuedComments
         const next = params.queued === true
           ? [...new Set([...queue, queueId])]
           : queue.filter((id) => id !== queueId)
         if (selectedSurface === 'detail') state.detail.queuedComments = next
-        else state.checks.queuedComments = next
+        else checksOf(state, selected.worktree).queuedComments = next
       })
       return { surface: selectedSurface, commentId: queueId, queued: params.queued }
     },
@@ -1151,8 +1360,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const collapsed = params.collapsed
       applyIfOwner(env, selected, (state) => {
         if (selectedSurface === 'detail') state.detail.checksCollapsed = collapsed
-        else state.checks.checksCollapsed = collapsed
-      })
+        else state.checksCollapsed = collapsed
+      }, 'shared')
       return { surface: selectedSurface, collapsed }
     },
 
@@ -1164,10 +1373,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const checkId = params.checkId
       applyIfOwner(env, selected, (state) => {
-        const current = selectedSurface === 'detail' ? state.detail.expandedChecks : state.checks.expandedChecks
+        const current = selectedSurface === 'detail' ? state.detail.expandedChecks : checksOf(state, selected.worktree).expandedChecks
         const next = params.expanded === true ? [...new Set([...current, checkId])] : current.filter((id) => id !== checkId)
         if (selectedSurface === 'detail') state.detail.expandedChecks = next
-        else state.checks.expandedChecks = next
+        else checksOf(state, selected.worktree).expandedChecks = next
       })
       return { surface: selectedSurface, checkId, expanded: params.expanded }
     },
@@ -1195,9 +1404,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           throw env.invalid('stale_target', 'A newer review request or mutation owns this checks state.')
         }
         applyIfOwner(env, selected, (state) => {
-          assignChecks(state, selectedSurface, checks)
+          assignChecks(state, selected, checks)
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { surface: selectedSurface, number: selected.number, headSha, checks: checks.checks }
       } catch (error) {
@@ -1213,7 +1422,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       checkNumber(params, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const checkRunId = positiveNumber(env, params.checkRunId, 'checkRunId')
-      const checks = checkState(env.read(), selectedSurface)
+      const checks = checkState(env.read(), selected)
       const parsedChecks = checks === null ? null : parseChecksResult(checks, selected.number)
       const row = parsedChecks?.checks.find((check) => check.checkRunId === checkRunId)
       if (!isRecord(row)) throw env.invalid('not_found', 'The selected check run is not in the current pull request checks list.')
@@ -1241,11 +1450,13 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           throw env.invalid('stale_head', 'The pull request or check changed while check details were loading.')
         }
         applyIfOwner(env, selected, (state) => {
-          const existing = selectedSurface === 'detail' ? state.detail.checks : state.checks.checks
-          const detailsById = isRecord(existing?.detailsById) ? { ...existing.detailsById } : {}
-          detailsById[String(checkRunId)] = details
+          const existing = selectedSurface === 'detail' ? state.detail.checks : checksOf(state, selected.worktree).checks
+          const detailsById = {
+            ...(isRecord(existing?.detailsById) ? existing.detailsById : {}),
+            ...Object.fromEntries([[String(checkRunId), details]]),
+          }
           const next = { ...(existing ?? { number: selected.number, checks: [] }), detailsById }
-          assignChecks(state, selectedSurface, next)
+          assignChecks(state, selected, next)
         })
         return { surface: selectedSurface, number: selected.number, checkRunId, details }
       } catch (error) {
@@ -1281,7 +1492,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           if (!selectionMatches(env.read(), selected) || (writeVersions.get(selected.identity) ?? 0) !== writeVersionAfterStart) {
             throw env.invalid('stale_target', 'The rerun was requested, but a newer review mutation owns the checks state.')
           }
-          refreshed = applyIfOwner(env, selected, (state) => assignChecks(state, selectedSurface, parsed))
+          refreshed = applyIfOwner(env, selected, (state) => assignChecks(state, selected, parsed))
           if (!refreshed) throw env.invalid('stale_target', 'The rerun was requested, but the selected review surface changed.')
         } catch (error) {
           refreshError = errorMessage(error)
@@ -1325,15 +1536,15 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const overlay = getOverlay(selected)
         overlay.set(commentIdKey(comment), comment)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
           const comments = parsed?.comments
           const next = commentsEnvelope(selected.number, [...(comments ?? []), comment], current)
-          assignComments(state, selectedSurface, { ...next, comments: mergeOverlay(next.comments, overlay) })
+          assignComments(state, selected, { ...next, comments: mergeOverlay(next.comments, overlay) })
           if (selectedSurface === 'detail' && state.detail.commentDraft === body) state.detail.commentDraft = ''
-          if (selectedSurface === 'checks' && state.checks.commentDraft === body) state.checks.commentDraft = ''
+          if (selectedSurface === 'checks' && checksOf(state, selected.worktree).commentDraft === body) checksOf(state, selected.worktree).commentDraft = ''
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, comment: { id: comment.id as number, kind: comment.kind, body: comment.body, author: comment.author, createdAt: comment.createdAt, url: comment.url ?? null } }
       } catch (error) {
@@ -1359,11 +1570,11 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const ticket = beginMutation(env, selected, `comment:${commentId}`, mutationCounters, pendingCounts, writeVersions)
       const optimistic = { ...original, body }
       applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const list = updateCommentList(parsed.comments, commentId, (value) => ({ ...value, body }))
-        assignComments(state, selectedSurface, { ...parsed, comments: list })
+        assignComments(state, selected, { ...parsed, comments: list })
       })
       try {
         const raw = await env.call('quirky.hosting/reviewConversation', { ...hostingParams(selected), action: 'edit', commentId, body })
@@ -1371,19 +1582,19 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the comment edit was confirmed.')
         getOverlay(selected).set(commentIdKey(edited), edited)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => edited) })
+          if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => edited) })
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, commentId, body, updated: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-            if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => original) })
+            if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => original) })
           })
         }
         recordError(env, selected, error)
@@ -1397,6 +1608,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const commentId = positiveNumber(env, params.commentId, 'commentId')
       const comments = commentsFromState(env, selected)
       const original = comments[commentIndex(comments, commentId)]
@@ -1405,9 +1617,9 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       }
       const ticket = beginMutation(env, selected, `comment:${commentId}`, mutationCounters, pendingCounts, writeVersions)
       applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-        if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
+        if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
       })
       try {
         const raw = await env.call('quirky.hosting/reviewConversation', { ...hostingParams(selected), action: 'delete', commentId, yes: true })
@@ -1418,20 +1630,20 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         const overlay = getOverlay(selected)
         overlay.set(`issue_comment:${commentId}`, null)
         applyIfOwner(env, selected, (state) => {
-          const current = commentState(state, selectedSurface)
+          const current = commentState(state, selected)
           const parsed = current === null ? null : parseCommentsResult(current, selected.number)
-          if (parsed !== null) assignComments(state, selectedSurface, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
+          if (parsed !== null) assignComments(state, selected, { ...parsed, comments: updateCommentList(parsed.comments, commentId, () => null) })
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, commentId, deleted: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
             if (parsed !== null && commentIndex(parsed.comments, commentId) === -1) {
-              assignComments(state, selectedSurface, { ...parsed, comments: [...parsed.comments, original] })
+              assignComments(state, selected, { ...parsed, comments: [...parsed.comments, original] })
             }
           })
         }
@@ -1454,17 +1666,19 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const oldStates = comments.filter((comment) => comment.threadId === params.threadId).map((comment) => comment.isResolved)
       const ticket = beginMutation(env, selected, `thread:${params.threadId}`, mutationCounters, pendingCounts, writeVersions)
       const setResolved = (resolved: boolean | null) => applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const next = parsed.comments.map((comment) => comment.threadId === params.threadId ? { ...comment, isResolved: resolved } : comment)
-        assignComments(state, selectedSurface, { ...parsed, comments: next })
+        assignComments(state, selected, { ...parsed, comments: next })
       })
       setResolved(params.resolved as boolean)
       try {
         const raw = await env.call('quirky.hosting/resolveThread', { ...hostingParams(selected), threadId: params.threadId, action: params.resolved === true ? 'resolve' : 'unresolve' })
         const expectedAction = params.resolved === true ? 'resolve' : 'unresolve'
-        if (!isRecord(raw) || raw.number !== selected.number || raw.threadId !== params.threadId || raw.action !== expectedAction || raw.resolved !== params.resolved) {
+        const validNumber = isRecord(raw)
+          && (raw.number === selected.number || selected.review?.provider === 'gitlab' && raw.number === undefined)
+        if (!isRecord(raw) || !validNumber || raw.threadId !== params.threadId || raw.action !== expectedAction || raw.resolved !== params.resolved) {
           throw env.invalid('invalid_upstream', 'The hosting API did not confirm the review thread state.')
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the thread update was confirmed.')
@@ -1474,7 +1688,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (isLatest(ticket, mutationCounters)) {
           let offset = 0
           applyIfOwner(env, selected, (state) => {
-            const current = commentState(state, selectedSurface)
+            const current = commentState(state, selected)
             const parsed = current === null ? null : parseCommentsResult(current, selected.number)
             if (parsed === null) return
             const next = parsed.comments.map((comment) => {
@@ -1483,7 +1697,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
               offset += 1
               return { ...comment, isResolved }
             })
-            assignComments(state, selectedSurface, { ...parsed, comments: next })
+            assignComments(state, selected, { ...parsed, comments: next })
           })
         }
         recordError(env, selected, error)
@@ -1497,6 +1711,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (typeof params.subjectId !== 'string' || params.subjectId.trim() === '' || params.subjectId.length > 1024
         || !reactions.includes(params.content as typeof reactions[number]) || typeof params.add !== 'boolean') {
         throw env.invalid('invalid_input', 'Reaction target, content, and action are required.')
@@ -1506,7 +1721,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const content = params.content as typeof reactions[number]
       const ticket = beginMutation(env, selected, `reaction:${params.subjectId}:${content}`, mutationCounters, pendingCounts, writeVersions)
       const patch = (viewerHasReacted: boolean, countDelta: number) => applyIfOwner(env, selected, (state) => {
-        const current = commentState(state, selectedSurface)
+        const current = commentState(state, selected)
         const parsed = current === null ? null : parseCommentsResult(current, selected.number)
         if (parsed === null) return
         const next = parsed.comments.map((comment) => {
@@ -1517,7 +1732,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
           if (viewerHasReacted || count > 0) nextReactions.push({ content, count, viewerHasReacted })
           return { ...comment, reactions: nextReactions }
         })
-        assignComments(state, selectedSurface, { ...parsed, comments: next })
+        assignComments(state, selected, { ...parsed, comments: next })
       })
       patch(params.add as boolean, params.add === true ? 1 : -1)
       try {
@@ -1547,8 +1762,8 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       if (before === null) throw env.invalid('no_review', 'The pull request is not available.')
       const ticket = beginMutation(env, selected, 'description', mutationCounters, pendingCounts, writeVersions)
       applyIfOwner(env, selected, (state) => {
-        const current = surfaceReview(state, selectedSurface)
-        if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { body }))
+        const current = surfaceReview(state, selected)
+        if (current !== null) assignReview(state, selected, withReviewChange(current, { body }))
         if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item)) {
           state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body } }
         }
@@ -1558,22 +1773,22 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (!parseNumberResult(raw, selected.number) || raw.updated !== true) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the pull request description update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the description update was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { body }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { body }))
           if (selectedSurface === 'detail') {
             if (state.detail.details && isRecord(state.detail.details.item)) {
               state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body } }
             }
             state.detail.bodyDraft = null
             state.detail.error = null
-          } else state.checks.error = null
+          } else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, body, updated: true }
       } catch (error) {
         if (isLatest(ticket, mutationCounters)) {
           applyIfOwner(env, selected, (state) => {
-            const current = surfaceReview(state, selectedSurface)
-            if (current !== null && current.body === body) assignReview(state, selectedSurface, withReviewChange(current, { body: before.body }))
+            const current = surfaceReview(state, selected)
+            if (current !== null && current.body === body) assignReview(state, selected, withReviewChange(current, { body: before.body }))
             if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item) && state.detail.details.item.body === body) {
               state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, body: before.body } }
             }
@@ -1590,6 +1805,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const action = params.action
       if (action !== 'add' && action !== 'remove' || !Array.isArray(params.logins) || params.logins.length < 1 || params.logins.length > 15
         || !params.logins.every((login) => typeof login === 'string' && login.trim().length > 0 && login.trim().length <= 39)) {
@@ -1604,10 +1820,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (reviewers === null || !isRecord(raw) || raw.updated !== true) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the reviewer update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before reviewers were updated.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { requestedReviewers: reviewers }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { requestedReviewers: reviewers }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, reviewers, updated: true }
       } catch (error) {
@@ -1622,6 +1838,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const action = params.action
       if (action !== 'add' && action !== 'remove' && action !== 'set' || !Array.isArray(params.logins) || params.logins.length > 100
         || !params.logins.every((login) => typeof login === 'string' && login.trim().length > 0 && login.trim().length <= 256)) {
@@ -1635,13 +1852,13 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         if (assignees === null) throw env.invalid('invalid_upstream', 'The hosting API did not confirm the assignee update.')
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before assignees were updated.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { assignees }))
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, { assignees }))
           if (selectedSurface === 'detail' && state.detail.details && isRecord(state.detail.details.item)) {
             state.detail.details = { ...state.detail.details, item: { ...state.detail.details.item, assignees } }
           }
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, assignees }
       } catch (error) {
@@ -1668,6 +1885,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       requireHead(env, selected, params.expectedHead)
       const method = params.method
       const action = params.action
@@ -1692,6 +1910,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const method = params.method
       const action = params.action
@@ -1711,12 +1930,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_head', 'The pull request changed before the merge was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
+          const current = surfaceReview(state, selected)
           if (current === null) return
-          if (raw.state === 'merged') assignReview(state, selectedSurface, withReviewChange(current, { state: 'merged' }))
-          else assignReview(state, selectedSurface, withReviewChange(current, { state: 'open', autoMergeRequest: { state: raw.state, operationId: raw.operationId ?? null } }))
+          if (raw.state === 'merged') assignReview(state, selected, withReviewChange(current, { state: 'merged' }))
+          else assignReview(state, selected, withReviewChange(current, { state: 'open', autoMergeRequest: { state: raw.state, operationId: raw.operationId ?? null } }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return {
           number: selected.number,
@@ -1736,6 +1955,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       const expectedHead = requireHead(env, selected, params.expectedHead)
       if (typeof params.enabled !== 'boolean') throw env.invalid('invalid_input', 'enabled must be a boolean.')
       const method = params.method === undefined ? undefined : params.method
@@ -1755,12 +1975,12 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_head', 'The pull request changed before the auto-merge state was confirmed.')
         applyIfOwner(env, selected, (state) => {
-          const current = surfaceReview(state, selectedSurface)
-          if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, {
+          const current = surfaceReview(state, selected)
+          if (current !== null) assignReview(state, selected, withReviewChange(current, {
             autoMergeRequest: params.enabled === true ? { state: raw.state, enabled: true, method: method ?? policy.defaultMethod } : null,
           }))
           if (selectedSurface === 'detail') state.detail.error = null
-          else state.checks.error = null
+          else checksOf(state, selected.worktree).error = null
         })
         return { number: selected.number, enabled: params.enabled, state: raw.state }
       } catch (error) {
@@ -1775,6 +1995,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (typeof params.path !== 'string' || params.path.trim() === '' || params.path.length > 1024 || typeof params.viewed !== 'boolean') {
         throw env.invalid('invalid_input', 'path and viewed are required for a changed-file update.')
       }
@@ -1815,6 +2036,7 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
       const selectedSurface = surface(params)
       const selected = selection(params, selectedSurface, true)
       checkNumber(params, selected)
+      rejectUnsupportedGitLab(env, selected)
       if (selectedSurface !== 'detail') throw env.invalid('unsupported_surface', 'Inline review comments are available only on the pull request detail page.')
       const expectedHead = requireHead(env, selected, params.expectedHead)
       const path = params.path
@@ -1889,26 +2111,30 @@ async function updateReviewState(
   const ticket = beginMutation(env, selected, operation, mutationCounters, pendingCounts, writeVersions)
   const optimisticState = action === 'close' ? 'closed' : 'open'
   if (action !== 'ready') applyIfOwner(env, selected, (state) => {
-    const current = surfaceReview(state, selectedSurface)
-    if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { state: optimisticState }))
+    const current = surfaceReview(state, selected)
+    if (current !== null) assignReview(state, selected, withReviewChange(current, { state: optimisticState }))
   })
   try {
     const raw = await env.call('quirky.hosting/updateReview', { ...hostingParams(selected), action })
-    const expected = action === 'close' ? 'closed' : 'open'
-    if (!parseReviewUpdate(raw, selected.number, expected)) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
+    const provider = selected.review!.provider as ReviewProvider
+    const allowedStates = action === 'close' ? ['closed'] as const
+      : action === 'reopen' && provider === 'gitlab' ? ['open', 'draft'] as const
+      : ['open'] as const
+    const confirmed = parseReviewUpdate(raw, selected.number, allowedStates, provider)
+    if (confirmed === null) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
     if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the state update was confirmed.')
     applyIfOwner(env, selected, (state) => {
-      const current = surfaceReview(state, selectedSurface)
-      if (current !== null) assignReview(state, selectedSurface, withReviewChange(current, { state: expected }))
+      const current = surfaceReview(state, selected)
+      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: confirmed.state }))
       if (selectedSurface === 'detail') state.detail.error = null
-      else state.checks.error = null
+      else checksOf(state, selected.worktree).error = null
     })
-    return { number: selected.number, state: expected, updated: true }
+    return { number: selected.number, ...confirmed }
   } catch (error) {
     if (action !== 'ready' && mutationCounters.get(ticket.key) === ticket.sequence) {
       applyIfOwner(env, selected, (state) => {
-        const current = surfaceReview(state, selectedSurface)
-        if (current !== null && current.state === optimisticState) assignReview(state, selectedSurface, withReviewChange(current, { state: before.state }))
+        const current = surfaceReview(state, selected)
+        if (current !== null && current.state === optimisticState) assignReview(state, selected, withReviewChange(current, { state: before.state }))
       })
     }
     recordError(env, selected, error)

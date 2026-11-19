@@ -47,6 +47,7 @@ function renderModel(model: UiModel): string {
     ['SIDEBAR', model.sidebarSections, () => slotTable(model.sidebarSections)],
     ['ACTIVITY ITEMS', model.activityItems, () => slotTable(model.activityItems)],
     ['STATUS BARS', model.statusBars, () => slotTable(model.statusBars)],
+    ['WINDOW BAR ITEMS', model.windowBarItems ?? [], () => slotTable(model.windowBarItems ?? [])],
     ['PANELS', model.panels, () => slotTable(model.panels)],
     ['TOOLS', model.tools ?? [], () => toolTable(model.tools ?? [])],
     ['VIEWS', model.views, () => slotTable(model.views)],
@@ -353,5 +354,26 @@ export const uiRun: Command = {
     const commandArgs = args.flags.args
     const reply = await ctx.rpc.call('ui.command.run', { id, ...(commandArgs === undefined ? {} : { args: commandArgs }) })
     ctx.out.result(reply, () => formatGeneric(reply.result))
+  }
+}
+
+export const uiUrl: Command = {
+  name: 'ui url',
+  summary: 'print the browser UI URL and optionally request the daemon host to open it',
+  positionals: [],
+  flags: {
+    open: { type: 'boolean', description: 'request the daemon host’s default browser' }
+  },
+  methods: ['ui.url', 'ui.open'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    if (args.flags.open === true) {
+      const result = await ctx.rpc.call('ui.open', {})
+      ctx.out.result(result, () => result.url)
+      return
+    }
+    const result = await ctx.rpc.call('ui.url', {})
+    ctx.out.result(result, () => result.url)
   }
 }

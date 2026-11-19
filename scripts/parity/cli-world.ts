@@ -1,0 +1,2514 @@
+import { spawnSync } from 'node:child_process'
+import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { tmpdir } from 'node:os'
+import { daemonEntryHash, isDaemonAlive, readDaemonHealth, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
+import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } from '../test-support/process-scope'
+import { createIsolatedRuntimeEnvironment, prepareCaptureFixtureHome, type FixtureWorktree } from '../ui-review/fixtures'
+import type { Page } from 'playwright'
+import type { StartWorldDependencies, SoakWorld } from '../soak/world'
+import type { SoakWindows, WindowStartupObservation } from '../soak/windows'
+import type { WindowRecord } from '../soak/contracts'
+import { createCliFixtures, installCliFixtureTools, type CliFixturePaths, type CliFixtureTools, type FixtureCommandResult } from './cli-fixtures'
+import { buildCliActorCommand } from './cli-actor'
+import { daemonStatus } from './daemon-status'
+import { CLI_FILES_LIMITS } from './cli-files-limits'
+
+const MAX_STDOUT_BYTES = 16 * 1024 * 1024
+const MAX_STDERR_BYTES = 8 * 1024
+const COMMAND_TIMEOUT_MS = 15_000
+const STARTUP_TIMEOUT_MS = 30_000
+const PROCESS_TABLE_TIMEOUT_MS = 2_000
+const PROCESS_TABLE_LIMIT_BYTES = 16 * 1024 * 1024
+
+export type CliWorldExecuteOptions = { signal?: AbortSignal; timeoutMs?: number; cwd?: string }
+export type CliWorldHooks = {
+  beforeStart?: () => Promise<void> | void
+  afterReady?: (world: CliWorld) => Promise<void> | void
+  onActorLive?: (world: CliWorld) => Promise<void> | void
+}
+export type CliWorldOptions = { signal?: AbortSignal; deadline?: number; hooks?: CliWorldHooks }
+export type CliWorldPaths = CliFixturePaths & {
+  repoRoot: string
+  cliEntry: string
+  daemonEntry: string
+  actorCommand: string
+  coordinatorCommand: string
+}
+export type CliWorldResult = {
+  stdout: string
+  stderr: string
+  exitCode: number
+  stdoutBytes: number
+  elapsedMs: number
+}
+export type CliWorld = {
+  home: string
+  env: Record<string, string>
+  daemonPid: number
+  readonly ptyPid: number | undefined
+  scope: ProcessScope
+  paths: CliWorldPaths
+  serveEnvironment(home: string): Record<string, string>
+  execute(argv: string[], options?: CliWorldExecuteOptions): Promise<CliWorldResult>
+  actorLive(): Promise<void>
+  cleanup(): Promise<void>
+}
+
+export type CliFilesWorldOptions = { signal?: AbortSignal; deadline?: number }
+export type CliProcessInspectionMetadata = {
+  spawnErrorCode: string | null
+  spawnErrorName: string | null
+  exitStatus: number | null
+  signal: string | null
+  stdoutWasString: boolean
+  stdoutBytes: number | null
+  timeoutHit: boolean
+  maxBufferHit: boolean
+  timeoutMs: number
+  maxBufferBytes: number
+}
+export type CliFilesTrackedIdentity = {
+  kind: string
+  pid: number
+  ppid: number
+  pgid: number
+  started: string
+  command: string
+  gone: boolean
+}
+export type CliFilesCleanupEvidence = {
+  trackedIdentities: readonly CliFilesTrackedIdentity[]
+  identities: readonly { kind: string; pid: number; gone: boolean }[]
+  processIdentitiesGone: boolean
+  homeRemoved: boolean
+  processInspection?: CliProcessInspectionMetadata
+}
+export type CliFilesStartupDiagnostics = {
+  phase: 'environment' | 'fixtures' | 'build' | 'daemon' | 'renderer' | 'ready'
+  elapsedMs: number
+  buildElapsedMs: number
+  rendererElapsedMs: number
+  assets?: { uiDir: string; pluginsDir: string }
+  renderer: WindowStartupObservation[]
+  logs: { buildTail?: string; daemonTail?: string; rendererTail?: string }
+  processInspection?: CliProcessInspectionMetadata
+}
+export type CliFilesStartupEvidence = {
+  diagnostics: CliFilesStartupDiagnostics
+  cleanup: {
+    ok: boolean
+    error?: string
+    evidence: CliFilesCleanupEvidence & {
+      started: { daemon: boolean; browser: boolean }
+      unresolvedAcquisition: boolean
+      scopeCleanupComplete: boolean
+      acquisitionSettled: boolean
+    }
+  }
+}
+export type CliFilesWorld = {
+  home: string
+  env: Record<string, string>
+  daemonPid: number
+  cliEntry: string
+  pages: readonly Page[]
+  records: readonly WindowRecord[]
+  worktrees: readonly FixtureWorktree[]
+  tools: CliFixtureTools
+  buildElapsedMs: number
+  readonly startupDiagnostics?: CliFilesStartupDiagnostics
+  assertLive(options?: CliWorldExecuteOptions): Promise<void>
+  execute(argv: string[], options?: CliWorldExecuteOptions): Promise<CliWorldResult>
+  prepare(argv: string[], cwd: string, options?: CliWorldExecuteOptions): Promise<CliWorldResult>
+  cleanup(): Promise<void>
+  readonly cleanupEvidence: CliFilesCleanupEvidence
+}
+
+type CliFilesStartWorldOptions = {
+  out: string
+  repoRoot: string
+  signal?: AbortSignal
+  windows: 2
+  workers: false
+}
+type CliFilesWorldDependencies = {
+  createScope?: () => ProcessScope
+  installCliFixtureTools?: typeof installCliFixtureTools
+  createCliEnvironment?: typeof createCliEnvironment
+  startWorld?: (options: CliFilesStartWorldOptions, dependencies: StartWorldDependencies) => Promise<SoakWorld>
+  prepareCaptureFixtureHome?: typeof prepareCaptureFixtureHome
+  registerCaptureFixtures?: StartWorldDependencies['registerCaptureFixtures']
+  openWindows?: (options: {
+    world: SoakWorld
+    count: number
+    executable: string
+    out: string
+    signal: AbortSignal
+    onStartup?: (observation: WindowStartupObservation) => void
+  }) => Promise<SoakWindows>
+  findChrome?: () => string | undefined
+  readRuntime?: typeof readRuntime
+  isDaemonAlive?: typeof isDaemonAlive
+  processSnapshot?: typeof processSnapshot
+  spawnProcessSnapshot?: typeof spawnSync
+  now?: () => number
+  sleep?: (milliseconds: number) => Promise<void>
+  verifyEgressGuard?: (options: {
+    env: Record<string, string>
+    tools: CliFixtureTools
+    repoRoot: string
+  }) => Promise<void>
+  runCli?: (argv: string[], options: CliWorldExecuteOptions & { cwd: string; timeoutMs: number }) => Promise<CliWorldResult>
+  runPreparation?: (argv: string[], options: CliWorldExecuteOptions & { cwd: string; timeoutMs: number }) => Promise<CliWorldResult>
+}
+
+function freezeCliFilesValue<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+  const entries = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)
+  for (const entry of entries) freezeCliFilesValue(entry)
+  return Object.freeze(value)
+}
+
+export class CliWorldError extends Error {
+  cleanupError?: string
+  constructor(
+    readonly kind: string,
+    message: string,
+    readonly stderrTail?: string,
+    readonly stdoutBytes?: number,
+    readonly elapsedMs?: number,
+    readonly exitCode?: number
+  ) {
+    super(message)
+    this.name = 'CliWorldError'
+  }
+}
+export class CliFilesStartupError extends CliWorldError {
+  readonly startupEvidence: CliFilesStartupEvidence
+  constructor(
+    kind: string,
+    message: string,
+    startupEvidence: CliFilesStartupEvidence,
+    stderrTail?: string,
+    stdoutBytes?: number,
+    elapsedMs?: number,
+    exitCode?: number
+  ) {
+    super(kind, message, stderrTail, stdoutBytes, elapsedMs, exitCode)
+    this.name = 'CliFilesStartupError'
+    this.startupEvidence = freezeCliFilesValue(startupEvidence)
+  }
+}
+
+type ProcessIdentity = { pid: number; ppid: number; pgid: number; started: string; state: string; command: string }
+type HeadCapture = { done: Promise<void>; text(): string; bytes(): number; overflow(): boolean; cancel(): Promise<void> }
+type TailCapture = { done: Promise<void>; text(): string; cancel(): Promise<void> }
+export type CliBoundedChild = Bun.Subprocess<'ignore', 'pipe', 'pipe'>
+export type CliCaptureOptions = { signal?: AbortSignal; timeoutMs: number }
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function checkInterrupted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  throw reason instanceof Error ? reason : new CliWorldError('interrupted', typeof reason === 'string' ? reason : 'CLI rehearsal was interrupted')
+}
+
+/** Keep the scope helper's implicit ps calls inside the same isolated environment as its guardian. */
+function ownImplicitProcessCalls(env: Record<string, string>): () => void {
+  const original = Bun.spawnSync
+  Bun.spawnSync = new Proxy(original, {
+    apply(target, receiver, args: unknown[]) {
+      const [commandOrOptions, options] = args
+      if (Array.isArray(commandOrOptions)) {
+        const supplied = options && typeof options === 'object'
+          ? options as Record<string, unknown>
+          : {}
+        const childEnv = supplied.env === undefined ? env : supplied.env
+        return Reflect.apply(target, receiver, [commandOrOptions, { ...supplied, env: childEnv }])
+      }
+      if (commandOrOptions !== null && typeof commandOrOptions === 'object'
+        && 'cmd' in commandOrOptions && Array.isArray(commandOrOptions.cmd)) {
+        const supplied = commandOrOptions as Record<string, unknown>
+        const childEnv = supplied.env === undefined ? env : supplied.env
+        return Reflect.apply(target, receiver, [{ ...supplied, env: childEnv }])
+      }
+      throw new Error('scope process calls must use executable argv')
+    }
+  })
+  return () => { Bun.spawnSync = original }
+}
+
+function withOwnedProcessEnvironment<T>(env: Record<string, string>, operation: () => T): T {
+  const previous = { ...process.env }
+  for (const key of Object.keys(process.env)) delete process.env[key]
+  Object.assign(process.env, env)
+  const restoreProcessCalls = ownImplicitProcessCalls(env)
+  try {
+    return operation()
+  } finally {
+    restoreProcessCalls()
+    for (const key of Object.keys(process.env)) delete process.env[key]
+    Object.assign(process.env, previous)
+  }
+}
+
+function safeProcessScope(
+  scope: ProcessScope,
+  env: Record<string, string>,
+  onSpawn?: (command: string[], child: { pid: number; exited: Promise<number> }, spawnedAt: number) => void
+): ProcessScope {
+  let cleanupPromise: Promise<void> | undefined
+  return {
+    home: scope.home,
+    env: scope.env,
+    spawn<
+      const In extends Bun.SpawnOptions.Writable = 'ignore',
+      const Out extends Bun.SpawnOptions.Readable = 'pipe',
+      const Err extends Bun.SpawnOptions.Readable = 'inherit'
+    >(command: string[], options?: ProcessScopeSpawnOptions<In, Out, Err>) {
+      let spawnedAt = 0
+      const child = withOwnedProcessEnvironment(env, () => {
+        spawnedAt = performance.now()
+        return scope.spawn(command, { ...options, env: options?.env ?? env })
+      })
+      onSpawn?.(command, child, spawnedAt)
+      return child
+    },
+    track(pid: number) {
+      withOwnedProcessEnvironment(env, () => scope.track(pid))
+    },
+    cleanup() {
+      cleanupPromise ??= Promise.resolve().then(() => scope.cleanup(env))
+      return cleanupPromise
+    },
+    killNow() {
+      withOwnedProcessEnvironment(env, () => scope.killNow())
+    }
+  }
+}
+
+function createHeadCapture(stream: ReadableStream<Uint8Array> | null, onOverflow: () => void): HeadCapture {
+  const chunks: Buffer[] = []
+  let keptBytes = 0
+  let totalBytes = 0
+  let didOverflow = false
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const done = (async () => {
+    if (!stream) return
+    reader = stream.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = Buffer.from(value)
+        totalBytes += chunk.length
+        const allowed = Math.max(0, Math.min(chunk.length, MAX_STDOUT_BYTES - keptBytes))
+        if (allowed > 0) {
+          chunks.push(allowed === chunk.length ? chunk : chunk.subarray(0, allowed))
+          keptBytes += allowed
+        }
+        if (allowed < chunk.length && !didOverflow) {
+          didOverflow = true
+          onOverflow()
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  })()
+  return {
+    done,
+    text: () => Buffer.concat(chunks, keptBytes).toString('utf8'),
+    bytes: () => totalBytes,
+    overflow: () => didOverflow,
+    async cancel() { await reader?.cancel().catch(() => undefined) }
+  }
+}
+
+function createTailCapture(stream: ReadableStream<Uint8Array> | null): TailCapture {
+  const chunks: Buffer[] = []
+  let keptBytes = 0
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const done = (async () => {
+    if (!stream) return
+    reader = stream.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = Buffer.from(value)
+        if (chunk.length >= MAX_STDERR_BYTES) {
+          chunks.splice(0, chunks.length, chunk.subarray(chunk.length - MAX_STDERR_BYTES))
+          keptBytes = MAX_STDERR_BYTES
+          continue
+        }
+        chunks.push(chunk)
+        keptBytes += chunk.length
+        while (keptBytes > MAX_STDERR_BYTES) {
+          const excess = keptBytes - MAX_STDERR_BYTES
+          const first = chunks[0]!
+          if (first.length <= excess) {
+            chunks.shift()
+            keptBytes -= first.length
+          } else {
+            chunks[0] = first.subarray(excess)
+            keptBytes -= excess
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  })()
+  return {
+    done,
+    text: () => Buffer.concat(chunks, keptBytes).toString('utf8'),
+    async cancel() { await reader?.cancel().catch(() => undefined) }
+  }
+}
+
+function signalChildGroup(child: CliBoundedChild, signal: NodeJS.Signals): void {
+  if (process.platform === 'win32') {
+    try { child.kill(signal) } catch {}
+    return
+  }
+  try {
+    process.kill(-child.pid, signal)
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ESRCH') return
+    try { child.kill(signal) } catch {}
+  }
+}
+
+async function terminateChildGroup(child: CliBoundedChild): Promise<number> {
+  signalChildGroup(child, 'SIGTERM')
+  const graceful = await Promise.race([child.exited.then(exit => ({ exit })), Bun.sleep(200).then(() => undefined)])
+  signalChildGroup(child, 'SIGKILL')
+  const reaped = graceful ?? await Promise.race([child.exited.then(exit => ({ exit })), Bun.sleep(500).then(() => undefined)])
+  if (!reaped) throw new CliWorldError('child-reap-failed', `owned child ${child.pid} did not exit after SIGKILL`)
+  return reaped.exit
+}
+
+async function drainCaptures(stdout: HeadCapture, stderr: TailCapture): Promise<void> {
+  const drains = Promise.all([stdout.done, stderr.done])
+  const finished = await Promise.race([drains.then(() => true), Bun.sleep(500).then(() => false)])
+  if (finished) return
+  await Promise.allSettled([stdout.cancel(), stderr.cancel()])
+  await Promise.allSettled([stdout.done, stderr.done])
+}
+
+function boundedCommandError(
+  kind: string,
+  message: string,
+  stderrTail: string,
+  measurements?: { stdoutBytes: number; elapsedMs: number; exitCode: number }
+): CliWorldError {
+  return new CliWorldError(kind, message, stderrTail, measurements?.stdoutBytes, measurements?.elapsedMs, measurements?.exitCode)
+}
+
+export async function captureCliChild(child: CliBoundedChild, options: CliCaptureOptions): Promise<CliWorldResult> {
+  const timeoutMs = Math.min(COMMAND_TIMEOUT_MS, options.timeoutMs)
+  checkInterrupted(options.signal)
+  if (timeoutMs <= 0) throw new CliWorldError('deadline', 'No child command time remains')
+  const failure = Promise.withResolvers<never>()
+  const stdout = createHeadCapture(child.stdout, () => failure.reject(boundedCommandError('stdout-overflow', `Child stdout exceeded ${MAX_STDOUT_BYTES} bytes`, '')))
+  const stderr = createTailCapture(child.stderr)
+  const startedAt = Date.now()
+  const onAbort = () => {
+    const reason = options.signal?.reason
+    const kind = reason && typeof reason === 'object' && 'kind' in reason && typeof reason.kind === 'string' ? reason.kind : 'interrupted'
+    failure.reject(boundedCommandError(kind, errorText(reason ?? 'Child command was interrupted'), ''))
+  }
+  const timer = setTimeout(() => failure.reject(boundedCommandError('command-timeout', `Child command exceeded ${timeoutMs}ms`, '')), timeoutMs)
+  options.signal?.addEventListener('abort', onAbort, { once: true })
+  if (options.signal?.aborted) onAbort()
+  let exitCode: number
+  try {
+    exitCode = await Promise.race([child.exited, failure.promise])
+  } catch (error) {
+    let cleanupError: string | undefined
+    let reapedCode: number | undefined
+    try { reapedCode = await terminateChildGroup(child) } catch (stopError) { cleanupError = errorText(stopError) }
+    await drainCaptures(stdout, stderr)
+    const kind = error && typeof error === 'object' && 'kind' in error && typeof error.kind === 'string' ? error.kind : 'child-failed'
+    const message = [errorText(error), cleanupError ? `child cleanup failed: ${cleanupError}` : ''].filter(Boolean).join('; ')
+    throw boundedCommandError(kind, message, stderr.text(), {
+      stdoutBytes: stdout.bytes(),
+      elapsedMs: Date.now() - startedAt,
+      exitCode: reapedCode ?? child.exitCode ?? -1
+    })
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', onAbort)
+  }
+  if (stdout.overflow()) {
+    const reapedCode = await terminateChildGroup(child)
+    await drainCaptures(stdout, stderr)
+    throw boundedCommandError('stdout-overflow', `Child stdout exceeded ${MAX_STDOUT_BYTES} bytes`, stderr.text(), {
+      stdoutBytes: stdout.bytes(),
+      elapsedMs: Date.now() - startedAt,
+      exitCode: reapedCode
+    })
+  }
+  try {
+    await terminateChildGroup(child)
+    await drainCaptures(stdout, stderr)
+  } catch (error) {
+    throw boundedCommandError('child-reap-failed', errorText(error), stderr.text(), {
+      stdoutBytes: stdout.bytes(),
+      elapsedMs: Date.now() - startedAt,
+      exitCode: child.exitCode ?? exitCode
+    })
+  }
+  return { stdout: stdout.text(), stderr: stderr.text(), exitCode, stdoutBytes: stdout.bytes(), elapsedMs: Date.now() - startedAt }
+}
+
+async function runBoundedChild(scope: ProcessScope, env: Record<string, string>, argv: string[], options: {
+  cwd: string
+  signal?: AbortSignal
+  timeoutMs: number
+}): Promise<CliWorldResult> {
+  checkInterrupted(options.signal)
+  const child = scope.spawn(argv, {
+    cwd: options.cwd,
+    env,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe'
+  }) as CliBoundedChild
+  return captureCliChild(child, options)
+}
+
+function parseProcessTable(text: string): Map<number, ProcessIdentity> {
+  const rows = new Map<number, ProcessIdentity>()
+  for (const line of text.split('\n')) {
+    const columns = line.trim().split(/\s+/)
+    const [pid, ppid, pgid] = columns.slice(0, 3).map(Number)
+    if (!Number.isInteger(pid) || !Number.isInteger(ppid) || !Number.isInteger(pgid) || columns.length < 10) continue
+    rows.set(pid, {
+      pid,
+      ppid,
+      pgid,
+      started: columns.slice(3, 8).join(' '),
+      state: columns[8]!,
+      command: columns.slice(9).join(' ')
+    })
+  }
+  return rows
+}
+
+function boundedProcessInspectionString(value: string): string {
+  if (Buffer.byteLength(value, 'utf8') <= 128) return value
+  const bytes = Buffer.from(value, 'utf8')
+  let end = 128
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1
+  return bytes.subarray(0, end).toString('utf8')
+}
+
+export function getProcessInspectionMetadata(error: unknown): CliProcessInspectionMetadata | undefined {
+  if (!error || typeof error !== 'object' || !('processInspection' in error)) return undefined
+  const candidate = error.processInspection
+  if (!candidate || typeof candidate !== 'object') return undefined
+  const value = candidate as Record<string, unknown>
+  const nullableString = (field: unknown): field is string | null => field === null || typeof field === 'string'
+  const nullableSafeInteger = (field: unknown): field is number | null =>
+    field === null || (typeof field === 'number' && Number.isSafeInteger(field))
+  if (!nullableString(value.spawnErrorCode) || !nullableString(value.spawnErrorName)
+    || !nullableSafeInteger(value.exitStatus) || !nullableString(value.signal)
+    || typeof value.stdoutWasString !== 'boolean' || !nullableSafeInteger(value.stdoutBytes)
+    || (value.stdoutBytes !== null && value.stdoutBytes < 0)
+    || typeof value.timeoutHit !== 'boolean' || typeof value.maxBufferHit !== 'boolean'
+    || typeof value.timeoutMs !== 'number' || !Number.isSafeInteger(value.timeoutMs) || value.timeoutMs < 0
+    || typeof value.maxBufferBytes !== 'number' || !Number.isSafeInteger(value.maxBufferBytes) || value.maxBufferBytes < 0) {
+    return undefined
+  }
+  return Object.freeze({
+    spawnErrorCode: value.spawnErrorCode === null ? null : boundedProcessInspectionString(value.spawnErrorCode),
+    spawnErrorName: value.spawnErrorName === null ? null : boundedProcessInspectionString(value.spawnErrorName),
+    exitStatus: value.exitStatus,
+    signal: value.signal === null ? null : boundedProcessInspectionString(value.signal),
+    stdoutWasString: value.stdoutWasString,
+    stdoutBytes: value.stdoutBytes,
+    timeoutHit: value.timeoutHit,
+    maxBufferHit: value.maxBufferHit,
+    timeoutMs: value.timeoutMs,
+    maxBufferBytes: value.maxBufferBytes
+  })
+}
+
+function processSnapshot(home: string, spawn: typeof spawnSync = spawnSync): Map<number, ProcessIdentity> {
+  const result = spawn('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=,stat=,command='], {
+    cwd: home,
+    env: { HOME: home, QUIRKY_HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: join(home, 'tmp'), LANG: 'C', TZ: 'UTC' },
+    encoding: 'utf8',
+    timeout: PROCESS_TABLE_TIMEOUT_MS,
+    maxBuffer: PROCESS_TABLE_LIMIT_BYTES,
+    stdio: ['ignore', 'pipe', 'ignore']
+  })
+  if (!result.error && result.status === 0 && typeof result.stdout === 'string') return parseProcessTable(result.stdout)
+  const spawnError = result.error as (Error & { code?: unknown }) | null
+  const spawnErrorCode = typeof spawnError?.code === 'string' ? spawnError.code : null
+  const spawnErrorName = typeof spawnError?.name === 'string' ? spawnError.name : null
+  const stdoutWasString = typeof result.stdout === 'string'
+  const stdoutBytes = stdoutWasString
+    ? Buffer.byteLength(result.stdout as string, 'utf8')
+    : Buffer.isBuffer(result.stdout) ? result.stdout.byteLength : null
+  const metadata: CliProcessInspectionMetadata = Object.freeze({
+    spawnErrorCode: spawnErrorCode === null ? null : boundedProcessInspectionString(spawnErrorCode),
+    spawnErrorName: spawnErrorName === null ? null : boundedProcessInspectionString(spawnErrorName),
+    exitStatus: Number.isSafeInteger(result.status) ? result.status : null,
+    signal: typeof result.signal === 'string' ? boundedProcessInspectionString(result.signal) : null,
+    stdoutWasString,
+    stdoutBytes,
+    timeoutHit: spawnErrorCode === 'ETIMEDOUT' || spawnErrorName === 'TimeoutError',
+    maxBufferHit: spawnErrorCode === 'ENOBUFS' || spawnErrorCode === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+      || (stdoutBytes !== null && stdoutBytes > PROCESS_TABLE_LIMIT_BYTES),
+    timeoutMs: PROCESS_TABLE_TIMEOUT_MS,
+    maxBufferBytes: PROCESS_TABLE_LIMIT_BYTES
+  })
+  const error = new Error('could not inspect owned process identities')
+  Object.defineProperty(error, 'processInspection', { value: metadata, enumerable: true })
+  throw error
+}
+
+function processTree(snapshot: Map<number, ProcessIdentity>, rootPid: number): ProcessIdentity[] {
+  const children = new Map<number, ProcessIdentity[]>()
+  for (const row of snapshot.values()) children.set(row.ppid, [...(children.get(row.ppid) ?? []), row])
+  const seen = new Set<number>([rootPid])
+  const pending = [rootPid]
+  const found: ProcessIdentity[] = []
+  const root = snapshot.get(rootPid)
+  if (root) found.push(root)
+  while (pending.length > 0) {
+    const parent = pending.pop()!
+    for (const child of children.get(parent) ?? []) {
+      if (seen.has(child.pid)) continue
+      seen.add(child.pid)
+      found.push(child)
+      pending.push(child.pid)
+    }
+  }
+  return found
+}
+
+function processIdentityKey(identity: ProcessIdentity): string {
+  return `${identity.pid}\0${identity.started}\0${identity.command}`
+}
+
+function sameProcess(identity: ProcessIdentity, current: ProcessIdentity | undefined): boolean {
+  if (!current || current.pid !== identity.pid || current.started !== identity.started) return false
+  return current.command === identity.command || current.state.includes('Z')
+}
+
+function readPtyPid(home: string): number | undefined {
+  try {
+    const pid = Number(readFileSync(join(home, 'pty.pid'), 'utf8').trim())
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function checkReadyRuntime(home: string, daemonPid: number, entryHash: string): void {
+  const runtime = readRuntime(home)
+  if (!runtime || runtime.pid !== daemonPid || runtime.entryHash !== entryHash || runtime.port <= 0) {
+    throw new CliWorldError('daemon-readiness', 'runtime readiness does not belong to the spawned daemon and owned home')
+  }
+}
+
+async function healthCheck(home: string, daemon: CliBoundedChild, env: Record<string, string>, signal?: AbortSignal): Promise<boolean> {
+  checkInterrupted(signal)
+  let pendingProbe: Promise<boolean> | undefined
+  try {
+    return await daemonStatus(home, daemon, Number.POSITIVE_INFINITY, {
+      signal,
+      probeTimeoutMs: 250,
+      isDaemonAlive: (runtime, timeoutMs) => {
+        pendingProbe = withOwnedProcessEnvironment(env, () => isDaemonAlive(runtime, timeoutMs))
+        return pendingProbe
+      }
+    })
+  } finally {
+    await pendingProbe?.catch(() => {})
+  }
+}
+
+async function waitForCliFilesDaemonHealth(options: {
+  home: string
+  daemonPid: number
+  expectedRuntime: RuntimeInfo
+  processIdentity?: ProcessIdentity
+  env: Record<string, string>
+  signal: AbortSignal
+  deadline: number
+  readOwnedRuntime: typeof readRuntime
+  probe: typeof isDaemonAlive
+  processTable: typeof processSnapshot
+  identityAfterSuccess: boolean
+  timeoutLabel: string
+  now?: () => number
+  sleep?: (milliseconds: number) => Promise<void>
+}): Promise<{
+  alive: boolean
+  diagnostics: { probes: number; windowMs: number; lastProbeMs: number; daemonState: string; runtimeMatches: boolean }
+}> {
+  const now = options.now ?? Date.now
+  const sleep = options.sleep ?? ((milliseconds) => Bun.sleep(milliseconds))
+  const startedAt = now()
+  const retryDeadline = startedAt + Math.max(0, Math.min(5_000, options.deadline - Date.now()))
+  let processIdentity = options.processIdentity
+  let aborted = options.signal.aborted
+  let loopStopped = false
+  let probes = 0
+  let lastProbeMs = 0
+  let daemonState = 'not-sampled'
+  let runtimeMatches = false
+  const stopped = Promise.withResolvers<void>()
+  const stopLoop = () => {
+    loopStopped = true
+    stopped.resolve()
+  }
+  const onAbort = () => {
+    aborted = true
+    stopLoop()
+  }
+  const matchesExpectedRuntime = (runtime: RuntimeInfo | null | undefined): runtime is RuntimeInfo => {
+    const expected = options.expectedRuntime
+    return runtime != null
+      && runtime.pid === options.daemonPid
+      && runtime.pid === expected.pid
+      && runtime.port === expected.port
+      && runtime.token === expected.token
+      && runtime.hookToken === expected.hookToken
+      && runtime.daemonVersion === expected.daemonVersion
+      && runtime.protocolVersion === expected.protocolVersion
+      && runtime.startedAt === expected.startedAt
+      && runtime.socket === expected.socket
+      && runtime.entryHash === expected.entryHash
+      && runtime.port > 0
+  }
+  const inspectDaemon = () => {
+    const current = options.processTable(options.home).get(options.daemonPid)
+    daemonState = current?.state ?? 'missing'
+    if (!current || current.state.includes('Z')) return false
+    if (!processIdentity) processIdentity = current
+    return sameProcess(processIdentity, current)
+  }
+  const result = (alive: boolean) => ({
+    alive,
+    diagnostics: {
+      probes,
+      windowMs: Math.max(0, Math.round(now() - startedAt)),
+      lastProbeMs,
+      daemonState,
+      runtimeMatches
+    }
+  })
+  const runHealthLoop = async () => {
+    while (now() < retryDeadline) {
+      if (loopStopped) return result(false)
+      if (aborted || options.signal.aborted || Date.now() >= options.deadline) return result(false)
+      const runtime = options.readOwnedRuntime(options.home)
+      runtimeMatches = matchesExpectedRuntime(runtime)
+      if (!runtimeMatches) return result(false)
+      if (options.identityAfterSuccess && !inspectDaemon()) return result(false)
+      const remaining = Math.min(retryDeadline - now(), options.deadline - Date.now())
+      if (remaining <= 0) return result(false)
+      const probeStartedAt = now()
+      probes++
+      const healthProbe = withOwnedProcessEnvironment(
+        options.env,
+        () => options.probe(runtime, Math.max(1, Math.min(300, remaining)))
+      )
+      const alive = await Promise.race([healthProbe, stopped.promise.then(() => false)])
+      if (loopStopped) return result(false)
+      lastProbeMs = Math.max(0, Math.round(now() - probeStartedAt))
+      if (aborted || options.signal.aborted || Date.now() >= options.deadline) return result(false)
+      const afterProbe = options.readOwnedRuntime(options.home)
+      runtimeMatches = matchesExpectedRuntime(afterProbe)
+      if (options.identityAfterSuccess || !alive) {
+        if (!inspectDaemon()) return result(false)
+      }
+      if (!runtimeMatches) return result(false)
+      if (now() >= retryDeadline) return result(false)
+      if (alive) return result(true)
+      const pause = Math.min(50, retryDeadline - now(), options.deadline - Date.now())
+      if (pause <= 0) return result(false)
+      await Promise.race([sleep(pause), stopped.promise])
+      if (loopStopped) return result(false)
+    }
+    return result(false)
+  }
+  options.signal.addEventListener('abort', onAbort, { once: true })
+  if (options.signal.aborted) onAbort()
+  try {
+    return await waitForCliFilesOperation(
+      runHealthLoop(),
+      options.signal,
+      options.deadline,
+      5_000,
+      options.timeoutLabel,
+      () => {
+        stopLoop()
+        return result(false)
+      }
+    )
+  } finally {
+    stopLoop()
+    options.signal.removeEventListener('abort', onAbort)
+  }
+}
+
+function redactDiagnostic(text: string, home: string, tokens: readonly string[]): string {
+  let safe = text.split(home).join('<cli-home>')
+  for (const token of tokens) if (token) safe = safe.split(token).join('<redacted>')
+  const bytes = Buffer.from(safe)
+  return bytes.subarray(Math.max(0, bytes.byteLength - MAX_STDERR_BYTES)).toString('utf8')
+}
+
+function collectProcessIdentities(snapshot: Map<number, ProcessIdentity>, daemonPid: number, home: string, expectedDaemon?: ProcessIdentity): ProcessIdentity[] {
+  const identities = new Map<string, ProcessIdentity>()
+  const daemon = snapshot.get(daemonPid)
+  if (daemon && (expectedDaemon ? sameProcess(expectedDaemon, daemon) : daemon.command.includes('daemon/src/main.ts'))) {
+    for (const identity of processTree(snapshot, daemonPid)) identities.set(processIdentityKey(identity), identity)
+  }
+  const ptyPid = readPtyPid(home)
+  if (ptyPid) {
+    const pty = snapshot.get(ptyPid)
+    if (pty?.command.includes('pty-host')) {
+      identities.set(processIdentityKey(pty), pty)
+      for (const child of processTree(snapshot, ptyPid)) identities.set(processIdentityKey(child), child)
+    }
+  }
+  return [...identities.values()]
+}
+
+async function waitForProcessExit(
+  identities: readonly ProcessIdentity[],
+  home: string,
+  snapshotReader: typeof processSnapshot = processSnapshot
+): Promise<ProcessIdentity[]> {
+  const deadline = Date.now() + 2_000
+  while (Date.now() < deadline) {
+    const snapshot = snapshotReader(home)
+    const remaining = identities.filter((identity) => sameProcess(identity, snapshot.get(identity.pid)))
+    if (remaining.length === 0) return []
+    await Bun.sleep(75)
+  }
+  const finalSnapshot = snapshotReader(home)
+  return identities.filter((identity) => sameProcess(identity, finalSnapshot.get(identity.pid)))
+}
+
+function createWorldScope(
+  home: string,
+  env: Record<string, string>,
+  onSpawn?: (command: string[], child: { pid: number; exited: Promise<number> }, spawnedAt: number) => void
+): ProcessScope {
+  return safeProcessScope(withOwnedProcessEnvironment(env, () => createProcessScope(home)), env, onSpawn)
+}
+
+function validateCliArgv(argv: string[], cliEntry: string): void {
+  if (!Array.isArray(argv) || argv.length < 2 || argv.some((argument) => typeof argument !== 'string')) {
+    throw new CliWorldError('invalid-cli-arguments', 'CLI argv must contain literal string arguments')
+  }
+  if (argv[0] !== process.execPath || argv[1] !== cliEntry || !isAbsolute(argv[0])) {
+    throw new CliWorldError('invalid-cli-arguments', 'only the checkout CLI under the absolute Bun executable is allowed')
+  }
+  let localRuntime = false
+  let jsonOutput = false
+  for (let index = 2; index < argv.length; index++) {
+    if (argv[index] === '--runtime' && argv[index + 1] === 'local') localRuntime = true
+    if (argv[index] === '--json') jsonOutput = true
+  }
+  if (!localRuntime || !jsonOutput) throw new CliWorldError('invalid-cli-arguments', 'CLI calls require explicit --runtime local --json')
+}
+
+
+function isWithinDirectory(root: string, candidate: string): boolean {
+  const path = relative(root, candidate)
+  return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+}
+
+function resolveCliCwd(cwd: string | undefined, repoRoot: string, home: string): string {
+  if (cwd === undefined) return repoRoot
+  if (!isAbsolute(cwd)) throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must be absolute')
+  let realCwd: string
+  try {
+    realCwd = realpathSync(cwd)
+  } catch {
+    throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must resolve inside the owned home or checkout root')
+  }
+  if (realCwd !== repoRoot && !isWithinDirectory(home, realCwd)) {
+    throw new CliWorldError('invalid-cli-arguments', 'CLI cwd must resolve inside the owned home or checkout root')
+  }
+  return realCwd
+}
+
+export function createServeEnvironment(
+  home: string,
+  worldHome: string,
+  worldEnv: Record<string, string>,
+  repoRoot: string
+): Record<string, string> {
+  const lexicalRoot = resolve(worldHome)
+  const candidate = resolve(home)
+  const lexicalRelative = relative(lexicalRoot, candidate)
+  if (lexicalRelative === '' || lexicalRelative === '..' || lexicalRelative.startsWith(`..${sep}`) || isAbsolute(lexicalRelative)) {
+    throw new CliWorldError('invalid-serve-home', 'serve home must be inside the CLI world home')
+  }
+  const root = realpathSync(lexicalRoot)
+  let existing = candidate
+  while (!existsSync(existing)) {
+    const parent = dirname(existing)
+    if (parent === existing) throw new CliWorldError('invalid-serve-home', 'serve home has no existing parent')
+    existing = parent
+  }
+  const canonicalCandidate = resolve(realpathSync(existing), relative(existing, candidate))
+  const relativeHome = relative(root, canonicalCandidate)
+  if (relativeHome === '' || relativeHome === '..' || relativeHome.startsWith(`..${sep}`) || isAbsolute(relativeHome)) {
+    throw new CliWorldError('invalid-serve-home', 'serve home resolves outside the CLI world home')
+  }
+
+  return {
+    ...worldEnv,
+    QUIRKY_HOME: candidate,
+    QUIRKY_DAEMON_ENTRY: join(resolve(repoRoot), 'packages/daemon/src/main.ts')
+  }
+}
+function ensureWorldLive(daemon: CliBoundedChild, closed: boolean): void {
+  if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
+  if (daemon.exitCode !== null) throw new CliWorldError('daemon-exited', 'owned daemon exited; refusing CLI auto-start')
+}
+
+function makeWorld(options: {
+  home: string
+  env: Record<string, string>
+  scope: ProcessScope
+  daemon: CliBoundedChild
+  paths: CliWorldPaths
+  defaultSignal?: AbortSignal
+  hooks?: CliWorldHooks
+  daemonIdentity: ProcessIdentity
+  tokens: string[]
+}): CliWorld {
+  const observed = new Map<string, ProcessIdentity>()
+  observed.set(processIdentityKey(options.daemonIdentity), options.daemonIdentity)
+  let cleanupPromise: Promise<void> | undefined
+  let closed = false
+  let processCaptureError: string | undefined
+  let world: CliWorld
+  const captureProcesses = () => {
+    try {
+      const snapshot = processSnapshot(options.home)
+      const identities = collectProcessIdentities(snapshot, options.daemon.pid, options.home, options.daemonIdentity)
+      for (const identity of identities) observed.set(processIdentityKey(identity), identity)
+      const ptyPid = readPtyPid(options.home)
+      if (ptyPid && snapshot.get(ptyPid)?.command.includes('pty-host')) options.scope.track(ptyPid)
+      processCaptureError = undefined
+    } catch (error) {
+      processCaptureError = errorText(error)
+    }
+  }
+  world = {
+    home: options.home,
+    env: options.env,
+    daemonPid: options.daemon.pid,
+    get ptyPid() {
+      const pid = readPtyPid(options.home)
+      if (!pid) return undefined
+      const snapshot = processSnapshot(options.home)
+      const identity = snapshot.get(pid)
+      if (!identity?.command.includes('pty-host')) return undefined
+      options.scope.track(pid)
+      observed.set(processIdentityKey(identity), identity)
+      return pid
+    },
+    scope: options.scope,
+    paths: options.paths,
+    serveEnvironment(home) {
+      return createServeEnvironment(home, options.home, { ...options.env, ...options.scope.env }, options.paths.repoRoot)
+    },
+    async execute(argv: string[], executeOptions: CliWorldExecuteOptions = {}) {
+      const signal = executeOptions.signal ?? options.defaultSignal
+      checkInterrupted(signal)
+      ensureWorldLive(options.daemon, closed)
+      validateCliArgv(argv, options.paths.cliEntry)
+      const cwd = resolveCliCwd(executeOptions.cwd, options.paths.repoRoot, options.home)
+      captureProcesses()
+      if (!(await healthCheck(options.home, options.daemon, options.env, signal))) {
+        checkInterrupted(signal)
+        throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+      }
+      const timeoutMs = Math.min(COMMAND_TIMEOUT_MS, executeOptions.timeoutMs ?? COMMAND_TIMEOUT_MS)
+      let result: CliWorldResult
+      try {
+        result = await runBoundedChild(options.scope, options.env, argv, {
+          cwd,
+          signal,
+          timeoutMs
+        })
+      } catch (error) {
+        captureProcesses()
+        if (error instanceof CliWorldError) throw error
+        throw new CliWorldError('cli-failed', errorText(error))
+      }
+      captureProcesses()
+      if (options.daemon.exitCode !== null || !(await healthCheck(options.home, options.daemon, options.env, signal))) {
+        checkInterrupted(signal)
+        throw new CliWorldError('daemon-exited', 'owned daemon exited during the CLI operation; refusing further CLI calls', result.stderr)
+      }
+      return result
+    },
+    async actorLive() {
+      captureProcesses()
+      await options.hooks?.onActorLive?.(world)
+    },
+    cleanup() {
+      if (cleanupPromise) return cleanupPromise
+      closed = true
+      cleanupPromise = (async () => {
+        captureProcesses()
+        let cleanupError: string | undefined = processCaptureError
+        const beforeCleanup = [...observed.values()]
+        try {
+          await options.scope.cleanup()
+        } catch (error) {
+          cleanupError = errorText(error)
+        }
+        let lingering: ProcessIdentity[] = []
+        try {
+          lingering = await waitForProcessExit(beforeCleanup, options.home)
+        } catch (error) {
+          cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ')
+        }
+        if (lingering.length > 0) {
+          cleanupError = [cleanupError, `owned processes remain: ${lingering.map((row) => `${row.pid} ${row.command}`).join(', ')}`].filter(Boolean).join('; ')
+        }
+        if (lingering.length === 0) {
+          try {
+            rmSync(options.home, { recursive: true, force: true })
+            if (existsSync(options.home)) cleanupError = [cleanupError, 'owned home remains after removal'].filter(Boolean).join('; ')
+          } catch (error) {
+            cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ')
+          }
+        }
+        if (cleanupError) throw new CliWorldError('cleanup-failed', redactDiagnostic(cleanupError, options.home, options.tokens))
+      })()
+      return cleanupPromise
+    }
+  }
+  return world
+}
+
+export function createCliEnvironment(home: string, repoRoot: string, fixtureBin: string, fetchPreload: string): Record<string, string> {
+  const root = realpathSync(resolve(home))
+  const checkout = resolve(repoRoot)
+  const bin = resolve(fixtureBin)
+  const preload = resolve(fetchPreload)
+  const base = createIsolatedRuntimeEnvironment(root, { repoRoot: checkout })
+  for (const key of ['TMPDIR', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR']) {
+    const directory = base[key]
+    if (directory) mkdirSync(directory, { recursive: true, mode: 0o700 })
+  }
+  const environment: Record<string, string> = {
+    ...base,
+    PATH: [bin, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(delimiter),
+    SHELL: join(bin, 'cli-shell'),
+    QUIRKY_HOME: root,
+    QUIRKY_PORT: '0',
+    QUIRKY_AGENT_SEARCH_DIRS: '',
+    QUIRKY_CLI_ENTRY: join(checkout, 'packages/cli/src/main.ts'),
+    QUIRKY_DAEMON_ENTRY: join(root, 'disabled-daemon-entry.ts'),
+    QUIRKY_PTY_HOST_ENTRY: join(checkout, 'packages/pty-host/src/main.ts'),
+    CODEX_HOME: join(root, 'codex'),
+    CLI_PARITY_CLI_ENTRY: join(checkout, 'packages/cli/src/main.ts'),
+    CLI_PARITY_CODEX_FIXTURE: join(root, 'fixtures/codex/codex-app-server-fixture'),
+    BUN_OPTIONS: `--preload=${preload}`,
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+  }
+  for (const key of [
+    'QUIRKY_RUNTIME', 'QUIRKY_PAIRING', 'QUIRKY_PAIRING_CODE', 'QUIRKY_SESSION_ID', 'QUIRKY_SESSION_TOKEN', 'QUIRKY_WORKTREE_ID',
+    'CLAUDE_CONFIG_DIR', 'OPENAI_API_KEY', 'CODEX_API_KEY', 'ANTHROPIC_API_KEY',
+    'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy',
+    'NODE_OPTIONS',
+  ]) delete environment[key]
+  return environment
+}
+
+export async function createCliWorld(options: CliWorldOptions = {}): Promise<CliWorld> {
+  checkInterrupted(options.signal)
+  const startedAt = Date.now()
+  const startupDeadline = Math.min(options.deadline ?? Number.POSITIVE_INFINITY, startedAt + STARTUP_TIMEOUT_MS)
+  const repoRoot = realpathSync(resolve(import.meta.dir, '../..'))
+  const cliEntry = join(repoRoot, 'packages/cli/src/main.ts')
+  const daemonEntry = join(repoRoot, 'packages/daemon/src/main.ts')
+  const temporaryHome = mkdtempSync(join('/tmp', 'quirky-cli-world-'))
+  const home = realpathSync(temporaryHome)
+  let scope: ProcessScope | undefined
+  let daemon: CliBoundedChild | undefined
+  let env: Record<string, string> = {}
+  let paths: CliWorldPaths | undefined
+  const diagnostics: TailCapture[] = []
+  const tokens: string[] = []
+
+  const setupRun = async (argv: string[], cwd: string): Promise<FixtureCommandResult> => {
+    checkInterrupted(options.signal)
+    const remaining = Math.min(COMMAND_TIMEOUT_MS, startupDeadline - Date.now())
+    if (remaining <= 0) throw new CliWorldError('startup-timeout', 'CLI world startup exceeded 30 seconds')
+    const result = await runBoundedChild(scope!, env, argv, { cwd, signal: options.signal, timeoutMs: remaining })
+    return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode }
+  }
+
+  const cleanupFailedStartup = async (): Promise<string | undefined> => {
+    if (!scope) {
+      rmSync(home, { recursive: true, force: true })
+      return undefined
+    }
+    let cleanupError: string | undefined
+    let owned: ProcessIdentity[] = []
+    if (daemon) {
+      try { owned = collectProcessIdentities(processSnapshot(home), daemon.pid, home) } catch (error) { cleanupError = errorText(error) }
+    }
+    try {
+      await scope.cleanup()
+    } catch (error) {
+      cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ')
+    }
+    let lingering: ProcessIdentity[] = []
+    try { lingering = await waitForProcessExit(owned, home) } catch (error) { cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ') }
+    if (lingering.length > 0) cleanupError = [cleanupError, `owned processes remain: ${lingering.map((row) => row.pid).join(', ')}`].filter(Boolean).join('; ')
+    if (lingering.length === 0) {
+      try { rmSync(home, { recursive: true, force: true }) }
+      catch (error) { cleanupError = [cleanupError, errorText(error)].filter(Boolean).join('; ') }
+    }
+    return cleanupError
+  }
+
+  try {
+    const tools = installCliFixtureTools(home)
+    env = createCliEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+    scope = createWorldScope(home, env)
+    tokens.push(scope.env.QUIRKY_TEST_SCOPE ?? '')
+    const fixtures = await createCliFixtures({ home, repoRoot, tools, run: setupRun })
+    paths = {
+      ...fixtures,
+      repoRoot,
+      cliEntry,
+      daemonEntry,
+      actorCommand: buildCliActorCommand({ bunPath: process.execPath, actorEntry: fixtures.actorEntry }),
+      coordinatorCommand: `${buildCliActorCommand({ bunPath: process.execPath, actorEntry: fixtures.workerActorEntry })} coordinator`
+    }
+    if (!isAbsolute(process.execPath)) throw new CliWorldError('startup-failed', 'Bun executable path is not absolute')
+    if (!existsSync(cliEntry) || !existsSync(daemonEntry) || !existsSync(paths.actorEntry) || !existsSync(paths.workerActorEntry)) {
+      throw new CliWorldError('startup-failed', 'checkout CLI, daemon or actor entrypoint is missing')
+    }
+    await options.hooks?.beforeStart?.()
+    checkInterrupted(options.signal)
+    if (Date.now() >= startupDeadline) throw new CliWorldError('startup-timeout', 'CLI world startup exceeded 30 seconds')
+    const selfTestUrl = 'https://cli-parity-guard.invalid/self-test'
+    const selfTestSentinel = 'CLI_PARITY_EGRESS_GUARD_ACTIVE\n'
+    let guardTest: FixtureCommandResult
+    try {
+      guardTest = await setupRun([
+        process.execPath,
+        '-e',
+        `fetch(${JSON.stringify(selfTestUrl)}).then(() => { process.exitCode = 3 }, (error) => { if (error instanceof Error && error.message.includes('non-loopback')) process.stdout.write(${JSON.stringify(selfTestSentinel)}); else process.exitCode = 4 })`
+      ], repoRoot)
+    } catch {
+      if (options.signal?.aborted) checkInterrupted(options.signal)
+      throw new CliWorldError('egress-guard-inactive', 'fetch egress guard self-test could not be run')
+    }
+    let egressLog = ''
+    try {
+      egressLog = readFileSync(paths.egressLog, 'utf8')
+    } catch {}
+    if (guardTest.exitCode !== 0 || guardTest.stdout !== selfTestSentinel || egressLog !== `${selfTestUrl}\n`) {
+      throw new CliWorldError('egress-guard-inactive', 'fetch egress guard self-test failed')
+    }
+    daemon = scope.spawn([process.execPath, daemonEntry], {
+      cwd: repoRoot,
+      env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe'
+    }) as CliBoundedChild
+    diagnostics.push(createTailCapture(daemon.stdout), createTailCapture(daemon.stderr))
+    const expectedHash = daemonEntryHash(daemonEntry)
+    const readinessDeadline = Math.min(startupDeadline, Date.now() + STARTUP_TIMEOUT_MS)
+    let ready = false
+    while (Date.now() < readinessDeadline) {
+      checkInterrupted(options.signal)
+      if (daemon.exitCode !== null) {
+        const tail = (await Promise.all(diagnostics.map((capture) => capture.done))).map((_, index) => diagnostics[index]!.text()).join('\n')
+        throw new CliWorldError('daemon-exited', `daemon exited ${daemon.exitCode} before readiness`, tail)
+      }
+      const runtime = readRuntime(home)
+      if (runtime) {
+        if (!tokens.includes(runtime.token)) tokens.push(runtime.token)
+        if (!tokens.includes(runtime.hookToken)) tokens.push(runtime.hookToken)
+      }
+      if (runtime) {
+        if (runtime.pid !== daemon.pid) throw new CliWorldError('daemon-readiness', 'runtime.json belongs to a different process')
+        if (runtime.entryHash !== expectedHash) throw new CliWorldError('daemon-readiness', 'runtime.json does not match the checkout daemon entrypoint')
+        const health = await withOwnedProcessEnvironment(env, () => readDaemonHealth(runtime, 250))
+        if (health?.pid === daemon.pid && health.startupSettled === true) {
+          ready = true
+          break
+        }
+      }
+      await Bun.sleep(50)
+    }
+    checkInterrupted(options.signal)
+    if (!ready) {
+      throw new CliWorldError('daemon-readiness-timeout', 'owned daemon did not become healthy within 30 seconds', diagnostics.map((capture) => capture.text()).join('\n'))
+    }
+    checkReadyRuntime(home, daemon.pid, expectedHash)
+    const initial = processSnapshot(home).get(daemon.pid)
+    if (!initial) throw new CliWorldError('daemon-readiness', 'spawned daemon process identity could not be captured')
+    const world = makeWorld({
+      home,
+      env,
+      scope,
+      daemon,
+      paths,
+      defaultSignal: options.signal,
+      hooks: options.hooks,
+      daemonIdentity: initial,
+      tokens
+    })
+    await options.hooks?.afterReady?.(world)
+    if (!(await healthCheck(home, daemon, env, options.signal))) {
+      checkInterrupted(options.signal)
+      throw new CliWorldError('daemon-exited', 'owned daemon exited after readiness')
+    }
+    return world
+  } catch (error) {
+    const cleanupError = await cleanupFailedStartup()
+    const drains = Promise.allSettled(diagnostics.map((capture) => capture.done))
+    const drained = await Promise.race([drains.then(() => true), Bun.sleep(500).then(() => false)])
+    if (!drained) await Promise.allSettled(diagnostics.map((capture) => capture.cancel()))
+    const daemonTail = diagnostics.map((capture) => capture.text()).join('\n')
+    const message = errorText(error)
+    const stderrTail = redactDiagnostic([error && typeof error === 'object' && 'stderrTail' in error && typeof error.stderrTail === 'string' ? error.stderrTail : '', daemonTail].filter(Boolean).join('\n'), home, tokens)
+    const kind = error && typeof error === 'object' && 'kind' in error && typeof error.kind === 'string' ? error.kind : 'startup-failed'
+    const failure = new CliWorldError(kind, redactDiagnostic(message, home, tokens), stderrTail || undefined)
+    if (cleanupError) failure.cleanupError = redactDiagnostic(cleanupError, home, tokens)
+    throw failure
+  }
+}
+
+const CLI_FILES_RENDERER_TIMEOUT_MS = 5_000
+
+function canonicalCliFilesPath(path: string): string | undefined {
+  if (!isAbsolute(path)) return undefined
+  const candidate = resolve(path)
+  let existing = candidate
+  try {
+    while (true) {
+      try {
+        lstatSync(existing)
+        break
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') return undefined
+        const parent = dirname(existing)
+        if (parent === existing) return undefined
+        existing = parent
+      }
+    }
+    return resolve(realpathSync(existing), relative(existing, candidate))
+  } catch {
+    return undefined
+  }
+}
+
+function replaceCliFilesEnvironment(
+  target: Record<string, string>,
+  home: string,
+  repoRoot: string,
+  tools: CliFixtureTools,
+  requestedUiDir: string,
+  createEnvironment: typeof createCliEnvironment
+): Record<string, string> {
+  const uiDir = join(home, 'ui-dist')
+  const pluginsDir = join(home, 'builtin-plugins')
+  if (canonicalCliFilesPath(requestedUiDir) !== uiDir) {
+    throw new CliWorldError('ui-build', 'soak helper did not target the owned ui-dist directory')
+  }
+  if (canonicalCliFilesPath(pluginsDir) !== pluginsDir) {
+    throw new CliWorldError('fixture-home', 'generated plugin root escapes the owned builtin-plugins directory')
+  }
+  const replacement = createEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+  for (const key of Object.keys(target)) delete target[key]
+  Object.assign(target, replacement, {
+    QUIRKY_UI_DIR: uiDir,
+    QUIRKY_UI_OUT: uiDir,
+    QUIRKY_PLUGINS_DIR: pluginsDir,
+    QUIRKY_BUILTIN_PLUGINS_DIR: pluginsDir
+  })
+  return target
+}
+
+function tailUtf8(text: string, limit: number): string {
+  const bytes = Buffer.from(text)
+  if (bytes.byteLength <= limit) return text
+  let start = bytes.byteLength - limit
+  while (start < bytes.byteLength && (bytes[start]! & 0xc0) === 0x80) start += 1
+  return bytes.subarray(start).toString('utf8')
+}
+
+function stripCliFilesUrlSecrets(text: string): string {
+  return text.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/gi, (raw) => {
+    const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
+    try {
+      const url = new URL(raw.slice(0, raw.length - trailing.length))
+      return `${url.origin}${url.pathname}${trailing}`
+    } catch {
+      return raw
+    }
+  })
+}
+
+function sanitizeCliFilesDiagnostic(text: string, home: string, tokens: readonly string[], limit = MAX_STDERR_BYTES): string {
+  let safe = stripCliFilesUrlSecrets(text)
+  if (home) safe = safe.split(home).join('<cli-home>')
+  for (const token of tokens) if (token) safe = safe.split(token).join('<redacted>')
+  return tailUtf8(safe, limit)
+}
+
+function readOwnedCliFilesLog(home: string, path: string, tokens: readonly string[]): string | undefined {
+  let fd: number | undefined
+  try {
+    const canonicalPath = realpathSync(path)
+    const fromHome = relative(home, canonicalPath)
+    if (fromHome === '' || fromHome === '..' || fromHome.startsWith(`..${sep}`) || isAbsolute(fromHome)
+      || !statSync(canonicalPath).isFile()) return undefined
+    fd = openSync(canonicalPath, 'r')
+    const size = fstatSync(fd).size
+    const offset = Math.max(0, size - MAX_STDERR_BYTES - 4)
+    const prefixBytes = offset > 0 ? 1 : 0
+    const readOffset = offset - prefixBytes
+    const buffer = Buffer.alloc(Math.min(size - readOffset, MAX_STDERR_BYTES + 4 + prefixBytes))
+    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, readOffset)
+    let text = buffer.subarray(prefixBytes, bytesRead).toString('utf8')
+    if (prefixBytes > 0) {
+      const previousByte = buffer[0]!
+      const previousIsWhitespace = previousByte === 0x20 || (previousByte >= 0x09 && previousByte <= 0x0d)
+      if (!previousIsWhitespace) {
+        // The bounded read may start inside an authenticated URL, before its scheme and authority.
+        const boundary = text.search(/\s/)
+        text = boundary < 0 ? '' : text.slice(boundary + 1)
+      }
+    }
+    return sanitizeCliFilesDiagnostic(text, home, tokens)
+  } catch {
+    return undefined
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd) } catch {}
+    }
+  }
+}
+function sanitizeCliFilesRequestPath(path: string, home: string, tokens: readonly string[]): string {
+  let pathOnly = path
+  try {
+    pathOnly = new URL(path).pathname
+  } catch {
+    pathOnly = stripCliFilesUrlSecrets(path)
+  }
+  return sanitizeCliFilesDiagnostic(pathOnly, home, tokens, 1_024)
+}
+
+function snapshotWindowStartupObservation(
+  observation: WindowStartupObservation,
+  home: string,
+  tokens: readonly string[]
+): WindowStartupObservation {
+  const snapshot: WindowStartupObservation = {
+    stage: observation.stage,
+    elapsedMs: Number.isFinite(observation.elapsedMs) ? Math.max(0, Math.round(observation.elapsedMs)) : 0
+  }
+  if (Number.isSafeInteger(observation.index)) snapshot.index = observation.index
+  if (typeof observation.worktree === 'string') snapshot.worktree = sanitizeCliFilesDiagnostic(observation.worktree, home, tokens, 512)
+  if (Number.isSafeInteger(observation.connId)) snapshot.connId = observation.connId
+  if (Number.isSafeInteger(observation.browserPid)) snapshot.browserPid = observation.browserPid
+  if (typeof observation.message === 'string') snapshot.message = sanitizeCliFilesDiagnostic(observation.message, home, tokens)
+  if (Array.isArray(observation.pageErrors)) {
+    snapshot.pageErrors = observation.pageErrors.slice(-5)
+      .map((message) => sanitizeCliFilesDiagnostic(message, home, tokens, 1_024))
+  }
+  if (Array.isArray(observation.failedRequests)) {
+    snapshot.failedRequests = observation.failedRequests.slice(-5).map((request) => ({
+      path: sanitizeCliFilesRequestPath(request.path, home, tokens),
+      message: sanitizeCliFilesDiagnostic(request.message, home, tokens, 1_024)
+    }))
+  }
+  return snapshot
+}
+
+function findInstalledMacChrome(): string | undefined {
+  if (process.platform !== 'darwin') return undefined
+  const candidates = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
+    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary'
+  ]
+  for (const candidate of candidates) {
+    try {
+      const executable = realpathSync(candidate)
+      if (!statSync(executable).isFile()) continue
+      accessSync(executable, constants.X_OK)
+      return executable
+    } catch {}
+  }
+  return undefined
+}
+
+function ensureCliFilesWork(signal: AbortSignal, deadline: number): void {
+  checkInterrupted(signal)
+  if (Date.now() >= deadline) throw new CliWorldError('deadline', 'CLI files work deadline reached')
+}
+
+function cliFilesRemaining(signal: AbortSignal, deadline: number): number {
+  ensureCliFilesWork(signal, deadline)
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) throw new CliWorldError('deadline', 'CLI files work deadline reached')
+  return remaining
+}
+
+async function waitForCliFilesOperation<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+  deadline: number,
+  timeoutMs: number,
+  label: string,
+  timeoutResult?: () => T
+): Promise<T> {
+  const remaining = cliFilesRemaining(signal, deadline)
+  const timeout = Math.min(timeoutMs, remaining)
+  if (timeout <= 0) throw new CliWorldError('deadline', `${label} has no time remaining`)
+  const fullTimeoutResult = timeoutMs < remaining ? timeoutResult : undefined
+  const timedOut = Promise.withResolvers<T>()
+  const interrupted = Promise.withResolvers<never>()
+  const timer = setTimeout(() => {
+    if (fullTimeoutResult && Date.now() < deadline) {
+      try {
+        timedOut.resolve(fullTimeoutResult())
+      } catch (error) {
+        timedOut.reject(error)
+      }
+    } else {
+      timedOut.reject(new CliWorldError('deadline', `${label} exceeded its deadline`))
+    }
+  }, timeout)
+  const abort = () => {
+    const reason = signal.reason
+    interrupted.reject(reason instanceof Error ? reason : new CliWorldError('interrupted', 'CLI files work was interrupted'))
+  }
+  signal.addEventListener('abort', abort, { once: true })
+  const result = Promise.race([operation, timedOut.promise, interrupted.promise])
+  if (signal.aborted) abort()
+  try {
+    return await result
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', abort)
+  }
+}
+
+function cliFilesWindowIds(value: unknown): number[] {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new CliWorldError('renderer-disconnected', 'ui.state returned an invalid response')
+  }
+  const state = value as Record<string, unknown>
+  if (!Array.isArray(state.windows)) throw new CliWorldError('renderer-disconnected', 'ui.state returned no windows list')
+  const ids: number[] = []
+  for (const entry of state.windows) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new CliWorldError('renderer-disconnected', 'ui.state returned an invalid window record')
+    }
+    const connId = (entry as Record<string, unknown>).connId
+    if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId <= 0) {
+      throw new CliWorldError('renderer-disconnected', 'ui.state returned an invalid connection ID')
+    }
+    ids.push(connId)
+  }
+  if (new Set(ids).size !== ids.length) throw new CliWorldError('renderer-disconnected', 'ui.state returned duplicate connection IDs')
+  return ids
+}
+
+function resolveOwnedHomeCwd(cwd: string, home: string): string {
+  if (!isAbsolute(cwd)) throw new CliWorldError('invalid-cli-arguments', 'fixture cwd must be absolute')
+  let realCwd: string
+  try {
+    realCwd = realpathSync(cwd)
+  } catch {
+    throw new CliWorldError('invalid-cli-arguments', 'fixture cwd must resolve inside the owned home')
+  }
+  if (!isWithinDirectory(realpathSync(home), realCwd)) {
+    throw new CliWorldError('invalid-cli-arguments', 'fixture cwd must resolve inside the owned home')
+  }
+  return realCwd
+}
+
+function validateFixtureGitArgv(argv: string[]): void {
+  if (!Array.isArray(argv) || argv.length < 2 || argv.some((argument) => typeof argument !== 'string' || argument.includes('\0'))) {
+    throw new CliWorldError('invalid-cli-arguments', 'fixture Git argv must contain literal string arguments')
+  }
+  if (argv[0] !== '/usr/bin/git') {
+    throw new CliWorldError('invalid-cli-arguments', 'fixture preparation permits only /usr/bin/git')
+  }
+}
+
+function identityEvidence(
+  observed: ReadonlyMap<string, { identity: ProcessIdentity; kind: string }>,
+  gone: ReadonlySet<string>,
+  home: string,
+  tokens: readonly string[]
+): CliFilesTrackedIdentity[] {
+  return [...observed.entries()].map(([key, value]) => ({
+    kind: value.kind,
+    pid: value.identity.pid,
+    ppid: value.identity.ppid,
+    pgid: value.identity.pgid,
+    started: value.identity.started,
+    command: redactDiagnostic(value.identity.command, home, tokens),
+    gone: gone.has(key)
+  }))
+}
+
+function addObservedIdentity(
+  observed: Map<string, { identity: ProcessIdentity; kind: string }>,
+  identity: ProcessIdentity,
+  kind: string
+): void {
+  const key = processIdentityKey(identity)
+  if (!observed.has(key)) observed.set(key, { identity, kind })
+}
+
+function readBrowserPid(home: string): number | undefined {
+  try {
+    const pid = Number(readFileSync(join(home, 'out', 'browser.pid'), 'utf8').trim())
+    return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export async function createCliFilesWorld(
+  options: CliFilesWorldOptions = {},
+  dependencies: CliFilesWorldDependencies = {}
+): Promise<CliFilesWorld> {
+  const startedAt = Date.now()
+  const requestedDeadline = options.deadline ?? startedAt + CLI_FILES_LIMITS.workMs
+  if (!Number.isFinite(requestedDeadline) || requestedDeadline <= startedAt) {
+    throw new CliWorldError('deadline', 'CLI files work deadline is invalid or expired')
+  }
+  const deadline = Math.min(requestedDeadline, startedAt + CLI_FILES_LIMITS.workMs)
+  checkInterrupted(options.signal)
+  const repoRoot = realpathSync(resolve(import.meta.dir, '../..'))
+  const cliEntry = join(repoRoot, 'packages/cli/src/main.ts')
+  const daemonEntry = join(repoRoot, 'packages/daemon/src/main.ts')
+
+  const deadlineController = new AbortController()
+  const cleanupController = new AbortController()
+  const signal = AbortSignal.any([
+    ...(options.signal ? [options.signal] : []),
+    deadlineController.signal,
+    cleanupController.signal
+  ])
+  const deadlineTimer = setTimeout(
+    () => deadlineController.abort(new CliWorldError('deadline', 'CLI files work deadline reached')),
+    Math.max(1, deadline - Date.now())
+  )
+
+  const observed = new Map<string, { identity: ProcessIdentity; kind: string }>()
+  const buildRoots = new Map<string, ProcessIdentity>()
+  const lateCleanupErrors: string[] = []
+  const rendererObservations: WindowStartupObservation[] = []
+  const tokens: string[] = []
+  const startupStartedAt = performance.now()
+  let phase: CliFilesStartupDiagnostics['phase'] = 'environment'
+  let lastFailedObservation: WindowStartupObservation | undefined
+  let startupLogs: CliFilesStartupDiagnostics['logs'] = {}
+  let lateResourceUnresolved = false
+  let startWorldSettled = true
+  let scopeAcquisitionSettled = true
+  let rendererAcquisitionSettled = true
+  let rendererStartedAt: number | undefined
+  let rendererElapsedMs = 0
+  let daemonStarted = false
+  let browserStarted = false
+  let buildStarted = false
+  let buildIdentityCaptureFailed = false
+  let daemonIdentityCaptureFailed = false
+  let browserIdentityCaptureFailed = false
+  let scopeCleanupComplete = true
+  let home: string | undefined
+  let env: Record<string, string> = {}
+  let tools: CliFixtureTools | undefined
+  let scope: ProcessScope | undefined
+  let soakWorld: SoakWorld | undefined
+  let windowSet: SoakWindows | undefined
+  let browserPid: number | undefined
+  let daemonPid: number | undefined
+  let daemonIdentity: ProcessIdentity | undefined
+  let browserIdentity: ProcessIdentity | undefined
+  let expectedRuntime: RuntimeInfo | undefined
+  let startupRecords: WindowRecord[] = []
+  let selectedWorktrees: FixtureWorktree[] = []
+  let buildElapsedMs = 0
+  let buildPendingCount = 0
+  let cleanupPromise: Promise<void> | undefined
+  let closed = false
+  let cleanupEvidence: CliFilesCleanupEvidence = {
+    trackedIdentities: [],
+    identities: [],
+    processIdentitiesGone: false,
+    homeRemoved: false
+  }
+  let lastProcessInspection: CliProcessInspectionMetadata | undefined
+  const recordProcessInspection = (error: unknown) => {
+    const metadata = getProcessInspectionMetadata(error)
+    if (metadata) lastProcessInspection = metadata
+  }
+  const acquisitionSettled = () => scopeAcquisitionSettled && startWorldSettled && rendererAcquisitionSettled && buildPendingCount === 0
+  const startupDiagnostics = (): CliFilesStartupDiagnostics => freezeCliFilesValue({
+    phase,
+    elapsedMs: Math.max(0, Math.round(performance.now() - startupStartedAt)),
+    buildElapsedMs,
+    rendererElapsedMs: rendererStartedAt === undefined
+      ? rendererElapsedMs
+      : Math.max(rendererElapsedMs, Math.round(performance.now() - rendererStartedAt)),
+    ...(home ? {
+      assets: {
+        uiDir: sanitizeCliFilesDiagnostic(join(home, 'ui-dist'), home, tokens),
+        pluginsDir: sanitizeCliFilesDiagnostic(join(home, 'builtin-plugins'), home, tokens)
+      }
+    } : {}),
+    renderer: rendererObservations.map((observation) => ({
+      ...observation,
+      ...(observation.pageErrors ? { pageErrors: [...observation.pageErrors] } : {}),
+      ...(observation.failedRequests ? { failedRequests: observation.failedRequests.map((request) => ({ ...request })) } : {})
+    })),
+    ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {}),
+    logs: { ...startupLogs }
+  })
+
+  const updateCleanupEvidence = (gone: ReadonlySet<string> = new Set()) => {
+    if (!home) return
+    const trackedIdentities = identityEvidence(observed, gone, home, tokens)
+    cleanupEvidence = {
+      trackedIdentities,
+      identities: trackedIdentities
+        .filter((identity) => identity.kind === 'daemon' || identity.kind === 'browser' || identity.kind === 'pty')
+        .map(({ kind, pid, gone: hasGone }) => ({ kind, pid, gone: hasGone })),
+      processIdentitiesGone: false,
+      homeRemoved: !existsSync(home),
+      ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {})
+    }
+  }
+
+  const injectedProcessSnapshotSpawn = dependencies.spawnProcessSnapshot
+  const processTableBackend = injectedProcessSnapshotSpawn
+    ? (ownedHome: string) => processSnapshot(ownedHome, injectedProcessSnapshotSpawn)
+    : dependencies.processSnapshot ?? processSnapshot
+  const processTable = (ownedHome: string) => {
+    try {
+      return processTableBackend(ownedHome)
+    } catch (error) {
+      recordProcessInspection(error)
+      throw error
+    }
+  }
+  const captureBuildProcessIdentities = (snapshot: Map<number, ProcessIdentity>) => {
+    for (const root of buildRoots.values()) {
+      const currentRoot = snapshot.get(root.pid)
+      if (currentRoot && !sameProcess(root, currentRoot)) {
+        if (root.pgid === root.pid && [...snapshot.values()].some((identity) =>
+          identity.pid !== root.pid && identity.pgid === root.pgid && !observed.has(processIdentityKey(identity)))) {
+          buildIdentityCaptureFailed = true
+        }
+        continue
+      }
+      for (const identity of processTree(snapshot, root.pid)) {
+        if (identity.pid === root.pid) {
+          if (sameProcess(root, identity)) addObservedIdentity(observed, root, 'build')
+        } else {
+          addObservedIdentity(observed, identity, 'build-child')
+        }
+      }
+      if (root.pgid === root.pid) {
+        for (const identity of snapshot.values()) {
+          if (identity.pid !== root.pid && identity.pgid === root.pgid) {
+            addObservedIdentity(observed, identity, 'build-child')
+          }
+        }
+      }
+    }
+  }
+
+  const captureOwnedProcessIdentities = (requireLive: boolean, currentSnapshot?: Map<number, ProcessIdentity>) => {
+    if (!home) throw new CliWorldError('process-identity', 'owned process home is unavailable')
+    const runtime = (dependencies.readRuntime ?? readRuntime)(home)
+    if (runtime) {
+      for (const token of [runtime.token, runtime.hookToken]) {
+        if (token && !tokens.includes(token)) tokens.push(token)
+      }
+    }
+    if (requireLive && (!expectedRuntime || !runtime
+      || runtime.pid !== expectedRuntime.pid
+      || runtime.port !== expectedRuntime.port
+      || runtime.token !== expectedRuntime.token
+      || runtime.hookToken !== expectedRuntime.hookToken
+      || runtime.daemonVersion !== expectedRuntime.daemonVersion
+      || runtime.protocolVersion !== expectedRuntime.protocolVersion
+      || runtime.startedAt !== expectedRuntime.startedAt
+      || runtime.socket !== expectedRuntime.socket
+      || runtime.entryHash !== expectedRuntime.entryHash)) {
+      throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+    }
+    const selectedDaemonPid = daemonPid ?? soakWorld?.daemonPid ?? runtime?.pid
+    let snapshot: Map<number, ProcessIdentity>
+    if (currentSnapshot) {
+      snapshot = currentSnapshot
+    } else {
+      try {
+        snapshot = processTable(home)
+      } catch (error) {
+        if (daemonStarted && !daemonIdentity) daemonIdentityCaptureFailed = true
+        if (browserStarted && !browserIdentity) browserIdentityCaptureFailed = true
+        throw error
+      }
+    }
+    captureBuildProcessIdentities(snapshot)
+    if (selectedDaemonPid && Number.isSafeInteger(selectedDaemonPid) && selectedDaemonPid > 0) {
+      const currentDaemon = snapshot.get(selectedDaemonPid)
+      if (currentDaemon) {
+        daemonStarted = true
+        if (!daemonIdentity) daemonIdentity = currentDaemon
+        if (requireLive && currentDaemon.state.includes('Z')) {
+          throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+        }
+        if (requireLive && (!daemonIdentity || !sameProcess(daemonIdentity, currentDaemon))) {
+          throw new CliWorldError('daemon-identity', 'owned daemon process identity changed')
+        }
+        const daemonAndPty = collectProcessIdentities(snapshot, selectedDaemonPid, home, daemonIdentity)
+        const ptyPid = readPtyPid(home)
+        const ptyTree = new Set(ptyPid ? processTree(snapshot, ptyPid).map((identity) => identity.pid) : [])
+        for (const identity of daemonAndPty) {
+          const kind = identity.pid === selectedDaemonPid ? 'daemon' : identity.pid === ptyPid ? 'pty' : ptyTree.has(identity.pid) ? 'pty-child' : 'daemon-child'
+          addObservedIdentity(observed, identity, kind)
+        }
+      } else if (daemonStarted && !daemonIdentity) {
+        daemonIdentityCaptureFailed = true
+        if (requireLive) throw new CliWorldError('daemon-identity', 'owned daemon process is not present in the process table')
+      } else if (requireLive) {
+        throw new CliWorldError('daemon-identity', 'owned daemon process is not present in the process table')
+      }
+    } else if (requireLive) {
+      throw new CliWorldError('daemon-identity', 'owned daemon PID is unavailable')
+    }
+
+    const selectedBrowserPid = browserPid ?? readBrowserPid(home)
+    if (selectedBrowserPid) {
+      if (!browserPid) browserPid = selectedBrowserPid
+      const currentBrowser = snapshot.get(selectedBrowserPid)
+      if (currentBrowser) {
+        browserStarted = true
+        const sameBrowserIdentity = !browserIdentity || sameProcess(browserIdentity, currentBrowser)
+        if (!sameBrowserIdentity && requireLive) {
+          throw new CliWorldError('renderer-disconnected', 'owned browser process identity changed')
+        }
+        if (sameBrowserIdentity) {
+          if (!browserIdentity) browserIdentity = currentBrowser
+          for (const identity of processTree(snapshot, selectedBrowserPid)) {
+            addObservedIdentity(observed, identity, identity.pid === selectedBrowserPid ? 'browser' : 'browser-child')
+          }
+        }
+      } else if (browserStarted && !browserIdentity) {
+        browserIdentityCaptureFailed = true
+        if (requireLive) throw new CliWorldError('renderer-disconnected', 'owned browser process is not present in the process table')
+      } else if (requireLive) {
+        throw new CliWorldError('renderer-disconnected', 'owned browser process is not present in the process table')
+      }
+    } else if (browserStarted && !browserIdentity) {
+      browserIdentityCaptureFailed = true
+      if (requireLive) throw new CliWorldError('renderer-disconnected', 'owned browser PID is unavailable')
+    } else if (requireLive) {
+      throw new CliWorldError('renderer-disconnected', 'owned browser PID is unavailable')
+    }
+
+    if (requireLive && (daemonIdentityCaptureFailed || browserIdentityCaptureFailed)) {
+      throw new CliWorldError('process-identity', 'a started process identity could not be captured at acquisition')
+    }
+    if (requireLive && (!daemonIdentity || !browserIdentity)) {
+      throw new CliWorldError('process-identity', 'owned daemon and browser identities were not both captured')
+    }
+    updateCleanupEvidence()
+    return snapshot
+  }
+  const captureStartedBrowserIdentity = (pid: number) => {
+    browserStarted = true
+    if (!Number.isSafeInteger(pid) || pid <= 0) {
+      browserIdentityCaptureFailed = true
+      return
+    }
+    if (browserPid !== undefined && browserPid !== pid) {
+      browserIdentityCaptureFailed = true
+      return
+    }
+    browserPid = pid
+    if (browserIdentity || browserIdentityCaptureFailed) return
+    try {
+      const snapshot = captureOwnedProcessIdentities(false)
+      // The capture call assigns this closed-over identity.
+      const capturedIdentity = browserIdentity as ProcessIdentity | undefined
+      if (!snapshot.has(pid) || capturedIdentity?.pid !== pid) browserIdentityCaptureFailed = true
+    } catch {
+      browserIdentityCaptureFailed = true
+    }
+  }
+
+  const recordRendererObservation = (observation: WindowStartupObservation) => {
+    if (observation.browserPid !== undefined) captureStartedBrowserIdentity(observation.browserPid)
+    const safeObservation = snapshotWindowStartupObservation(observation, home!, tokens)
+    if (safeObservation.stage === 'failed') lastFailedObservation = safeObservation
+    rendererObservations.push(safeObservation)
+    if (rendererObservations.length > 64) {
+      const removeAt = lastFailedObservation === undefined
+        ? 0
+        : Math.max(0, rendererObservations.findIndex((entry) => entry !== lastFailedObservation))
+      rendererObservations.splice(removeAt, 1)
+    }
+  }
+
+  const captureStartupLogs = () => {
+    if (!home) return
+    const buildTail = readOwnedCliFilesLog(home, join(home, 'out', 'ui-build.log'), tokens)
+    const daemonTail = readOwnedCliFilesLog(home, join(home, 'out', 'daemon.log'), tokens)
+    const rendererTail = sanitizeCliFilesDiagnostic(rendererObservations.slice(-5).flatMap((observation) => [
+      ...(observation.message ? [observation.message] : []),
+      ...(observation.pageErrors ?? []),
+      ...(observation.failedRequests ?? []).flatMap((request) => [request.path, request.message])
+    ]).join('\\n'), home, tokens)
+    startupLogs = {
+      ...(buildTail !== undefined ? { buildTail } : {}),
+      ...(daemonTail !== undefined ? { daemonTail } : {}),
+      ...(rendererTail ? { rendererTail } : {})
+    }
+  }
+
+
+  const verifyRuntime = async (activeSignal: AbortSignal = signal, activeDeadline = deadline) => {
+    if (!home || !soakWorld || !daemonPid || !expectedRuntime) {
+      throw new CliWorldError('daemon-identity', 'owned runtime is not ready')
+    }
+    ensureCliFilesWork(activeSignal, activeDeadline)
+    if (soakWorld.home !== home || soakWorld.daemonPid !== daemonPid) {
+      throw new CliWorldError('daemon-identity', 'soak world no longer identifies the owned home and daemon')
+    }
+    const health = await waitForCliFilesDaemonHealth({
+      home,
+      daemonPid,
+      expectedRuntime,
+      ...(daemonIdentity ? { processIdentity: daemonIdentity } : {}),
+      env,
+      signal: activeSignal,
+      deadline: activeDeadline,
+      readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+      probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+      processTable,
+      identityAfterSuccess: false,
+      timeoutLabel: 'owned daemon health check',
+      ...(dependencies.now ? { now: dependencies.now } : {}),
+      ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+    })
+    if (!health.alive) {
+      throw new CliWorldError(
+        'daemon-exited',
+        'owned daemon is not healthy; refusing CLI auto-start',
+        JSON.stringify(health.diagnostics)
+      )
+    }
+  }
+
+  const verifyLiveRenderers = async (activeSignal: AbortSignal = signal, activeDeadline = deadline): Promise<void> => {
+    if (!soakWorld || !windowSet || startupRecords.length !== 2 || windowSet.pages.length !== 2) {
+      throw new CliWorldError('renderer-disconnected', 'both owned renderer windows are required')
+    }
+    const state = await waitForCliFilesOperation(
+      soakWorld.control.callAny('ui.state', {}, { timeoutMs: Math.min(CLI_FILES_RENDERER_TIMEOUT_MS, cliFilesRemaining(activeSignal, activeDeadline)) }),
+      activeSignal,
+      activeDeadline,
+      CLI_FILES_RENDERER_TIMEOUT_MS,
+      'public renderer connection state'
+    )
+    const freshRecords = windowSet.liveness
+      ? windowSet.liveness()
+      : (await waitForCliFilesOperation(
+        windowSet.finish(),
+        activeSignal,
+        activeDeadline,
+        15_000,
+        'renderer window snapshot'
+      )).records
+    if (!Array.isArray(freshRecords) || freshRecords.length !== 2) {
+      throw new CliWorldError('renderer-disconnected', 'window liveness records do not contain both owned renderers')
+    }
+    const current = [...freshRecords].sort((left, right) => left.index - right.index)
+    const ids = new Set(cliFilesWindowIds(state))
+    for (let index = 0; index < 2; index++) {
+      const record = current[index]!
+      const expected = startupRecords[index]!
+      let pageClosed = true
+      try {
+        pageClosed = windowSet.pages[index]!.isClosed()
+      } catch {}
+      if (record.index !== index || record.connId !== expected.connId || record.worktree !== expected.worktree
+        || record.open !== true || pageClosed || !ids.has(expected.connId)) {
+        throw new CliWorldError('renderer-disconnected', `owned renderer ${index} is closed, stale, or disconnected`)
+      }
+    }
+  }
+
+  const cleanup = (): Promise<void> => {
+    if (cleanupPromise) return cleanupPromise
+    closed = true
+    clearTimeout(deadlineTimer)
+    if (!cleanupController.signal.aborted) {
+      cleanupController.abort(new CliWorldError('world-closed', 'CLI files world has been cleaned up'))
+    }
+    cleanupPromise = (async () => {
+      const cleanupErrors: string[] = [...lateCleanupErrors]
+      const recordCleanupError = (error: unknown) => {
+        recordProcessInspection(error)
+        cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(errorText(error), home, tokens) : errorText(error))
+      }
+
+      let processCaptureVerified = true
+      if (home) {
+        try {
+          captureOwnedProcessIdentities(false)
+        } catch (error) {
+          processCaptureVerified = false
+          recordCleanupError(error)
+        }
+      }
+      if (windowSet) {
+        try {
+          await windowSet.stop()
+        } catch (error) {
+          recordCleanupError(error)
+        }
+      }
+      if (soakWorld) {
+        try {
+          await soakWorld.stop()
+          scopeCleanupComplete = true
+        } catch (error) {
+          scopeCleanupComplete = false
+          recordCleanupError(error)
+          try {
+            scope?.killNow()
+          } catch (killError) {
+            recordCleanupError(killError)
+          }
+          try {
+            await scope?.cleanup()
+          } catch (scopeError) {
+            recordCleanupError(scopeError)
+          }
+        }
+      } else if (scope) {
+        try {
+          await scope.cleanup()
+          scopeCleanupComplete = true
+        } catch (error) {
+          scopeCleanupComplete = false
+          recordCleanupError(error)
+        }
+      } else {
+        scopeCleanupComplete = true
+      }
+
+      let processTableVerified = !home
+      let lingering: ProcessIdentity[] = []
+      if (home) {
+        try {
+          captureOwnedProcessIdentities(false)
+        } catch (error) {
+          processCaptureVerified = false
+          recordCleanupError(error)
+        }
+        try {
+          lingering = await waitForProcessExit([...observed.values()].map(({ identity }) => identity), home, processTable)
+          processTableVerified = true
+        } catch (error) {
+          recordCleanupError(error)
+        }
+        if (processTableVerified && lingering.length > 0) {
+          try {
+            scope?.killNow()
+          } catch (error) {
+            recordCleanupError(error)
+          }
+          try {
+            await scope?.cleanup()
+          } catch (error) {
+            scopeCleanupComplete = false
+            recordCleanupError(error)
+          }
+          try {
+            captureOwnedProcessIdentities(false)
+            lingering = await waitForProcessExit([...observed.values()].map(({ identity }) => identity), home, processTable)
+          } catch (error) {
+            processTableVerified = false
+            processCaptureVerified = false
+            recordCleanupError(error)
+          }
+        }
+      }
+      captureStartupLogs()
+      const lingeringKeys = new Set(lingering.map(processIdentityKey))
+      const gone = new Set([...observed.keys()].filter((key) => !lingeringKeys.has(key)))
+      if (!processTableVerified || !processCaptureVerified) gone.clear()
+      const daemonRootObserved = !daemonStarted || [...observed.values()].some(({ identity, kind }) =>
+        kind === 'daemon' && (daemonPid === undefined || identity.pid === daemonPid))
+      const browserRootObserved = !browserStarted || [...observed.values()].some(({ identity, kind }) =>
+        kind === 'browser' && (browserPid === undefined || identity.pid === browserPid))
+      const buildRootObserved = !buildStarted || (buildRoots.size > 0 && [...buildRoots.keys()].every((key) => observed.get(key)?.kind === 'build'))
+      const acquisitionsSettled = acquisitionSettled()
+      const unresolvedAcquisition = lateResourceUnresolved || !acquisitionsSettled
+      const processIdentitiesGone = processTableVerified && processCaptureVerified
+        && !unresolvedAcquisition && daemonRootObserved && browserRootObserved && buildRootObserved && gone.size === observed.size
+        && !daemonIdentityCaptureFailed && !browserIdentityCaptureFailed && !buildIdentityCaptureFailed
+      const homeCanBeRemoved = processTableVerified && processCaptureVerified && scopeCleanupComplete
+        && !unresolvedAcquisition && buildRootObserved && !buildIdentityCaptureFailed && gone.size === observed.size && cleanupErrors.length === 0
+      cleanupEvidence = {
+        trackedIdentities: home ? identityEvidence(observed, gone, home, tokens) : [],
+        identities: home
+          ? identityEvidence(observed, gone, home, tokens)
+            .filter(({ kind }) => kind === 'daemon' || kind === 'browser' || kind === 'pty')
+            .map(({ kind, pid, gone: hasGone }) => ({ kind, pid, gone: hasGone }))
+          : [],
+        processIdentitiesGone,
+        homeRemoved: !home,
+        ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {})
+      }
+      if (lingering.length > 0) {
+        const detail = lingering.map((identity) => `${identity.pid} ${identity.command}`).join(', ')
+        cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(`owned processes remain: ${detail}`, home, tokens) : `owned processes remain: ${detail}`)
+      }
+      if (!daemonRootObserved || !browserRootObserved) cleanupErrors.push('started process root identity could not be verified')
+      if (!buildRootObserved || buildIdentityCaptureFailed) cleanupErrors.push('started build root identity could not be verified')
+      if (!processIdentitiesGone) cleanupErrors.push('owned process identities could not be verified gone')
+      if (!scopeCleanupComplete) cleanupErrors.push('owned process scope cleanup did not complete')
+      if (!acquisitionsSettled) cleanupErrors.push('owned startup acquisition did not settle')
+      if (homeCanBeRemoved && home) {
+        try {
+          rmSync(home, { recursive: true, force: true })
+          cleanupEvidence = { ...cleanupEvidence, homeRemoved: !existsSync(home) }
+          if (!cleanupEvidence.homeRemoved) cleanupErrors.push('owned home remains after removal')
+        } catch (error) {
+          recordCleanupError(error)
+        }
+      }
+      for (const lateError of lateCleanupErrors) {
+        if (!cleanupErrors.includes(lateError)) cleanupErrors.push(lateError)
+      }
+      if (cleanupErrors.length > 0) {
+        const message = cleanupErrors.join('; ')
+        const failure = new CliWorldError('cleanup-failed', message)
+        failure.cleanupError = message
+        throw failure
+      }
+    })()
+    return cleanupPromise
+  }
+
+  try {
+    ensureCliFilesWork(signal, deadline)
+    scopeAcquisitionSettled = false
+    const injectedScope = dependencies.createScope?.()
+    if (injectedScope) {
+      home = realpathSync(injectedScope.home)
+      scope = safeProcessScope(injectedScope, createIsolatedRuntimeEnvironment(home, { repoRoot }))
+    } else {
+      home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-files-')))
+    }
+    scopeAcquisitionSettled = true
+    const installTools = dependencies.installCliFixtureTools ?? installCliFixtureTools
+    tools = installTools(home)
+    const createEnvironment = dependencies.createCliEnvironment ?? createCliEnvironment
+    env = createEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
+    const claudeHome = join(home, '.claude')
+    mkdirSync(claudeHome, { recursive: true, mode: 0o700 })
+    writeFileSync(join(claudeHome, '.credentials.json'), JSON.stringify({
+      claudeAiOauth: { refreshToken: 'cli-parity-fixture-refresh' }
+    }), { mode: 0o600 })
+    const observeSpawn = (command: string[], child: { pid: number; exited: Promise<number> }, spawnedAt: number) => {
+      if (command[0] !== process.execPath) return
+      if (command[1] === 'packages/ui/build.ts') {
+        phase = 'build'
+        buildStarted = true
+        buildPendingCount += 1
+        const finishBuild = () => {
+          buildElapsedMs = Math.max(0, Math.round(performance.now() - spawnedAt))
+          buildPendingCount = Math.max(0, buildPendingCount - 1)
+        }
+        let buildRoot: ProcessIdentity | undefined
+        try {
+          const snapshot = processTable(home!)
+          const identity = snapshot.get(child.pid)
+          if (!identity || !identity.command.includes(command[1]!) || identity.pgid !== identity.pid) {
+            buildIdentityCaptureFailed = true
+          } else {
+            buildRoot = identity
+            buildRoots.set(processIdentityKey(identity), identity)
+            addObservedIdentity(observed, identity, 'build')
+            captureBuildProcessIdentities(snapshot)
+          }
+        } catch {
+          buildIdentityCaptureFailed = true
+        }
+        const captureBuildExit = () => {
+          if (!buildRoot) return
+          try {
+            captureBuildProcessIdentities(processTable(home!))
+          } catch {
+            buildIdentityCaptureFailed = true
+          }
+        }
+        void child.exited.then(
+          () => { captureBuildExit(); finishBuild() },
+          () => { captureBuildExit(); finishBuild() }
+        )
+      }
+      if (command[1] === 'packages/daemon/src/main.ts') {
+        phase = 'daemon'
+        daemonStarted = true
+        let identity: ProcessIdentity | undefined
+        try {
+          identity = processTable(home!).get(child.pid)
+        } catch (error) {
+          daemonIdentityCaptureFailed = true
+          throw error
+        }
+        if (!identity) {
+          daemonIdentityCaptureFailed = true
+          throw new CliWorldError('daemon-identity', 'spawned daemon process identity could not be captured')
+        }
+        if (daemonIdentity && !sameProcess(daemonIdentity, identity)) {
+          daemonIdentityCaptureFailed = true
+          throw new CliWorldError('daemon-identity', 'spawned daemon PID does not match its original process identity')
+        }
+        daemonIdentity = identity
+        addObservedIdentity(observed, identity, 'daemon')
+      }
+    }
+    scopeAcquisitionSettled = false
+    scope = injectedScope
+      ? safeProcessScope(injectedScope, env, observeSpawn)
+      : createWorldScope(home, env, observeSpawn)
+    scopeAcquisitionSettled = true
+    scopeCleanupComplete = false
+    if (scope.home !== home) throw new CliWorldError('startup-failed', 'owned process scope home does not match the allocated home')
+    if (!isAbsolute(process.execPath)) throw new CliWorldError('startup-failed', 'Bun executable path is not absolute')
+    if (!existsSync(cliEntry) || !existsSync(daemonEntry)) {
+      throw new CliWorldError('startup-failed', 'checkout CLI or daemon entrypoint is missing')
+    }
+    if (scope.env.QUIRKY_TEST_SCOPE) tokens.push(scope.env.QUIRKY_TEST_SCOPE)
+
+    const selfTestUrl = 'https://cli-parity-guard.invalid/self-test'
+    const selfTestSentinel = 'CLI_PARITY_EGRESS_GUARD_ACTIVE\n'
+    if (dependencies.verifyEgressGuard) {
+      await dependencies.verifyEgressGuard({ env, tools: tools!, repoRoot })
+    } else {
+      let guardResult: CliWorldResult
+      try {
+        guardResult = await runBoundedChild(scope!, env, [
+          process.execPath,
+          '-e',
+          `fetch(${JSON.stringify(selfTestUrl)}).then(() => { process.exitCode = 3 }, (error) => { if (error instanceof Error && error.message.includes('non-loopback')) process.stdout.write(${JSON.stringify(selfTestSentinel)}); else process.exitCode = 4 })`
+        ], {
+          cwd: repoRoot,
+          signal,
+          timeoutMs: Math.min(COMMAND_TIMEOUT_MS, cliFilesRemaining(signal, deadline))
+        })
+      } catch (error) {
+        if (signal.aborted) checkInterrupted(signal)
+        throw new CliWorldError('egress-guard-inactive', `fetch egress guard self-test could not be run: ${errorText(error)}`)
+      }
+      let egressLog = ''
+      try {
+        egressLog = readFileSync(tools!.egressLog, 'utf8')
+      } catch {}
+      if (guardResult.exitCode !== 0 || guardResult.stdout !== selfTestSentinel || egressLog !== `${selfTestUrl}\n`) {
+        throw new CliWorldError('egress-guard-inactive', 'fetch egress guard self-test failed')
+      }
+    }
+
+    const helperPrepare = dependencies.prepareCaptureFixtureHome ?? prepareCaptureFixtureHome
+    const startDependencies: StartWorldDependencies = {
+      createScope: () => scope!,
+      prepareCaptureFixtureHome: async (fixtureHome, preparation) => {
+        phase = 'fixtures'
+        if (canonicalCliFilesPath(fixtureHome) !== home) {
+          throw new CliWorldError('fixture-home', 'soak fixture preparation escaped the owned home')
+        }
+        const mutableEnv = preparation.env
+        if (!mutableEnv) throw new CliWorldError('environment', 'soak fixture preparation omitted its mutable environment')
+        const uiDir = mutableEnv.QUIRKY_UI_DIR
+        if (!uiDir || canonicalCliFilesPath(uiDir) !== join(home!, 'ui-dist')) {
+          throw new CliWorldError('ui-build', 'soak helper did not target the owned ui-dist directory')
+        }
+        env = replaceCliFilesEnvironment(mutableEnv, home!, repoRoot, tools!, uiDir, createEnvironment)
+        const remaining = cliFilesRemaining(signal, deadline)
+        return helperPrepare(home!, {
+          ...preparation,
+          timeoutMs: Math.max(1, Math.min(preparation.timeoutMs ?? STARTUP_TIMEOUT_MS, remaining)),
+          signal,
+          env
+        })
+      },
+      ...(dependencies.registerCaptureFixtures
+        ? { registerCaptureFixtures: dependencies.registerCaptureFixtures }
+        : {})
+    }
+    const startWorld = dependencies.startWorld ?? (await import('../soak/world')).startWorld
+    startWorldSettled = false
+    try {
+      soakWorld = await startWorld({
+        out: join(home, 'out'),
+        repoRoot,
+        signal,
+        windows: 2,
+        workers: false
+      }, startDependencies)
+    } finally {
+      startWorldSettled = true
+    }
+    phase = 'daemon'
+    daemonStarted = true
+    ensureCliFilesWork(signal, deadline)
+    if (soakWorld.home !== home || soakWorld.workers.length !== 0 || soakWorld.env.QUIRKY_HOME !== home
+      || soakWorld.env.QUIRKY_PORT !== '0' || soakWorld.env.QUIRKY_UI_DIR !== join(home, 'ui-dist')
+      || soakWorld.env.QUIRKY_PLUGINS_DIR !== join(home, 'builtin-plugins')
+      || soakWorld.env.QUIRKY_BUILTIN_PLUGINS_DIR !== join(home, 'builtin-plugins')) {
+      throw new CliWorldError('daemon-identity', 'soak world is not the owned, worker-free UI runtime')
+    }
+    if (!existsSync(join(home, 'ui-dist')) || !statSync(join(home, 'ui-dist')).isDirectory()) {
+      throw new CliWorldError('ui-build', 'owned UI build did not produce its ui-dist directory')
+    }
+    daemonPid = soakWorld.daemonPid
+    daemonStarted = true
+    const daemonIdentityAtSpawn = daemonIdentity
+    if (daemonIdentity && daemonIdentity.pid !== daemonPid) {
+      throw new CliWorldError('daemon-identity', 'runtime PID does not match the spawned daemon identity')
+    }
+    expectedRuntime = soakWorld.runtime
+    if (!Number.isSafeInteger(daemonPid) || daemonPid <= 0 || expectedRuntime.pid !== daemonPid
+      || expectedRuntime.port <= 0 || !expectedRuntime.entryHash) {
+      throw new CliWorldError('daemon-identity', 'soak runtime does not belong to its reported daemon PID')
+    }
+    if (!dependencies.startWorld && expectedRuntime.entryHash !== daemonEntryHash(daemonEntry)) {
+      throw new CliWorldError('daemon-identity', 'soak runtime entry hash does not match the checkout daemon')
+    }
+    const initialRuntime = (dependencies.readRuntime ?? readRuntime)(home)
+    if (!initialRuntime || initialRuntime.pid !== daemonPid || initialRuntime.port !== expectedRuntime.port
+      || initialRuntime.entryHash !== expectedRuntime.entryHash) {
+      throw new CliWorldError('daemon-identity', 'runtime.json does not identify the started daemon in the owned home')
+    }
+    const health = await waitForCliFilesDaemonHealth({
+      home,
+      daemonPid,
+      expectedRuntime,
+      ...(daemonIdentityAtSpawn ? { processIdentity: daemonIdentityAtSpawn } : {}),
+      env,
+      signal,
+      deadline,
+      readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+      probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+      processTable,
+      identityAfterSuccess: true,
+      timeoutLabel: 'owned daemon readiness check',
+      ...(dependencies.now ? { now: dependencies.now } : {}),
+      ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+    })
+    if (!health.alive) {
+      throw new CliWorldError(
+        'daemon-exited',
+        'owned daemon did not remain healthy after startup',
+        JSON.stringify(health.diagnostics)
+      )
+    }
+    captureOwnedProcessIdentities(false)
+    const daemonSnapshot = processTable(home)
+    const currentDaemonIdentity = daemonSnapshot.get(daemonPid)
+    if (!currentDaemonIdentity || (daemonIdentityAtSpawn && !sameProcess(daemonIdentityAtSpawn, currentDaemonIdentity))
+      || (daemonIdentity && !sameProcess(daemonIdentity, currentDaemonIdentity))) {
+      throw new CliWorldError('daemon-identity', 'owned daemon process identity could not be verified')
+    }
+    daemonIdentity = daemonIdentityAtSpawn ?? currentDaemonIdentity
+    addObservedIdentity(observed, daemonIdentity, 'daemon')
+
+    phase = 'renderer'
+    rendererStartedAt = performance.now()
+    const chrome = (dependencies.findChrome ?? findInstalledMacChrome)()
+    if (!chrome || !isAbsolute(chrome)) throw new CliWorldError('missing-chrome', 'an installed macOS Chrome or Chromium executable was not found')
+    const openWindows = dependencies.openWindows ?? (await import('../soak/windows')).openWindows
+    const rendererController = new AbortController()
+    const rendererSignal = AbortSignal.any([signal, rendererController.signal])
+    let abandoningWindowOpen = false
+    let openingWindows: SoakWindows | undefined
+    let lateWindowStop: Promise<void> | undefined
+    const stopLateWindow = (opened: SoakWindows): Promise<void> => {
+      if (!lateWindowStop) {
+        lateWindowStop = Promise.resolve().then(() => opened.stop()).catch((error: unknown) => {
+          lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(error), home!, tokens))
+        })
+      }
+      return lateWindowStop
+    }
+    rendererAcquisitionSettled = false
+    const pendingWindows = Promise.resolve().then(() => openWindows({
+      world: soakWorld!,
+      count: 2,
+      executable: chrome,
+      out: join(home!, 'out'),
+      signal: rendererSignal,
+      onStartup: recordRendererObservation
+    })).then(async (opened) => {
+      openingWindows = opened
+      if (!browserStarted) captureStartedBrowserIdentity(opened.browserPid)
+      if (abandoningWindowOpen || rendererSignal.aborted) await stopLateWindow(opened)
+      else windowSet = opened
+      return opened
+    })
+    let openedWindows: SoakWindows | undefined
+    try {
+      openedWindows = await waitForCliFilesOperation(
+        pendingWindows,
+        signal,
+        deadline,
+        Math.min(30_000, cliFilesRemaining(signal, deadline)),
+        'renderer startup'
+      )
+      rendererAcquisitionSettled = true
+      rendererElapsedMs = Math.max(0, Math.round(performance.now() - rendererStartedAt))
+      windowSet = openedWindows
+    } catch (error) {
+      rendererElapsedMs = Math.max(0, Math.round(performance.now() - rendererStartedAt))
+      rendererController.abort(error)
+      abandoningWindowOpen = true
+      if (openingWindows) await stopLateWindow(openingWindows)
+      const settled = pendingWindows.then(() => undefined, () => undefined)
+      const lateDeadline = Promise.withResolvers<never>()
+      const lateTimer = setTimeout(
+        () => lateDeadline.reject(new CliWorldError('late-resource-cleanup', 'late browser startup did not settle')),
+        25_000
+      )
+      try {
+        await Promise.race([settled, lateDeadline.promise])
+        rendererAcquisitionSettled = true
+      } catch (lateError) {
+        lateResourceUnresolved = true
+        rendererAcquisitionSettled = false
+        lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(lateError), home, tokens))
+      } finally {
+        clearTimeout(lateTimer)
+      }
+      windowSet = undefined
+      throw error
+    }
+    if (!openedWindows) throw new CliWorldError('renderer-disconnected', 'owned browser startup returned no window handle')
+    captureStartedBrowserIdentity(openedWindows.browserPid)
+    if (openedWindows.browserPid <= 0 || !Number.isSafeInteger(openedWindows.browserPid)) {
+      throw new CliWorldError('renderer-disconnected', 'owned browser did not report a valid process ID')
+    }
+    browserPid = openedWindows.browserPid
+    const pages = openedWindows.pages
+    if (pages.length !== 2) throw new CliWorldError('renderer-disconnected', 'owned browser did not open exactly two renderer pages')
+    const initialWindowSnapshot = await waitForCliFilesOperation(
+      openedWindows.finish(),
+      signal,
+      deadline,
+      15_000,
+      'initial window record capture'
+    )
+    if (!Array.isArray(initialWindowSnapshot.records) || initialWindowSnapshot.records.length !== 2) {
+      throw new CliWorldError('renderer-disconnected', 'openWindows did not return two owned window records')
+    }
+    startupRecords = [...initialWindowSnapshot.records].sort((left, right) => left.index - right.index)
+    const fixtureWorktrees = soakWorld.fixtures.worktrees
+    const fixtureById = new Map(fixtureWorktrees.map((worktree) => [worktree.id, worktree]))
+    if (fixtureById.size !== fixtureWorktrees.length) throw new CliWorldError('worktree-identity', 'soak fixtures contain duplicate worktree IDs')
+    const recordConnIds = new Set<number>()
+    const recordWorktrees = new Set<string>()
+    selectedWorktrees = startupRecords.map((record, index) => {
+      if (record.index !== index || !Number.isSafeInteger(record.connId) || record.connId <= 0
+        || typeof record.worktree !== 'string' || !record.worktree || record.open !== true
+        || recordConnIds.has(record.connId) || recordWorktrees.has(record.worktree)) {
+        throw new CliWorldError('renderer-disconnected', 'openWindows records have duplicate, stale, or closed identities')
+      }
+      recordConnIds.add(record.connId)
+      recordWorktrees.add(record.worktree)
+      const worktree = fixtureById.get(record.worktree)
+      if (!worktree) throw new CliWorldError('worktree-identity', `window record refers to unknown worktree ${record.worktree}`)
+      return worktree
+    })
+    if (selectedWorktrees.length !== 2 || selectedWorktrees[0]!.id === selectedWorktrees[1]!.id) {
+      throw new CliWorldError('worktree-identity', 'the two owned windows must use distinct worktrees')
+    }
+    const initialUiState = await waitForCliFilesOperation(
+      soakWorld.control.callAny('ui.state', {}, { timeoutMs: Math.min(CLI_FILES_RENDERER_TIMEOUT_MS, cliFilesRemaining(signal, deadline)) }),
+      signal,
+      deadline,
+      CLI_FILES_RENDERER_TIMEOUT_MS,
+      'initial public renderer connection state'
+    )
+    const initialConnectionIds = new Set(cliFilesWindowIds(initialUiState))
+    if (recordConnIds.size !== 2 || [...recordConnIds].some((id) => !initialConnectionIds.has(id))) {
+      throw new CliWorldError('renderer-disconnected', 'openWindows records do not match public ui.state connection IDs')
+    }
+    for (let index = 0; index < pages.length; index++) {
+      if (pages[index]!.isClosed()) throw new CliWorldError('renderer-disconnected', `renderer page ${index} closed during startup`)
+    }
+    captureOwnedProcessIdentities(true)
+    if (!acquisitionSettled()) throw new CliWorldError('late-resource-cleanup', 'owned startup acquisition did not settle before readiness')
+    phase = 'ready'
+    captureStartupLogs()
+    const readyStartupDiagnostics = startupDiagnostics()
+
+    const assertLive = async (liveOptions: CliWorldExecuteOptions = {}) => {
+      if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
+      const liveSignal = liveOptions.signal ?? signal
+      const liveDeadline = liveOptions.signal ? Number.POSITIVE_INFINITY : deadline
+      ensureCliFilesWork(liveSignal, liveDeadline)
+      await verifyRuntime(liveSignal, liveDeadline)
+      await verifyLiveRenderers(liveSignal, liveDeadline)
+      const snapshot = processTable(home!)
+      captureOwnedProcessIdentities(true, snapshot)
+    }
+
+    const world: CliFilesWorld = {
+      home: home!,
+      env,
+      daemonPid: daemonPid!,
+      cliEntry,
+      pages,
+      records: startupRecords,
+      worktrees: selectedWorktrees,
+      tools: tools!,
+      get buildElapsedMs() {
+        return buildElapsedMs
+      },
+      startupDiagnostics: readyStartupDiagnostics,
+      assertLive,
+      async execute(argv, executeOptions = {}) {
+        if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
+        const executeSignal = executeOptions.signal ?? signal
+        const executeDeadline = executeOptions.signal ? Number.POSITIVE_INFINITY : deadline
+        ensureCliFilesWork(executeSignal, executeDeadline)
+        validateCliArgv(argv, cliEntry)
+        const cwd = resolveOwnedHomeCwd(executeOptions.cwd ?? home!, home!)
+        await assertLive(executeOptions)
+        const timeoutMs = Math.min(
+          COMMAND_TIMEOUT_MS,
+          executeOptions.timeoutMs ?? COMMAND_TIMEOUT_MS,
+          cliFilesRemaining(executeSignal, executeDeadline)
+        )
+        const result = dependencies.runCli
+          ? await dependencies.runCli(argv, { ...executeOptions, cwd, timeoutMs, signal: executeSignal })
+          : await runBoundedChild(scope!, env, argv, { cwd, signal: executeSignal, timeoutMs })
+        return result
+      },
+      async prepare(argv, cwdInput, prepareOptions = {}) {
+        if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
+        const prepareSignal = prepareOptions.signal ? AbortSignal.any([signal, prepareOptions.signal]) : signal
+        ensureCliFilesWork(prepareSignal, deadline)
+        validateFixtureGitArgv(argv)
+        const cwd = resolveOwnedHomeCwd(cwdInput, home!)
+        const timeoutMs = Math.min(
+          COMMAND_TIMEOUT_MS,
+          prepareOptions.timeoutMs ?? COMMAND_TIMEOUT_MS,
+          cliFilesRemaining(prepareSignal, deadline)
+        )
+        return dependencies.runPreparation
+          ? dependencies.runPreparation(argv, { ...prepareOptions, cwd, timeoutMs, signal: prepareSignal })
+          : runBoundedChild(scope!, env, argv, { cwd, signal: prepareSignal, timeoutMs })
+      },
+      cleanup,
+      get cleanupEvidence() {
+        return cleanupEvidence
+      }
+    }
+    clearTimeout(deadlineTimer)
+    return world
+  } catch (error) {
+    const primaryProcessInspection = getProcessInspectionMetadata(error)
+    let cleanupError: string | undefined
+    try {
+      await cleanup()
+    } catch (failure) {
+      cleanupError = errorText(failure)
+    }
+    const original = error instanceof CliWorldError
+      ? error
+      : new CliWorldError(
+        error && typeof error === 'object' && 'kind' in error && typeof error.kind === 'string' ? error.kind : 'startup-failed',
+        errorText(error)
+      )
+    const kind = original.kind
+    const message = home ? sanitizeCliFilesDiagnostic(original.message, home, tokens) : sanitizeCliFilesDiagnostic(original.message, '', tokens)
+    const originalCleanupError = original.cleanupError
+      ? (home ? sanitizeCliFilesDiagnostic(original.cleanupError, home, tokens) : sanitizeCliFilesDiagnostic(original.cleanupError, '', tokens))
+      : undefined
+    const safeCleanupError = [originalCleanupError, cleanupError]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => home ? sanitizeCliFilesDiagnostic(value, home, tokens) : sanitizeCliFilesDiagnostic(value, '', tokens))
+      .join('; ')
+    const acquisitionsAreSettled = acquisitionSettled()
+    const unresolvedAcquisition = lateResourceUnresolved || !acquisitionsAreSettled
+    const cleanupOk = !safeCleanupError && cleanupEvidence.processIdentitiesGone && cleanupEvidence.homeRemoved
+      && scopeCleanupComplete && acquisitionsAreSettled && !unresolvedAcquisition
+    const stderrTail = original.stderrTail
+      ? home ? sanitizeCliFilesDiagnostic(original.stderrTail, home, tokens) : sanitizeCliFilesDiagnostic(original.stderrTail, '', tokens)
+      : undefined
+    const startupEvidence: CliFilesStartupEvidence = {
+      diagnostics: startupDiagnostics(),
+      cleanup: {
+        ok: cleanupOk,
+        ...(safeCleanupError ? { error: safeCleanupError } : {}),
+        evidence: {
+          ...cleanupEvidence,
+          started: { daemon: daemonStarted, browser: browserStarted },
+          unresolvedAcquisition,
+          scopeCleanupComplete,
+          acquisitionSettled: acquisitionsAreSettled
+        }
+      }
+    }
+    const failure = new CliFilesStartupError(
+      kind,
+      message,
+      startupEvidence,
+      stderrTail,
+      original.stdoutBytes,
+      original.elapsedMs,
+      original.exitCode
+    )
+    if (safeCleanupError) failure.cleanupError = safeCleanupError
+    const processInspection = primaryProcessInspection ?? lastProcessInspection
+    if (processInspection) {
+      Object.defineProperty(failure, 'processInspection', { value: processInspection, enumerable: true })
+    }
+    throw failure
+  }
+}

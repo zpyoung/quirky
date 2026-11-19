@@ -1,7 +1,54 @@
-import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredStartOptions, StructuredRunner } from './runner'
-import { nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
+import type { CanUseTool, ModelInfo, Options, PermissionMode, PermissionResult, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { constants } from 'node:fs'
+import { open } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { extname, join } from 'node:path'
+import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
+import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
+import {
+  CallTracker,
+  ProseStream,
+  claudeEntries,
+  claudeTextDelta,
+  closingEntries,
+  errorItem,
+  stderrLines,
+  summarizeInput,
+  turnEndItem,
+  userItem,
+  type ItemEntry
+} from './items'
+import { MAX_IMAGE_BYTES } from './queue'
+import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
+import { planDecision, planSpec, planText } from './plan'
+import { hoistCommand } from './slash-commands'
+
+const TOOLS_DISABLED = 'tools are disabled for this session'
+const denyEveryTool: CanUseTool = async () => ({ behavior: 'deny', message: TOOLS_DISABLED })
+
+function numberOr0(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+/** The context footprint of a result message, or null when the SDK reported no usage. */
+function resultUsage(msg: any): TurnUsage | null {
+  const usage = msg?.usage
+  if (typeof usage !== 'object' || usage === null) return null
+  const windows =
+    typeof msg.modelUsage === 'object' && msg.modelUsage !== null
+      ? Object.values<any>(msg.modelUsage)
+          .map((entry) => entry?.contextWindow)
+          .filter((value): value is number => typeof value === 'number' && value > 0)
+      : []
+  return {
+    contextTokens:
+      numberOr0(usage.input_tokens) +
+      numberOr0(usage.cache_read_input_tokens) +
+      numberOr0(usage.cache_creation_input_tokens) +
+      numberOr0(usage.output_tokens),
+    contextWindow: windows.length > 0 ? Math.max(...windows) : null
+  }
+}
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
 
@@ -9,16 +56,103 @@ export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options
 export type ClaudeQuery = AsyncIterable<any> & {
   interrupt(): Promise<unknown>
   close(): void
+  setPermissionMode(mode: PermissionMode): Promise<void>
+  setModel(model?: string): Promise<void>
+  applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
+  initializationResult?(): Promise<{ models?: { value: string; supportsAutoMode?: boolean }[] }>
+  supportedModels?(): Promise<ModelInfo[]>
+  supportedCommands?(): Promise<ClaudeSlashCommand[]>
 }
+
+/** One entry of the SDK's `supportedCommands()` list or `commands_changed` push. */
+export type ClaudeSlashCommand = { name: string; description?: string; argumentHint?: string; builtin?: boolean }
 
 export type ClaudeRunnerDeps = {
   /** Replaces the SDK's `query`; tests inject a fake. The SDK is imported on first use otherwise. */
   query?: (params: ClaudeQueryParams) => ClaudeQuery
+  /** Where Claude keeps plan files; defaults to `plans` under the session's Claude config directory. */
+  plansDir?: string
 }
 
 const DENIED = 'Denied from Quirky'
-const SUMMARY_LIMIT = 160
 const INTERRUPT_TIMEOUT_MS = 2000
+const KEEP_PLANNING = 'Keep planning.'
+const EMPTY_PLAN = 'The plan was empty. Present the plan again.'
+const SUPERSEDED_PLAN = 'A newer plan replaced this one. This plan was not approved.'
+const STOPPED_PLAN = 'The user stopped before answering. The plan was not approved; stay in plan mode.'
+const AUTO_REFUSED_SWITCH_FAILED = "Auto mode isn't available and switching to Accept edits failed."
+const AUTO_REFUSED = "Auto mode isn't available. Using Accept edits."
+
+const MODES: readonly PermissionModeName[] = ['default', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions']
+const MODE_LABELS: Record<PermissionModeName, string> = {
+  default: 'Default',
+  acceptEdits: 'Accept edits',
+  plan: 'Plan',
+  auto: 'Auto',
+  dontAsk: "Don't ask",
+  bypassPermissions: 'Bypass permissions'
+}
+
+function isModeName(value: unknown): value is PermissionModeName {
+  return typeof value === 'string' && (MODES as readonly string[]).includes(value)
+}
+
+/** What ends the wait on a plan before the user answers its ask. */
+type PlanInterrupt = { kind: 'feedback'; text: string } | { kind: 'mode-switch'; mode: PermissionModeName } | { kind: 'stopped' } | { kind: 'superseded' }
+
+type PendingPlan = {
+  version: number
+  askId: string | null
+  /** Set by whoever claims the plan first: an answer, feedback, a mode switch or a stop. */
+  settled: boolean
+  interrupt: PromiseWithResolvers<PlanInterrupt>
+  /** Resolves once the plan's final item is journaled. */
+  done: PromiseWithResolvers<void>
+}
+
+type ModelAvailability = { value: string; supportsAutoMode?: boolean }
+
+const COMMANDS_TIMEOUT_MS = 10_000
+const MCP_PROMPT = /^(.+):(\S+) \(MCP\)$/
+const SOURCE_SUFFIX = / \((user|project)\)$/
+
+/**
+ * Sorts the SDK's command list into the kinds Quirky shows. `skills` are the names `system/init`
+ * reports as skills; until the first turn starts it is null and a `(user)` or `(project)` suffix,
+ * which the CLI adds to `.claude/commands` entries, tells a command from a skill. Built-ins stay
+ * start-only unless init names them as skills, since `/clear` or `/compact` mid-message must not run.
+ */
+export function claudeCommands(list: readonly ClaudeSlashCommand[], skills: ReadonlySet<string> | null): AgentCommand[] {
+  return list.flatMap((entry): AgentCommand[] => {
+    if (typeof entry?.name !== 'string' || entry.name === '' || entry.name.startsWith('__')) return []
+    const hint = typeof entry.argumentHint === 'string' ? entry.argumentHint.trim() : ''
+    const raw = typeof entry.description === 'string' ? entry.description.trim() : ''
+    const details = (description: string) => ({ ...(description === '' ? {} : { description }), ...(hint === '' ? {} : { argumentHint: hint }) })
+    const mcp = MCP_PROMPT.exec(entry.name)
+    // the CLI lists an MCP prompt by its display name but runs it as /mcp__<server>__<prompt>
+    if (mcp) return [{ name: `mcp__${mcp[1]!.replace(/[^\w-]/g, '_')}__${mcp[2]}`, kind: 'mcp', ...details(raw) }]
+    if (entry.builtin === true) {
+      return skills?.has(entry.name) ? [{ name: entry.name, kind: 'skill', ...details(raw) }] : [{ name: entry.name, kind: 'builtin', startOnly: true, ...details(raw) }]
+    }
+    const colon = entry.name.indexOf(':')
+    if (colon > 0) {
+      const prefix = `(${entry.name.slice(0, colon)}) `
+      return [{ name: entry.name, kind: 'plugin', ...details(raw.startsWith(prefix) ? raw.slice(prefix.length) : raw) }]
+    }
+    const isSkill = skills ? skills.has(entry.name) : !SOURCE_SUFFIX.test(raw)
+    return [{ name: entry.name, kind: isSkill ? 'skill' : 'command', ...details(raw.replace(SOURCE_SUFFIX, '')) }]
+  })
+}
+
+/** The list built from `system/init` names alone, for a CLI whose SDK has no `supportedCommands()`. */
+function initCommands(slashCommands: readonly string[], skills: ReadonlySet<string>): AgentCommand[] {
+  return [
+    ...slashCommands
+      .filter((name) => !skills.has(name))
+      .map((name): AgentCommand => ({ name, kind: name.startsWith('mcp__') ? 'mcp' : name.includes(':') ? 'plugin' : 'command' })),
+    ...[...skills].map((name): AgentCommand => ({ name, kind: name.includes(':') ? 'plugin' : 'skill' }))
+  ]
+}
 
 type InputStream = {
   messages: AsyncIterable<SDKUserMessage>
@@ -61,21 +195,104 @@ function createInputStream(): InputStream {
 }
 
 type Running = {
+  /** A `deny-all` session refuses every tool and cannot leave that by changing its permission mode. */
+  denyAll: boolean
   query: ClaudeQuery
   input: InputStream
   providerSessionId: string | undefined
   providerSessionKnown: boolean
   stopped: boolean
   ended: boolean
+  /** An interrupt was issued and its non-success result has not been swallowed yet. */
+  interrupted: boolean
+  calls: CallTracker
+  stream: ProseStream
+  turnStartedAt: number | null
+  /** Prompts sent whose result has not arrived yet; a result closes one turn, not all of them. */
+  openTurns: number
+  settings: { model?: string; effort?: string }
+  /** The mode Claude is in as far as Quirky knows; the newest `mode` item mirrors it. */
+  mode: PermissionModeName
+  autoAvailable: boolean
+  initModel: string | undefined
+  models: ModelAvailability[] | null
+  initialized: boolean
+  plansDir: string
+  planVersion: number
+  lastPlanText: string | null
+  /** The newest journaled item of each plan version, so a status change can journal a full copy. */
+  plans: Map<number, PlanItem>
+  pendingPlan: PendingPlan | null
+  /** Tail of the ExitPlanMode calls queued on this run; each call runs after the one before it. */
+  planQueue: Promise<void>
+  /** Count of ExitPlanMode calls received, so a queued call can tell a newer one has arrived. */
+  planArrivals: number
+  /** ExitPlanMode calls received and not yet finished. */
+  planInFlight: number
+  /** Bumped by each interrupt or stop, so a queued call can tell the turn it arrived in was cut short. */
+  planCancels: number
+  /** The mode an approval asked Claude to switch to, until the turn's result confirms it. */
+  pendingApprovalTarget: 'auto' | 'acceptEdits' | 'default' | null
+  approvedVersion: number | null
+  /** The SDK's command list, or null until `supportedCommands()` answers. */
+  slashCommands: ClaudeSlashCommand[] | null
+  /** The skill names from `system/init`, or null until the first turn starts. */
+  skills: Set<string> | null
+  /** The list last reported, which decides how an outgoing message is rewritten. */
+  commands: AgentCommand[]
+  /** Settles once the command list has loaded or failed; messages are written to the CLI after it. */
+  commandsLoaded: Promise<void>
 }
 
-function userMessage(text: string, providerSessionId?: string): SDKUserMessage {
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+
+type EncodedImage = { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
+/**
+ * Reads an image for the agent without ever blocking on it: the file is opened non-blocking and
+ * checked on the open descriptor, so a path swapped for a FIFO or device since it was validated
+ * is refused instead of hanging the daemon.
+ */
+async function encodeImage(path: string): Promise<EncodedImage> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
+  try {
+    const stats = await handle.stat()
+    if (!stats.isFile()) throw new Error(`image ${path} is not a regular file`)
+    if (stats.size > MAX_IMAGE_BYTES) throw new Error(`image ${path} is larger than 20 MB`)
+    const data = await handle.readFile()
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: IMAGE_MEDIA_TYPES[extname(path).toLowerCase()] ?? 'image/png',
+        data: data.toString('base64')
+      }
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+function userMessage(text: string, providerSessionId?: string, images: EncodedImage[] = []): SDKUserMessage {
+  // the api rejects an empty text block, so an image-only message carries the images alone
+  const content = images.length === 0 ? text : [...(text === '' ? [] : [{ type: 'text', text }]), ...images]
   return {
     type: 'user',
-    message: { role: 'user', content: text },
+    message: { role: 'user', content } as SDKUserMessage['message'],
     parent_tool_use_id: null,
     ...(providerSessionId === undefined ? {} : { session_id: providerSessionId })
   }
+}
+
+function configDirOf(env: Record<string, string | null> | undefined): string {
+  const configured = env?.CLAUDE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR
+  return typeof configured === 'string' && configured !== '' ? configured : join(homedir(), '.claude')
 }
 
 function environmentOf(patch: Record<string, string | null>): Record<string, string> {
@@ -88,40 +305,6 @@ function environmentOf(patch: Record<string, string | null>): Record<string, str
     else env[name] = value
   }
   return env
-}
-
-function oneLine(text: string, limit = SUMMARY_LIMIT): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
-}
-
-function summarizeInput(input: Record<string, unknown> | undefined): string {
-  if (!input) return ''
-  for (const key of ['command', 'file_path', 'path', 'pattern', 'url', 'query', 'description']) {
-    const value = input[key]
-    if (typeof value === 'string' && value) return oneLine(value)
-  }
-  return oneLine(JSON.stringify(input) ?? '')
-}
-
-function blockText(content: unknown): string {
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n')
-}
-
-function resultText(msg: any): string {
-  const summary =
-    typeof msg.result === 'string' && msg.result
-      ? msg.result
-      : [msg.subtype, ...(Array.isArray(msg.errors) ? msg.errors : [])].filter(Boolean).join(': ') || 'finished'
-  const details: string[] = []
-  if (typeof msg.total_cost_usd === 'number') details.push(`$${msg.total_cost_usd.toFixed(4)}`)
-  if (typeof msg.duration_ms === 'number') details.push(`${(msg.duration_ms / 1000).toFixed(1)}s`)
-  return details.length ? `${summary}\n(${details.join(', ')})` : summary
 }
 
 /**
@@ -178,43 +361,223 @@ class ClaudeRunner implements StructuredRunner {
     providerSessionId: string | undefined
   ): void {
     const input = createInputStream()
-    if (prompt !== undefined && prompt !== '') {
-      const first = userMessage(prompt, providerSessionId)
-      this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: first })
-      input.push(first)
+    const hasPrompt = prompt !== undefined && prompt !== ''
+    if (hasPrompt) {
+      this.context.appendMessage({ sessionId: session.id, role: 'user', text: prompt, data: userMessage(prompt, providerSessionId), item: userItem(prompt) })
     }
-    this.context.setStatus(session.id, prompt === undefined || prompt === '' ? 'running' : 'working')
+    this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
+    const denyAll = launchOptions.toolPolicy === 'deny-all'
+    const mode = !denyAll && isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
     const run: Running = {
+      denyAll,
       input,
       providerSessionId,
       providerSessionKnown: launchOptions.providerSession !== undefined,
       stopped: false,
       ended: false,
+      interrupted: false,
+      calls: new CallTracker(),
+      stream: new ProseStream(),
+      turnStartedAt: hasPrompt ? Date.now() : null,
+      openTurns: hasPrompt ? 1 : 0,
+      mode,
+      autoAvailable: false,
+      initModel: undefined,
+      models: null,
+      initialized: false,
+      plansDir: this.deps.plansDir ?? join(configDirOf(launchOptions.env), 'plans'),
+      planVersion: launchOptions.planVersion ?? 0,
+      lastPlanText: launchOptions.lastPlanText ?? null,
+      plans: new Map(launchOptions.lastPlan === undefined ? [] : [[launchOptions.lastPlan.version, launchOptions.lastPlan]]),
+      pendingPlan: null,
+      planQueue: Promise.resolve(),
+      planArrivals: 0,
+      planInFlight: 0,
+      planCancels: 0,
+      pendingApprovalTarget: null,
+      approvedVersion: null,
+      slashCommands: null,
+      skills: null,
+      commands: [],
+      commandsLoaded: Promise.resolve(),
+      settings: {
+        ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
+        ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort } : {})
+      },
       query: query({
         prompt: input.messages,
         options: {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
-          permissionMode: 'default',
-          canUseTool: this.canUseTool(session.id),
-          ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
+          permissionMode: mode as PermissionMode,
+          // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
+          allowDangerouslySkipPermissions: !denyAll,
+          includePartialMessages: true,
+          canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
+          ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
+          env: environmentOf({ ...launchOptions.env, CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1' }),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
         }
       })
     }
     this.running.set(session.id, run)
+    this.appendMode(session.id, run)
+    run.commandsLoaded = this.loadCommands(session.id, run)
+    if (hasPrompt) this.write(run, prompt)
     void this.pump(session.id, run)
   }
 
-  async send(sessionId: string, text: string): Promise<void> {
+  /** Asks the CLI for its commands as soon as it starts, so the list is there before the first message. */
+  private async loadCommands(sessionId: string, run: Running): Promise<void> {
+    if (typeof run.query.supportedCommands !== 'function') return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const list = await Promise.race([
+        run.query.supportedCommands(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), COMMANDS_TIMEOUT_MS)
+        })
+      ])
+      if (!Array.isArray(list) || run.stopped || run.slashCommands !== null) return
+      run.slashCommands = list
+      this.reportCommands(sessionId, run)
+    } catch {
+      // a CLI that cannot list commands still reports names in system/init
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private reportCommands(sessionId: string, run: Running): void {
+    run.commands = claudeCommands(run.slashCommands ?? [], run.skills)
+    this.context.reportCommands?.(sessionId, run.commands)
+  }
+
+  /** Writes a user message to the CLI once the command list is known, so a mid-message command can open it. */
+  private write(run: Running, text: string, images: EncodedImage[] = []): void {
+    void run.commandsLoaded.then(() => {
+      if (run.stopped || run.ended) return
+      run.input.push(userMessage(hoistCommand(text, run.commands), run.providerSessionId, images))
+    })
+  }
+
+  async send(sessionId: string, text: string, options: StructuredSendOptions = {}): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) throw new Error('session is not running')
-    const message = userMessage(text, run.providerSessionId)
-    this.context.appendMessage({ sessionId, role: 'user', text, data: message })
+    const images = options.images !== undefined && options.images.length > 0 ? await Promise.all(options.images.map(encodeImage)) : []
+    if (run.stopped || run.ended) throw new Error('session is not running')
+    this.context.appendMessage({
+      sessionId,
+      role: 'user',
+      text,
+      data: userMessage(text, run.providerSessionId, images),
+      item: userItem(text, options.images, options.queuedId)
+    })
+    run.openTurns++
+    run.turnStartedAt ??= Date.now()
     this.context.setStatus(sessionId, 'working')
-    run.input.push(message)
+    this.write(run, text, images)
+  }
+
+  private configureChains = new Map<string, Promise<unknown>>()
+
+  /** Applies settings changes for one session in call order, so the returned settings match what the SDK was last told. */
+  configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const previous = this.configureChains.get(sessionId) ?? Promise.resolve()
+    const result = previous.then(() => this.applySettings(sessionId, settings))
+    const settled = result.then(() => undefined, () => undefined)
+    this.configureChains.set(sessionId, settled)
+    void settled.then(() => {
+      if (this.configureChains.get(sessionId) === settled) this.configureChains.delete(sessionId)
+    })
+    return result
+  }
+
+  private async applySettings(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended) throw new Error('session is not running')
+    const current = run.settings
+    if (settings.model !== undefined) {
+      await run.query.setModel(settings.model)
+      current.model = settings.model
+      this.refreshAutoAvailable(sessionId, run)
+    }
+    if (settings.effort !== undefined) {
+      await run.query.applyFlagSettings({ effortLevel: settings.effort as Options['effort'] })
+      current.effort = settings.effort
+    }
+    if (settings.permissionMode !== undefined && run.denyAll) throw new Error('a session without tools has no permission modes')
+    if (settings.permissionMode !== undefined) await this.switchMode(sessionId, run, settings.permissionMode)
+    return { ...current, permissionMode: run.mode }
+  }
+
+  /** Moves Claude to `target`, first telling a waiting plan it was not approved so it never outlives the switch. */
+  private async switchMode(sessionId: string, run: Running, target: string): Promise<void> {
+    if (!isModeName(target)) throw new Error(`unsupported permission mode ${target}`)
+    if (target === 'auto' && run.mode !== 'auto') await this.requireAutoModeModel(run)
+    const pending = run.pendingPlan
+    if (pending && target !== run.mode && !pending.settled) {
+      pending.settled = true
+      pending.interrupt.resolve({ kind: 'mode-switch', mode: target })
+      await pending.done.promise
+    }
+    await run.query.setPermissionMode(target)
+    run.pendingApprovalTarget = null
+    if (target === run.mode) return
+    run.mode = target
+    this.appendMode(sessionId, run)
+  }
+
+  autoAvailable(sessionId: string): boolean {
+    return this.running.get(sessionId)?.autoAvailable ?? false
+  }
+
+  planWaiting(sessionId: string): boolean {
+    const pending = this.running.get(sessionId)?.pendingPlan
+    return pending !== undefined && pending !== null && pending.askId !== null && !pending.settled
+  }
+
+  planFeedback(sessionId: string, text: string): boolean {
+    if (!this.planWaiting(sessionId)) return false
+    const pending = this.running.get(sessionId)!.pendingPlan!
+    pending.settled = true
+    pending.interrupt.resolve({ kind: 'feedback', text })
+    return true
+  }
+
+  /** Refuses auto mode when Claude reports that the session's model cannot use it; an unknown answer lets Claude decide. */
+  private async requireAutoModeModel(run: Running): Promise<void> {
+    let models: ModelInfo[]
+    try {
+      models = (await run.query.supportedModels?.()) ?? []
+    } catch {
+      return
+    }
+    const model = run.settings.model ?? 'default'
+    const found = models.find((entry) => entry.value === model || entry.resolvedModel === model)
+    if (found?.supportsAutoMode === false) throw new Error(`${found.displayName || model} does not support auto mode`)
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || run.turnStartedAt === null) return
+    run.planCancels++
+    this.settlePlan(run, { kind: 'stopped' })
+    this.closeTurn(sessionId, run, 'stopped')
+    run.interrupted = true
+    const honoured = await Promise.race([
+      run.query.interrupt().then(() => true, () => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), INTERRUPT_TIMEOUT_MS))
+    ])
+    if (!honoured) {
+      run.interrupted = false
+      await this.stop(sessionId)
+      return
+    }
+    if (run.stopped || run.ended || this.running.get(sessionId) !== run) return
+    this.context.setStatus(sessionId, 'done')
   }
 
   async stop(sessionId: string): Promise<void> {
@@ -223,7 +586,10 @@ class ClaudeRunner implements StructuredRunner {
     const run = this.running.get(sessionId)
     if (!run || run.stopped) return
     run.stopped = true
+    run.planCancels++
     this.running.delete(sessionId)
+    this.settlePlan(run, { kind: 'stopped' })
+    this.closeTurn(sessionId, run, 'stopped')
     run.input.end()
     await Promise.race([
       run.query.interrupt().catch(() => {}),
@@ -236,8 +602,24 @@ class ClaudeRunner implements StructuredRunner {
   private canUseTool(sessionId: string): CanUseTool {
     let pending = 0
     return async (toolName, input) => {
+      const run = this.running.get(sessionId)
+      if (toolName === 'EnterPlanMode' && run) {
+        this.recordMode(sessionId, run, 'plan')
+        return { behavior: 'allow', updatedInput: input }
+      }
       pending++
       this.context.setStatus(sessionId, 'waiting')
+      const settle = (): void => {
+        pending--
+        if (pending === 0 && this.running.get(sessionId)?.turnStartedAt != null) this.context.setStatus(sessionId, 'working')
+      }
+      if (toolName === 'ExitPlanMode' && run) {
+        try {
+          return await this.exitPlanMode(sessionId, run, input)
+        } finally {
+          settle()
+        }
+      }
       let envelope: AskEnvelope | null = null
       try {
         if (toolName === 'AskUserQuestion') {
@@ -251,32 +633,17 @@ class ClaudeRunner implements StructuredRunner {
           return { behavior: 'allow', updatedInput: { ...input, answers } }
         }
         envelope = await this.context.createAsk(
-          {
-            questions: [
-              {
-                id: 'decision',
-                type: 'select',
-                question: `Allow ${toolName}? ${summarizeInput(input)}`.trim(),
-                options: [
-                  { value: 'allow', label: 'Allow' },
-                  { value: 'deny', label: 'Deny' },
-                  { value: 'always', label: 'Always allow', description: `${toolName} for the rest of this session` }
-                ]
-              }
-            ]
-          },
+          approvalSpec(`Allow ${toolName}? ${summarizeInput(input)}`.trim()),
           sessionId
         )
       } catch {
         envelope = null
       } finally {
-        pending--
-        if (pending === 0 && this.running.has(sessionId)) this.context.setStatus(sessionId, 'working')
+        settle()
       }
-      const answer = envelope?.status === 'answered' ? envelope.answers.decision : undefined
-      const value = answer && 'value' in answer ? answer.value : undefined
-      if (value === 'allow') return { behavior: 'allow', updatedInput: input }
-      if (value === 'always') {
+      const outcome = approvalOutcome(envelope, true)
+      if (outcome.decision === 'allow') return { behavior: 'allow', updatedInput: input }
+      if (outcome.decision === 'always') {
         return {
           behavior: 'allow',
           updatedInput: input,
@@ -285,8 +652,219 @@ class ClaudeRunner implements StructuredRunner {
           ]
         }
       }
-      return { behavior: 'deny', message: DENIED }
+      return { behavior: 'deny', message: outcome.reason ?? DENIED }
     }
+  }
+
+  /**
+   * Presents Claude's plan and waits for the user. Only an answered approve exit with a non-empty plan
+   * allows the tool; every other ending denies it and leaves Claude in plan mode.
+   */
+  private async exitPlanMode(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
+    const arrival = ++run.planArrivals
+    const cancels = run.planCancels
+    const previous = run.planInFlight === 0 ? null : run.planQueue
+    run.planInFlight++
+    const turn = Promise.withResolvers<void>()
+    run.planQueue = turn.promise
+    // supersede synchronously so the waiting plan stops being answerable before this call queues
+    this.settlePlan(run, { kind: 'superseded' })
+    try {
+      if (previous) await previous
+      if (cancels !== run.planCancels || run.stopped || run.ended) {
+        this.closeSupersededPlans(sessionId, run)
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
+      // only the newest call may install a live ask; a call overtaken while queued is denied unseen
+      if (arrival !== run.planArrivals) return { behavior: 'deny', message: SUPERSEDED_PLAN }
+      return await this.presentPlan(sessionId, run, input)
+    } finally {
+      run.planInFlight--
+      turn.resolve()
+    }
+  }
+
+  private async presentPlan(sessionId: string, run: Running, input: Record<string, unknown>): Promise<PermissionResult> {
+    const found = planText(input, run.lastPlanText, run.plansDir)
+    for (const earlier of [...run.plans.values()]) {
+      if (earlier.status === 'waiting' || earlier.status === 'not-answered') {
+        this.appendPlan(sessionId, run, { ...withoutAsk(earlier), status: 'revised' })
+      }
+    }
+    const version = ++run.planVersion
+    const unchanged = !found.empty && found.text === run.lastPlanText
+    if (!found.empty) run.lastPlanText = found.text
+    const base: PlanItem = {
+      kind: 'plan',
+      version,
+      status: 'waiting',
+      text: found.text,
+      ...(found.filePath === undefined ? {} : { filePath: found.filePath }),
+      ...(found.empty ? { empty: true } : {}),
+      ...(unchanged ? { unchanged: true } : {})
+    }
+    const pending: PendingPlan = {
+      version,
+      askId: null,
+      settled: false,
+      interrupt: Promise.withResolvers<PlanInterrupt>(),
+      done: Promise.withResolvers<void>()
+    }
+    run.pendingPlan = pending
+    const notAnswered = (reason: NonNullable<PlanItem['reason']>): void =>
+      this.appendPlan(sessionId, run, { ...base, status: 'not-answered', reason })
+    const keepPlanning = (message: string): PermissionResult => {
+      notAnswered('feedback')
+      return { behavior: 'deny', message }
+    }
+    try {
+      const answered = (async (): Promise<{ kind: 'answer'; envelope: AskEnvelope | null }> => {
+        try {
+          const envelope = await this.context.createAsk(planSpec(), sessionId, {
+            silent: true,
+            onAsk: (askId) => {
+              if (pending.settled) {
+                void this.context.cancelAsk(askId).catch(() => {})
+                return
+              }
+              pending.askId = askId
+              this.appendPlan(sessionId, run, { ...base, askId })
+            }
+          })
+          pending.settled = true
+          return { kind: 'answer', envelope }
+        } catch {
+          pending.settled = true
+          return { kind: 'answer', envelope: null }
+        }
+      })()
+      const outcome = await Promise.race([answered, pending.interrupt.promise])
+      if (outcome.kind !== 'answer' && pending.askId !== null) await this.context.cancelAsk(pending.askId).catch(() => {})
+      if (outcome.kind === 'superseded') return { behavior: 'deny', message: SUPERSEDED_PLAN }
+      if (outcome.kind === 'feedback') return keepPlanning(outcome.text.trim() === '' ? KEEP_PLANNING : outcome.text)
+      if (outcome.kind === 'mode-switch') {
+        notAnswered('mode-switch')
+        return { behavior: 'deny', message: `The user switched to ${MODE_LABELS[outcome.mode]} mode. The plan was not approved.` }
+      }
+      if (outcome.kind === 'stopped') {
+        notAnswered('stopped')
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
+      const decision = planDecision(outcome.envelope)
+      if (decision.decision === 'keep') return keepPlanning(decision.message === '' ? KEEP_PLANNING : decision.message)
+      if (decision.decision === 'stopped') {
+        notAnswered('stopped')
+        return { behavior: 'deny', message: STOPPED_PLAN }
+      }
+      if (found.empty) return keepPlanning(EMPTY_PLAN)
+      const target = decision.decision === 'approve-auto' ? (run.autoAvailable ? 'auto' : 'acceptEdits') : 'default'
+      this.appendPlan(sessionId, run, { ...base, status: 'approved', approvedMode: target })
+      run.pendingApprovalTarget = target
+      run.approvedVersion = version
+      this.recordMode(sessionId, run, target)
+      return {
+        behavior: 'allow',
+        updatedInput: input,
+        updatedPermissions: [{ type: 'setMode', mode: target, destination: 'session' }]
+      }
+    } finally {
+      if (run.pendingPlan === pending) run.pendingPlan = null
+      pending.settled = true
+      pending.done.resolve()
+    }
+  }
+
+  /**
+   * Journals as not answered, reason stopped, every version left waiting with no live ask: a plan
+   * superseded by a call that was then cancelled before it could present. The one place that happens.
+   */
+  private closeSupersededPlans(sessionId: string, run: Running): void {
+    for (const item of [...run.plans.values()]) {
+      if (item.status !== 'waiting' || item.version === run.pendingPlan?.version) continue
+      this.appendPlan(sessionId, run, { ...withoutAsk(item), status: 'not-answered', reason: 'stopped' })
+    }
+  }
+
+  /** Ends the wait on a plan that has not been answered or claimed yet. */
+  private settlePlan(run: Running, interrupt: PlanInterrupt): void {
+    const pending = run.pendingPlan
+    if (!pending || pending.settled) return
+    pending.settled = true
+    pending.interrupt.resolve(interrupt)
+  }
+
+  private appendPlan(sessionId: string, run: Running, item: PlanItem): void {
+    run.plans.set(item.version, item)
+    this.context.appendMessage({ sessionId, role: 'system', text: `Plan v${item.version}: ${item.status}`, item })
+  }
+
+  private appendMode(sessionId: string, run: Running): void {
+    this.context.appendMessage({
+      sessionId,
+      role: 'system',
+      text: `Mode: ${MODE_LABELS[run.mode]}`,
+      item: { kind: 'mode', mode: run.mode, autoAvailable: run.autoAvailable }
+    })
+  }
+
+  /** Journals a mode change; a mode Claude already holds is not repeated. */
+  private recordMode(sessionId: string, run: Running, mode: PermissionModeName): void {
+    if (run.mode === mode) return
+    run.mode = mode
+    this.appendMode(sessionId, run)
+  }
+
+  private refreshAutoAvailable(sessionId: string, run: Running): void {
+    if (run.models === null) return
+    const current = run.settings.model ?? run.initModel
+    const info = run.models.find((model) => model.value === current) ?? (run.settings.model === undefined ? run.models.find((model) => model.value === 'default') : undefined)
+    const available = info?.supportsAutoMode === true
+    if (available === run.autoAvailable) return
+    run.autoAvailable = available
+    this.appendMode(sessionId, run)
+  }
+
+  /** Learns which models offer Auto; best effort, so a failure leaves Auto unavailable. */
+  private async loadModels(sessionId: string, run: Running): Promise<void> {
+    if (!run.query.initializationResult) return
+    try {
+      const result = await run.query.initializationResult()
+      if (run.stopped || run.ended) return
+      run.models = result.models ?? []
+      this.refreshAutoAvailable(sessionId, run)
+    } catch {
+      // without the model list Auto stays unavailable
+    }
+  }
+
+  /** Follows the mode Claude reports, and corrects an approval into Auto that Claude did not honour. */
+  private async reportMode(sessionId: string, run: Running, reported: unknown): Promise<void> {
+    if (!isModeName(reported)) return
+    if (run.pendingApprovalTarget === 'auto') {
+      run.pendingApprovalTarget = null
+      if (reported !== 'auto') {
+        await this.correctRefusedAuto(sessionId, run, reported)
+        return
+      }
+    }
+    this.recordMode(sessionId, run, reported)
+  }
+
+  private async correctRefusedAuto(sessionId: string, run: Running, reported: PermissionModeName): Promise<void> {
+    run.autoAvailable = false
+    try {
+      await run.query.setPermissionMode('acceptEdits')
+    } catch {
+      this.recordMode(sessionId, run, reported)
+      const notice = `${AUTO_REFUSED_SWITCH_FAILED} Claude is in ${MODE_LABELS[reported]} mode.`
+      this.context.appendMessage({ sessionId, role: 'system', text: notice, item: { kind: 'prose', text: notice } })
+      return
+    }
+    run.mode = 'acceptEdits'
+    const approved = run.approvedVersion === null ? undefined : run.plans.get(run.approvedVersion)
+    if (approved) this.appendPlan(sessionId, run, { ...approved, status: 'approved', approvedMode: 'acceptEdits' })
+    this.appendMode(sessionId, run)
+    this.context.appendMessage({ sessionId, role: 'system', text: AUTO_REFUSED, item: { kind: 'prose', text: AUTO_REFUSED } })
   }
 
   private async pump(sessionId: string, run: Running): Promise<void> {
@@ -300,86 +878,160 @@ class ClaudeRunner implements StructuredRunner {
       failure = error instanceof Error ? error : new Error(String(error))
     }
     run.ended = true
+    this.settlePlan(run, { kind: 'stopped' })
     if (run.stopped || this.running.get(sessionId) !== run) return
     this.running.delete(sessionId)
+    const wasWorking = run.turnStartedAt !== null
+    this.closeTurn(sessionId, run, 'failed')
     if (failure) {
-      this.context.appendMessage({ sessionId, role: 'system', text: `claude failed: ${failure.message}` })
+      this.context.appendMessage({
+        sessionId,
+        role: 'system',
+        text: `claude failed: ${failure.message}`,
+        item: errorItem('exited', stderrLines(failure.message), run.providerSessionKnown)
+      })
+    } else if (wasWorking) {
+      this.context.appendMessage({
+        sessionId,
+        role: 'system',
+        text: 'claude exited',
+        item: errorItem('exited', [], run.providerSessionKnown)
+      })
     }
     this.context.setStatus(sessionId, 'exited')
   }
 
+  private append(sessionId: string, entry: ItemEntry): void {
+    this.context.appendMessage({ sessionId, role: entry.role, text: entry.text, data: entry.data, item: entry.item })
+  }
+
+  /** Closes calls still running and ends the turn when one is open; a turn that is not open is left alone. */
+  private closeTurn(sessionId: string, run: Running, state: 'stopped' | 'failed'): void {
+    if (run.turnStartedAt === null) return
+    for (const entry of closingEntries(run.calls, state)) this.append(sessionId, entry)
+    this.context.appendMessage({
+      sessionId,
+      role: 'result',
+      text: state === 'stopped' ? 'Turn stopped' : 'Turn failed',
+      item: turnEndItem(state, Date.now() - run.turnStartedAt)
+    })
+    run.turnStartedAt = null
+    run.openTurns = 0
+    run.stream.reset()
+  }
+
+  /**
+   * Keeps the session status in step with turns Claude runs on its own: a background task or
+   * subagent finishing, a hook or a scheduled wakeup can start a turn with no send from Quirky.
+   * Top-level model output reopens the turn; Claude's idle signal is the authoritative turn end.
+   */
+  private trackTurn(sessionId: string, run: Running, msg: any): void {
+    if (msg?.type === 'system' && msg.subtype === 'session_state_changed') {
+      if (msg.state === 'running') this.openTurn(sessionId, run)
+      else if (msg.state === 'idle' && (run.turnStartedAt !== null || run.openTurns > 0)) {
+        // claude can fold a queued message into the running turn, leaving one result for two sends
+        run.turnStartedAt = null
+        run.openTurns = 0
+        run.stream.reset()
+        this.context.setStatus(sessionId, 'done')
+      }
+      return
+    }
+    const topLevel = msg?.parent_tool_use_id === null || msg?.parent_tool_use_id === undefined
+    if ((msg?.type === 'assistant' || msg?.type === 'stream_event') && topLevel) this.openTurn(sessionId, run)
+  }
+
+  private openTurn(sessionId: string, run: Running): void {
+    // echoes of an interrupted turn arrive before its result and must not reopen it
+    if (run.turnStartedAt !== null || run.interrupted) return
+    run.turnStartedAt = Date.now()
+    run.openTurns = Math.max(run.openTurns, 1)
+    this.context.setStatus(sessionId, 'working')
+  }
+
   private async journal(sessionId: string, msg: any): Promise<void> {
-    const append = (role: Parameters<StructuredContext['appendMessage']>[0]['role'], text: string, data: unknown) =>
-      this.context.appendMessage({ sessionId, role, text, data })
-    switch (msg?.type) {
-      case 'assistant': {
-        const content: any[] = Array.isArray(msg.message?.content) ? msg.message.content : []
-        const toolUses = content.filter((block) => block?.type === 'tool_use')
-        const text = content
-          .filter((block) => block?.type === 'text' && typeof block.text === 'string')
-          .map((block) => block.text)
-          .join('')
-        if (text || toolUses.length === 0) append('assistant', text, msg)
-        for (const block of toolUses) append('tool', `${block.name}: ${summarizeInput(block.input)}`, block)
-        return
+    const run = this.running.get(sessionId)
+    if (run) this.trackTurn(sessionId, run, msg)
+    if (msg?.type === 'system' && msg.subtype === 'session_state_changed') return
+    const delta = claudeTextDelta(msg)
+    if (delta !== null) {
+      const item = run?.stream.push('assistant', delta, Date.now())
+      if (item && item.kind === 'prose') this.context.appendMessage({ sessionId, role: 'system', text: item.text, data: { streaming: true }, item })
+      return
+    }
+    if (msg?.type === 'system' && msg.subtype === 'init') {
+      const nativeSessionId = msg.session_id
+      if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+        throw new Error('Claude initialized without a native session ID')
       }
-      case 'user': {
-        const content = msg.message?.content
-        if (Array.isArray(content) && content.some((block: any) => block?.type === 'tool_result')) {
-          const text = content
-            .filter((block: any) => block?.type === 'tool_result')
-            .map((block: any) => blockText(block.content))
-            .join('\n')
-          append('tool', text, msg)
+      if (run) {
+        if (run.providerSessionKnown) {
+          if (run.providerSessionId !== nativeSessionId) {
+            throw new Error(`Claude resumed session ${run.providerSessionId}, received ${nativeSessionId}`)
+          }
         } else {
-          append('user', blockText(content), msg)
+          run.providerSessionId = nativeSessionId
+          run.providerSessionKnown = true
+          await this.context.setProviderSession(sessionId, { id: nativeSessionId, transcriptPath: null })
         }
-        return
       }
-      case 'system': {
-        if (msg.subtype === 'init') {
-          const nativeSessionId = msg.session_id
-          const run = this.running.get(sessionId)
-          if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
-            throw new Error('Claude initialized without a native session ID')
-          }
-          if (run) {
-            if (run.providerSessionKnown) {
-              if (run.providerSessionId !== nativeSessionId) {
-                throw new Error(`Claude resumed session ${run.providerSessionId}, received ${nativeSessionId}`)
-              }
-            } else {
-              run.providerSessionId = nativeSessionId
-              run.providerSessionKnown = true
-              await this.context.setProviderSession(sessionId, { id: nativeSessionId, transcriptPath: null })
-            }
-          }
-        }
-        append('system', msg.subtype === 'init' ? `session started${msg.model ? ` (${msg.model})` : ''}` : `system: ${msg.subtype ?? 'event'}`, msg)
-        return
+    }
+    if (msg?.type === 'system' && msg.subtype === 'init' && run) {
+      const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [])
+      run.skills = new Set(names(msg.skills))
+      if (run.slashCommands) this.reportCommands(sessionId, run)
+      else {
+        run.commands = initCommands(names(msg.slash_commands), run.skills)
+        this.context.reportCommands?.(sessionId, run.commands)
       }
-      case 'result': {
-        append('result', resultText(msg), msg)
-        const failed = msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error'))
-        if (failed) {
-          const run = this.running.get(sessionId)
-          if (run) {
-            run.ended = true
-            run.input.end()
-            run.query.close()
-            this.running.delete(sessionId)
-          }
-          this.context.setStatus(sessionId, 'exited')
-        } else {
-          this.context.setStatus(sessionId, 'done')
-        }
-        return
+      if (!run.initialized) {
+        run.initialized = true
+        run.initModel = typeof msg.model === 'string' ? msg.model : undefined
+        void this.loadModels(sessionId, run)
       }
-      case 'rate_limit_event':
-        append('system', 'Claude rate limit event', msg)
-        return
-      default:
-        append('system', String(msg?.type ?? 'event'), msg)
+    }
+    if (msg?.type === 'system' && msg.subtype === 'commands_changed' && run && Array.isArray(msg.commands)) {
+      run.slashCommands = msg.commands
+      this.reportCommands(sessionId, run)
+      return
+    }
+    if (msg?.type === 'result' && run) run.pendingApprovalTarget = null
+    if (msg?.type === 'result' && run?.interrupted) {
+      run.interrupted = false
+      // the result of the turn that was interrupted is already journaled as stopped
+      if (msg.subtype !== 'success') return
+    }
+    if (msg?.type === 'user' && run?.interrupted) return
+    if (msg?.type === 'assistant') run?.stream.reset()
+    const failed = msg?.type === 'result' && (msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error')))
+    if (msg?.type === 'result' && run) {
+      for (const entry of closingEntries(run.calls, failed ? 'failed' : 'done')) this.append(sessionId, entry)
+      run.openTurns = Math.max(0, run.openTurns - 1)
+      run.turnStartedAt = run.openTurns > 0 ? Date.now() : null
+    }
+    const usage = msg?.type === 'result' ? resultUsage(msg) : null
+    for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) {
+      this.append(sessionId, usage !== null && entry.role === 'result' ? { ...entry, data: { ...(entry.data as object), contextUsage: usage } } : entry)
+    }
+    if (run && msg?.type === 'system' && (msg.subtype === 'init' || msg.subtype === 'status')) {
+      await this.reportMode(sessionId, run, msg.permissionMode)
+    }
+    if (msg?.type !== 'result') return
+    if (failed) {
+      if (run) {
+        run.ended = true
+        run.input.end()
+        run.query.close()
+        this.running.delete(sessionId)
+      }
+      this.context.setStatus(sessionId, 'exited')
+    } else {
+      this.context.setStatus(sessionId, run !== undefined && run.openTurns > 0 ? 'working' : 'done')
     }
   }
+}
+
+function withoutAsk(item: PlanItem): PlanItem {
+  const { askId: _askId, ...rest } = item
+  return rest
 }

@@ -1,5 +1,5 @@
 import { lstat, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { resolve, join } from 'node:path'
 import type {
   GitArea,
   GitChangeStatus,
@@ -10,7 +10,7 @@ import type {
   GitStatusEntry
 } from '@quirky/protocol'
 import { GitError } from './index'
-import { gitEnv, runGit } from './run'
+import { retryStalled, runGit, shareGitRead, streamNullRecords } from './run'
 import { effectiveUpstream } from './upstream'
 
 /** The most entries a status returns before it stops reading and reports `capped`. */
@@ -180,53 +180,23 @@ class PorcelainReader {
 }
 
 /** Runs the porcelain v2 status, stopping git as soon as more than `limit` entries have been read. */
-async function readPorcelain(
+function readPorcelain(cwd: string, limit: number, dropUntracked: (path: string) => Promise<boolean>): Promise<Snapshot> {
+  return retryStalled((timeoutMs) => readPorcelainOnce(cwd, limit, dropUntracked, timeoutMs))
+}
+
+async function readPorcelainOnce(
   cwd: string,
   limit: number,
-  dropUntracked: (path: string) => Promise<boolean>
+  dropUntracked: (path: string) => Promise<boolean>,
+  timeoutMs: number
 ): Promise<Snapshot> {
-  const args = ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all']
-  let proc: ReturnType<typeof Bun.spawn>
-  try {
-    proc = Bun.spawn(['git', ...args], {
-      cwd,
-      env: await gitEnv(cwd, { readOnly: true }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-  } catch (err) {
-    throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-  }
-  const stderr = new Response(proc.stderr as ReadableStream).text()
   const reader = new PorcelainReader(limit, dropUntracked)
-  const decoder = new TextDecoder()
-  let carry = ''
-  let stopped = false
-  try {
-    const stdout = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-    read: for (;;) {
-      const { done, value } = await stdout.read()
-      if (done) break
-      carry += decoder.decode(value, { stream: true })
-      const records = carry.split('\0')
-      carry = records.pop() ?? ''
-      for (const record of records) {
-        if (await reader.record(record)) {
-          stopped = true
-          break read
-        }
-      }
-    }
-    if (!stopped && carry.length > 0) await reader.record(carry)
-  } finally {
-    if (stopped) proc.kill()
-  }
-  const exitCode = await proc.exited
-  const errText = await stderr
-  if (!stopped && exitCode !== 0) {
-    throw new GitError(`git status failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
-  }
+  await streamNullRecords(
+    cwd,
+    ['-c', 'core.quotePath=false', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all'],
+    (record) => reader.record(record),
+    { timeoutMs }
+  )
   return reader.snapshot
 }
 
@@ -309,9 +279,25 @@ async function addLineCounts(cwd: string, entries: GitStatusEntry[]): Promise<vo
  * conflicts first, then by path in natural order. `busy` is always null and no `resolved_locally`
  * conflicts are produced; the daemon adds both. Throws `GitError` when git fails.
  */
-export async function statusV2(
+export function statusV2(
   cwd: string,
   options: { limit?: number; sharedSymlinks?: string[] } = {}
+): Promise<GitStatus> {
+  const limit = options.limit ?? STATUS_ENTRY_LIMIT
+  const sharedSymlinks = [...new Set(options.sharedSymlinks ?? [])].sort()
+  const key = JSON.stringify([
+    'statusV2',
+    resolve(cwd),
+    limit,
+    sharedSymlinks,
+    process.env.PATH ?? ''
+  ])
+  return shareGitRead(key, () => statusV2Once(cwd, { limit, sharedSymlinks }), (value) => structuredClone(value))
+}
+
+async function statusV2Once(
+  cwd: string,
+  options: { limit?: number; sharedSymlinks?: string[] }
 ): Promise<GitStatus> {
   const shared = new Set(options.sharedSymlinks ?? [])
   const dropUntracked = async (path: string): Promise<boolean> => {
@@ -364,17 +350,28 @@ export async function statusV2(
 
 const gitDirs = new Map<string, Promise<string>>()
 
+/** How long `gitDirOf` waits for git before it fails the lookup. */
+export const GIT_DIR_TIMEOUT_MS = 10_000
+
 /**
  * The absolute git directory of the worktree at `cwd`: a linked worktree's own directory, not the
- * main checkout's. Cached per `cwd`; a failed lookup is not cached.
+ * main checkout's. A successful lookup is cached per `cwd`; one that fails or takes longer than
+ * `timeoutMs` rejects with `GitError` and is not cached, so a later call asks git again.
  */
-export function gitDirOf(cwd: string): Promise<string> {
+export function gitDirOf(cwd: string, timeoutMs: number = GIT_DIR_TIMEOUT_MS): Promise<string> {
   let cached = gitDirs.get(cwd)
   if (!cached) {
-    cached = runGit(cwd, ['rev-parse', '--absolute-git-dir'], { readOnly: true }).then((r) => {
+    const lookup = runGit(cwd, ['rev-parse', '--absolute-git-dir'], { readOnly: true, timeoutMs }).then((r) => {
+      if (r.timedOut) throw new GitError(`git rev-parse timed out after ${timeoutMs}ms`, r.stderr, r.exitCode)
       if (r.exitCode !== 0) throw new GitError(`git rev-parse failed (exit ${r.exitCode}): ${r.stderr.trim()}`, r.stderr, r.exitCode)
       return text(r.stdout).trim()
     })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new GitError(`git rev-parse timed out after ${timeoutMs}ms`, '', -1)), timeoutMs)
+    })
+    cached = Promise.race([lookup, deadline]).finally(() => clearTimeout(timer))
+    lookup.catch(() => {})
     gitDirs.set(cwd, cached)
     cached.catch(() => gitDirs.delete(cwd))
   }

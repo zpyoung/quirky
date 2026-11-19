@@ -3,11 +3,8 @@ import type { GitStatusEntry } from '@quirky/protocol'
 import {
   actionPaths,
   entryActions,
-  groupSections,
   isStageable,
-  sectionButtons,
-  uncommittedBadge,
-  type Section
+  uncommittedBadge
 } from '../../src/panel/sections'
 
 const entry = (
@@ -28,79 +25,6 @@ const sample = [
   entry('notes.txt', 'untracked', 'untracked'),
   unresolved('a.ts')
 ]
-
-describe('groupSections', () => {
-  const ids = (sections: Section[]) => sections.map((s) => s.id)
-
-  test('changes-first puts conflicts, then changes, staged and untracked', () => {
-    expect(ids(groupSections(sample, 'changes-first'))).toEqual(['conflicts', 'unstaged', 'staged', 'untracked'])
-  })
-
-  test('staged-first', () => {
-    expect(ids(groupSections(sample, 'staged-first'))).toEqual(['conflicts', 'staged', 'unstaged', 'untracked'])
-  })
-
-  test('untracked-first', () => {
-    expect(ids(groupSections(sample, 'untracked-first'))).toEqual(['conflicts', 'untracked', 'unstaged', 'staged'])
-  })
-
-  test('conflicts stay first in every order', () => {
-    for (const order of ['changes-first', 'staged-first', 'untracked-first'] as const) {
-      expect(groupSections(sample, order)[0].id).toBe('conflicts')
-    }
-  })
-
-  test('empty sections are omitted', () => {
-    expect(ids(groupSections([entry('a', 'staged')], 'changes-first'))).toEqual(['staged'])
-    expect(groupSections([], 'changes-first')).toEqual([])
-  })
-
-  test('headings and counts', () => {
-    const sections = groupSections(sample, 'changes-first')
-    expect(sections.map((s) => [s.heading, s.count])).toEqual([
-      ['Conflicts', 1],
-      ['Changes', 1],
-      ['Staged Changes', 1],
-      ['Untracked Files', 1]
-    ])
-  })
-
-  test('a path both staged and changed appears in both sections', () => {
-    const sections = groupSections([entry('a.ts', 'staged'), entry('a.ts', 'unstaged')], 'changes-first')
-    expect(sections.map((s) => s.id)).toEqual(['unstaged', 'staged'])
-  })
-
-  test('sorts unresolved conflicts, then resolved locally, then the rest', () => {
-    const conflicts = groupSections([resolved('a.ts'), unresolved('z.ts'), unresolved('b.ts')], 'changes-first')[0]
-    expect(conflicts.entries.map((e) => e.path)).toEqual(['b.ts', 'z.ts', 'a.ts'])
-  })
-
-  test('sorts by natural file name, ignoring the folder, then by path', () => {
-    const rows = [
-      entry('z/file10.ts', 'unstaged'),
-      entry('a/file2.ts', 'unstaged'),
-      entry('b/file2.ts', 'unstaged'),
-      entry('file1.ts', 'unstaged')
-    ]
-    expect(groupSections(rows, 'changes-first')[0].entries.map((e) => e.path)).toEqual([
-      'file1.ts',
-      'a/file2.ts',
-      'b/file2.ts',
-      'z/file10.ts'
-    ])
-  })
-
-  test('name order is case-insensitive like the collator', () => {
-    const rows = [entry('b.ts', 'unstaged'), entry('A.ts', 'unstaged'), entry('c.ts', 'unstaged')]
-    expect(groupSections(rows, 'changes-first')[0].entries.map((e) => e.path)).toEqual(['A.ts', 'b.ts', 'c.ts'])
-  })
-
-  test('does not reorder the input', () => {
-    const input = [entry('b', 'unstaged'), entry('a', 'unstaged')]
-    groupSections(input, 'changes-first')
-    expect(input.map((e) => e.path)).toEqual(['b', 'a'])
-  })
-})
 
 describe('entryActions', () => {
   test('a changed file can be staged and discarded', () => {
@@ -136,13 +60,11 @@ describe('entryActions', () => {
       const path = kind === 'deleted_by_us' ? 'deleted-by-us.ts' : 'deleted-by-them.ts'
       const conflict = entry(path, 'conflicts', 'deleted', { conflict: { kind, state: 'unresolved' } })
       expect(entryActions(conflict, context).stage).toBe(false)
-      expect(sectionButtons(groupSections([conflict], 'changes-first')[0], context).stageAll).toBe(false)
       expect(actionPaths([conflict], 'stage', context)).toEqual([])
     }
 
     const ordinaryConflict = unresolved('ordinary.ts')
     expect(entryActions(ordinaryConflict, context).stage).toBe(true)
-    expect(sectionButtons(groupSections([ordinaryConflict], 'changes-first')[0], context).stageAll).toBe(true)
     expect(actionPaths([ordinaryConflict], 'stage', context)).toEqual(['ordinary.ts'])
   })
 
@@ -152,14 +74,11 @@ describe('entryActions', () => {
       const conflict = entry(path, 'conflicts', 'deleted', { conflict: { kind, state: 'unresolved' } })
       const readableContext = { markersGone: new Set([path]) }
       const unreadableContext = { markersGone: new Set([path]), unreadableConflicts: new Set([path]) }
-      const section = groupSections([conflict], 'changes-first')[0]
 
       expect(entryActions(conflict, readableContext).stage).toBe(false)
-      expect(sectionButtons(section, readableContext).stageAll).toBe(false)
       expect(actionPaths([conflict], 'stage', readableContext)).toEqual([])
 
       expect(entryActions(conflict, unreadableContext).stage).toBe(true)
-      expect(sectionButtons(section, unreadableContext).stageAll).toBe(true)
       expect(actionPaths([conflict], 'stage', unreadableContext)).toEqual([path])
     }
 
@@ -176,7 +95,6 @@ describe('entryActions', () => {
     })
     for (const conflict of [resolvedConflict, submoduleConflict]) {
       expect(entryActions(conflict, protectedContext).stage).toBe(false)
-      expect(sectionButtons(groupSections([conflict], 'changes-first')[0], protectedContext).stageAll).toBe(false)
       expect(actionPaths([conflict], 'stage', protectedContext)).toEqual([])
     }
   })
@@ -200,70 +118,6 @@ describe('entryActions', () => {
   test('isStageable mirrors the stage flag', () => {
     expect(isStageable(entry('a', 'unstaged'))).toBe(true)
     expect(isStageable(entry('a', 'staged'))).toBe(false)
-  })
-})
-
-describe('sectionButtons', () => {
-  const section = (entries: GitStatusEntry[], order: 'changes-first' = 'changes-first') => groupSections(entries, order)[0]
-
-  test('changes section', () => {
-    expect(sectionButtons(section([entry('a', 'unstaged')]))).toEqual({
-      discardAll: { label: 'Discard all' },
-      stageAll: true,
-      unstageAll: false,
-      viewAll: true
-    })
-  })
-
-  test('untracked section says Delete all untracked', () => {
-    expect(sectionButtons(section([entry('a', 'untracked', 'untracked')])).discardAll).toEqual({
-      label: 'Delete all untracked'
-    })
-  })
-
-  test('untracked Stage all is hidden when the list is capped', () => {
-    const s = section([entry('a', 'untracked', 'untracked')])
-    expect(sectionButtons(s, { capped: true }).stageAll).toBe(false)
-    expect(sectionButtons(section([entry('a', 'unstaged')]), { capped: true }).stageAll).toBe(true)
-  })
-
-  test('staged section offers Unstage all and Discard all', () => {
-    expect(sectionButtons(section([entry('a', 'staged')]))).toEqual({
-      discardAll: { label: 'Discard all' },
-      stageAll: false,
-      unstageAll: true,
-      viewAll: true
-    })
-  })
-
-  test('conflicts section only offers View all', () => {
-    expect(sectionButtons(section([unresolved('a.ts')]))).toEqual({
-      discardAll: null,
-      stageAll: false,
-      unstageAll: false,
-      viewAll: true
-    })
-  })
-
-  test('a section of submodules has no stage or discard buttons', () => {
-    const sub = entry('v', 'unstaged', 'modified', {
-      submodule: { commitChanged: true, trackedChanges: false, untrackedChanges: false }
-    })
-    expect(sectionButtons(section([sub]))).toEqual({
-      discardAll: null,
-      stageAll: false,
-      unstageAll: false,
-      viewAll: true
-    })
-  })
-
-  test('filtering hides every button', () => {
-    expect(sectionButtons(section([entry('a', 'unstaged')]), { filtering: true })).toEqual({
-      discardAll: null,
-      stageAll: false,
-      unstageAll: false,
-      viewAll: false
-    })
   })
 })
 

@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
-import { buttonText, byLabel, click, dialogNamed, messageBox, primary, q, qa, rowOf, text, toasts, type } from './dom'
+import { buttonText, byLabel, click, dialogNamed, errorLine, messageBox, primary, q, qa, rowOf, text, toasts, type } from './dom'
 import { boot, installHook, shutdown, type World } from './world'
 
 const { scratch } = isolateGitConfig()
@@ -74,7 +74,7 @@ const stage = (w: World) => {
   w.git('add', 'math.ts')
 }
 
-test('NA-25: the first generation goes through the Generate dialog and fills the box', async () => {
+test('NA-25: the sparkle generates without a dialog, fills the box and says who wrote it', async () => {
   const fakes = installFakeAgents()
   const w = await boot(scratch)
   await fakes.use(w)
@@ -82,12 +82,11 @@ test('NA-25: the first generation goes through the Generate dialog and fills the
   await readySparkle(w)
 
   await click(byLabel(SPARKLE))
-  const dialog = await w.win.waitFor(() => dialogNamed('Generate Commit Message'))
-
-  await click(buttonText('Generate', dialog))
   await w.win.waitFor(() => byLabel('Stop generating commit message'))
+  expect(dialogNamed('Generate Commit Message')).toBeUndefined()
   await w.win.waitFor(() => messageBox().value === 'Rename x to count\n\nClearer name.')
   await w.win.waitFor(() => byLabel('Stop generating commit message') === null)
+  await w.win.waitFor(() => text(q('[data-git-written-by]')) === 'Written by Claude')
 
   const argv = fakes.read('argv').split('\0')
   expect(argv).toEqual(expect.arrayContaining(['-p', '--output-format', 'text', '--model', 'sonnet']))
@@ -95,8 +94,30 @@ test('NA-25: the first generation goes through the Generate dialog and fills the
   expect(fakes.read('stdin')).toContain('M\tmath.ts')
 
   await type(messageBox(), '')
+  expect(q('[data-git-written-by]')).toBeNull()
   await click(byLabel(SPARKLE))
-  await w.win.waitFor(() => dialogNamed('Generate Commit Message'))
+  await w.win.waitFor(() => messageBox().value === 'Rename x to count\n\nClearer name.')
+  expect(dialogNamed('Generate Commit Message')).toBeUndefined()
+  expect(fakes.read('runs').split('\n').filter(Boolean)).toHaveLength(2)
+  expect(w.problems()).toEqual([])
+}, SLOW)
+
+test('NA-25: the sparkle menu opens the Generate dialog for one run', async () => {
+  const fakes = installFakeAgents()
+  const w = await boot(scratch)
+  await fakes.use(w)
+  stage(w)
+  await readySparkle(w)
+
+  await click(byLabel('Commit message options'))
+  await click(await w.win.waitFor(() => qa('[role="menuitem"]').find((item) => text(item) === 'Choose agent…')))
+  const generate = await w.win.waitFor(() => {
+    const dialog = dialogNamed('Generate Commit Message')
+    const button = dialog && buttonText('Generate', dialog)
+    return button && !button.disabled ? button : undefined
+  })
+  await click(generate)
+  await w.win.waitFor(() => messageBox().value === 'Rename x to count\n\nClearer name.')
   expect(fakes.read('runs').split('\n').filter(Boolean)).toHaveLength(1)
   expect(w.problems()).toEqual([])
 }, SLOW)
@@ -126,7 +147,7 @@ test('NA-30: typing during a run keeps the box, and Stop ends the run', async ()
   expect(w.problems()).toEqual([])
 }, SLOW)
 
-test('NA-33: AI Fix on the Commit blocked card opens a Claude tab with the failure prompt', async () => {
+test('NA-33: AI Fix on the commit error line opens a Claude tab with the failure prompt', async () => {
   const fakes = installFakeAgents()
   const w = await boot(scratch)
   await fakes.use(w)
@@ -136,9 +157,10 @@ test('NA-33: AI Fix on the Commit blocked card opens a Claude tab with the failu
   await type(messageBox(), 'Rename x')
   await click(primary())
 
-  const card = await w.win.waitFor(() =>
-    qa('[role="alert"]').find((notice) => byLabel('Start the default AI agent to fix this commit failure', notice) !== null)
-  )
+  const card = await w.win.waitFor(() => {
+    const line = errorLine()?.parentElement
+    return line && byLabel('Start the default AI agent to fix this commit failure', line) !== null ? line : undefined
+  })
   const fix = byLabel('Start the default AI agent to fix this commit failure', card)
   await click(byLabel('Choose an agent for this commit failure', card))
   await click(buttonText('Customize launch...'))

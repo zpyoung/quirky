@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { spawn } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
+import { CLI_FILES_TEST_FILE } from '../parity/cli-files-limits'
+import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
+import { runCi } from '../speed/ci'
 import { type Context, runCli } from './cli'
-import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, TestStatus, Verdict } from './types'
+import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
 type Run = typeof bunTestFile
 
@@ -135,6 +136,10 @@ function attempt(tests: Record<string, 'pass' | 'fail' | 'skip'> = {}, file = 'a
   }
 }
 
+function attemptWithResults(tests: Attempt['tests']): Attempt {
+  return { exitCode: 0, fileError: null, tests }
+}
+
 function fileResult(file: string, first: Attempt, rerun?: Attempt, platform: 'linux' | 'macos' = 'linux'): FileResult {
   return { file, platform, durationMs: 100, first, ...(rerun ? { rerun } : {}) }
 }
@@ -161,23 +166,28 @@ function writePlan(dir: string, plan: Plan, baseline?: Baseline) {
 
 const reportOf = (args: string[]) => args.find((arg) => arg.startsWith('--reporter-outfile='))!.slice('--reporter-outfile='.length)
 
-type Calls = { files: string[]; active: number; maxActive: number }
+type Calls = { files: string[]; active: number; maxActive: number; limits?: Array<{ file: string; limitMs: number }> }
+type FakeStatus = 'pass' | 'fail' | 'skip'
 
 /** A fake `bun test`: each file's attempts are consumed in order, the last one repeating. */
-function fakeRun(script: Record<string, Record<string, 'pass' | 'fail'>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
+function fakeRun(script: Record<string, Record<string, FakeStatus>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
   const used: Record<string, number> = {}
-  return async (_cwd, args) => {
+  return async (_cwd, args, limitMs) => {
     const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
     const attempts = script[file]
     if (!attempts) throw new Error(`unexpected file ${file}`)
     const tests = attempts[Math.min(used[file] ?? 0, attempts.length - 1)]
     used[file] = (used[file] ?? 0) + 1
     calls.files.push(file)
+    calls.limits?.push({ file, limitMs })
     calls.active++
     calls.maxActive = Math.max(calls.maxActive, calls.active)
     await Bun.sleep(15)
     calls.active--
-    const cases = Object.entries(tests).map(([name, s]) => (s === 'fail' ? `<testcase name="${name}" classname=""><failure message="x" /></testcase>` : `<testcase name="${name}" classname="" />`))
+    const cases = Object.entries(tests).map(([name, status]) => {
+      const body = status === 'fail' ? '<failure message="x" />' : status === 'skip' ? '<skipped />' : ''
+      return `<testcase name="${name}" classname="">${body}</testcase>`
+    })
     writeFileSync(reportOf(args), `<testsuites><testsuite name="${file}">${cases.join('')}</testsuite></testsuites>`)
     return { code: Object.values(tests).includes('fail') ? 1 : 0, output: '', timedOut: false }
   }
@@ -211,12 +221,10 @@ describe('argument handling', () => {
     ['issues without --baseline', ['issues', '--plan', 'p', '--only', 'open']],
     ['issues without --only', ['issues', '--plan', 'p', '--baseline', 'b']],
     ['issues with an invalid --only', ['issues', '--plan', 'p', '--baseline', 'b', '--only', 'both']],
-    ['affected with a zero --jobs', ['affected', '--jobs', '0']],
-    ['affected with a non-numeric --jobs', ['affected', '--jobs', 'many']],
+    ['affected with --jobs', ['affected', '--jobs', '2']],
+    ['affected with --list', ['affected', '--list']],
     ['plan with a bad --full', ['plan', '--event', 'push', '--full', 'maybe', '--out', 'x']],
-    ['run-files without --jobs', ['run-files', '--slots', '4']],
-    ['run-files without --slots', ['run-files', '--jobs', '4']],
-    ['run-files with a zero --slots', ['run-files', '--jobs', '4', '--slots', '0']],
+    ['run-files, which no longer exists', ['run-files', '--jobs', '4', '--slots', '4']],
   ])('%s exits 2', async (_name, argv) => {
     const { ctx, err } = harness(root)
     expect(await runCli(argv, ctx)).toBe(2)
@@ -538,6 +546,92 @@ describe('run-shard', () => {
     expect(calls.files.filter((f) => f === 'm1.test.ts')).toHaveLength(2)
   })
 
+  test('run-shard applies the CLI-files timeout to the selected macOS file and its rerun', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const ordinaryFile = 'macos-ordinary.test.ts'
+    writePlan(planDir, planOf({ macos: [CLI_FILES_TEST_FILE, ordinaryFile] }))
+    const calls: Calls = { files: [], active: 0, maxActive: 0, limits: [] }
+    const run = fakeRun({
+      [CLI_FILES_TEST_FILE]: [{ selected: 'fail' }, { selected: 'pass' }],
+      [ordinaryFile]: [{ ordinary: 'pass' }]
+    }, calls)
+    const out = join(dirOf('out'), 'macos-limits.json')
+    const { ctx } = harness(cwd, { run })
+
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+    const results = readJson<FileResult[]>(out)
+    expect(results.map((result) => result.file)).toEqual([CLI_FILES_TEST_FILE, ordinaryFile])
+    expect(results[0].platform).toBe('macos')
+    expect(results[0].first.tests[0].status).toBe('failed')
+    expect(results[0].rerun?.tests[0].status).toBe('passed')
+    expect(results[1].rerun).toBeUndefined()
+    expect(calls.limits?.filter((call) => call.file === CLI_FILES_TEST_FILE).map((call) => call.limitMs)).toEqual([840_000, 840_000])
+    expect(calls.limits?.filter((call) => call.file === ordinaryFile).map((call) => call.limitMs)).toEqual([600_000])
+  })
+
+  test('run-shard applies test-alone entries to both macOS and Linux jobs', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const linuxFiles = ['linux-a.test.ts', 'linux-alone.test.ts', 'linux-b.test.ts', 'linux-c.test.ts']
+    const macosFiles = ['macos-a.test.ts', 'macos-alone.test.ts', 'macos-b.test.ts']
+    writePlan(planDir, planOf({ linuxShards: [linuxFiles], macos: macosFiles }))
+    put(cwd, 'scripts/test-alone.txt', [
+      '# Files that need an uncontended first attempt.',
+      'linux-alone.test.ts fails beside other files',
+      'macos-alone.test.ts fails beside other files',
+      'not-in-this-job.test.ts ignored when absent'
+    ].join('\n'))
+
+    const linuxCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const linuxHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(linuxFiles.map((file) => [file, [{ ok: 'pass' as const }]])), linuxCalls)
+    })
+    const linuxOut = join(dirOf('out'), 'linux.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', linuxOut], linuxHarness.ctx)).toBe(0)
+    expect(linuxCalls.files).toEqual(['linux-alone.test.ts', 'linux-a.test.ts', 'linux-b.test.ts', 'linux-c.test.ts'])
+    expect(readJson<FileResult[]>(linuxOut).map((result) => result.file)).toEqual(linuxFiles)
+    expect(linuxHarness.err).toEqual(['::group::linux-alone.test.ts passed alone\n\n::endgroup::\n'])
+
+    const macosCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const macosHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(macosFiles.map((file) => [file, [{ ok: 'pass' as const }]])), macosCalls)
+    })
+    const macosOut = join(dirOf('out'), 'macos.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', macosOut], macosHarness.ctx)).toBe(0)
+    expect(macosCalls.files).toEqual(['macos-alone.test.ts', 'macos-a.test.ts', 'macos-b.test.ts'])
+    expect(readJson<FileResult[]>(macosOut).map((result) => result.file)).toEqual(macosFiles)
+    expect(macosHarness.err).toEqual(['::group::macos-alone.test.ts passed alone\n\n::endgroup::\n'])
+  })
+
+  test('a missing or empty test-alone list leaves a macOS shard unchanged', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const files = ['m1.test.ts', 'm2.test.ts', 'm3.test.ts', 'm4.test.ts']
+    writePlan(planDir, planOf({ macos: files }))
+    const listPath = join(cwd, 'scripts/test-alone.txt')
+
+    for (const contents of [undefined, '']) {
+      if (contents === undefined) {
+        if (existsSync(listPath)) rmSync(listPath)
+      } else {
+        put(cwd, 'scripts/test-alone.txt', contents)
+      }
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, err } = harness(cwd, {
+        run: fakeRun(Object.fromEntries(files.map((file) => [file, [{ ok: 'pass' as const }]])), calls)
+      })
+      const out = join(dirOf('out'), `macos-${contents === undefined ? 'missing' : 'empty'}.json`)
+
+      expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+      expect(calls.files).toEqual(files)
+      expect(calls.maxActive).toBe(3)
+      expect(readJson<FileResult[]>(out).map((result) => result.file)).toEqual(files)
+      expect(err).toEqual([])
+    }
+  })
+
+
   test('a shard index outside the plan is an argument error', async () => {
     const planDir = dirOf('plan')
     writePlan(planDir, planOf())
@@ -669,6 +763,200 @@ describe('verdict', () => {
     expect(code).toBe(1)
     expect(verdict?.runBroken).toBe(true)
     expect(verdict?.ok).toBe(false)
+  })
+
+  describe('Linux daemon skip coverage', () => {
+    const daemonFile = 'packages/daemon/test/index-preload.browser.test.ts'
+    const daemonName = 'modulepreload assertion'
+    const daemonKey = (file = daemonFile, classname = '', name = daemonName) => [file, classname, name].join('\0')
+    const daemonPlan = (over: Partial<Plan> = {}) => planOf({
+      selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      linuxShards: [[daemonFile]],
+      ...over,
+    })
+    const skippedDaemon = (file = daemonFile, classname = '', name = daemonName) =>
+      fileResult(file, attemptWithResults([{ key: daemonKey(file, classname, name), status: 'skipped' }]))
+    const writeSkipMap = (cwd: string, contents: string) => put(cwd, 'scripts/test-baseline/daemon-linux-skips.json', contents)
+
+    test('rejects a Linux daemon skip on every event with or without a baseline entry', async () => {
+      for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+        for (const hasBaseline of [false, true]) {
+          const skippedKey = daemonKey()
+          const baseline = hasBaseline ? baselineOf(sha(1), { [skippedKey]: 'skipped' }) : undefined
+          const plan = daemonPlan({
+            event,
+            ...(baseline ? { baseline: { commit: baseline.commit, createdAt: baseline.createdAt } } : {}),
+          })
+          const staged = stage(plan, { 'linux-0.json': [skippedDaemon()] }, baseline)
+          const cwd = dirOf('cwd')
+          const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+          expect(code).toBe(1)
+          expect(verdict?.ok).toBe(false)
+          expect(verdict?.runBroken).toBe(true)
+          expect(err.join('')).toContain(daemonFile)
+          expect(err.join('')).toContain(daemonName)
+          expect(readFileSync(join(staged.outDir, 'comment.md'), 'utf8')).toContain('The run itself broke')
+          expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+        }
+      }
+    })
+
+    test('applies the Linux skip policy to every daemon test file', async () => {
+      const file = 'packages/daemon/test/other-daemon.test.ts'
+      const staged = stage(daemonPlan({
+        selection: { mode: 'all', files: [file], reasons: [] },
+        linuxShards: [[file]],
+      }), { 'linux-0.json': [skippedDaemon(file)] })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(file)
+      expect(err.join('')).toContain(daemonName)
+    })
+
+    const daemonCoverageCases: [string, FileResult[], string][] = [
+      ['the first attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), attempt({ [daemonName]: 'pass' }, daemonFile))], daemonName],
+      ['the rerun attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile), attempt({ [daemonName]: 'skip' }, daemonFile))], daemonName],
+      ['after 1,001 passing entries', [fileResult(daemonFile, attemptWithResults([
+        ...Array.from({ length: 1001 }, (_, index) => ({ key: daemonKey(daemonFile, '', `passing ${index}`), status: 'passed' as const })),
+        { key: daemonKey(daemonFile, '', 'late skipped test'), status: 'skipped' as const },
+      ]))], 'late skipped test'],
+      ['an earlier duplicate file result', [
+        skippedDaemon(),
+        fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile)),
+      ], daemonName],
+    ]
+    test.each(daemonCoverageCases)('%s cannot hide a skipped daemon test', async (_name, results, expectedName) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': results })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+      expect(err.join('')).toContain(expectedName)
+    })
+
+    test('rejects a daemon file assigned to Linux but reported as macOS', async () => {
+      const staged = stage(daemonPlan(), {
+        'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')],
+      })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+    })
+
+    test('leaves genuine macOS daemon skips and non-daemon Linux skips under existing policy', async () => {
+      const macos = stage(daemonPlan({
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+        linuxShards: [],
+        macos: [daemonFile],
+      }), { 'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')] })
+      const macosResult = await verdictOf(macos)
+      expect(macosResult.code).toBe(0)
+      expect(macosResult.verdict?.runBroken).toBe(false)
+
+      const uiFile = 'packages/ui/test/a.test.ts'
+      const nonDaemon = stage(daemonPlan({
+        selection: { mode: 'all', files: [uiFile], reasons: [] },
+        linuxShards: [[uiFile]],
+      }), { 'linux-0.json': [fileResult(uiFile, attempt({ 'still skipped': 'skip' }, uiFile))] })
+      const uiResult = await verdictOf(nonDaemon)
+      expect(uiResult.code).toBe(0)
+      expect(uiResult.verdict?.runBroken).toBe(false)
+    })
+
+    test('keeps a missing selected daemon file incomplete rather than a skip violation', async () => {
+      const staged = stage(daemonPlan())
+      const { code, verdict } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.incomplete).toEqual([daemonFile])
+      expect(verdict?.runBroken).toBe(false)
+    })
+
+    test('accepts and reports an exact full JUnit key with its readable reason', async () => {
+      const classname = 'index preload > module requests'
+      const name = 'uses the preload map#2'
+      const exactKey = daemonKey(daemonFile, classname, name)
+      const reason = 'fixture-only platform limitation'
+      const staged = stage(daemonPlan(), {
+        'linux-0.json': [skippedDaemon(daemonFile, classname, name)],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [exactKey]: reason }))
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(0)
+      expect(verdict?.runBroken).toBe(false)
+      expect(err.join('')).toContain('index preload > module requests')
+      expect(err.join('')).toContain(name)
+      expect(err.join('')).toContain(reason)
+    })
+
+    test.each([
+      ['a different key', daemonKey(daemonFile, 'another class')],
+      ['a wildcard-like key', daemonKey(daemonFile, '', '*')],
+      ['a sibling file key', daemonKey('packages/daemon/test/sibling.test.ts')],
+    ])('%s does not excuse the skipped test', async (_name, configuredKey) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [configuredKey]: 'fixture-only platform limitation' }))
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+    })
+
+    test.each(['toString', '__proto__'])('an inherited %s property cannot excuse a daemon skip', async (key) => {
+      const staged = stage(daemonPlan({ event: 'push' }), {
+        'linux-0.json': [fileResult(daemonFile, attemptWithResults([{ key, status: 'skipped' }]))],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, '{}')
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
+    const invalidMaps: [string, string][] = [
+      ['malformed JSON', '{'],
+      ['a non-object', '[]'],
+      ['an empty reason', JSON.stringify({ [daemonKey()]: '' })],
+      ['a whitespace reason', JSON.stringify({ [daemonKey()]: ' \t\n ' })],
+      ['a non-string reason', JSON.stringify({ [daemonKey()]: 42 })],
+    ]
+    test.each(invalidMaps)('a %s exception map breaks the verdict without publishing a baseline', async (_name, contents) => {
+      const staged = stage(daemonPlan({
+        event: 'push',
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      }), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, contents)
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain('daemon-linux-skips.json')
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
+
+    test('keeps a skipped JUnit result through run-shard and rejects it in verdict', async () => {
+      const cwd = dirOf('cwd')
+      const planDir = dirOf('plan')
+      const plan = daemonPlan()
+      writePlan(planDir, plan)
+      const resultsDir = dirOf('results')
+      const resultPath = join(resultsDir, 'linux-0.json')
+      const runContext = harness(cwd, {
+        run: fakeRun({ [daemonFile]: [{ [daemonName]: 'skip' }] }),
+      })
+      expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', resultPath], runContext.ctx)).toBe(0)
+      const results = readJson<FileResult[]>(resultPath)
+      expect(results[0].first.tests).toEqual([{ key: daemonKey(), status: 'skipped' }])
+      expect(results[0].rerun).toBeUndefined()
+
+      const staged = { planDir, inDir: resultsDir, outDir: dirOf('out') }
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(readJson<FileResult[]>(resultPath)[0].first.tests[0].status).toBe('skipped')
+    })
   })
 
   test('every fileError the runner can produce is accepted', async () => {
@@ -804,6 +1092,86 @@ describe('verdict', () => {
   })
 })
 
+describe('advisory speed evidence', () => {
+  for (const fails of [false, true]) {
+    for (const evidence of ['missing', 'malformed', 'failed', 'cancelled']) {
+      test(`${evidence} speed does not change ${fails ? 'failing' : 'passing'} unit verdict`, async () => {
+        const planDir = dirOf('plan')
+        const inDir = dirOf('results')
+        const outDir = dirOf('out')
+        const speed = dirOf('speed')
+        writePlan(planDir, planOf())
+        writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+        if (evidence === 'malformed') writeFileSync(join(speed, 'report.json'), '{')
+        if (evidence === 'failed' || evidence === 'cancelled') writeFileSync(join(speed, 'comparison.json'), JSON.stringify({ status: 'error', reason: evidence }))
+        const h = harness(dirOf('cwd'))
+        const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], h.ctx)
+        expect(code).toBe(fails ? 1 : 0)
+        const verdict = readJson<Verdict>(join(outDir, 'verdict.json'))
+        expect(verdict.runBroken).toBe(false)
+        const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+        expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+        expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+        expect(comment).toContain('not measured:')
+      })
+    }
+  }
+  for (const fails of [false, true]) {
+    test(`a paired speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
+      const planDir = dirOf('plan')
+      const inDir = dirOf('results')
+      const outDir = dirOf('out')
+      const speed = dirOf('speed')
+      writePlan(planDir, planOf({ head: sha(8) }))
+      writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+      const current: SpeedReport = {
+        version: 1, commit: sha(9), runId: '123', createdAt: NOW.toISOString(), status: 'complete', qualified: true,
+        profile: { workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000, renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context', floodChunkBytes: 65536, floodIntervalMs: 16, runner: 'macos-15', os: 'darwin', arch: 'arm64', cpuModel: 'CPU', cpuCount: 4, bun: '1.4.0', chromium: 'test', imageVersion: 'test' },
+        metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
+        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json'], misses: 'misses.json' },
+      }
+      const pair = {
+        version: 1,
+        runId: current.runId,
+        createdAt: current.createdAt,
+        status: 'complete',
+        qualified: true,
+        head: { commit: current.commit },
+        base: { commit: sha(1), basis: 'merge-base' },
+        metrics: Object.fromEntries(METRICS.map(metric => {
+          const pairs = metric === 'startup' || metric === 'diff' ? 20 : 60
+          return [metric, { headSamplesMs: Array(pairs).fill(52), baseSamplesMs: Array(pairs).fill(40) }]
+        })),
+        failures: [],
+        evidence: { samples: 'pair-samples.jsonl' },
+      }
+      const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
+      const miss = {
+        metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 50.001, commit: current.commit, runId: current.runId,
+        samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding,
+      }
+      writeFileSync(join(speed, 'report.json'), JSON.stringify(current))
+      writeFileSync(join(speed, 'pair.json'), JSON.stringify(pair))
+      writeFileSync(join(speed, 'misses.json'), JSON.stringify([miss]))
+      expect(await runCi([
+        'compare', '--current', join(speed, 'report.json'), '--pair', join(speed, 'pair.json'),
+        '--out', speed, '--head', current.commit,
+      ], { cwd: dirOf('ci-cwd'), err: () => {} })).toBe(0)
+      expect(existsSync(join(speed, 'baseline.json'))).toBe(false)
+
+      const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
+      expect(code).toBe(fails ? 1 : 0)
+      expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)
+      const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+      expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+      expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+      expect(comment).toContain('REGRESSION')
+      expect(comment).toContain(finding)
+      expect(comment).toContain(fails ? '## Tests failed' : '## Tests passed')
+    })
+  }
+})
+
 describe('verdict without bun install', () => {
   const HERE = import.meta.dir
   const staticImports = (source: string) =>
@@ -811,8 +1179,8 @@ describe('verdict without bun install', () => {
 
   test('cli.ts statically imports only node built-ins and dependency-free modules', () => {
     const specs = staticImports(readFileSync(join(HERE, 'cli.ts'), 'utf8'))
-    const allowed = new Set(['./baseline', './compare', './issues', './report', './select', './shards'])
-    for (const spec of specs) expect(spec.startsWith('node:') || allowed.has(spec)).toBe(true)
+    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true, '../parity/cli-files-limits': true }
+    for (const spec of specs) expect(spec.startsWith('node:') || allowed[spec] === true).toBe(true)
     expect(specs).not.toContain('./runner')
     expect(specs).not.toContain('./graph')
     expect(specs.some((spec) => spec.includes('suite'))).toBe(false)
@@ -831,6 +1199,12 @@ describe('verdict without bun install', () => {
     const lib = join(dirOf('lib'), 'scripts', 'test-baseline')
     mkdirSync(lib, { recursive: true })
     for (const name of ['cli', 'baseline', 'compare', 'issues', 'report', 'select', 'shards', 'types']) copyFileSync(join(HERE, `${name}.ts`), join(lib, `${name}.ts`))
+    const speedLib = join(lib, '..', 'speed')
+    mkdirSync(speedLib)
+    for (const name of ['ci', 'contracts', 'report']) copyFileSync(join(HERE, '..', 'speed', `${name}.ts`), join(speedLib, `${name}.ts`))
+    const parityLib = join(lib, '..', 'parity')
+    mkdirSync(parityLib)
+    copyFileSync(join(HERE, '../parity/cli-files-limits.ts'), join(parityLib, 'cli-files-limits.ts'))
     const planDir = dirOf('plan')
     const inDir = dirOf('in')
     const outDir = join(dirOf('o'), 'verdict')
@@ -959,6 +1333,7 @@ describe('issues', () => {
 
 describe('affected', () => {
   const A = 'plugins/x/test/a.test.ts'
+  const B = 'plugins/y/test/b.test.ts'
   const IMPORTS = 'plugins/test/imports.test.ts'
 
   function setup(withBaseline: Baseline | 'none' | 'down' = 'none', files: Record<string, string> = {}) {
@@ -973,377 +1348,161 @@ describe('affected', () => {
     return { dir, base, gh }
   }
 
-  test('--list prints the selection from the working tree, untracked files included, and runs nothing', async () => {
+  /** A `run` that records every call, so each test can assert that listing a selection ran nothing. */
+  function watched() {
+    const calls: string[][] = []
+    const run: Run = async (_cwd, args) => {
+      calls.push(args)
+      throw new Error('affected must not run tests')
+    }
+    return { calls, run }
+  }
+
+  async function affected(dir: string, gh: GhRunner, args: string[] = [], over: Partial<Context> = {}) {
+    const { calls, run } = watched()
+    const { ctx, out, err } = harness(dir, { gh, run, ...over })
+    const code = await runCli(['affected', ...args], ctx)
+    expect(calls).toEqual([])
+    return { code, stdout: out.join(''), stderr: err.join('') }
+  }
+
+  test('lists the selected files from the working tree, untracked files included, then why with the reasons', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
     put(dir, 'plugins/y/test/new.test.ts', 'export {}\n')
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list'], ctx)).toBe(0)
-    const lines = out.join('').trim().split('\n')
-    expect(lines).toEqual(expect.arrayContaining([A, IMPORTS, 'plugins/y/test/b.test.ts', 'plugins/y/test/new.test.ts']))
-    expect(lines).not.toContain('packages/p/test/p.test.ts')
+    const { code, stdout } = await affected(dir, gh)
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    const why = lines.indexOf('why:')
+    expect(why).toBeGreaterThan(0)
+    expect(lines.slice(0, why)).toEqual(expect.arrayContaining([A, IMPORTS, B, 'plugins/y/test/new.test.ts']))
+    expect(lines.slice(0, why)).not.toContain('packages/p/test/p.test.ts')
+    const reasons = lines.slice(why + 1)
+    expect(reasons.length).toBeGreaterThan(0)
+    for (const reason of reasons) expect(reason).toMatch(/^ {2}\S/)
+    expect(reasons.join('\n')).toContain('plugins/x/src/a.ts')
   })
 
   describe('a test file deleted from the working tree but not staged', () => {
-    const B = 'plugins/y/test/b.test.ts'
-    const bKey = key(B, 'works')
-
     test('is not selected, including by the run-everything fallback', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
+      const { dir, gh } = setup(baselineOf(sha(0), { [key(B, 'works')]: 'passed' }))
       rmSync(join(dir, B))
-      const withBaseline = harness(dir, { gh, run: fakeRun({}) })
-      expect(await runCli(['affected', '--list'], withBaseline.ctx)).toBe(0)
-      expect(withBaseline.out.join('')).toContain(A)
-      expect(withBaseline.out.join('')).not.toContain(B)
+      const withBaseline = await affected(dir, gh)
+      expect(withBaseline.code).toBe(0)
+      const listed = withBaseline.stdout.split('why:')[0].trimEnd().split('\n')
+      expect(listed).toContain(A)
+      expect(listed).not.toContain(B)
 
       git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
-      const fallback = harness(dir, { gh: brokenGh, run: fakeRun({}) })
-      expect(await runCli(['affected', '--list'], fallback.ctx)).toBe(0)
-      expect(fallback.out.join('').trim().split('\n')).toEqual([IMPORTS, A, 'packages/p/test/p.test.ts'].sort())
-    })
-
-    test('is never run and its baseline tests are reported missing', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0), { [bKey]: 'passed' }))
-      rmSync(join(dir, B))
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }, calls)
-      const { ctx, out } = harness(dir, { gh, run })
-      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-      expect(calls.files).not.toContain(B)
-      expect((JSON.parse(out.join('')) as Verdict).missing).toEqual([bKey])
+      const fallback = await affected(dir, brokenGh, ['--json'])
+      expect(fallback.code).toBe(0)
+      const selection = JSON.parse(fallback.stdout) as Selection
+      expect(selection.mode).toBe('all')
+      expect([...selection.files].sort()).toEqual([IMPORTS, A, 'packages/p/test/p.test.ts'].sort())
     })
   })
 
-  test('--list --json prints the selection as JSON', async () => {
+  test('--json prints the selection as JSON', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list', '--json'], ctx)).toBe(0)
-    expect(JSON.parse(out.join(''))).toMatchObject({ mode: 'some', files: [IMPORTS, A] })
+    const { code, stdout } = await affected(dir, gh, ['--json'])
+    expect(code).toBe(0)
+    const selection = JSON.parse(stdout) as Selection
+    expect(selection).toMatchObject({ mode: 'some', files: [IMPORTS, A] })
+    expect(selection.reasons.length).toBeGreaterThan(0)
+    expect(stdout).toBe(JSON.stringify(selection, null, 2) + '\n')
   })
 
   test('an untracked source file selects its area', async () => {
     const { dir, gh } = setup(baselineOf(sha(0)))
     put(dir, 'packages/p/src/extra.ts', 'export const extra = 1\n')
-    const { ctx, out } = harness(dir, { gh, run: fakeRun({}) })
-    expect(await runCli(['affected', '--list'], ctx)).toBe(0)
-    expect(out.join('')).toContain('packages/p/test/p.test.ts')
+    const { code, stdout } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stdout).toContain('packages/p/test/p.test.ts')
   })
 
-  describe('with a test host', () => {
-    const HOST = { host: 'quirkyci@ovh', jobs: 3, slots: 5 }
-    const MAC = 'plugins/y/test/b.test.ts'
-
-    /** A `runInHost` that runs the real worker command in this process, so the results make the real round trip. */
-    function fakeHost(dir: string, script: Parameters<typeof fakeRun>[0]) {
-      const seen: { host: string; command: string; stdin: string }[] = []
-      const runInHost: NonNullable<Context['runInHost']> = async (_cwd, host, command, stdin) => {
-        seen.push({ host, command, stdin })
-        const worker = harness(dir, { run: fakeRun(script), stdin: async () => stdin })
-        const code = await runCli(command.split(' ').slice(2), worker.ctx)
-        return { code, output: `noise\n${worker.out.join('')}` }
-      }
-      return { seen, runInHost }
-    }
-
-    test('sends everything but macOS-only files to the host and judges both sets together', async () => {
-      // the list is committed, because changing it makes the selection run every test
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${MAC}  needs chrome\n` })
-      put(dir, MAC, 'export const changed = 1\n')
-      const { seen, runInHost } = fakeHost(dir, { [A]: [{ fresh: 'fail' }, { fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-      const local: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, out, err } = harness(dir, { gh, run: fakeRun({ [MAC]: [{ mac: 'fail' }, { mac: 'fail' }] }, local), chooseHost: async () => ({ host: HOST }), runInHost })
-
-      expect(await runCli(['affected'], ctx)).toBe(1)
-
-      expect(seen).toHaveLength(1)
-      expect(seen[0].host).toBe(HOST.host)
-      expect(seen[0].command).toBe('bun scripts/test-baseline/cli.ts run-files --jobs 3 --slots 5')
-      expect(seen[0].stdin.split('\n').sort()).toEqual([IMPORTS, A].sort())
-      expect(new Set(local.files)).toEqual(new Set([MAC]))
-      expect(out.join('')).toContain(`new: ${A} > fresh`)
-      expect(out.join('')).toContain(`new: ${MAC} > mac`)
-      expect(err.join('')).toContain('running 2 test files on quirkyci@ovh and 1 macOS-only files here')
-    })
-
-    test('stops before any test when no host can be reached', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)))
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, err } = harness(dir, { gh, run: fakeRun({}, calls), chooseHost: async () => ({ error: 'quirkyci@ovh is unreachable, so no tests ran.' }) })
-      expect(await runCli(['affected'], ctx)).toBe(1)
-      expect(err.join('')).toContain('quirkyci@ovh is unreachable')
-      expect(calls.files).toEqual([])
-    })
-
-    test.each([
-      ['the copy failed', undefined],
-      ['the worker printed no results', { code: 1, output: 'bun: command not found' }],
-    ])('fails rather than reporting a pass when %s', async (_name, result) => {
-      const { dir, gh } = setup(baselineOf(sha(0)))
-      const { ctx, err } = harness(dir, { gh, run: fakeRun({}), chooseHost: async () => ({ host: HOST }), runInHost: async () => result })
-      expect(await runCli(['affected'], ctx)).toBe(1)
-      expect(err.join('')).toContain("couldn't finish the tests")
-    })
-
-    test('runs nothing and points at the PR label when the change selects every test', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': '' })
-      put(dir, 'scripts/test-on-macos.txt', `${A}  needs chrome\n`)
-      const calls: Calls = { files: [], active: 0, maxActive: 0 }
-      const { ctx, out, err } = harness(dir, {
-        gh,
-        run: fakeRun({}, calls),
-        chooseHost: async () => ({ host: HOST }),
-        runInHost: async () => {
-          throw new Error('should not reach the host')
-        },
-      })
-      expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-      expect(calls.files).toEqual([])
-      expect(err.join('')).toContain('--add-label full-suite')
-      expect(JSON.parse(out.join(''))).toMatchObject({ skipped: 'every test selected' })
-    })
-
-    test('never contacts a host when only macOS-only files are selected', async () => {
-      const { dir, gh } = setup(baselineOf(sha(0)), { 'scripts/test-on-macos.txt': `${A}  needs chrome\n${IMPORTS}  needs chrome\n` })
-      const { ctx } = harness(dir, {
-        gh,
-        run: fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] }),
-        chooseHost: async () => {
-          throw new Error('should not be asked')
-        },
-      })
-      expect(await runCli(['affected'], ctx)).toBe(0)
-    })
-  })
-
-  test('labels results against the baseline, prints advisory, and exits 1 on a new failure', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0), { [key(A, 'old')]: 'failed' }))
-    const run = fakeRun({ [A]: [{ old: 'fail', fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(1)
-    const text = out.join('')
-    expect(text).toContain(`new: ${A} > fresh`)
-    expect(text).toContain(`known: ${A} > old`)
-    expect(text).toMatch(/^advisory: 1 new failure, 1 known failure, 0 flaky, against baseline [0-9a-f]{7}$/m)
-  })
-
-  test('exits 0 when only known failures remain', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0), { [key(A, 'old')]: 'failed' }))
-    const run = fakeRun({ [A]: [{ old: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('advisory:')
-  })
-
-  test('--json prints the advisory verdict and still exits 1 on a new failure', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    const run = fakeRun({ [A]: [{ fresh: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected', '--json'], ctx)).toBe(1)
-    const verdict = JSON.parse(out.join('')) as Verdict
-    expect(verdict.advisory).toBe(true)
-    expect(verdict.new).toEqual([key(A, 'fresh')])
-    expect(verdict.notOnCi).toEqual([])
-  })
-
-  test('a flaky failure that passes on rerun does not block', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    const run = fakeRun({ [A]: [{ t: 'fail' }, { t: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain(`flaky: ${A} > t`)
-  })
-
-  test('--jobs overrides how many files run at once', async () => {
-    const { dir, gh } = setup(baselineOf(sha(0)))
-    put(dir, 'plugins/y/test/c.test.ts', 'export {}\n')
-    const everything = {
-      [A]: [{ ok: 'pass' as const }],
-      [IMPORTS]: [{ ok: 'pass' as const }],
-      'plugins/y/test/b.test.ts': [{ ok: 'pass' as const }],
-      'plugins/y/test/c.test.ts': [{ ok: 'pass' as const }],
-    }
-    const one: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected', '--jobs', '1'], harness(dir, { gh, run: fakeRun(everything, one) }).ctx)).toBe(0)
-    const dflt: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected'], harness(dir, { gh, run: fakeRun(everything, dflt) }).ctx)).toBe(0)
-    const four: Calls = { files: [], active: 0, maxActive: 0 }
-    expect(await runCli(['affected', '--jobs', '4'], harness(dir, { gh, run: fakeRun(everything, four) }).ctx)).toBe(0)
-    expect([one.maxActive, dflt.maxActive, four.maxActive]).toEqual([1, 2, 4])
-  })
-
-  test('with no selected tests it says so and exits 0', async () => {
+  test('with no selected tests it says none are needed, gives the why block and exits 0', async () => {
     const { dir, base } = makeRepo()
     seedBaseline(dir, baselineOf(base))
     put(dir, 'docs/readme.md', '# changed\n')
-    const { ctx, out } = harness(dir, { gh: artifactsGh([base]), run: fakeRun({}) })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('No tests were needed')
+    const { code, stdout } = await affected(dir, artifactsGh([base]))
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    expect(lines[0]).toBe('No tests are needed for this change.')
+    expect(lines[1]).toBe('why:')
+    expect(lines.slice(2).length).toBeGreaterThan(0)
+    for (const reason of lines.slice(2)) expect(reason).toMatch(/^ {2}\S/)
+    expect(lines.join('\n')).toContain('docs/readme.md')
   })
 
-  test('when the baseline is unavailable it says so, selects from the merge base and treats every failure as new', async () => {
+  test('a change that selects every test says the next push runs the whole suite and lists no files', async () => {
+    const { dir } = setup(baselineOf(sha(0)))
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
+    const { code, stdout } = await affected(dir, brokenGh)
+    expect(code).toBe(0)
+    const lines = stdout.trimEnd().split('\n')
+    expect(lines[0]).toBe('This change selects every test, so the next push runs the whole suite.')
+    expect(lines[1]).toBe('why:')
+    expect(lines.slice(2)).toEqual([expect.stringMatching(/^ {2}no merge base/)])
+    for (const file of ALL_TESTS) expect(stdout).not.toContain(file)
+  })
+
+  test('--json for a run-everything selection lists every test file', async () => {
+    const { dir } = setup('none')
+    git(dir, 'update-ref', '-d', 'refs/remotes/origin/main')
+    const { code, stdout } = await affected(dir, brokenGh, ['--json'])
+    expect(code).toBe(0)
+    const selection = JSON.parse(stdout) as Selection
+    expect(selection.mode).toBe('all')
+    expect([...selection.files].sort()).toEqual(ALL_TESTS)
+  })
+
+  test('when the baseline is unavailable it says so on stderr and still selects from the merge base', async () => {
     const { dir, gh } = setup('down')
-    const run = fakeRun({ [A]: [{ old: 'fail' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out, err } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(1)
-    expect(err.join('')).toContain('baseline unavailable')
-    expect(err.join('')).toContain('merge base')
-    expect(out.join('')).toContain(`new: ${A} > old`)
-    expect(out.join('')).toMatch(/^advisory: 1 new failure, 0 known failures, 0 flaky, no baseline$/m)
+    const { code, stdout, stderr } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
+    expect(stderr).toContain('merge base')
+    expect(stdout).toContain(A)
   })
 
-  test('with no baseline artifact at all it also selects from the merge base with no baseline', async () => {
+  test('with no baseline artifact at all it says so on stderr and selects from the merge base', async () => {
     const { dir, gh } = setup('none')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(out.join('')).toContain('no baseline')
+    const { code, stdout, stderr } = await affected(dir, gh)
+    expect(code).toBe(0)
+    expect(stderr).toContain('no baseline found')
+    expect(stdout).toContain(A)
   })
 
   test('--json keeps stdout parseable when the baseline is unavailable', async () => {
     const { dir, gh } = setup('down')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, out } = harness(dir, { gh, run })
-    expect(await runCli(['affected', '--json'], ctx)).toBe(0)
-    expect((JSON.parse(out.join('')) as Verdict).baseline).toBeNull()
+    const { code, stdout, stderr } = await affected(dir, gh, ['--json'])
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
+    expect((JSON.parse(stdout) as Selection).files).toContain(A)
   })
 
   test('without GITHUB_REPOSITORY or an origin remote the baseline is unavailable', async () => {
     const { dir } = setup('none')
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx, err } = harness(dir, { env: {}, gh: forbiddenGh, run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
-    expect(err.join('')).toContain('baseline unavailable')
+    const { code, stderr } = await affected(dir, forbiddenGh, [], { env: {} })
+    expect(code).toBe(0)
+    expect(stderr).toContain('baseline unavailable')
   })
 
   test('reads the repository from an origin remote when GITHUB_REPOSITORY is unset', async () => {
     const { dir, base } = setup(baselineOf(sha(0)))
     git(dir, 'remote', 'add', 'origin', 'git@github.com:acme/quirky.git')
     const calls: string[][] = []
-    const run = fakeRun({ [A]: [{ ok: 'pass' }], [IMPORTS]: [{ ok: 'pass' }] })
-    const { ctx } = harness(dir, { env: {}, gh: artifactsGh([base], calls), run })
-    expect(await runCli(['affected'], ctx)).toBe(0)
+    const { code } = await affected(dir, artifactsGh([base], calls), [], { env: {} })
+    expect(code).toBe(0)
     expect(calls[0].join(' ')).toContain('repos/acme/quirky/actions/artifacts')
   })
-})
 
-describe('run-files process output', () => {
-  test('flushes more than 64 KiB of JSON before exiting', async () => {
-    const worker = join(root, 'worker')
-    const home = join(root, 'home')
-    const quirkyHome = join(root, 'quirky-home')
-    const bin = join(worker, 'bin')
-    mkdirSync(worker, { recursive: true })
-    mkdirSync(home)
-    mkdirSync(quirkyHome)
-    mkdirSync(bin)
-    writeFileSync(join(bin, 'flock'), '#!/bin/sh\nshift 4\nexec "$@"\n', { mode: 0o755 })
-
-    const testFile = 'large-results.test.ts'
-    const testNames = Array.from(
-      { length: 1000 },
-      (_, index) => `case-${index.toString().padStart(4, '0')}-${'x'.repeat(340)}`
-    )
-    writeFileSync(
-      join(worker, testFile),
-      `import { expect, test } from 'bun:test'\n\n${testNames.map((name) => `test(${JSON.stringify(name)}, () => expect(true).toBe(true))`).join('\n')}\n`
-    )
-    const resultQueued = join(worker, 'result-queued')
-    writeFileSync(
-      join(worker, 'stdout-marker.cjs'),
-      `const realWrite = process.stdout.write.bind(process.stdout)
-let marked = false
-process.stdout.write = function (chunk, ...args) {
-  const result = realWrite(chunk, ...args)
-  const startsResult = typeof chunk === 'string'
-    ? chunk.startsWith('file-results ')
-    : Buffer.isBuffer(chunk) && chunk.subarray(0, 13).toString() === 'file-results '
-  if (!marked && startsResult) {
-    marked = true
-    require('node:fs').writeFileSync(process.env.RESULT_QUEUED, '')
-  }
-  return result
-}
-`
-    )
-
-    const child = spawn(
-      '/bin/bash',
-      [
-        '-o', 'pipefail',
-        '-c', '"$@" | { while [ ! -e "$RESULT_QUEUED" ]; do sleep 0.1; done; sleep 0.1; cat; }',
-        '--',
-        process.execPath,
-        '--preload',
-        join(worker, 'stdout-marker.cjs'),
-        fileURLToPath(new URL('./cli.ts', import.meta.url)),
-        'run-files',
-        '--jobs', '1',
-        '--slots', '1'
-      ],
-      {
-        cwd: worker,
-        detached: true,
-        env: {
-          ...process.env,
-          RESULT_QUEUED: resultQueued,
-          HOME: home,
-          QUIRKY_HOME: quirkyHome,
-          PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`
-        },
-        stdio: 'pipe'
-      }
-    )
-    const stdout: Buffer[] = []
-    let stderr = ''
-    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk))
-    child.stdout.resume()
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8')
+  for (const flag of [['--list'], ['--jobs', '2']]) {
+    test(`${flag.join(' ')} is a usage error and runs nothing`, async () => {
+      const { dir, gh } = setup(baselineOf(sha(0)))
+      const { code, stdout, stderr } = await affected(dir, gh, flag)
+      expect(code).toBe(2)
+      expect(stdout).toBe('')
+      expect(stderr).toContain('usage')
     })
-
-    const closed = Promise.withResolvers<{ code: number | null; signal: NodeJS.Signals | null; error?: Error }>()
-    child.once('error', (error) => closed.resolve({ code: null, signal: null, error }))
-    child.once('close', (code, signal) => closed.resolve({ code, signal }))
-    const killWorker = (force = false) => {
-      if (child.pid === undefined || (!force && (child.exitCode !== null || child.signalCode !== null))) return
-      try {
-        process.kill(-child.pid, 'SIGKILL')
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error
-      }
-    }
-
-    let timedOut = false
-    // Keep the real subprocess pipeline bounded and reap its process group.
-    const timeout = setTimeout(() => {
-      timedOut = true
-      killWorker(true)
-    }, 45_000)
-    child.stdin.end(`${testFile}\n`)
-    try {
-      const exit = await closed.promise
-      const output = Buffer.concat(stdout).toString('utf8')
-
-      expect(timedOut).toBe(false)
-      expect(exit.error).toBeUndefined()
-      expect(exit.code).toBe(0)
-      expect(exit.signal).toBeNull()
-      expect(stderr).toBe('')
-      expect(output.length).toBeGreaterThan(64 * 1024)
-      expect(output.startsWith('file-results ')).toBe(true)
-
-      const payload = JSON.parse(output.slice('file-results '.length)) as { results: FileResult[]; skipped: boolean }
-      expect(payload.skipped).toBe(false)
-      expect(payload.results).toHaveLength(1)
-      expect(payload.results[0].file).toBe(testFile)
-      expect(payload.results[0].first.exitCode).toBe(0)
-      expect(payload.results[0].first.fileError).toBeNull()
-      expect(payload.results[0].first.tests).toEqual(
-        testNames.map((name) => ({ key: `${testFile}\0\0${name}`, status: 'passed' }))
-      )
-    } finally {
-      clearTimeout(timeout)
-      killWorker()
-      await closed.promise
-    }
-  }, 60_000)
+  }
 })

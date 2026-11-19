@@ -144,7 +144,8 @@ async function failure(promise: Promise<unknown>): Promise<{ code: number; messa
 
 const find = (listing: { agents: any[] }, id: string) => listing.agents.find((agent) => agent.id === id)
 
-const settle = () => Bun.sleep(150)
+// Drain the production 250 ms coalescing window before event-count assertions.
+const settle = () => Bun.sleep(600)
 
 const agentManifest = (id: string, entries: Record<string, unknown>[], extra: Record<string, unknown> = {}): Manifest => ({
   id,
@@ -385,6 +386,7 @@ describe('choosing the agent', () => {
     const t = await start({ installed: ['claude', 'codex'] })
     await t.call(A('setDefault'), { agent: 'claude' })
     expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    await settle()
     const before = t.changes()
 
     const disabled = await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
@@ -414,9 +416,11 @@ describe('choosing the agent', () => {
     const refusal = await failure(t.call(A('setDefault'), { agent: 'claude' }))
     expect(refusal).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'agent claude is disabled' })
 
+    await settle()
     await t.call('setting.set', { id: 'setting:quirky.agents/default-agent', value: 'claude' })
     await waitFor(() => t.changes() >= 2)
     expect((await t.call(A('list'))).defaultAgent).toBe('claude')
+    await settle()
     const before = t.changes()
 
     await t.call(A('setEnabled'), { agent: 'claude', enabled: false })
@@ -450,6 +454,7 @@ describe('choosing the agent', () => {
     await t.call(A('setDefault'), { agent: 'acme-bot' })
     expect((await t.call(A('list'))).defaultAgent).toBe('acme-bot')
 
+    await settle()
     const before = t.changes()
     await t.call('plugin.disable', { id: 'acme.agents' })
     await waitFor(() => t.changes() > before)
@@ -1285,6 +1290,16 @@ process.stdin.on('end', () => writeFileSync(recordPath, JSON.stringify({ args: p
     })).toMatchObject({
       added: ['--model', 'provider-two/shared-model', '--thinking', 'medium']
     })
+    expect(await t.call(A('resolveLaunch'), {
+      agent: 'pi',
+      model: 'provider-two/shared-model',
+      options: { effort: 'medium' },
+      structured: true
+    })).toMatchObject({
+      added: [],
+      args: '',
+      structured: { model: 'provider-two/shared-model', effort: 'medium' }
+    })
     const record: { args: string[]; requests: { type: string }[] } = JSON.parse(readFileSync(recordPath, 'utf8'))
     expect(record.args).toEqual(['--mode', 'rpc', '--no-session'])
     expect(record.requests.map((request) => request.type)).toEqual([
@@ -1367,6 +1382,19 @@ describe('launch settings', () => {
     expect(info.models[3].options).toEqual([])
     expect(info.unlistedOptions.map((option: any) => option.id)).toEqual(['effort'])
     expect(info.unlistedOptions[0].choices.map((choice: any) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+     expect(info.defaultModel).toBe('opus')
+    expect(info.models[1].options[0].default).toBe('high')
+    expect((await t.call(A('options'), { agent: 'codex' })).defaultModel).toBeNull()
+  })
+
+  test('omp offers a thinking level for any model it is given', async () => {
+    const t = await start()
+    const info = await t.call(A('options'), { agent: 'omp' })
+    expect(info).toMatchObject({ models: [], unlisted: 'accept', defaultModel: null })
+    expect(info.unlistedOptions[0]).toMatchObject({ id: 'effort', label: 'Thinking level' })
+    expect(await t.call(A('resolveLaunch'), { agent: 'omp', model: 'openai-codex/gpt-6.1-sol', options: { effort: 'high' } })).toMatchObject({
+      added: ['--model', 'openai-codex/gpt-6.1-sol', '--thinking', 'high']
+    })
   })
 
   test('SC-2: Codex\'s effort list stops at each model\'s ceiling', async () => {
@@ -1410,6 +1438,38 @@ describe('launch settings', () => {
       placeholder: null,
       message: "Extra arguments aren't supported for this agent yet."
     })
+  })
+
+  test('scenarios 12–14: pi and omp expose and resolve structured models, and pi refuses effort without discovery', async () => {
+    const t = await start()
+    for (const agent of ['pi', 'omp'] as const) {
+      expect(await t.call(A('options'), { agent })).toMatchObject({
+        agent,
+        supported: true,
+        unlisted: 'accept',
+        structured: true
+      })
+      expect(await t.call(A('resolveLaunch'), { agent, model: 'stub/think', structured: true })).toMatchObject({
+        added: [],
+        args: '',
+        structured: { model: 'stub/think' },
+        shadowed: []
+      })
+      const withEffort = t.call(A('resolveLaunch'), {
+        agent,
+        model: 'stub/think',
+        options: { effort: 'high' },
+        structured: true
+      })
+      if (agent === 'omp') {
+        expect(await withEffort).toMatchObject({ structured: { model: 'stub/think', effort: 'high' } })
+        continue
+      }
+      expect(await failure(withEffort)).toMatchObject({
+        code: RpcErrorCode.InvalidParams,
+        message: `Agent ${agent} model stub/think does not support effort high.`
+      })
+    }
   })
 
   test('SC-12: resolveLaunch uses the saved arguments and replaces the configured model flag', async () => {

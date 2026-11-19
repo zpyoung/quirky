@@ -61,12 +61,15 @@ function chunkByBytes(text: string, maxBytes: number): string[] {
 /**
  * Turns pasted text into the writes that deliver it: newlines become carriage returns, text of
  * up to 64 KiB is one write, larger text goes in 16 KiB chunks, and bracketed-paste markers
- * wrap it only when the running program enabled that mode. Text over 16 MiB is refused.
+ * wrap it only when the running program enabled that mode. Text over 16 MiB is refused. Empty
+ * text writes nothing, except an empty bracketed paste when that mode is on: an image-only
+ * clipboard reads as empty text, and agents such as Claude Code take that paste as the cue to
+ * read the image from the clipboard themselves.
  */
 export function planPaste(text: string, bracketed: boolean): PastePlan {
   if (text.length > PASTE_MAX_BYTES) return { kind: 'refused' }
   if (text.length * 3 > PASTE_MAX_BYTES && utf8Length(text) > PASTE_MAX_BYTES) return { kind: 'refused' }
-  if (text.length === 0) return { kind: 'write', chunks: [], closer: null }
+  if (text.length === 0) return { kind: 'write', chunks: bracketed ? [`${BRACKETED_START}${BRACKETED_END}`] : [], closer: null }
 
   let payload = text.replace(/\r\n|\n|\r/g, '\r')
   if (bracketed) payload = payload.replaceAll('\x1b', INERT_ESCAPE)

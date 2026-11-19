@@ -63,23 +63,42 @@ async function currentBranch(worktree: Worktree): Promise<string> {
   return current
 }
 
-/** The `expected` param of a force push: a full commit id, or undefined to lease on the remote-tracking ref. */
-function expectedParam(env: DaemonEnv, expected: unknown): string | undefined {
+/** Validates an optional full commit id parameter. */
+function expectedParam(env: DaemonEnv, expected: unknown, name = 'expected'): string | undefined {
   if (expected === undefined) return undefined
   if (typeof expected !== 'string' || !FULL_SHA.test(expected)) {
-    throw env.context.error('invalid-params', 'expected must be a full 40- or 64-character commit id.')
+    throw env.context.error('invalid-params', `${name} must be a full 40- or 64-character commit id.`)
   }
   return expected
+}
+
+function expectedBranchParam(env: DaemonEnv, branch: unknown): string | undefined {
+  if (branch === undefined) return undefined
+  if (typeof branch !== 'string' || branch.length === 0) {
+    throw env.context.error('invalid-params', 'expectedBranch must be a non-empty branch name.')
+  }
+  return branch
 }
 
 /** Pushes HEAD to its configured target, or to a fresh validated GitHub target for review/creation. */
 export function push(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
+    const expectedHead = expectedParam(env, params.expectedHead, 'expectedHead')
+    const expectedBranch = expectedBranchParam(env, params.expectedBranch)
     const purpose = pushPurpose(env, params.purpose)
+    if (purpose === undefined && (expectedHead !== undefined || expectedBranch !== undefined)) {
+      throw env.context.error('invalid-params', 'expectedHead and expectedBranch may only be used with purpose.')
+    }
     return remoteOperation(env, worktree, 'push', async () => {
       if (purpose === undefined) return gitApi().push(worktree.path)
       const target = await requirePushTarget(env, worktree, caller, purpose)
+      if (expectedHead !== undefined && expectedHead !== target.localHead) {
+        throw env.errors.reasoned('conflict', 'stale-target', 'The validated push target changed since confirmation. Confirm again.')
+      }
+      if (expectedBranch !== undefined && (expectedBranch !== target.localBranch || expectedBranch !== target.branch)) {
+        throw env.errors.reasoned('conflict', 'stale-target', 'The validated push target changed since confirmation. Confirm again.')
+      }
       return gitApi().push(worktree.path, { target: exactTarget(target) })
     })
   }
@@ -89,12 +108,23 @@ export function push(env: DaemonEnv): Handler {
 /**
  * Replaces the remote branch with HEAD only if it is still at `expected` (default: where the last
  * fetch left the remote-tracking ref, read without fetching), so a commit pushed since survives.
+ * With `expectedLocalHead`, only that commit may be published through a validated target.
  */
 export function forcePush(env: DaemonEnv): Handler {
   return async (params, caller) => {
     const worktree = await env.resolve(params, caller)
     const expected = expectedParam(env, params.expected)
     const purpose = pushPurpose(env, params.purpose)
+    let expectedLocalHead: string | undefined
+    if (params.expectedLocalHead !== undefined) {
+      if (typeof params.expectedLocalHead !== 'string' || !/^[0-9a-f]{40}$/i.test(params.expectedLocalHead)) {
+        throw env.context.error('invalid-params', 'expectedLocalHead must be a full 40-character commit id.')
+      }
+      if (purpose === undefined) {
+        throw env.context.error('invalid-params', 'expectedLocalHead requires purpose.')
+      }
+      expectedLocalHead = params.expectedLocalHead.toLowerCase()
+    }
     return remoteOperation(env, worktree, 'force-push', async () => {
       const git = gitApi()
       if (purpose === undefined) {
@@ -104,6 +134,9 @@ export function forcePush(env: DaemonEnv): Handler {
       }
 
       const target = await requirePushTarget(env, worktree, caller, purpose)
+      if (expectedLocalHead !== undefined && expectedLocalHead !== target.localHead) {
+        throw env.errors.reasoned('conflict', 'stale-target', 'The local head changed since force-push confirmation. Confirm again.')
+      }
       if (purpose === 'review' && expected !== undefined && expected !== target.headOid) {
         throw env.errors.reasoned('conflict', 'stale-target', 'The pull-request head changed since force-push confirmation. Confirm again.')
       }

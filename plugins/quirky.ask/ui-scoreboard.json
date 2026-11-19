@@ -1,0 +1,782 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "panel:quirky.ask/questions": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.ask/card": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (loadState.status === 'loading') return <NoticeLine>Loading questions…</NoticeLine>"
+      },
+      "anchor": "if (loadState.status === 'loading')",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<NoticeLine>Loading questions…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (asks.length === 0) return <EmptyState message=\"No pending questions.\" />"
+      },
+      "anchor": "if (asks.length === 0)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<EmptyState message=\"No pending questions.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (loadState.status === 'failed') {\n      return <InlineError message={`Could not load questions: ${loadState.message}`} action={{ label: 'Retry', onAction: store.retry }} />\n    }"
+      },
+      "anchor": "if (loadState.status === 'failed')",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<InlineError message={`Could not load questions: ${loadState.message}`} action={{ label: 'Retry', onAction: store.retry }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "{errors[question.id] && <InlineError message={errors[question.id]!} />}"
+      },
+      "anchor": "errors[question.id] &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "<InlineError message={errors[question.id]!} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "import { Badge, Button, InlineError, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast(failure, error instanceof Error ? error.message : String(error))"
+      },
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast(failure, error instanceof Error ? error.message : String(error))"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ask/card",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "context.toast('Could not answer', errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.toast('Could not answer', errorText(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ask/card",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (phase.status === 'failed') {"
+      },
+      "anchor": "if (phase.status === 'failed')",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "<InlineError message={`Could not load the question: ${phase.message}`} action={{ label: 'Retry', onAction: () => void load() }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ask/card",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (phase.status === 'loading') return <NoticeLine>Loading question…</NoticeLine>"
+      },
+      "anchor": "if (phase.status === 'loading')",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "<NoticeLine>Loading question…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ask/card",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "return <EmptyState message=\"This question is no longer available.\" />"
+      },
+      "anchor": "<EmptyState",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "<EmptyState message=\"This question is no longer available.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "A result flash announces its terminal status rather than a pending-list state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "ask.envelope.summary && ("
+      },
+      "reason": "A terminal summary is optional content on a result flash."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "ask.envelope.status === 'unavailable' && <p>{ask.envelope.reason}</p>"
+      },
+      "reason": "An unavailable reason is optional result detail."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "ask.handoff ? ("
+      },
+      "reason": "Delegated questions use a read-only presentation variant."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header ?? ("
+      },
+      "reason": "The question header selects a display fallback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header && ("
+      },
+      "reason": "An explicit header enables supplementary display text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "(question.type === 'select' || question.type === 'multiselect') && ("
+      },
+      "reason": "Delegated choice questions display their available options."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "(grouped || question.header) && ("
+      },
+      "reason": "Grouping and headers control question legend layout."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header && <><strong>{question.header}</strong>{grouped && <br />}</>"
+      },
+      "anchor": "question.header &&",
+      "reason": "An explicit question header is formatted for display."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "grouped && <br />"
+      },
+      "reason": "Grouped headers use a visual line break."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "grouped && <span data-question-text style={QUESTION_TEXT_STYLE}>{question.question}</span>"
+      },
+      "reason": "Grouped questions show the prompt in their legend."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "!question.required && <div style={{ alignSelf: 'flex-start' }}><Badge>(optional)</Badge></div>"
+      },
+      "reason": "Optional questions carry a non-state label."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'multiselect':"
+      },
+      "reason": "Multiselect selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'text':"
+      },
+      "reason": "Text selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "question.multiline ? ("
+      },
+      "reason": "Multiline text selects a textarea control."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'number':"
+      },
+      "reason": "Number selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'date':"
+      },
+      "reason": "Date selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'confirm':"
+      },
+      "reason": "Confirm selects its yes/no control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "value ? 'Yes' : 'No'"
+      },
+      "reason": "The confirmation option value selects its button label."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.description && <span> {option.description}</span>"
+      },
+      "reason": "Option descriptions are supplemental content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.preview && ("
+      },
+      "reason": "Preview availability controls whether a preview action is shown."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "previewing ? 'Hide preview' : 'Show preview'"
+      },
+      "reason": "The preview button label reflects its current visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.preview && previewing && <PreviewFrame preview={option.preview} />"
+      },
+      "reason": "An open option preview renders its content without changing panel state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "{denying && ("
+      },
+      "anchor": "denying &&",
+      "reason": "Shows the optional reason field only after Deny was chosen."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "{denying ? ("
+      },
+      "anchor": "denying ?",
+      "reason": "Swaps the Allow and Deny buttons for Cancel and Confirm deny while a denial is being confirmed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (!ask) {"
+      },
+      "anchor": "if (!ask)",
+      "reason": "Groups the loading, failed and missing outcomes of the ask read; each is classified at its own branch."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (ask.envelope.status !== 'pending') {"
+      },
+      "anchor": "if (ask.envelope.status !== 'pending')",
+      "reason": "An answered or expired ask collapses to its one-line record; the ask status is domain content, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "role=\"status\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announces the one-line ask record classified at the branch above."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (approval) {"
+      },
+      "anchor": "if (approval)",
+      "reason": "Chooses the approval card or the ordinary question card for a pending ask."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/ui.tsx",
+        "quote": "if (!input) return undefined"
+      },
+      "anchor": "if (!input)",
+      "reason": "Refuses an unusable mount input before any UI renders; no read has happened."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "if (!open && !clipped) return textSpan"
+      },
+      "anchor": "if (!open && !clipped)",
+      "reason": "Leaves a record that fits on its line as plain text instead of a disclosure button."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "onAction: store.retry"
+      },
+      "route": {
+        "target": "quirky.ask/list",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/store.ts",
+          "quote": "context.call('quirky.ask/list', { pendingOnly: true })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/store.ts",
+            "quote": "const retry = () => {\n    if (disposed || loadState.status === 'ready') return\n    loadState = { status: 'loading' }\n    publish(asks)\n    void refresh()\n  }"
+          },
+          {
+            "file": "plugins/quirky.ask/src/store.ts",
+            "quote": "const refresh = async (eventSeq = 0) => {\n    const mine = ++generation\n    const removed = new Set<string>()\n    removedDuringRefresh.add(removed)\n    try {\n      const list = (await context.call('quirky.ask/list', { pendingOnly: true })) as Ask[]\n      if (disposed || mine < appliedGeneration) return\n      appliedGeneration = mine\n      watermark = Math.max(watermark, eventSeq)\n      for (const ask of list) watermark = Math.max(watermark, ask.seq)\n      const live = list.filter((ask) => !removed.has(ask.id) && !resolvedIds.has(ask.id))\n      prunePreviewsForList(new Set(live.map((ask) => ask.id)))\n      if (loadState.status !== 'ready') loadState = { status: 'ready' }\n      publish(\n        live.filter((ask) => !ask.queued).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),\n        live.filter((ask) => ask.queued).length\n      )\n    } catch (error) {\n      const message = error instanceof Error ? error.message : String(error)\n      context.log(`could not list asks: ${message}`)\n      if (!disposed && mine === generation && mine >= appliedGeneration && loadState.status !== 'ready') {\n        loadState = { status: 'failed', message }\n        publish(asks)\n      }\n    } finally {\n      removedDuringRefresh.delete(removed)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void openDelegatedQuestion()}"
+      },
+      "route": {
+        "target": "view:quirky.session/worktree",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.openView('view:quirky.session/worktree', { worktree: worktreeId, session: ask.sessionId })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const openDelegatedQuestion = async () => {\n    if (!ask.sessionId) {\n      context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')\n      return\n    }\n    setBusy(true)\n    try {\n      let worktreeId = ask.worktreeId\n      if (!worktreeId) {\n        const session = await context.call('quirky.session/get', { session: ask.sessionId })\n        if (typeof session !== 'object' || session === null || !('worktreeId' in session) || typeof session.worktreeId !== 'string') {\n          throw new Error('The delegated session has no worktree view.')\n        }\n        worktreeId = session.worktreeId\n      }\n      context.openView('view:quirky.session/worktree', { worktree: worktreeId, session: ask.sessionId })\n    } catch (error) {\n      context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onChange={(draft) => change(question.id, draft)}"
+      },
+      "route": {
+        "target": "quirky.ask/updatePartial",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context\n        .call('quirky.ask/updatePartial', { askId: ask.id, partial: draftsToPartial(latest.current, ask.spec) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const change = (questionId: string, draft: QuestionDraft) => {\n    latest.current = { ...latest.current, [questionId]: draft }\n    setDrafts(latest.current)\n    setErrors(({ [questionId]: _cleared, ...rest }) => rest)\n    scheduleSave()\n  }"
+          },
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const scheduleSave = () => {\n    cancelSave()\n    saveTimer.current = setTimeout(() => {\n      saveTimer.current = null\n      context\n        .call('quirky.ask/updatePartial', { askId: ask.id, partial: draftsToPartial(latest.current, ask.spec) })\n        .catch((error: unknown) => context.log(`could not save draft: ${error instanceof Error ? error.message : String(error)}`))\n    }, SAVE_DELAY_MS)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void dismiss()}"
+      },
+      "route": {
+        "target": "quirky.ask/cancel",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.call('quirky.ask/cancel', { askId: ask.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const dismiss = () =>\n    attempt(() => context.call('quirky.ask/cancel', { askId: ask.id }) as Promise<AskEnvelope>, 'Could not dismiss')"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void submit()}"
+      },
+      "route": {
+        "target": "quirky.ask/answer",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.call('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const submit = () => {\n    const submission = buildSubmission(ask.spec, drafts)\n    if (!submission.ok) {\n      setErrors(submission.errors)\n      return\n    }\n    setErrors({})\n    return attempt(\n      () => context.call('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped }) as Promise<AskEnvelope>,\n      'Could not answer'\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={() => {\n              void context.executeCommand(TOGGLE_PREVIEW_COMMAND, { askId, questionId, option: option.value })\n            }}"
+      },
+      "route": {
+        "target": "command:quirky.ask/toggle-preview",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/QuestionField.tsx",
+          "quote": "context.executeCommand(TOGGLE_PREVIEW_COMMAND, { askId, questionId, option: option.value })"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onPress={() => toggle(option.value)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only the local selection draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={onPress}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onChange={(event) => onChange({ ...draft, freeText: event.target.value })}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextArea\n          rows={3}\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          type=\"number\"\n          step={question.integer ? '1' : 'any'}\n          min={question.min}\n          max={question.max}\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          type=\"date\"\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={() => onChange({ ...draft, confirm: value })}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<TextField label=\"Reason, if you deny\" value={reason} onChange={(event) => setReason(event.target.value)} />"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only the optional reason for denying."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<Button disabled={busy} onClick={onCancelDeny}>Cancel</Button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to the onCancelDeny handler, which only leaves the denial confirmation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<Button variant=\"destructive\" disabled={busy} onClick={() => void send('deny')}>Confirm deny</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "const send = async (decision: Decision) => {\n    const answers: Record<string, AskAnswer> = { decision: { value: decision, label: DECISION_LABELS[decision], source: 'option' } }\n    const note = reason.trim()\n    const withReason = decision === 'deny' && hasReason && note !== ''\n    if (withReason) answers.reason = { value: note, source: 'input' }\n    setBusy(true)\n    try {\n      const envelope = (await context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })) as AskEnvelope\n      onResolved(envelope)\n    } catch (error) {\n      context.toast('Could not answer', errorText(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<Button variant=\"primary\" disabled={busy} onClick={() => void send('allow')}>{DECISION_LABELS.allow}</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "const send = async (decision: Decision) => {\n    const answers: Record<string, AskAnswer> = { decision: { value: decision, label: DECISION_LABELS[decision], source: 'option' } }\n    const note = reason.trim()\n    const withReason = decision === 'deny' && hasReason && note !== ''\n    if (withReason) answers.reason = { value: note, source: 'input' }\n    setBusy(true)\n    try {\n      const envelope = (await context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })) as AskEnvelope\n      onResolved(envelope)\n    } catch (error) {\n      context.toast('Could not answer', errorText(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "onClick={() => void send('always')}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })"
+        },
+        "target": "quirky.ask/answer",
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "const send = async (decision: Decision) => {\n    const answers: Record<string, AskAnswer> = { decision: { value: decision, label: DECISION_LABELS[decision], source: 'option' } }\n    const note = reason.trim()\n    const withReason = decision === 'deny' && hasReason && note !== ''\n    if (withReason) answers.reason = { value: note, source: 'input' }\n    setBusy(true)\n    try {\n      const envelope = (await context.call('quirky.ask/answer', {\n        askId: ask.id,\n        answers,\n        skipped: hasReason && !withReason ? ['reason'] : []\n      })) as AskEnvelope\n      onResolved(envelope)\n    } catch (error) {\n      context.toast('Could not answer', errorText(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<Button variant=\"destructive\" disabled={busy} onClick={onStartDeny}>{DECISION_LABELS.deny}</Button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to the onStartDeny handler, which only opens the denial confirmation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "return <InlineError message={`Could not load the question: ${phase.message}`} action={{ label: 'Retry', onAction: () => void load() }} />"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.call('quirky.ask/list', { pendingOnly: false, askId })"
+        },
+        "target": "quirky.ask/list",
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "async function load(): Promise<void> {\n    const seq = ++loadSeq.current\n    try {\n      const asks = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]\n      if (!alive.current || seq !== loadSeq.current) return\n      const next = asks.find((candidate) => candidate.id === askId) ?? null\n      setAsk((current) => (current?.id === askId && current.envelope.status !== 'pending' && next?.envelope.status === 'pending' ? current : next))\n      setPhase({ status: 'ready' })\n    } catch (error) {\n      context.log(`could not load ask ${askId}: ${errorText(error)}`)\n      if (!alive.current || seq !== loadSeq.current) return\n      setPhase((current) => (current.status === 'ready' ? current : { status: 'failed', message: errorText(error) }))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "return <ApprovalCard ask={ask} approval={approval} context={context} sessionApproveDisabled={sessionApproveDisabled} onResolved={resolve} />"
+      },
+      "anchor": "onResolved",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ask/src/CardView.tsx",
+          "quote": "context.call('quirky.ask/list', { pendingOnly: false, askId })"
+        },
+        "target": "quirky.ask/list",
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "const resolve = (envelope: AskEnvelope) => {\n    if (envelope.status === 'pending') return\n    loadSeq.current += 1\n    setAsk((current) => (current ? { ...current, envelope } : current))\n    void load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.ask/src/CardView.tsx",
+            "quote": "async function load(): Promise<void> {\n    const seq = ++loadSeq.current\n    try {\n      const asks = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]\n      if (!alive.current || seq !== loadSeq.current) return\n      const next = asks.find((candidate) => candidate.id === askId) ?? null\n      setAsk((current) => (current?.id === askId && current.envelope.status !== 'pending' && next?.envelope.status === 'pending' ? current : next))\n      setPhase({ status: 'ready' })\n    } catch (error) {\n      context.log(`could not load ask ${askId}: ${errorText(error)}`)\n      if (!alive.current || seq !== loadSeq.current) return\n      setPhase((current) => (current.status === 'ready' ? current : { status: 'failed', message: errorText(error) }))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/CardView.tsx",
+        "quote": "<button type=\"button\" style={RECORD_TOGGLE_STYLE} aria-expanded={open} onClick={onToggle}>"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the click to the onToggle handler, which only expands or collapses a cut-off answer record.",
+      "notAction": "forwarded"
+    }
+  ]
+}

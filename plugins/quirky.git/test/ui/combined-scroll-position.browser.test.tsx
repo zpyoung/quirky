@@ -30,24 +30,35 @@ const BROWSER_IMPORTS: Record<string, string> = {
 }
 const STYLESHEETS = [
   'packages/ui/src/design-system/tokens.css',
-  'packages/ui/src/design-system/components.css'
+  'packages/ui/src/design-system/components.css',
+  'packages/ui/src/design-system/git-review.css'
 ]
 const executable = chromium.executablePath()
 let browser: Browser | null = null
 let browserBundle = ''
 
 function browserEntry(): string {
-  const combinedDiff = join(ROOT, 'plugins/quirky.git/src/view/CombinedDiff.tsx')
+  const reviewDiff = join(ROOT, 'plugins/quirky.git/src/view/ReviewDiff.tsx')
   const diffPane = join(ROOT, 'plugins/quirky.git/src/view/DiffPane.tsx')
   return `
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
-    import { CombinedDiff } from ${JSON.stringify(combinedDiff)}
+    import { ReviewDiff } from ${JSON.stringify(reviewDiff)}
     import { DiffPane } from ${JSON.stringify(diffPane)}
 
     const defaultPaths = Array.from({ length: 6 }, (_, index) => 'file-' + (index + 1) + '.ts')
     let paths = defaultPaths
     const settings = { sideBySide: false, wrap: false, showWhitespace: false, collapseUnchanged: false, fileTree: false }
+    const emptyReview = {
+      worktreeId: 'worktree-1',
+      branch: 'feat',
+      base: { name: 'main', source: 'detected', isCurrentBranch: false },
+      compare: { status: 'ready', mergeBase: 'b'.repeat(40), headOid: 'c'.repeat(40) },
+      totals: { added: 0, removed: 0 },
+      counts: { files: 0, reviewed: 0, changed: 0, uncommitted: 0, staged: 0 },
+      capped: false,
+      files: []
+    }
     const originalFor = (path) => Array.from({ length: 100 }, (_, index) => path + ' line ' + (index + 1)).join('\\n') + '\\n'
     const diffFor = (path) => {
       const original = originalFor(path)
@@ -63,6 +74,7 @@ function browserEntry(): string {
             entries: paths.map((path) => ({ path, status: 'modified', added: 1, removed: 1, binary: false }))
           }
         }
+        if (method === 'quirky.git/review') return emptyReview
         if (method === 'quirky.git/diff') return diffFor(params.path)
         if (method === 'quirky.git/notes') return { notes: [] }
         throw new Error('Unexpected call: ' + method)
@@ -72,7 +84,7 @@ function browserEntry(): string {
       toast() {},
       executeCommand() { return Promise.resolve() }
     }
-    const input = { mode: 'combined', worktree: 'worktree-1', commit }
+    const input = { mode: 'review', worktree: 'worktree-1', commit }
     const host = document.getElementById('diff-root')
     let root = null
     const mount = (element) => {
@@ -80,10 +92,9 @@ function browserEntry(): string {
       root = createRoot(host)
       root.render(element)
     }
-    window.openCombined = (options = {}) => {
+    window.openReview = (options = {}) => {
       paths = options.paths ?? defaultPaths
-      settings.fileTree = options.fileTree ?? false
-      mount(createElement(CombinedDiff, {
+      mount(createElement(ReviewDiff, {
         context,
         input,
         settings,
@@ -113,7 +124,7 @@ function browserBuildScript(entrypoint: string, outputPath: string): string {
   return `
     const BROWSER_IMPORTS = ${JSON.stringify(BROWSER_IMPORTS)}
     const browserDependencyResolver = {
-      name: 'git-combined-scroll-browser-dependencies',
+      name: 'git-review-scroll-browser-dependencies',
       setup(builder) {
         builder.onResolve(
           {
@@ -137,7 +148,7 @@ function browserBuildScript(entrypoint: string, outputPath: string): string {
 }
 
 type BrowserTestWindow = typeof window & {
-  openCombined(options?: { fileTree?: boolean; paths?: string[] }): void
+  openReview(options?: { paths?: string[] }): void
   showSingleFile(): void
   singleFileCurrentChange(): number | null
 }
@@ -178,13 +189,11 @@ async function waitForSections(page: Page, count = 6): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
 }
 
-async function combinedPosition(page: Page) {
+async function reviewPosition(page: Page) {
   return page.evaluate(() => {
-    const scroll = [...document.querySelectorAll<HTMLElement>('#diff-root .ui-stack')].find(
-      (element) => element.style.overflow === 'auto' && element.querySelector(':scope > section[data-path="file-1.ts"]')
-    )
-    const firstHeader = scroll?.querySelector<HTMLElement>(':scope > section[data-path="file-1.ts"] header')
-    if (!scroll || !firstHeader) throw new Error('The combined diff scroll area or first file header did not render.')
+    const scroll = document.querySelector<HTMLElement>('#diff-root [data-review-scroll]')
+    const firstHeader = scroll?.querySelector<HTMLElement>('section[data-path="file-1.ts"] header')
+    if (!scroll || !firstHeader) throw new Error('The Review tab scroll area or first card header did not render.')
     const viewport = scroll.getBoundingClientRect()
     const header = firstHeader.getBoundingClientRect()
     return {
@@ -198,7 +207,7 @@ async function combinedPosition(page: Page) {
 
 beforeAll(async () => {
   if (!existsSync(executable)) return
-  const tempDir = mkdtempSync(join(tmpdir(), 'quirky-git-combined-scroll-'))
+  const tempDir = mkdtempSync(join(tmpdir(), 'quirky-git-review-scroll-'))
   try {
     const entrypoint = join(tempDir, 'browser-entry.ts')
     writeFileSync(entrypoint, browserEntry())
@@ -222,79 +231,22 @@ afterAll(async () => {
   await browser?.close()
 }, 60_000)
 
-test.skipIf(!existsSync(executable))('combined commit diff stays at its first file when opened and reopened', async () => {
+test.skipIf(!existsSync(executable))('a commit-scoped Review tab stays at its first card when opened and reopened', async () => {
   const { context, page } = await openPage()
   try {
-    await page.evaluate(() => (window as BrowserTestWindow).openCombined())
+    await page.evaluate(() => (window as BrowserTestWindow).openReview())
     await waitForSections(page)
-    const initial = await combinedPosition(page)
+    const initial = await reviewPosition(page)
     expect(initial.scrollHeight).toBeGreaterThan(initial.clientHeight)
     expect(initial.scrollTop).toBe(0)
     expect(initial.firstHeaderVisible).toBe(true)
 
-    await page.evaluate(() => (window as BrowserTestWindow).openCombined())
+    await page.evaluate(() => (window as BrowserTestWindow).openReview())
     await waitForSections(page)
-    const reopened = await combinedPosition(page)
+    const reopened = await reviewPosition(page)
     expect(reopened.scrollTop).toBe(initial.scrollTop)
     expect(reopened.scrollTop).toBe(0)
     expect(reopened.firstHeaderVisible).toBe(true)
-  } finally {
-    await context.close()
-  }
-}, 60_000)
-
-test.skipIf(!existsSync(executable))('combined file tree keeps long paths on one line at a constrained width', async () => {
-  const paths = ['data/metrics.csv', 'notebooks/summary.ipynb']
-  const { context, page } = await openPage({
-    viewport: { width: 1280, height: 720 },
-    paneWidth: 628,
-    paneHeight: 720
-  })
-  try {
-    await page.evaluate((fixturePaths) => (window as BrowserTestWindow).openCombined({ fileTree: true, paths: fixturePaths }), paths)
-    await waitForSections(page, paths.length)
-
-    const layout = await page.evaluate((fixturePaths) => {
-      const nav = document.querySelector<HTMLElement>('#diff-root nav[aria-label="Files"]')
-      if (!nav) throw new Error('The combined diff file tree did not render.')
-      const rows = fixturePaths.map((path) => {
-        const wrapper = nav.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)
-        const row = wrapper?.querySelector<HTMLElement>('.ui-list-row')
-        const pathSpan = wrapper?.querySelector<HTMLElement>('.ui-list-row__title > span')
-        if (!row || !pathSpan) throw new Error(`The file tree row for ${path} did not render.`)
-        const range = document.createRange()
-        range.selectNodeContents(pathSpan)
-        const lineTops = new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top * 2) / 2))
-        return {
-          path,
-          title: pathSpan.title,
-          lineCount: lineTops.size,
-          rowOverflowsHorizontally: row.scrollWidth > row.clientWidth + 1
-        }
-      })
-      return {
-        paneWidth: document.querySelector<HTMLElement>('#diff-pane')!.getBoundingClientRect().width,
-        navOverflowsHorizontally: nav.scrollWidth > nav.clientWidth + 1,
-        rows
-      }
-    }, paths)
-
-    expect(layout.paneWidth).toBeCloseTo(628, 0)
-    expect(layout.navOverflowsHorizontally).toBe(false)
-    for (const row of layout.rows) {
-      expect(row.lineCount).toBe(1)
-      expect(row.title).toBe(row.path)
-      expect(row.rowOverflowsHorizontally).toBe(false)
-      expect(await page.getByRole('button', { name: row.path, exact: true }).count()).toBe(1)
-    }
-    await page.getByRole('button', { name: paths[1], exact: true }).click()
-    const targetScrollTop = await page.evaluate((path) => {
-      const scroll = [...document.querySelectorAll<HTMLElement>('#diff-root .ui-stack')].find(
-        (element) => element.style.overflow === 'auto' && element.querySelector(`:scope > section[data-path="${CSS.escape(path)}"]`)
-      )
-      return scroll?.scrollTop ?? 0
-    }, paths[1])
-    expect(targetScrollTop).toBeGreaterThan(0)
   } finally {
     await context.close()
   }

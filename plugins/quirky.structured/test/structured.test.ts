@@ -12,6 +12,7 @@ import {
   type StructuredMessage
 } from '@quirky/protocol'
 import { startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
+import { liveProcesses } from '../../../packages/process/src/api'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
 import { createCodexRunner } from '../codex-runner'
@@ -41,6 +42,9 @@ class FakeRunner implements StructuredRunner {
     if (this.sendError) throw this.sendError
     this.sent.push({ sessionId, text })
     this.context.appendMessage({ sessionId, role: 'user', text, data: { n: 1 } })
+  }
+  async interrupt(sessionId: string) {
+    this.context.setStatus(sessionId, 'done')
   }
   async stop(sessionId: string) {
     this.stopped.push(sessionId)
@@ -86,7 +90,7 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
-type StructuredAgent = 'claude' | 'codex'
+type StructuredAgent = 'claude' | 'codex' | 'pi' | 'omp'
 type StructuredCreateOverrides = {
   model?: string
   options?: Record<string, string | boolean>
@@ -391,6 +395,15 @@ try {
     expect((await pending).status).toBe('answered')
   })
 
+  test('the context cancels one pending ask', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const pending = runner.context.createAsk({ questions: [{ id: 'ok', type: 'confirm', question: 'Run rm?' }] }, session.id)
+    const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
+    await runner.context.cancelAsk(ask.id)
+    expect((await pending).status).toBe('declined')
+  })
+
   test('closing a session declines its pending asks', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
@@ -430,8 +443,19 @@ try {
     expect(runner.started).toEqual([])
   })
 
+  test('pi and omp sessions are accepted, titled by agent and started with the lease environment', async () => {
+    for (const [agent, title] of [['pi', 'Pi'], ['omp', 'OMP']] as const) {
+      const session = await createAgent(agent, 'look around')
+      expect(session).toMatchObject({ kind: 'structured', agent, title })
+      await waitFor(() => runner.started.some((entry) => entry.session.id === session.id))
+      const started = runner.started.find((entry) => entry.session.id === session.id)!
+      expect(started.prompt).toBe('look around')
+      expect((started.options as { env: Record<string, string> }).env.QUIRKY_SESSION_TOKEN).toBeTruthy()
+    }
+  })
+
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'pi', prompt: 'x' }))).toMatchObject({
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({
@@ -461,6 +485,47 @@ try {
     })
     expect(world.registerCalls).toHaveLength(1)
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+  })
+
+  test('resume without a prompt sends the moved queue in order', async () => {
+    const home = shortHome()
+    await boot({ home })
+    world.worktree.path = home
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    world.sessions.get(original.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })
+    await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })
+    await call('quirky.structured/stop', { session: original.id })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id })) as Session
+    await waitFor(() => runner.sent.length === 1)
+    runner.context.setStatus(resumed.id, 'working')
+    runner.context.setStatus(resumed.id, 'done')
+    await waitFor(() => runner.sent.length === 2)
+    expect(runner.sent).toEqual([
+      { sessionId: resumed.id, text: 'one' },
+      { sessionId: resumed.id, text: 'two' }
+    ])
+    expect(await call('quirky.structured/queue', { session: resumed.id })).toEqual([])
+  })
+
+  test('a failed account preparation on resume leaves the queue on the old session in order', async () => {
+    const home = shortHome()
+    const failing = new FakeWorld()
+    failing.worktree.path = home
+    await boot({ home, world: failing, accountPreparation: true })
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    world.sessions.get(original.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    const one = (await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })) as { queuedId: string }
+    const two = (await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })) as { queuedId: string }
+    await call('quirky.structured/stop', { session: original.id })
+    world.accountPreparationFailure = 'selected Claude home is unavailable'
+
+    const error = await failure(call('quirky.structured/resume', { session: original.id }))
+    expect(error.message).toContain('selected Claude home is unavailable')
+    expect(((await call('quirky.structured/queue', { session: original.id })) as { id: string }[]).map((m) => m.id)).toEqual([one.queuedId, two.queuedId])
   })
 
   test('send failures from the runner surface as internal errors', async () => {
@@ -529,7 +594,7 @@ describe('the Claude runner inside the plugin', () => {
     })
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
     expect(ask.sessionId).toBe(session.id)
-    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'deny', 'always'])
+    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'always', 'deny'])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
     expect(await permission).toEqual({ behavior: 'allow', updatedInput: { command: 'ls' } })
 
@@ -548,13 +613,73 @@ describe('the Claude runner inside the plugin', () => {
     const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
     expect(messages.map((m) => [m.role, m.text.split('\n')[0]])).toEqual([
       ['user', 'fix it'],
+      ['system', 'Mode: Default'],
       ['system', 'session started (m)'],
+      ['system', 'Approval needed'],
       ['assistant', 'done'],
       ['result', 'All good'],
       ['user', 'and tests']
     ])
+    expect(messages[1]!.item).toMatchObject({ kind: 'mode', mode: 'default' })
+    expect(messages[3]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
     await waitFor(() => structuredEvents().length === messages.length)
-    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5])
+    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6, 7])
+  })
+
+  test('reports the Claude init commands and skills, and resume moves the queue in order', async () => {
+    const home = shortHome()
+    const queries: FakeQuery[] = []
+    await boot({
+      home,
+      factory: (context: StructuredContext) =>
+        createClaudeRunner(
+          { ...context, resolveClaudePath: async () => '/usr/local/bin/claude' },
+          {
+            query: (params: ClaudeQueryParams) => {
+              const query = new FakeQuery(params)
+              queries.push(query)
+              return query
+            }
+          }
+        )
+    })
+    world.worktree.path = home
+    const original = (await call('quirky.structured/create', { worktree: 'main', agent: 'claude', deferStart: true })) as Session
+    await waitFor(() => queries.length === 1 && world.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'running'))
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: [] })
+
+    await call('quirky.structured/send', { session: original.id, text: 'first turn' })
+    await waitFor(() => queries[0].written.length === 1)
+    queries[0].emit({
+      type: 'system',
+      subtype: 'init',
+      session_id: 'sdk-commands-session',
+      model: 'm',
+      slash_commands: ['compact', 'review'],
+      skills: ['pdf', 'review']
+    })
+    const expected = [
+      { name: 'compact', kind: 'command' },
+      { name: 'pdf', kind: 'skill' },
+      { name: 'review', kind: 'skill' }
+    ]
+    await waitFor(() => events.some((e) => e.type === 'quirky.structured/commandsChanged'))
+    expect(events.find((e) => e.type === 'quirky.structured/commandsChanged')).toMatchObject({ data: { sessionId: original.id, commands: expected } })
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: expected })
+
+    const one = (await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })) as { queuedId: string }
+    const two = (await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })) as { queuedId: string }
+    await call('quirky.structured/stop', { session: original.id })
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: expected })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id, prompt: 'continue' })) as Session
+    expect(((await call('quirky.structured/queue', { session: resumed.id })) as { id: string }[]).map((m) => m.id)).toEqual([one.queuedId, two.queuedId])
+    expect(await call('quirky.structured/queue', { session: original.id })).toEqual([])
+    const changed = events.filter((e) => e.type === 'quirky.structured/queueChanged').map((e) => (e as { data: { sessionId: string } }).data.sessionId)
+    expect(changed).toContain(resumed.id)
+    expect(changed.at(-2)).toBe(original.id)
+    await waitFor(() => queries.length === 2)
+    await call('quirky.structured/stop', { session: resumed.id })
   })
 
   test('persists Claude identity after native init and resumes that session idle', async () => {
@@ -661,6 +786,9 @@ describe('the Codex runner inside the plugin', () => {
     const session = await createAgent('codex', '[approve] summarize', { model: 'gpt-5.5', options: { effort: 'high' } })
     expect(session).toMatchObject({ kind: 'structured', agent: 'codex', cwd: home })
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
+    expect(liveProcesses()).toContainEqual(
+      expect.objectContaining({ owner: 'quirky.structured', command: fixture.executable })
+    )
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as { id: string }[])[0])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
     const settled = await waitFor(() =>
@@ -702,6 +830,7 @@ describe('the Codex runner inside the plugin', () => {
 
     await call('quirky.structured/stop', { session: session.id })
     expect((await call('quirky.session/get', { session: session.id })).status).toBe('exited')
+    expect(liveProcesses().some((entry) => entry.owner === 'quirky.structured' && entry.command === fixture.executable)).toBe(false)
     expect(await call('quirky.structured/messages', { session: session.id })).toHaveLength(journal.length)
   })
 
@@ -746,7 +875,8 @@ describe('the Codex runner inside the plugin', () => {
     expect(fixture.requests().filter((request) => request.method).map((request) => request.method)).toEqual([
       'initialize',
       'initialized',
-      'thread/start'
+      'thread/start',
+      'skills/list'
     ])
     expect(await call('quirky.structured/messages', { session: session.id })).toEqual([])
 
@@ -996,7 +1126,7 @@ describe('v1 journal import', () => {
 })
 
 describe('structured journal store upgrades', () => {
-  test('preserves an existing v1 journal while appending the receipt migration', async () => {
+  test('preserves an existing v1 journal while appending the receipt, item and queue migrations', async () => {
     const home = shortHome()
     const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
     mkdirSync(dirname(storePath), { recursive: true })
@@ -1027,12 +1157,15 @@ describe('structured journal store upgrades', () => {
 
     const upgraded = new Database(storePath, { readonly: true })
     try {
-      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
       expect(
         upgraded
           .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
           .all()
       ).toEqual([{ name: 'structured_send_receipts' }])
+      expect(
+        upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_queue'").all()
+      ).toEqual([{ name: 'structured_queue' }])
     } finally {
       upgraded.close()
     }

@@ -14,7 +14,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { spawnSync } from 'node:child_process'
+import type { ProcessRunner, RunResult } from '@quirky/protocol'
 import type { ConfigWarning, ManagedProvider } from './types'
 import { MANAGED_ID_RE } from './types'
 
@@ -55,7 +55,7 @@ export class AccountProfiles {
   readonly root: string
   private readonly dataRoot: string
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, private readonly runner: ProcessRunner) {
     this.dataRoot = realpathSync.native(dataDir)
     this.root = join(this.dataRoot, 'profiles')
     this.ensureDirectories(this.dataRoot, this.root)
@@ -123,8 +123,8 @@ export class AccountProfiles {
     }
   }
 
-  readIdentity(provider: ManagedProvider, home: string, includeEnvironmentApiKey = false): ProviderIdentity {
-    if (provider === 'claude') return this.readClaudeIdentity(home, includeEnvironmentApiKey)
+  async readIdentity(provider: ManagedProvider, home: string, includeEnvironmentApiKey = false): Promise<ProviderIdentity> {
+    if (provider === 'claude') return await this.readClaudeIdentity(home, includeEnvironmentApiKey)
     return this.readCodexIdentity(home)
   }
 
@@ -219,9 +219,9 @@ export class AccountProfiles {
     }
   }
 
-  remove(provider: ManagedProvider, id: string): void {
+  async remove(provider: ManagedProvider, id: string): Promise<void> {
     const home = this.ensureOwned(provider, id)
-    if (provider === 'claude') this.deleteClaudeKeychainCredential(home)
+    if (provider === 'claude') await this.deleteClaudeKeychainCredential(home)
     const accountDir = dirname(home)
     try {
       rmSync(accountDir, { recursive: true, force: false })
@@ -358,7 +358,7 @@ export class AccountProfiles {
     }
   }
 
-  private readClaudeIdentity(home: string, includeEnvironmentApiKey: boolean): ProviderIdentity {
+  private async readClaudeIdentity(home: string, includeEnvironmentApiKey: boolean): Promise<ProviderIdentity> {
     const stateText = this.readOptionalText(join(home, '.claude.json'))
     const state = stateText === null ? null : parseRecord(stateText)
     const oauth = asRecord(state?.oauthAccount)
@@ -368,7 +368,9 @@ export class AccountProfiles {
     const credentials = credentialText === null ? null : parseRecord(credentialText)
     const oauthCredential = asRecord(credentials?.claudeAiOauth)
     const hasFileToken = Boolean(stringValue(oauthCredential?.accessToken) || stringValue(oauthCredential?.refreshToken))
-    const keychain = hasFileToken ? { hasCredential: false, unavailable: false } : this.readClaudeKeychain(home, this.isManagedHomePath(home))
+    const keychain = hasFileToken
+      ? { hasCredential: false, unavailable: false }
+      : await this.readClaudeKeychain(home, this.isManagedHomePath(home))
     const hasApiKey = Boolean(stringValue(state?.primaryApiKey)) || (includeEnvironmentApiKey && Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN))
     const hasAuth = hasFileToken || keychain.hasCredential || hasApiKey
     const authKind = hasFileToken || keychain.hasCredential ? 'oauth' : hasApiKey ? 'api-key' : keychain.unavailable ? 'unknown' : 'none'
@@ -406,34 +408,58 @@ export class AccountProfiles {
     }
   }
 
-  private readClaudeKeychain(home: string, managed: boolean): SecurityReadResult {
+  private async readClaudeKeychain(home: string, managed: boolean): Promise<SecurityReadResult> {
     const systemClaudeHome = join(process.env.HOME ?? '', '.claude')
     const service = managed || resolve(home) !== resolve(systemClaudeHome)
       ? `Claude Code-credentials-${claudeKeychainSuffix(home)}`
       : 'Claude Code-credentials'
-    const account = keychainAccountName()
-    const result = spawnSync('security', ['find-generic-password', '-s', service, '-a', account, '-w'], {
-      encoding: 'utf8',
-      timeout: 3000,
-      maxBuffer: 4096,
-      env: process.env
-    })
-    if (result.error) return { hasCredential: false, unavailable: true }
-    if (result.status === 44 || /could not be found/i.test(result.stderr)) return { hasCredential: false, unavailable: false }
-    if (result.status !== 0) return { hasCredential: false, unavailable: true }
-    return { hasCredential: result.stdout.trim().length > 0, unavailable: false }
+    let result: RunResult
+    try {
+      result = await this.runKeychain(['security', 'find-generic-password', '-s', service, '-a', keychainAccountName(), '-w'])
+    } catch {
+      return { hasCredential: false, unavailable: true }
+    }
+    if (result.spawnError !== undefined || result.stopped !== undefined || result.signal !== null) {
+      return { hasCredential: false, unavailable: true }
+    }
+    if (result.exitCode === 44 || /could not be found/i.test(result.stderr)) {
+      return { hasCredential: false, unavailable: false }
+    }
+    if (result.exitCode !== 0) return { hasCredential: false, unavailable: true }
+    return { hasCredential: result.stdoutText.trim().length > 0, unavailable: false }
   }
 
-  private deleteClaudeKeychainCredential(home: string): void {
+  private async deleteClaudeKeychainCredential(home: string): Promise<void> {
     const service = `Claude Code-credentials-${claudeKeychainSuffix(home)}`
-    const result = spawnSync('security', ['delete-generic-password', '-s', service, '-a', keychainAccountName()], {
-      encoding: 'utf8',
-      timeout: 3000,
-      maxBuffer: 4096,
-      env: process.env
-    })
-    if (result.error || (result.status !== 0 && result.status !== 44 && !/could not be found/i.test(result.stderr))) {
+    let result: RunResult
+    try {
+      result = await this.runKeychain(['security', 'delete-generic-password', '-s', service, '-a', keychainAccountName()])
+    } catch {
       throw new Error('The managed Claude credential could not be removed from Keychain.')
+    }
+    if (
+      result.spawnError !== undefined ||
+      result.stopped !== undefined ||
+      result.signal !== null ||
+      result.exitCode !== 0 && result.exitCode !== 44 && !/could not be found/i.test(result.stderr)
+    ) {
+      throw new Error('The managed Claude credential could not be removed from Keychain.')
+    }
+  }
+
+  private async runKeychain(argv: string[]): Promise<RunResult> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3_000)
+    try {
+      return await this.runner.run(argv, {
+        timeoutMs: 3_000,
+        maxOutputBytes: 4_096,
+        killGraceMs: 0,
+        env: process.env,
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
     }
   }
 

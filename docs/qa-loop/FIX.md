@@ -33,15 +33,24 @@ Your lane number is in the prompt that started you.
    files beside the code you changed, one file per `bun test <file>` (a whole plugin directory in
    one process hangs). They must pass, except a failure that also happens on `origin/main`: some
    files time out or compare `/var` with `/private/var` on this Mac. Check such a failure in a
-   scratch worktree of `origin/main` and name it in the PR body. Before you push, run
-   `bun run test:affected`: a `new` failure is yours to fix, and a `known` one already fails on main.
+   scratch worktree of `origin/main` and name it in the PR body.
 6. **PR and merge.** Use the keyring login, because the shell's `GITHUB_TOKEN` cannot push:
 
    ```sh
    unset GITHUB_TOKEN
    git push -u origin qa-fix/<id>
-   gh pr create --base main --title "<conventional title>" --body "<finding, cause, fix, how verified>"
-   gh pr checks --watch
+   gh pr create --draft --base main --title "<conventional title>" --body "<finding, cause, fix, how verified>"
+   gh pr checks <number> --watch
+   ```
+
+   Read the PR's Tests comment. A `new` failure is yours to fix: fix it and push again, which
+   re-runs Tests. A `known` failure already fails on main, so name it in the PR body. Once Tests
+   passes, mark the PR ready, which starts the macOS app build (it skips drafts), wait for checks
+   again, then merge:
+
+   ```sh
+   gh pr ready <number>
+   gh pr checks <number> --watch
    gh pr merge --squash --delete-branch
    ```
 
