@@ -570,7 +570,7 @@ describe('Session Info routed actions and views', () => {
           !normalized || [session.id, session.title, session.providerSession.id].some((value) => value.toLowerCase().includes(normalized))
         )
       },
-      'quirky.session/resume': () => { throw new Error('cannot resume this session') }
+      'quirky.terminal/resumeSession': () => { throw new Error('cannot resume this session') }
     })
     activate(fake.context)
     const history = fake.mount('view:quirky.session-info/history', { query: 'provider-1' })
@@ -589,10 +589,13 @@ describe('Session Info routed actions and views', () => {
   })
 
   test('copy-resume-command uses its public method and resume/fork place the returned session in a pane', async () => {
+    const resumed = (session: unknown, fork?: unknown) => ({ id: `${String(session)}-new`, kind: 'terminal', agent: 'claude', worktreeId: 'wt-main', cwd: '/repo', title: 'Claude', status: 'starting', createdAt: 3, lastActivityAt: 3, exitCode: null, exitSignal: null, exitCause: null, restorable: true, launch: null, providerSession: null, ...(fork ? { fork: true } : {}) })
     const fake = makeContext({
       'quirky.session-info/get': () => state(info()),
       'quirky.session-info/resumeCommand': ({ fork }) => ({ command: fork ? 'claude --fork-session' : 'claude --resume provider-1' }),
-      'quirky.session/resume': ({ session, fork }) => ({ id: `${String(session)}-new`, kind: 'terminal', agent: 'claude', worktreeId: 'wt-main', cwd: '/repo', title: 'Claude', status: 'starting', createdAt: 3, lastActivityAt: 3, exitCode: null, exitSignal: null, exitCause: null, restorable: true, launch: null, providerSession: null, ...(fork ? { fork: true } : {}) })
+      'quirky.session/resume': ({ session, fork }) => resumed(session, fork),
+      // a plain resume goes through the layout so the resumed session takes over its old pane
+      'quirky.terminal/resumeSession': ({ session }) => ({ session: resumed(session), pane: 'pane-1', workspace: {} })
     })
     activate(fake.context)
     const writes: string[] = []
@@ -602,8 +605,8 @@ describe('Session Info routed actions and views', () => {
     expect(writes).toEqual(['claude --resume provider-1'])
     await fake.run('resume', { session: 'quirky-1' })
     await fake.run('fork', { session: 'quirky-1' })
-    expect(fake.calls.filter((call) => call.method === 'quirky.session/resume')).toEqual([
-      { method: 'quirky.session/resume', params: { session: 'quirky-1' } },
+    expect(fake.calls.filter((call) => call.method === 'quirky.session/resume' || call.method === 'quirky.terminal/resumeSession')).toEqual([
+      { method: 'quirky.terminal/resumeSession', params: { session: 'quirky-1' } },
       { method: 'quirky.session/resume', params: { session: 'quirky-1', fork: true } }
     ])
     expect(fake.commands).toEqual([
@@ -706,10 +709,8 @@ describe('Session Info routed actions and views', () => {
     }
     const fake = makeContext({
       'quirky.session-info/history': () => [record],
-      'quirky.session/resume': ({ fork }) => {
-        if (!fork) throw new Error('cannot resume this session')
-        return { id: 'q1-fork', worktreeId: 'wt' }
-      },
+      'quirky.terminal/resumeSession': () => { throw new Error('cannot resume this session') },
+      'quirky.session/resume': () => ({ id: 'q1-fork', worktreeId: 'wt' }),
       'quirky.session-info/resumeCommand': () => ({ command: 'claude --resume provider-1' })
     })
     activate(fake.context)

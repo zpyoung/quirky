@@ -1286,14 +1286,34 @@ describe('screens: ended (SC-17)', () => {
     expect(fake.callsTo('quirky.structured/dequeue')[0]!.params).toEqual({ session: 's1', id: 'q1' })
   })
 
-  test('Resume calls resume and opens the returned session; New chat starts a chat with the same agent', async () => {
+  test('Resume swaps the resumed session into the same tab, carrying the draft, and opens nothing new', async () => {
+    const draft = { ...EMPTY_DRAFT, text: 'half written' }
     await mount(
-      { 'quirky.structured/resume': () => session({ id: 'back', kind: 'structured', agent: 'claude' }), 'quirky.structured/create': () => session({ id: 'fresh', kind: 'structured', agent: 'claude' }) },
+      {
+        'quirky.session/draft': () => draft,
+        'quirky.terminal/resumeSession': () => ({ session: session({ id: 'back', kind: 'structured', agent: 'claude' }), pane: 'pane-1', workspace: {} })
+      },
+      { status: 'exited' }
+    )
+    const opened = fake.opened.length
+    await click(buttonNamed('Resume'))
+    await settle()
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 's1', draft })
+    expect(fake.callsTo('quirky.structured/resume')).toEqual([])
+    expect(fake.opened.length).toBe(opened)
+  })
+
+  test('Resume of a chat no tab shows opens the returned session; New chat starts a chat with the same agent', async () => {
+    await mount(
+      {
+        'quirky.terminal/resumeSession': () => ({ session: session({ id: 'back', kind: 'structured', agent: 'claude' }), pane: null, workspace: null }),
+        'quirky.structured/create': () => session({ id: 'fresh', kind: 'structured', agent: 'claude' })
+      },
       { status: 'exited' }
     )
     await click(buttonNamed('Resume'))
     await settle()
-    expect(fake.callsTo('quirky.structured/resume')[0]!.params).toEqual({ session: 's1' })
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 's1' })
     expect(fake.opened.at(-1)!.input).toEqual({ worktree: 'wt-main', session: 'back' })
     await click(buttonNamed('New chat'))
     await settle()

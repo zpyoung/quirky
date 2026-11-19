@@ -3,7 +3,7 @@ import type { AgentCapabilities, PermissionModeName, QueuedMessage, Session, Str
 import { Button, ControlIcon, IconButton, InlineError, ScopeChip } from '@quirky/ui'
 import { WORKTREE_VIEW_ID } from '../model'
 import type { QuirkyCommandName } from './commands'
-import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
+import { basename, base64Of, composeMessage, isEmptyDraft, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
 import { absolutePathsOf, AgentChip, defaultVisualLevel, NO_PICKS, reasonOf, registerChatHandle, useAgentOptions, useTurnSettings, useVisualLabels, VisualDial, type Picks } from './controls'
 import { createChat } from './createChat'
 import { chatFrame, DEFAULT_CHAT_LAYOUT, type ChatLayout } from './chatLayout'
@@ -14,6 +14,7 @@ import { ImageChip } from './ImageChip'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
 import { useFileSearch } from './Mentions'
 import { QueuedList, useQueue, type SteeredMessage } from './QueuedList'
+import { resumeInPlace } from './resumeInPlace'
 import { ModeBadges, SettingsChip, type SettingsSection } from './SettingsChip'
 import { fileSuggestions, slashSuggestions, SuggestionList, useAgentCommands, type Suggestion } from './SuggestionList'
 
@@ -347,9 +348,8 @@ export function Composer({
 
   const resume = async () => {
     try {
-      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session
-      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks })
-      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })
+      const carried = { text, images: images.map((image) => image.path), pastes, picks: draftPicks }
+      await resumeInPlace(context, session, isEmptyDraft(carried) ? undefined : carried)
     } catch (error) {
       fail(`Could not resume: ${messageOf(error)}`)
     }

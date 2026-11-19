@@ -66,6 +66,30 @@
         }
       },
       {
+        "id": "resume",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        }
+      },
+      {
+        "id": "setStatus",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "status": { "type": "string" } },
+          "required": ["session", "status"]
+        }
+      },
+      {
+        "id": "saveDraft",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "draft": { "type": "object", "additionalProperties": true } },
+          "required": ["session", "draft"]
+        }
+      },
+      {
         "id": "close",
         "params": {
           "type": "object",
