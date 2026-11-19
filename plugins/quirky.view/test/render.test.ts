@@ -1486,6 +1486,24 @@ describe('pointing', () => {
     expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'region:50-25', label: 'region near 50%,25%' }])
   })
 
+  test('a click on an image rings the clicked region and moves the ring on the next click', async () => {
+    const spec: ViewSpec = { title: 'Shot', root: { type: 'image', props: { path: 'a.png', alt: 'A' } } }
+    const fake = start([record(spec)], { 'quirky.session/markdownAssets': () => ({ images: { 'a.png': 'http://localhost/a.png' } }) })
+    fake.commands[POINT] = () => {}
+    const { element } = await mountSurface(fake)
+    const image = element.querySelector('img')!
+    image.getBoundingClientRect = () => ({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) })
+    expect(element.querySelector('[data-point-marker]')).toBeNull()
+    await act(async () => void image.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 110, clientY: 45 })))
+    await settle()
+    const rings = element.querySelectorAll('[data-point-marker]')
+    expect(rings).toHaveLength(1)
+    expect(rings[0]!.parentElement).toBe(image.parentElement)
+    await act(async () => void image.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 30, clientY: 70 })))
+    await settle()
+    expect(element.querySelectorAll('[data-point-marker]')).toHaveLength(1)
+  })
+
   test('a key press on a focused pointable element points like a click', async () => {
     const { fake, target } = await pointAtFixture('[data-point-key="file:0"]')
     expect(pointCalls(fake)).toHaveLength(1)
@@ -1632,6 +1650,28 @@ describe('a version that did not render', () => {
     expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(0)
   })
 
+  test('two versions in a row that fail to render leave the card on the last version that rendered', async () => {
+    const missing = (title: string): ViewSpec => ({ title, root: { type: 'image', props: { path: `docs/${title}.png`, alt: 'Nothing' } } })
+    const good: ViewSpec = { title: 'Auth flow', root: { type: 'markdown', props: { text: 'the good one' } } }
+    const { fake, state } = startVersions([good, missing('second'), missing('third')], {
+      'quirky.session/markdownAssets': (params) => ({ images: Object.fromEntries((params.images as string[]).map((path) => [path, null])) }),
+      'quirky.view/render-failed': (params) => {
+        state.refused = { attempt: 'render', version: params.version as number, errors: [String(params.error)], source: '', at: 1 }
+        return { ok: true }
+      }
+    })
+    const { element } = await mountSurface(fake)
+    await settle()
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    await settle()
+    expect(text(element)).toContain('v1 of 3')
+    expect(text(element)).toContain('the good one')
+    expect(badge(element)!.textContent).toContain("v3 didn't render")
+    expect(text(element)).not.toContain('is not an image')
+    expect(fake.callsTo('quirky.view/render-failed').map((call) => call.params.version)).toEqual([3])
+  })
+
   test('a frame that navigates is put back and reported once', async () => {
     const spec: ViewSpec = { title: 'Proto', root: { type: 'html', props: { html: '<a href="https://example.test">out</a>', interactive: true } } }
     const { fake } = startVersions([spec])
@@ -1664,26 +1704,48 @@ describe('a version that did not render', () => {
 describe('the sandboxed html frame', () => {
   const proto = (interactive: boolean): ViewSpec => ({ title: 'Settings', root: { type: 'html', id: 'proto', props: { html: '<button data-point="save" data-point-label="Save">Save</button><script>window.x = 1</script>', interactive, height: 300 } } })
 
-  test('an interactive frame allows scripts only, never the same origin, and starts with the CSP meta', async () => {
+  const innerOf = (frame: Element) => {
+    const wrapper = frame.getAttribute('srcdoc')!
+    const holder = document.createElement('div')
+    holder.innerHTML = wrapper
+    const inner = holder.querySelector('iframe')!
+    return { wrapper, inner, innerDoc: inner.getAttribute('srcdoc')! }
+  }
+
+  test('an interactive frame allows scripts only, never the same origin, and starts with the wrapper CSP meta', async () => {
     const fake = start([record(proto(true))])
     const { element } = await mountSurface(fake)
     const frame = element.querySelector('iframe')!
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(frame.style.height).toBe('300px')
-    const srcdoc = frame.getAttribute('srcdoc')!
-    expect(srcdoc.startsWith('<meta http-equiv="Content-Security-Policy" content="')).toBe(true)
-    expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('<button'))
-    expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('<script>'))
-    expect(srcdoc).toContain("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; base-uri 'none'")
-    expect(srcdoc).toContain('quirky-point')
+    const { wrapper } = innerOf(frame)
+    expect(wrapper.startsWith('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'')).toBe(true)
+    expect(wrapper.indexOf('Content-Security-Policy')).toBeLessThan(wrapper.indexOf('<script>'))
+    expect(wrapper.indexOf('<script>')).toBeLessThan(wrapper.indexOf('<iframe'))
     for (const grant of ['allow-same-origin', 'allow-forms', 'allow-popups', 'allow-top-navigation']) expect(frame.getAttribute('sandbox')).not.toContain(grant)
   })
 
-  test('a static html node gets an empty sandbox and no sandbox tag', async () => {
+  test('the agent frame is nested in the wrapper with the page policy first and the same grants', async () => {
+    const fake = start([record(proto(true))])
+    const { element } = await mountSurface(fake)
+    const { inner, innerDoc } = innerOf(element.querySelector('iframe')!)
+    expect(inner.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(innerDoc.startsWith('<meta http-equiv="Content-Security-Policy" content="')).toBe(true)
+    expect(innerDoc.indexOf('Content-Security-Policy')).toBeLessThan(innerDoc.indexOf('<button'))
+    expect(innerDoc.indexOf('Content-Security-Policy')).toBeLessThan(innerDoc.indexOf('<script>'))
+    expect(innerDoc).toContain("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; base-uri 'none'")
+    expect(innerDoc).toContain('quirky-point')
+    expect(innerDoc.endsWith('</script>')).toBe(true)
+    expect(innerDoc).toContain('<button data-point="save"')
+    for (const grant of ['allow-same-origin', 'allow-forms', 'allow-popups', 'allow-top-navigation']) expect(inner.getAttribute('sandbox')).not.toContain(grant)
+  })
+
+  test('a static html node runs no script in the agent frame and has no sandbox tag', async () => {
     const fake = start([record(proto(false))])
     const { element } = await mountSurface(fake)
-    expect(element.querySelector('iframe')!.getAttribute('sandbox')).toBe('')
+    expect(element.querySelector('iframe')!.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(innerOf(element.querySelector('iframe')!).inner.getAttribute('sandbox')).toBe('')
     expect(text(element)).not.toContain('sandboxed · no network')
   })
 
@@ -1715,6 +1777,43 @@ describe('the sandboxed html frame', () => {
       { session: 's1', viewId: 'view_1', version: 1, element: 'pt:save', label: 'Save' },
       { session: 's1', viewId: 'view_1', version: 1, element: 'pt:not-a-key', label: 'Not A Key!' }
     ])
+  })
+
+  test('the wrapper relays a point from the agent frame to the card, and nothing from anywhere else', async () => {
+    const { FRAME_RELAY } = await import('../src/render/HtmlFrame')
+    const agent = { name: 'agent' }
+    const listeners: Array<(event: unknown) => void> = []
+    const posted: unknown[] = []
+    new Function('window', 'document', 'parent', FRAME_RELAY)(
+      { addEventListener: (_type: string, listener: (event: unknown) => void) => void listeners.push(listener) },
+      { getElementById: (id: string) => (id === 'agent' ? { contentWindow: agent } : null) },
+      { postMessage: (data: unknown, target: string) => void posted.push([data, target]) }
+    )
+    const deliver = (source: unknown, data: unknown) => listeners[0]!({ source, data })
+    deliver({ name: 'stranger' }, { type: 'quirky-point', key: 'save', label: 'Save' })
+    deliver(null, { type: 'quirky-point', key: 'save', label: 'Save' })
+    deliver(agent, { type: 'something-else', key: 'save' })
+    deliver(agent, 'quirky-point')
+    deliver(agent, null)
+    expect(posted).toEqual([])
+    deliver(agent, { type: 'quirky-point', key: 'save', label: 'Save', extra: 'dropped' })
+    expect(posted).toEqual([[{ type: 'quirky-point', key: 'save', label: 'Save' }, '*']])
+  })
+
+  test('a point relayed through the wrapper reaches chat-point, and one that skips the wrapper does not', async () => {
+    const fake = start([record(proto(true))])
+    fake.commands[POINT] = () => {}
+    const { element } = await mountSurface(fake)
+    const outer = element.querySelector('iframe')!
+    const innerWindow = { name: 'inner agent frame' }
+    const send = async (source: unknown, data: unknown) => {
+      await act(async () => void window.dispatchEvent(new MessageEvent('message', { data, source: source as never })))
+      await settle()
+    }
+    await send(innerWindow, { type: 'quirky-point', key: 'save', label: 'Save' })
+    expect(pointCalls(fake)).toEqual([])
+    await send(outer.contentWindow, { type: 'quirky-point', key: 'save', label: 'Save' })
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'pt:save', label: 'Save' }])
   })
 
   test('the frame document puts the policy first and the agent html last', async () => {

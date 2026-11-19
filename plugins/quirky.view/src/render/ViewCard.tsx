@@ -165,7 +165,8 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
   const body = useRef<HTMLDivElement>(null)
   const popOutAvailable = usePopOutAvailable(context)
   const thumbnail = surface === 'thumbnail'
-  usePointStyles(body, selected)
+  const clickedRegion = useRef<Element | null>(null)
+  usePointStyles(body, selected, clickedRegion)
 
   useEffect(() => {
     setSelected(null)
@@ -276,6 +277,7 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
   }
 
   const pointFromClick = (event: MouseEvent) => {
+    clickedRegion.current = event.target instanceof Element ? event.target.closest('[data-point-region]') : null
     const found = pointAt(event.target, event)
     if (found !== null) control({ action: 'point', element: found.element, label: found.label })
   }
@@ -399,6 +401,7 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
   const [previous, setPrevious] = useState<ViewSpec | null>(null)
   const [pinned, setPinned] = useState<number | null>(requested ?? null)
   const pinnedRef = useRef<number | null>(requested ?? null)
+  const failedRef = useRef(new Set<number>())
 
   const readVersion = useCallback(
     async (version?: number): Promise<ViewRecord | null> => {
@@ -422,9 +425,15 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
         const { shown, latest } = versionsOf(next)
         const failedHere = pinnedRef.current === null && next.refused?.attempt === 'render' && next.refused.version === shown && shown > 1
         if (failedHere) {
-          const good = await readVersion(shown - 1)
-          if (!alive.current || request !== requestId.current) return
-          next = good === null ? next : { ...good, version: shown - 1, latestVersion: latest, refused: next.refused }
+          let good: ViewRecord | null = null
+          let goodVersion = shown
+          for (let candidate = shown - 1; candidate >= 1 && good === null; candidate--) {
+            if (failedRef.current.has(candidate)) continue
+            good = await readVersion(candidate)
+            goodVersion = candidate
+            if (!alive.current || request !== requestId.current) return
+          }
+          next = good === null ? next : { ...good, version: goodVersion, latestVersion: latest, refused: next.refused }
         } else if (shown === latest && shown > 1) {
           before = (await readVersion(shown - 1))?.spec ?? null
           if (!alive.current || request !== requestId.current) return
@@ -473,19 +482,26 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
       const current = recordRef.current
       if (current === null) return
       const { shown, latest } = versionsOf(current)
+      const known = failedRef.current.has(shown)
+      failedRef.current.add(shown)
+      if (shown !== latest) {
+        if (!known && pinnedRef.current === null) void load().catch(() => {})
+        return
+      }
       const key = `${viewId}:${shown}`
-      if (shown !== latest || reported.has(key)) return
+      if (reported.has(key)) return
       reported.add(key)
       context.call('quirky.view/render-failed', { viewId, version: shown, error }).catch((reason: unknown) => {
         reported.delete(key)
         context.log(`could not report a version that did not render: ${errorText(reason)}`)
       })
     },
-    [context, viewId]
+    [context, viewId, load]
   )
 
   useEffect(() => {
     alive.current = true
+    failedRef.current = new Set()
     recordRef.current = null
     pinnedRef.current = requested ?? null
     setPinned(requested ?? null)

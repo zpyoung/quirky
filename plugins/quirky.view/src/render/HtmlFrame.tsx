@@ -7,8 +7,8 @@ const FRAME_HEIGHT = { min: 120, max: 1200, fallback: 240 }
 
 /**
  * What an agent's html may load: its own inline styles and scripts and `data:` or `blob:` media,
- * and nothing from the network. `navigate-to` is left out because WebKit ignores it; the load
- * check in HtmlFrame is what stops navigation.
+ * and nothing from the network. `navigate-to` is left out because WebKit ignores it; the wrapper
+ * frame's `frame-src 'none'` is what stops the agent frame from navigating.
  */
 export const FRAME_CSP = [
   "default-src 'none'",
@@ -42,6 +42,32 @@ export const FRAME_BRIDGE = `(function () {
   }, true);
 })();`
 
+/**
+ * The wrapper's policy. A frame cannot navigate itself away from a parent whose `frame-src` is
+ * `'none'`, and the agent frame inherits this policy, so the media sources repeat the ones in
+ * FRAME_CSP.
+ */
+export const WRAPPER_CSP = [
+  "default-src 'none'",
+  "frame-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  'img-src data: blob:',
+  'font-src data:',
+  'media-src data: blob:'
+].join('; ')
+
+/** Runs in the wrapper: passes a `quirky-point` message from the agent frame, and only that, on to the card. */
+export const FRAME_RELAY = `(function () {
+  window.addEventListener('message', function (event) {
+    var inner = document.getElementById('agent');
+    var data = event.data;
+    if (!inner || event.source !== inner.contentWindow) return;
+    if (typeof data !== 'object' || data === null || data.type !== 'quirky-point') return;
+    parent.postMessage({ type: 'quirky-point', key: data.key, label: data.label }, '*');
+  });
+})();`
+
 const THEME_TOKENS = ['--ui-surface', '--ui-text', '--ui-muted', '--ui-accent', '--ui-border', '--ui-selected', '--ui-working', '--ui-needs-you', '--ui-failing', '--ui-font-body', '--ui-font-label', '--ui-font-mono']
 const SAFE_VALUE = /^[#\w\s(),.%/-]+$/
 
@@ -61,6 +87,17 @@ export function frameDocument(html: string, theme = themeStyle()): string {
   return `<meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}"><style>${theme}</style><script>${FRAME_BRIDGE}</script>${html}`
 }
 
+const escapeAttribute = (text: string): string => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+
+/**
+ * The document the card's frame holds: the policy first, the relay, and the agent's frame filling
+ * the page. The agent frame is nested so that its navigation is refused before any request is made.
+ */
+export function wrapperDocument(inner: string, interactive: boolean): string {
+  const sandbox = interactive ? 'allow-scripts' : ''
+  return `<meta http-equiv="Content-Security-Policy" content="${WRAPPER_CSP}"><style>html,body{margin:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}</style><script>${FRAME_RELAY}</script><iframe id="agent" sandbox="${sandbox}" srcdoc="${escapeAttribute(inner)}"></iframe>`
+}
+
 /** The point a `quirky-point` message names, or null when it is not one or its key cannot be pointed at. */
 export function pointFromMessage(data: unknown): { element: string; label: string } | null {
   if (typeof data !== 'object' || data === null) return null
@@ -73,7 +110,8 @@ export function pointFromMessage(data: unknown): { element: string; label: strin
 /**
  * Agent html in a frame with an opaque origin, no network and no way to reach Quirky: scripts run
  * only when the node is interactive, and a message counts only when it comes from this frame.
- * A frame that navigates is put back as it was and reported.
+ * The agent's frame sits inside a Quirky-owned wrapper frame that forbids it to navigate; a card
+ * frame that navigates anyway is put back as it was and reported.
  */
 export function HtmlFrame({ props }: { props: Props }) {
   const interactive = props.interactive === true
@@ -83,7 +121,7 @@ export function HtmlFrame({ props }: { props: Props }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const loads = useRef(0)
   const [epoch, setEpoch] = useState(0)
-  const srcdoc = useMemo(() => frameDocument(html), [html])
+  const srcdoc = useMemo(() => wrapperDocument(frameDocument(html), interactive), [html, interactive])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -114,7 +152,7 @@ export function HtmlFrame({ props }: { props: Props }) {
       ref={frame}
       title={`Visual ${viewId}`}
       data-view-node="html"
-      sandbox={interactive ? 'allow-scripts' : ''}
+      sandbox="allow-scripts"
       referrerPolicy="no-referrer"
       srcDoc={srcdoc}
       onLoad={loaded}

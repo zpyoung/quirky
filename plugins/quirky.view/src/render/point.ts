@@ -8,6 +8,8 @@ const POINT_KEY = 'data-point-key'
 const POINT_LABEL = 'data-point-label'
 const POINT_REGION = 'data-point-region'
 const CONTROLS = 'button,a,input,textarea,select,summary'
+const REGION_KEY = /^region:(\d{1,3})-(\d{1,3})$/
+const MARKER = 'data-point-marker'
 const GLOW = 'drop-shadow(0 0 var(--ui-space-2) var(--ui-accent))'
 
 export type Point = { element: string; label: string }
@@ -51,8 +53,48 @@ export function pointAt(target: EventTarget | null, at?: { clientX: number; clie
   return { element: `region:${x}-${y}`, label: `region near ${x}%,${y}%` }
 }
 
-/** Outlines the pointed-at element inside `host` and gives every pointable element a pointer cursor, also as the content changes. */
-export function usePointStyles(host: RefObject<HTMLElement | null>, selected: string | null): void {
+function newMarker(): HTMLElement {
+  const marker = document.createElement('span')
+  marker.setAttribute(MARKER, '')
+  marker.setAttribute('aria-hidden', 'true')
+  Object.assign(marker.style, {
+    position: 'absolute',
+    width: 'var(--ui-space-16)',
+    height: 'var(--ui-space-16)',
+    transform: 'translate(-50%, -50%)',
+    borderRadius: '50%',
+    borderWidth: 'var(--ui-focus-width)',
+    borderStyle: 'solid',
+    borderColor: 'var(--ui-accent)',
+    pointerEvents: 'none'
+  })
+  return marker
+}
+
+/** Puts the ring at `at` percent of `image`, inside the image's parent so it moves with the picture. */
+function placeMarker(host: HTMLElement, image: HTMLElement, at: RegExpExecArray): void {
+  host.style.position = getComputedStyle(host).position === 'static' ? 'relative' : host.style.position
+  const marker = host.querySelector<HTMLElement>(`:scope > [${MARKER}]`) ?? host.appendChild(newMarker())
+  marker.style.left = `${image.offsetLeft + (Number(at[1]) / 100) * image.offsetWidth}px`
+  marker.style.top = `${image.offsetTop + (Number(at[2]) / 100) * image.offsetHeight}px`
+}
+
+/** Rings the selected image region: the one last clicked, else the first image of the card. */
+function markRegion(root: HTMLElement, region: Element | null, selected: string | null): void {
+  const at = selected === null ? null : REGION_KEY.exec(selected)
+  const image = at === null ? null : region ?? root.querySelector(`[${POINT_REGION}]`)
+  const host = image instanceof HTMLElement ? image.parentElement : null
+  const stale = [...root.querySelectorAll(`[${MARKER}]`)].filter((marker) => marker.parentElement !== host)
+  stale.forEach((marker) => marker.remove())
+  void (at !== null && image instanceof HTMLElement && host !== null && placeMarker(host, image, at))
+}
+
+/**
+ * Outlines the pointed-at element inside `host`, rings the clicked spot of an image region, and
+ * gives every pointable element a pointer cursor, also as the content changes. `region` holds
+ * the image the last click landed on.
+ */
+export function usePointStyles(host: RefObject<HTMLElement | null>, selected: string | null, region: RefObject<Element | null>): void {
   useEffect(() => {
     const root = host.current
     if (root === null) return
@@ -68,10 +110,14 @@ export function usePointStyles(host: RefObject<HTMLElement | null>, selected: st
         }
         if (element.closest('[aria-hidden="true"],[role="img"]') === null) element.tabIndex = 0
       }
+      markRegion(root, region.current !== null && root.contains(region.current) ? region.current : null, selected)
     }
     apply()
     const observer = new MutationObserver(apply)
     observer.observe(root, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [host, selected])
+    return () => {
+      observer.disconnect()
+      root.querySelectorAll(`[${MARKER}]`).forEach((marker) => marker.remove())
+    }
+  }, [host, selected, region])
 }
