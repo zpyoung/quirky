@@ -115,6 +115,22 @@ describe('plan blocks', () => {
     const plans = (turns: typeof earlier) => turns!.flatMap((turn) => turn.blocks).flatMap((block) => (block.kind === 'plan' ? [[block.item.version, block.item.status]] : []))
     expect(plans(earlier)).toEqual([[2, 'not-answered']])
     expect(plans(current)).toEqual([[3, 'waiting']])
+    expect(current!.map((turn) => turn.user?.text ?? null)).toEqual(['again'])
+  })
+
+  // the daemon journals the newest plan again at the start of a resumed chat; only the plan panel needs it
+  test('a resumed chat whose earlier chat is not loaded opens no turn for the carried-over plan', () => {
+    const turns = groupTurns([planMsg(1, 2, 'not-answered', { reason: 'restarted' }), modeMsg(2, 'default'), user(3, 'Status?'), prose(4, 'fine')])
+    expect(turns.map((turn) => turn.user?.text ?? null)).toEqual(['Status?'])
+    expect(turns[0]!.blocks.map((block) => block.kind)).toEqual(['prose'])
+  })
+
+  test('a plan before any user message still shows when agent output follows it in the same turn', () => {
+    const turns = groupTurns([planMsg(1, 1, 'approved'), prose(2, 'building it'), user(3, 'next')])
+    expect(turns.map((turn) => [turn.key, turn.user?.text ?? null, turn.blocks.map((block) => block.kind)])).toEqual([
+      ['turn-1', null, ['plan', 'prose']],
+      ['turn-3', 'next', []]
+    ])
   })
 
   test('mode items never open a turn or render', () => {
@@ -165,6 +181,21 @@ describe('turn grouping', () => {
     expect(turns.map((turn) => turn.blocks.map((block) => block.kind))).toEqual([['prose'], ['prose']])
     expect(turns[0]!.end).toBeNull()
     expect(turns[1]!.end).toEqual({ state: 'done' })
+  })
+
+  // claude journals a zero-turn result on resume, e.g. while reporting a background task the old session left
+  test('a turn end before any user item opens no empty turn', () => {
+    const [earlier, current] = groupChatTurns([
+      [user(1, 'first'), prose(2, 'one'), end(3, 'done')],
+      [modeMsg(1, 'bypassPermissions'), end(2, 'done', 100), user(3, 'Status?'), prose(4, 'fine')]
+    ])
+    expect(earlier!.map((turn) => turn.end)).toEqual([{ state: 'done' }])
+    expect(current!.map((turn) => [turn.user?.text ?? null, turn.end])).toEqual([['Status?', null]])
+  })
+
+  test('a turn end of a stopped turn before any user item in a resumed chat opens no turn', () => {
+    const turns = groupTurns([end(1, 'stopped'), user(2, 'go on')])
+    expect(turns.map((turn) => turn.user?.text ?? null)).toEqual(['go on'])
   })
 
   test('messages before any user item share a turn with no user message', () => {
@@ -344,6 +375,23 @@ function pageOf(all: StructuredMessage[], params: Record<string, any>): Structur
   const inRange = all.filter((message) => message.seq > (params.afterSeq ?? 0) && (params.beforeSeq === undefined || message.seq < params.beforeSeq))
   if (params.limit === undefined) return inRange
   return params.tail ? inRange.slice(-params.limit) : inRange.slice(0, params.limit)
+}
+
+/** happy-dom has no layout, so every element measures wider than its box while `mount` runs; the clipped state sticks after. */
+async function withClippedLines(mount: () => Promise<void>) {
+  const proto = HTMLElement.prototype
+  const own = { scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(proto, 'clientWidth') }
+  Object.defineProperty(proto, 'scrollWidth', { configurable: true, get: () => 500 })
+  Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => 100 })
+  try {
+    await mount()
+  } finally {
+    for (const key of ['scrollWidth', 'clientWidth'] as const) {
+      const descriptor = own[key]
+      if (descriptor) Object.defineProperty(proto, key, descriptor)
+      else delete (proto as unknown as Record<string, unknown>)[key]
+    }
+  }
 }
 
 async function mountChat({ messages = [], capabilities = CLAUDE, session: over = {}, handlers = {} }: Mount = {}) {
@@ -656,6 +704,22 @@ describe('the cards', () => {
     expect(byLabel('Tests: pytest')!.textContent).toContain('Running tests')
   })
 
+  test('a test card keeps a long command on one clipped line and expands it', async () => {
+    const command = `bun test ${'test/long-path/'.repeat(30)}a.test.ts`
+    await withClippedLines(async () => {
+      await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'tests', callId: 't', command, state: 'running' })] })
+    })
+    const card = byLabel(`Tests: ${command}`)!
+    const text = card.querySelector<HTMLElement>('[data-command-text]')!
+    expect(text.style.whiteSpace).toBe('nowrap')
+    expect(text.style.textOverflow).toBe('ellipsis')
+    expect(card.querySelector<HTMLElement>('div')!.style.flexWrap).toBe('')
+    const toggle = card.querySelector('button')!
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(text.style.whiteSpace).toBe('pre-wrap')
+  })
+
   test('a steps card lists each step with its state and how many are done', async () => {
     await mountChat({
       messages: [
@@ -725,6 +789,58 @@ describe('the cards', () => {
       group.dispatchEvent(new Event('toggle'))
     })
     expect(group.open).toBe(true)
+  })
+
+  test('an activity row keeps the dot and the command on one clipped line, with the full command as its hover title', async () => {
+    const command = `rg -n ${'x'.repeat(300)}`
+    await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Bash', command, 'running')] })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    const text = row.querySelector<HTMLElement>('[data-command-text]')!
+    expect(text.getAttribute('title')).toBe(command)
+    expect(text.style.whiteSpace).toBe('nowrap')
+    expect(text.style.overflow).toBe('hidden')
+    expect(text.style.textOverflow).toBe('ellipsis')
+    const line = text.closest('button')?.parentElement ?? text.parentElement!
+    expect(line.style.display).toBe('flex')
+    expect(line.style.flexWrap).toBe('')
+    expect(line.querySelector('[aria-label="Running"]')).not.toBeNull()
+  })
+
+  test('a short activity row with no output has nothing to expand', async () => {
+    await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Read', 'Read src/a.ts', 'running')] })
+    expect(byLabel('Tool activity')!.querySelector('li button')).toBeNull()
+  })
+
+  test('a clipped activity row expands in place to the whole command and collapses again', async () => {
+    const command = `rg -n ${'x'.repeat(300)}`
+    await withClippedLines(async () => {
+      await mountChat({ messages: [user(1, 'go'), act1(2, 'a', 'Bash', command, 'running')] })
+    })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    const toggle = row.querySelector('button')!
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => toggle.click())
+    const text = row.querySelector<HTMLElement>('[data-command-text]')!
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(text.textContent).toBe(command)
+    expect(text.style.whiteSpace).toBe('pre-wrap')
+    expect(text.hasAttribute('title')).toBe(false)
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(text.style.whiteSpace).toBe('nowrap')
+  })
+
+  test('an activity row with output opens to the full command and the output together', async () => {
+    await mountChat({
+      messages: [user(1, 'go'), msg(2, { kind: 'activity', callId: 'a', tool: 'Bash', summary: 'git status', state: 'done', detail: 'nothing to commit' })]
+    })
+    const row = byLabel('Tool activity')!.querySelector('li')!
+    expect(row.querySelector('pre')).toBeNull()
+    const toggle = row.querySelector('button')!
+    expect(toggle.textContent).toBe('git status')
+    await act(async () => toggle.click())
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(row.querySelector('pre')!.textContent).toBe('nothing to commit')
   })
 
   test('an activity group with a running call starts open', async () => {

@@ -805,14 +805,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
-        "quote": "{call.item.detail && ("
-      },
-      "anchor": "call.item.detail &&",
-      "reason": "Shows a tool call's Details disclosure only when the call reported detail."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
         "quote": "<span style={note}>{readiness.ready ? `${readiness.model} · ready` : readiness.reason}</span>"
       },
@@ -1642,6 +1634,38 @@
       },
       "anchor": "if (this.pill.kind === 'command')",
       "reason": "Chooses a chip's text by its kind; presentation of one chip, not a state of the view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
+        "quote": "more={call.item.detail ? <pre style={detail}>{call.item.detail}</pre> : undefined}"
+      },
+      "anchor": "call.item.detail ?",
+      "reason": "Passes a tool call's output to its row only when the call reported output."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{lead !== undefined && <span style={lineBox}>{lead}</span>}"
+      },
+      "anchor": "lead !== undefined &&",
+      "reason": "Shows the leading status dot only when the caller passes one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{expandable ? ("
+      },
+      "anchor": "expandable ?",
+      "reason": "Makes a command line a disclosure button only when it is cut off or has output to show."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{open && more}"
+      },
+      "anchor": "open &&",
+      "reason": "Shows a command's output only while its line is expanded."
     }
   ],
   "actions": [
@@ -1866,33 +1890,6 @@
       },
       "notAction": "subscription",
       "reason": "Terminal stream lag is a subscription callback, not a user action."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
-        "quote": "onAction: () => store.retry()"
-      },
-      "route": {
-        "target": "quirky.session/list",
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/model.ts",
-          "quote": "this.context.call('quirky.session/list', { worktree: worktree.id })"
-        },
-        "via": [
-          {
-            "file": "plugins/quirky.session/src/window/model.ts",
-            "quote": "retry(): void {\n    if (this.stopped || this.snapshot.status !== 'failed') return\n    this.queued = []\n    this.commit({ status: 'loading', failure: null, worktree: null, sessions: [] })\n    void this.load()\n  }"
-          },
-          {
-            "file": "plugins/quirky.session/src/window/model.ts",
-            "quote": "private async load(): Promise<void> {\n    if (this.loading) {\n      this.reloadAfter = true\n      return\n    }\n    this.loading = true\n    try {\n      do {\n        this.reloadAfter = false\n        await this.loadOnce()\n      } while (this.reloadAfter && !this.stopped)\n    } finally {\n      this.loading = false\n    }\n  }"
-          },
-          {
-            "file": "plugins/quirky.session/src/window/model.ts",
-            "quote": "private async loadOnce(): Promise<void> {\n    let worktree: Worktree\n    let sessions: Session[]\n    try {\n      worktree = (await this.context.call('quirky.worktree/resolve', { selector: this.selector })) as Worktree\n      sessions = (await this.context.call('quirky.session/list', { worktree: worktree.id })) as Session[]\n    } catch (error) {\n      if (this.stopped) return\n      const gone = (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound\n      this.queued = []\n      if (gone) this.commit({ status: 'missing', failure: null, worktree: null, sessions: [] })\n      else if (this.snapshot.status === 'ready') this.context.toast('Could not load sessions', messageOf(error))\n      else this.commit({ status: 'failed', failure: messageOf(error), worktree: null, sessions: [] })\n      return\n    }\n    if (this.stopped) return\n    const byId = new Map(sessions.map((session) => [session.id, session]))\n    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id)\n    const loadedSessions = [...byId.values()]\n    pruneShowAllEvents(worktree.id, loadedSessions)\n    this.commit({\n      status: 'ready',\n      failure: null,\n      worktree: { id: worktree.id, name: worktree.name, path: worktree.path },\n      sessions: loadedSessions\n    })\n  }"
-          }
-        ]
-      }
     },
     {
       "site": {
@@ -3512,6 +3509,42 @@
       "anchor": "onClose",
       "transient": "draft",
       "reason": "Closes the visual level list; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/WorktreeView.tsx",
+        "quote": "onAction: () => store.retry()"
+      },
+      "route": {
+        "target": "quirky.session/list",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/model.ts",
+          "quote": "this.context.call('quirky.session/list', { worktree: worktree.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "retry(): void {\n    if (this.stopped || this.snapshot.status !== 'failed') return\n    this.queued = []\n    this.commit({ status: 'loading', failure: null, worktree: null, sessions: [] })\n    void this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async load(): Promise<void> {\n    if (this.loading) {\n      this.reloadAfter = true\n      return\n    }\n    this.loading = true\n    try {\n      do {\n        this.reloadAfter = false\n        await this.loadOnce()\n      } while (this.reloadAfter && !this.stopped)\n    } finally {\n      this.loading = false\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/model.ts",
+            "quote": "private async loadOnce(): Promise<void> {\n    let worktree: Worktree\n    let sessions: Session[]\n    try {\n      worktree = (await this.context.call('quirky.worktree/resolve', { selector: this.selector })) as Worktree\n      sessions = (await this.context.call('quirky.session/list', { worktree: worktree.id })) as Session[]\n    } catch (error) {\n      if (this.stopped) return\n      const gone = (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound\n      this.queued = []\n      if (gone) this.commit({ status: 'missing', failure: null, worktree: null, sessions: [] })\n      else if (this.snapshot.status === 'ready') this.context.toast('Could not load sessions', messageOf(error))\n      else this.commit({ status: 'failed', failure: messageOf(error), worktree: null, sessions: [] })\n      return\n    }\n    if (this.stopped) return\n    const byId = new Map(sessions.map((session) => [session.id, session]))\n    for (const event of this.queued.splice(0)) this.applyToMap(byId, event, worktree.id, true)\n    const loadedSessions = [...byId.values()]\n    pruneShowAllEvents(worktree.id, loadedSessions)\n    this.commit({\n      status: 'ready',\n      failure: null,\n      worktree: { id: worktree.id, name: worktree.name, path: worktree.path },\n      sessions: loadedSessions\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "<button type=\"button\" style={toggleButton} aria-expanded={open} onClick={onToggle}>"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the click to the onToggle handler, which only expands or collapses one command line.",
+      "notAction": "forwarded"
     }
   ]
 }

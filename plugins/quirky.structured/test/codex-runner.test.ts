@@ -397,6 +397,33 @@ describe('Codex app-server runner', () => {
       }
     })
   })
+  test('a turn Codex starts by itself shows working, can be interrupted and ends as stopped', async () => {
+    const marker = "  if (text.includes('[failed]')) return finish(threadId, turn, 'failed')"
+    // after the first turn completes the server opens a held turn with no turn/start from Quirky
+    const selfStart = `  if (text.includes('[self-start]')) {
+    finish(threadId, turn)
+    const own = { id: 'turn-own', status: 'inProgress', items: [] }
+    active.set(threadId, { turn: own, text: 'on its own', held: true, scriptedRequestsRemaining: 0 })
+    setTimeout(() => notify('turn/started', { threadId, turn: own }), 50)
+    return
+  }
+${marker}`
+    const server = readFileSync(setup.fixture.executable, 'utf8')
+    writeFileSync(setup.fixture.executable, server.replace(marker, selfStart))
+
+    await setup.runner.start(setup.session, 'go [self-start]')
+    await until(() => setup.statuses.includes('done'))
+    await until(() => setup.statuses.at(-1) === 'working')
+    expect(setup.statuses).toEqual(['working', 'done', 'working'])
+    await setup.runner.interrupt(setup.session.id)
+    expect(setup.fixture.requests().filter((request) => request.method === 'turn/interrupt').map((request) => request.params)).toEqual([
+      { threadId: 'scripted-thread', turnId: 'turn-own' }
+    ])
+    expect(setup.statuses.at(-1)).toBe('done')
+    const turnEnds = setup.messages.filter((message) => (message.item as { kind?: string } | undefined)?.kind === 'turn-end')
+    expect(turnEnds.map((message) => (message.item as { state: string }).state)).toEqual(['done', 'stopped'])
+  })
+
   test('a refused send is not journaled or left working', async () => {
     await setup.runner.start(setup.session, 'first accepted turn')
     await until(() => setup.statuses.includes('done'))

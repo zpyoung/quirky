@@ -453,6 +453,87 @@ describe('status', () => {
     expect(statuses).toEqual(['working', 'done', 'working'])
   })
 
+  const success = { type: 'result', subtype: 'success', result: 'ok', is_error: false }
+  const turnEnds = () => messages.filter((m) => (m.item as any)?.kind === 'turn-end')
+
+  test('a queued second send keeps the session working after the first result', async () => {
+    const query = await begin()
+    await runner.send('s_1', 'and then this')
+    query.emit(assistantText('first'))
+    query.emit(success)
+    await until(() => turnEnds().length === 1)
+    expect(statuses.at(-1)).toBe('working')
+    expect(statuses).not.toContain('done')
+    query.emit(assistantText('second'))
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    expect(turnEnds()).toHaveLength(2)
+  })
+
+  test('a turn Claude starts by itself after a result shows working until its own result', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    // a background task finishing re-invokes the model with no send from Quirky
+    query.emit({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'message_start' } })
+    query.emit({ type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id: 't9', name: 'Bash', input: { command: 'ls' } }] } })
+    await until(() => statuses.at(-1) === 'working')
+    query.emit({ ...success, duration_ms: 1200 })
+    await until(() => statuses.at(-1) === 'done')
+    expect(statuses).toEqual(['working', 'done', 'working', 'done'])
+    expect(turnEnds()).toHaveLength(2)
+    expect(messages.find((m) => (m.item as any)?.callId === 't9' && (m.item as any)?.state === 'done')).toBeDefined()
+  })
+
+  test('a self-started turn can be interrupted', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit(assistantText('on my own'))
+    await until(() => statuses.at(-1) === 'working')
+    await runner.interrupt('s_1')
+    expect(query.interrupted).toBe(1)
+    expect(statuses.at(-1)).toBe('done')
+    expect((turnEnds().at(-1)?.item as any)?.state).toBe('stopped')
+  })
+
+  test('subagent output after a result does not reopen the turn', async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit({ ...assistantText('sub'), parent_tool_use_id: 'task_1' })
+    await tick()
+    expect(statuses.at(-1)).toBe('done')
+  })
+
+  test("Claude's running and idle signals open and close the turn", async () => {
+    const query = await begin()
+    query.emit(success)
+    await until(() => statuses.at(-1) === 'done')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'running' })
+    await until(() => statuses.at(-1) === 'working')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle' })
+    await until(() => statuses.at(-1) === 'done')
+    expect(messages.some((m) => m.text.includes('session_state_changed'))).toBe(false)
+  })
+
+  test('idle ends the wait when Claude folded a queued send into the running turn', async () => {
+    const query = await begin()
+    await runner.send('s_1', 'steer')
+    query.emit(success)
+    await until(() => turnEnds().length === 1)
+    expect(statuses.at(-1)).toBe('working')
+    query.emit({ type: 'system', subtype: 'session_state_changed', state: 'idle' })
+    await until(() => statuses.at(-1) === 'done')
+    await runner.interrupt('s_1')
+    expect(query.interrupted).toBe(0)
+  })
+
+  test('asks Claude to report its running and idle state', async () => {
+    await begin()
+    expect(queries[0]?.params.options?.env?.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS).toBe('1')
+  })
+
 
   test('failed results journal the error, tear down the query, and exit without publishing done', async () => {
     const query = await begin()
@@ -1005,6 +1086,118 @@ describe('plan mode', () => {
       expect(states).toContainEqual([1, 'revised'])
       expect(states).toContainEqual([2, 'approved'])
       expect(states.filter(([, status]) => status === 'approved')).toHaveLength(1)
+    })
+
+    test('an interrupt while a second call is queued denies it without a new plan or ask', async () => {
+      const query = await begin()
+      const first = present(query)
+      await until(() => asks.length === 1)
+      const second = canUse(query, 'ExitPlanMode', { plan: '# B' })
+      await runner.interrupt(session.id)
+      expect(await first).toMatchObject({ behavior: 'deny' })
+      expect(await second).toMatchObject({ behavior: 'deny', message: expect.stringContaining('stopped') })
+      await tick()
+      expect(asks).toHaveLength(1)
+      expect(plans().some((item) => item.text === '# B')).toBe(false)
+      expect(runner.planWaiting!(session.id)).toBe(false)
+    })
+
+    describe('overlapping calls', () => {
+      type Ending = { name: string; queued: boolean; run: () => Promise<void>; final: Partial<PlanItem> | null; result: Record<string, unknown> }
+      const endings: Ending[] = [
+        {
+          name: 'approve-auto on the newest',
+          queued: false,
+          run: async () => void asks.at(-1)!.resolve(answer('approve-auto')),
+          final: { status: 'approved', approvedMode: 'acceptEdits' },
+          result: { behavior: 'allow' }
+        },
+        {
+          name: 'keep with feedback',
+          queued: false,
+          run: async () => void asks.at(-1)!.resolve(answer('keep', 'tighten it')),
+          final: { status: 'not-answered', reason: 'feedback' },
+          result: { behavior: 'deny', message: 'tighten it' }
+        },
+        {
+          name: 'interrupt while a call is queued',
+          queued: true,
+          run: () => runner.interrupt(session.id),
+          final: null,
+          result: { behavior: 'deny', message: expect.stringContaining('stopped') }
+        },
+        {
+          name: 'interrupt while the newest waits',
+          queued: false,
+          run: () => runner.interrupt(session.id),
+          final: { status: 'not-answered', reason: 'stopped' },
+          result: { behavior: 'deny', message: expect.stringContaining('stopped') }
+        },
+        {
+          name: 'stop while a call is queued',
+          queued: true,
+          run: () => runner.stop(session.id),
+          final: null,
+          result: { behavior: 'deny', message: expect.stringContaining('stopped') }
+        },
+        {
+          name: 'mode switch while the newest waits',
+          queued: false,
+          run: () => runner.configure!(session.id, { permissionMode: 'acceptEdits' }).then(() => {}),
+          final: { status: 'not-answered', reason: 'mode-switch' },
+          result: { behavior: 'deny', message: expect.stringContaining('not approved') }
+        }
+      ]
+      const finalStatuses = () => {
+        const last = new Map<number, PlanItem>()
+        for (const item of plans()) last.set(item.version, item)
+        return last
+      }
+      const liveAsks = () => asks.filter((ask) => !cancelled.includes(ask.askId) && !resolvedAsks.has(ask.askId))
+      const resolvedAsks = new Set<string>()
+
+      for (const calls of [1, 2, 3]) {
+        for (const ending of endings) {
+          if (ending.queued && calls === 1) continue
+          test(`${calls} call(s), ${ending.name}`, async () => {
+            resolvedAsks.clear()
+            const query = await begin()
+            await runner.configure!(session.id, { permissionMode: 'plan' })
+            const pending = Array.from({ length: calls }, (_, i) => canUse(query, 'ExitPlanMode', { plan: `# Plan ${i + 1}` }))
+            if (ending.queued) {
+              // ended before the first plan unwinds, so the later calls are still queued
+              expect(asks).toHaveLength(1)
+              await ending.run()
+            } else {
+              await until(() => asks.length === Math.min(calls, 2))
+              await tick()
+              expect(liveAsks()).toHaveLength(1)
+              expect(liveAsks()[0]!.askId).toBe(asks.at(-1)!.askId)
+              await ending.run()
+            }
+            const results = await Promise.all(pending)
+            await tick()
+
+            const last = finalStatuses()
+            expect(runner.planWaiting!(session.id)).toBe(false)
+            expect([...last.values()].filter((item) => item.status === 'waiting')).toEqual([])
+            if (ending.queued) {
+              expect([...last.values()].map((item) => [item.version, item.status, item.reason])).toEqual([[1, 'not-answered', 'stopped']])
+              expect(asks).toHaveLength(1)
+              expect(results[0]).toMatchObject({ behavior: 'deny', message: expect.stringContaining('newer plan') })
+              for (const result of results.slice(1)) expect(result).toMatchObject(ending.result)
+            } else {
+              const newest = Math.min(calls, 2)
+              expect(last.size).toBe(newest)
+              if (newest === 2) expect(last.get(1)!.status).toBe('revised')
+              expect(last.get(newest)).toMatchObject(ending.final!)
+              expect(results.at(-1)).toMatchObject(ending.result)
+              for (const result of results.slice(0, -1)) expect(result).toMatchObject({ behavior: 'deny', message: expect.stringContaining('newer plan') })
+              expect(results.filter((result: any) => result.behavior === 'allow')).toHaveLength(ending.result.behavior === 'allow' ? 1 : 0)
+            }
+          })
+        }
+      }
     })
 
     test('an approval into auto that Claude honours is left alone', async () => {
