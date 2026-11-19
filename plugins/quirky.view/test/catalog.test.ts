@@ -436,6 +436,12 @@ describe('visual kinds', () => {
     test('source is bounded to 20 KiB', () => {
       expect(errorsOf(diagram('A'.repeat(20 * 1024 + 1)))[0].path).toBe('root.props.source')
     })
+
+    test('the bound counts UTF-8 bytes, not characters', () => {
+      // 6,827 three-byte characters are 20,481 bytes; 6,826 are 20,478
+      expect(errorsOf(diagram('€'.repeat(6827)))).toEqual([{ path: 'root.props.source', message: 'must be at most 20480 bytes' }])
+      expect(validateViewSpec(diagram('€'.repeat(6826))).ok).toBe(true)
+    })
   })
 
   describe('image', () => {
@@ -484,9 +490,24 @@ describe('visual kinds', () => {
       ['style block url with quotes', '<style>div{background:url( "//x.test/a.png" )}</style>'],
       ['uppercase attribute', '<IMG SRC="HTTPS://x.test/a.png">'],
       ['entity encoded scheme', '<img src="&#104;ttps://x.test/a.png">'],
-      ['css import', '<style>@import "https://x.test/a.css";</style>']
+      ['css import', '<style>@import "https://x.test/a.css";</style>'],
+      ['hex-escaped scheme in url', '<style>div{background:url(\\68 ttps://example.com/x.png)}</style>'],
+      ['hex-escaped scheme with a six digit escape', '<style>div{background:url(\\000068ttps://example.com/x.png)}</style>'],
+      ['escaped url keyword', '<style>div{background:\\75 rl(https://example.com/x.png)}</style>'],
+      ['escaped slashes', '<style>div{background:url(\\2f\\2f example.com/x.png)}</style>'],
+      ['backslash-escaped letter', '<style>div{background:url(h\\ttps://example.com/x.png)}</style>'],
+      ['uppercase import', '<style>@IMPORT "https://x.test/a.css";</style>'],
+      ['escaped import', '<style>@\\69 mport "https://x.test/a.css";</style>'],
+      ['escaped import url', '<style>@import url(\\68 ttps://x.test/a.css);</style>'],
+      ['import after a comment', '<style>@import/**/"https://x.test/a.css";</style>']
     ])('remote content is refused: %s', (_name, body) => {
       expect(errorsOf(html(body))).toEqual([{ path: 'root.props.html', message: REMOTE }])
+    })
+
+    test('data: urls, also spelled with escapes, are still accepted', () => {
+      expect(validateViewSpec(html('<style>div{background:url(data:image/png;base64,AAAA)}</style>')).ok).toBe(true)
+      expect(validateViewSpec(html('<style>div{background:url(\\64 ata:image/png;base64,AAAA)}</style>')).ok).toBe(true)
+      expect(validateViewSpec(html('<style>div{content:"\\201C"}</style>')).ok).toBe(true)
     })
 
     test('interactive is required and height is bounded', () => {
@@ -498,7 +519,13 @@ describe('visual kinds', () => {
 
     test('html is bounded to 128 KiB', () => {
       const big = kind('html', { html: 'x'.repeat(128 * 1024 + 1), interactive: false })
-      expect(errorsOf(big)[0]).toEqual({ path: 'root.props.html', message: 'must be at most 131072 characters' })
+      expect(errorsOf(big)[0]).toEqual({ path: 'root.props.html', message: 'must be at most 131072 bytes' })
+    })
+
+    test('the html bound counts UTF-8 bytes, not characters', () => {
+      // 43,691 three-byte characters are 131,073 bytes; 43,690 are 131,070
+      expect(errorsOf(kind('html', { html: '€'.repeat(43691), interactive: false }))[0]).toEqual({ path: 'root.props.html', message: 'must be at most 131072 bytes' })
+      expect(validateViewSpec(kind('html', { html: '€'.repeat(43690), interactive: false })).ok).toBe(true)
     })
 
     test('scanning a long attribute-free page is fast', () => {
@@ -610,6 +637,9 @@ describe('visual kinds', () => {
 
     test('code is bounded to 64 KiB and notes to 50', () => {
       expect(errorsOf(kind('annotated-code', { language: 'ts', code: 'x'.repeat(64 * 1024 + 1), notes: [] }))[0].path).toBe('root.props.code')
+      // 21,846 three-byte characters are 65,538 bytes; 21,845 are 65,535
+      expect(errorsOf(kind('annotated-code', { language: 'ts', code: '€'.repeat(21846), notes: [] }))[0].path).toBe('root.props.code')
+      expect(validateViewSpec(kind('annotated-code', { language: 'ts', code: '€'.repeat(21845), notes: [] })).ok).toBe(true)
       const notes = Array.from({ length: 51 }, () => ({ lines: '1', note: 'n' }))
       expect(errorsOf(kind('annotated-code', { language: 'ts', code: 'x', notes }))[0].path).toBe('root.props.notes')
     })

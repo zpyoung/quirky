@@ -79,7 +79,6 @@ function readableTitle(value: unknown): string {
  */
 export class ViewService {
   private readonly waiters = new Map<string, Set<Waiter>>()
-  private readonly reportedRenders = new Set<string>()
   private readonly now: () => Date
   private readonly newId: () => string
 
@@ -182,9 +181,7 @@ export class ViewService {
     if (typeof error !== 'string' || error.trim() === '') throw this.deps.invalidParams('error must be a non-empty string')
     const record = this.get(viewId)
     if (record.closed || version !== record.latestVersion) return { ignored: true }
-    const key = `${viewId}:${version}`
-    if (this.reportedRenders.has(key) || (record.refused?.attempt === 'render' && record.refused.version === version)) return { duplicate: true }
-    this.reportedRenders.add(key)
+    if (!this.views.claimRenderReport(viewId, version)) return { duplicate: true }
     const message = error.slice(0, MAX_RENDER_ERROR_LENGTH)
     const refused = this.views.setRefused(viewId, {
       attempt: 'render',

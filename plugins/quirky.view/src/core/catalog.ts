@@ -55,9 +55,9 @@ const MAX_LIST_ITEMS = 200
 const MAX_COLUMNS = 4
 const MAX_OPTIONS = 12
 const MAX_ID_LENGTH = 40
-const MAX_DIAGRAM_SOURCE = 20 * 1024
-const MAX_HTML_LENGTH = 128 * 1024
-const MAX_CODE_LENGTH = 64 * 1024
+const MAX_DIAGRAM_BYTES = 20 * 1024
+const MAX_HTML_BYTES = 128 * 1024
+const MAX_CODE_BYTES = 64 * 1024
 const MIN_HTML_HEIGHT = 120
 const MAX_HTML_HEIGHT = 1200
 const MAX_MATRIX_COLUMNS = 12
@@ -83,7 +83,7 @@ const ID_HINT = `lowercase letters, digits and dashes, 1 to ${MAX_ID_LENGTH} cha
 type Check = { errors: ViewValidationError[]; fieldIds: Set<string>; ids: Set<string>; nodes: number; nodeLimitHit: boolean }
 
 type Field =
-  | { kind: 'string'; required?: boolean; max?: number; markdown?: boolean; pattern?: RegExp; hint?: string; ident?: boolean }
+  | { kind: 'string'; required?: boolean; max?: number; bytes?: boolean; markdown?: boolean; pattern?: RegExp; hint?: string; ident?: boolean }
   | { kind: 'enum'; values: readonly string[]; required?: boolean }
   | { kind: 'number'; required?: boolean; min?: number; max?: number }
   | { kind: 'boolean'; required?: boolean }
@@ -570,7 +570,7 @@ export const COMPONENTS: Record<CatalogType, Component> = {
   diagram: {
     summary:
       'A Mermaid diagram (flowchart, sequence, class, state and the rest), drawn by Quirky. Node labels are plain text, and a source that could load an image or other remote content (img: shapes, <img>, url()) is refused. Quirky does not parse the source here: a diagram that fails to draw is reported back to you as a message, so fix it with `quirky view update` or `patch`.',
-    shape: { source: { kind: 'string', required: true, max: MAX_DIAGRAM_SOURCE }, caption: CAPTION_FIELD },
+    shape: { source: { kind: 'string', required: true, max: MAX_DIAGRAM_BYTES, bytes: true }, caption: CAPTION_FIELD },
     example: { type: 'diagram', props: { source: 'flowchart LR\n  client[Client app] --> daemon[Daemon]', caption: 'Request path' } }
   },
   image: {
@@ -581,7 +581,7 @@ export const COMPONENTS: Record<CatalogType, Component> = {
   html: {
     summary: `A small page or prototype in a sandboxed frame with no network. It may carry inline CSS and, when \`interactive\` is true, inline scripts. Nothing may load from http:, https: or // (src, href, action, srcset, poster or CSS url()); inline images as data: URLs. An element with a data-point attribute can be pointed at; add data-point-label for its name. height is in pixels (${MIN_HTML_HEIGHT} to ${MAX_HTML_HEIGHT}).`,
     shape: {
-      html: { kind: 'string', required: true, max: MAX_HTML_LENGTH },
+      html: { kind: 'string', required: true, max: MAX_HTML_BYTES, bytes: true },
       interactive: { kind: 'boolean', required: true },
       height: { kind: 'number', min: MIN_HTML_HEIGHT, max: MAX_HTML_HEIGHT }
     },
@@ -645,7 +645,7 @@ export const COMPONENTS: Record<CatalogType, Component> = {
     summary: 'Code with notes attached to lines. `lines` is a 1-based line "4" or a range "3-7" inside the code; at most 50 notes.',
     shape: {
       language: { kind: 'string', required: true, max: 40 },
-      code: { kind: 'string', required: true, max: MAX_CODE_LENGTH },
+      code: { kind: 'string', required: true, max: MAX_CODE_BYTES, bytes: true },
       notes: { kind: 'list', of: { lines: { kind: 'string', required: true, max: 20 }, note: { kind: 'string', required: true, max: 400 } }, min: 0, max: 50, what: 'notes' }
     },
     example: { type: 'annotated-code', props: { language: 'ts', code: 'const a = 1\nconst b = a + 1\n', notes: [{ lines: '2', note: 'Uses a.' }] } }
@@ -718,13 +718,28 @@ function checkKeys(raw: Record<string, unknown>, allowed: readonly string[], pat
   }
 }
 
+/** The UTF-8 size of `text` in bytes; a lone surrogate counts as the 3 bytes of U+FFFD. */
+function utf8Length(text: string): number {
+  let bytes = 0
+  for (let at = 0; at < text.length; at++) {
+    const code = text.charCodeAt(at)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff && at + 1 < text.length && (text.charCodeAt(at + 1) & 0xfc00) === 0xdc00) {
+      bytes += 4
+      at++
+    } else bytes += 3
+  }
+  return bytes
+}
+
 function readString(raw: unknown, field: Extract<Field, { kind: 'string' }>, path: string, check: Check): string | undefined {
   if (typeof raw !== 'string') {
     addError(check, path, 'must be a string')
     return undefined
   }
   if (field.required && raw.length === 0) addError(check, path, 'must not be empty')
-  if (field.max !== undefined && raw.length > field.max) addError(check, path, `must be at most ${field.max} characters`)
+  if (field.max !== undefined && (field.bytes ? utf8Length(raw) : raw.length) > field.max) addError(check, path, `must be at most ${field.max} ${field.bytes ? 'bytes' : 'characters'}`)
   if (field.pattern && !field.pattern.test(raw)) addError(check, path, `must be ${field.hint ?? `in the form ${field.pattern}`}`)
   if (field.markdown) checkMarkdown(raw, path, check.errors)
   if (field.ident && ACTION_NAME_PATTERN.test(raw)) {
@@ -986,23 +1001,56 @@ function isRemoteAttribute(name: string, value: string): boolean {
   return REMOTE_URL.test(decoded.replace(/[\u0000- ]+/g, ''))
 }
 
-/** True for a CSS `url(` or `@import` that points at http:, https: or //; scans without regex backtracking. */
-function loadsRemoteCss(text: string): boolean {
-  const lower = text.toLowerCase()
-  const startsRemote = (from: number): boolean => {
-    let at = from
-    while (at < lower.length && /[\s"']/.test(lower[at])) at++
-    return lower.startsWith('http:', at) || lower.startsWith('https:', at) || lower.startsWith('//', at)
+const CSS_ESCAPE = /\\(?:([0-9a-f]{1,6})(?:\r\n|[ \t\n\r\f])?|(\r\n|[\n\r\f])|([^\n\r\f]))/gi
+
+/** The text with CSS escapes resolved the way a stylesheet reads them: `\68 ttps` is `https`. */
+function decodeCssEscapes(text: string): string {
+  return text.replace(CSS_ESCAPE, (_match, hex: string | undefined, _newline: string | undefined, literal: string | undefined) => {
+    if (hex !== undefined) {
+      const code = Number.parseInt(hex, 16)
+      return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? '\ufffd' : String.fromCodePoint(code)
+    }
+    return literal ?? ''
+  })
+}
+
+function stripCssComments(text: string): string {
+  let out = ''
+  let from = 0
+  for (let open = text.indexOf('/*'); open >= 0; open = text.indexOf('/*', from)) {
+    out += text.slice(from, open) + ' '
+    const close = text.indexOf('*/', open + 2)
+    if (close < 0) return out
+    from = close + 2
   }
+  return out + text.slice(from)
+}
+
+function startsRemoteCss(lower: string, from: number): boolean {
+  let at = from
+  while (at < lower.length && /[\s"']/.test(lower[at])) at++
+  return lower.startsWith('http:', at) || lower.startsWith('https:', at) || lower.startsWith('//', at)
+}
+
+function scansRemoteCss(lower: string): boolean {
   for (let at = lower.indexOf('url'); at >= 0; at = lower.indexOf('url', at + 3)) {
     let open = at + 3
     while (open < lower.length && /\s/.test(lower[open])) open++
-    if (lower[open] === '(' && startsRemote(open + 1)) return true
+    if (lower[open] === '(' && startsRemoteCss(lower, open + 1)) return true
   }
   for (let at = lower.indexOf('@import'); at >= 0; at = lower.indexOf('@import', at + 7)) {
-    if (startsRemote(at + 7)) return true
+    if (startsRemoteCss(lower, at + 7)) return true
   }
   return false
+}
+
+/**
+ * True for a CSS `url(` or `@import` that points at http:, https: or //, also when the text is
+ * spelled with CSS escapes or comments; scans without regex backtracking.
+ */
+function loadsRemoteCss(text: string): boolean {
+  const decoded = decodeCssEscapes(text)
+  return [text, decoded, stripCssComments(decoded)].some((variant) => scansRemoteCss(variant.toLowerCase()))
 }
 
 function loadsRemoteHtml(html: string): boolean {
