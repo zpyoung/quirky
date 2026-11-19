@@ -877,7 +877,8 @@ test('session subtitle shows one identity for shell and Claude sessions', async 
   ]
   await h.mountInto(host)
   expect(await hoverCardText(rowOf('fix-login', 'api'))).toContain('Agent: Shell · Running')
-  expect(markOf(rowOf('fix-login', 'api'))?.dataset.state).toBe('running')
+  // a live shell with no agent activity doesn't spin the row
+  expect(markOf(rowOf('fix-login', 'api'))?.dataset.state).toBe('idle')
   expect(await hoverCardText(rowOf('main', 'api'))).toContain('Agent: Claude · Done')
   expect(markOf(rowOf('main', 'api'))?.dataset.state).toBe('idle')
 })
@@ -2201,7 +2202,7 @@ describe('agent status presentation', () => {
 })
 test('sleep overrides live session activity and wake restores it', async () => {
   const h = setup()
-  h.world.sessions = [session('s1', 'w2', 'running')]
+  h.world.sessions = [session('s1', 'w2', 'working')]
   h.world.options.showSleeping = true
   await h.mountInto(host)
   const row = () => rowOf('fix-login', 'api')
