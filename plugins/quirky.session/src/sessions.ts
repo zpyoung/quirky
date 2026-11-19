@@ -921,6 +921,19 @@ export class SessionService {
     return this.publish(updated)
   }
 
+  /**
+   * Gives a session a user-chosen title (trimmed, 1 to 200 characters) and marks it custom so
+   * automatic titling leaves it alone. Titles need not be unique.
+   */
+  setTitle = (params: Record<string, unknown>): Session => {
+    const session = this.require(params.session as string)
+    if (typeof params.title !== 'string') throw this.context.error('invalid-params', 'title must be a string')
+    const title = params.title.trim()
+    if (title.length < 1 || title.length > 200) throw this.context.error('invalid-params', 'title must be 1 to 200 characters')
+    if (title === session.title && session.titleCustom === true) return session
+    return this.publish(this.records.update(session.id, { title, titleCustom: true }) as Session)
+  }
+
   /** Stores the agent CLI's own session ID (and transcript path) so a later resume can pass it back. */
   setProviderSession = async (params: Record<string, unknown>, caller?: PluginCaller): Promise<Session> => {
     const session = this.require(params.session as string)
@@ -1000,6 +1013,14 @@ export class SessionService {
     if (background !== undefined && typeof background !== 'boolean') {
       throw this.context.error('invalid-params', 'background must be a boolean')
     }
+    const titleCustom = params.titleCustom
+    if (titleCustom !== undefined && typeof titleCustom !== 'boolean') {
+      throw this.context.error('invalid-params', 'titleCustom must be a boolean')
+    }
+    const forked = params.forked
+    if (forked !== undefined && typeof forked !== 'boolean') {
+      throw this.context.error('invalid-params', 'forked must be a boolean')
+    }
     const checked = params.launchSettings === undefined || params.launchSettings === null ? null : checkLaunchSettings(params.launchSettings)
     if (typeof checked === 'string') throw this.context.error('invalid-params', `launchSettings is malformed: ${checked}`)
     const cwd = this.startCwd(params.cwd)
@@ -1026,6 +1047,8 @@ export class SessionService {
         ...this.newRecord(worktree, 'structured', params.agent as AgentKind, params.title as string),
         launchSettings: checked?.settings ?? null,
         ...(background === undefined ? {} : { background }),
+        ...(titleCustom === true ? { titleCustom } : {}),
+        ...(forked === true ? { forked } : {}),
         ...(resumedFrom === undefined ? {} : { resumedFrom })
       }
       this.records.insert(session, worktree.repoId)

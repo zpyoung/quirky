@@ -1919,6 +1919,64 @@ describe('the floating worktree', () => {
   })
 })
 
+describe('session titles', () => {
+  const setTitle = (session: string, title: unknown) => call<Session>(client, 'quirky.session/setTitle', { session, title })
+  const changedSessions = () =>
+    events.flatMap((e) => (e.type === 'quirky.session/changed' ? [(e.data as { session: Session }).session] : []))
+
+  test('setting a title trims it, marks it custom, persists it and emits changed', async () => {
+    const session = await shellSession()
+    expect(session.titleCustom).toBeUndefined()
+    const titled = await setTitle(session.id, '  Fix the header  ')
+    expect(titled).toMatchObject({ id: session.id, title: 'Fix the header', titleCustom: true })
+    expect(await sessionOf(session.id)).toMatchObject({ title: 'Fix the header', titleCustom: true })
+    await waitFor(() => (changedSessions().some((s) => s.id === session.id && s.title === 'Fix the header') ? true : undefined))
+  })
+
+  test('titles are not numbered or checked for uniqueness', async () => {
+    const a = await shellSession()
+    const b = await shellSession()
+    await setTitle(a.id, 'Same')
+    expect((await setTitle(b.id, 'Same')).title).toBe('Same')
+  })
+
+  test('the same trimmed title on an already custom session changes nothing and emits nothing', async () => {
+    const session = await shellSession()
+    await setTitle(session.id, 'Stable')
+    await Bun.sleep(30)
+    const count = changedSessions().length
+    expect((await setTitle(session.id, ' Stable ')).title).toBe('Stable')
+    await Bun.sleep(30)
+    expect(changedSessions()).toHaveLength(count)
+  })
+
+  test('a title equal to the automatic one still becomes custom', async () => {
+    const session = await shellSession()
+    expect((await setTitle(session.id, session.title)).titleCustom).toBe(true)
+  })
+
+  test('a refused title leaves the session as it was', async () => {
+    const session = await shellSession()
+    for (const title of ['', '   ', 'a'.repeat(201), 7, null, undefined]) {
+      expect(await code(setTitle(session.id, title)), String(title)).toBe(RpcErrorCode.InvalidParams)
+    }
+    expect((await sessionOf(session.id)).title).toBe(session.title)
+    expect((await setTitle(session.id, 'a'.repeat(200))).title).toBe('a'.repeat(200))
+  })
+
+  test('register records titleCustom and forked, and rejects non-boolean values', async () => {
+    const base = { worktree: 'id:wt_main', agent: 'claude', kind: 'structured', title: 'Forked chat' }
+    const session = await call<Session>(client, 'quirky.session/register', { ...base, titleCustom: true, forked: true })
+    expect(session).toMatchObject({ titleCustom: true, forked: true })
+    expect(await sessionOf(session.id)).toMatchObject({ titleCustom: true, forked: true })
+    const plain = await call<Session>(client, 'quirky.session/register', base)
+    expect(plain.titleCustom).toBeUndefined()
+    expect(plain.forked).toBeUndefined()
+    expect(await code(call(client, 'quirky.session/register', { ...base, titleCustom: 'yes' }))).toBe(RpcErrorCode.InvalidParams)
+    expect(await code(call(client, 'quirky.session/register', { ...base, forked: 1 }))).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
 describe('session names', () => {
   const setName = (session: string, name: string | null) => call<Session>(client, 'quirky.session/setName', { session, name })
   const exitAndWait = async (sessionId: string) => {
