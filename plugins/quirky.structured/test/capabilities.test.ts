@@ -67,6 +67,14 @@ describe('capabilities values', () => {
     expect((capabilitiesFor('pi')!.planMode as { reason: string }).reason).toBe('pi has no plan mode')
   })
 
+  test('every agent advertises a fork capability', () => {
+    for (const agent of ['claude', 'codex', 'pi', 'omp']) {
+      const fork = capabilitiesFor(agent)!.fork
+      expect(typeof fork.ok).toBe('boolean')
+      if (!fork.ok) expect(fork.reason.length).toBeGreaterThan(0)
+    }
+  })
+
   test('an unknown agent has no capabilities', () => {
     expect(capabilitiesFor('gemini')).toBeNull()
     expect(capabilitiesFor('constructor')).toBeNull()

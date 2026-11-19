@@ -30,7 +30,8 @@ const CLAUDE: AgentCapabilities = {
   images: OK,
   effort: OK,
   approveForSession: OK,
-  resume: OK
+  resume: OK,
+  fork: OK
 }
 const CLAUDE_ALL_MODES: AgentCapabilities['permissionModes'] = {
   ok: true,
@@ -47,7 +48,8 @@ const PI: AgentCapabilities = {
   images: OK,
   effort: { ok: false, reason: 'pi takes no effort setting' },
   approveForSession: { ok: false, reason: 'pi has no session approvals' },
-  resume: { ok: false, reason: 'pi cannot resume a conversation' }
+  resume: { ok: false, reason: 'pi cannot resume a conversation' },
+  fork: { ok: false, reason: 'pi cannot fork a conversation' }
 }
 const effort = (...values: string[]) => ({ id: 'effort', label: 'Effort', type: 'select', choices: values.map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) })) })
 const OPTIONS = {

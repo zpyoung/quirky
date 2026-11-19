@@ -19,7 +19,8 @@ const CLAUDE: AgentCapabilities = {
   images: OK,
   effort: OK,
   approveForSession: OK,
-  resume: OK
+  resume: OK,
+  fork: OK
 }
 const PI: AgentCapabilities = {
   agent: 'pi',
@@ -30,7 +31,8 @@ const PI: AgentCapabilities = {
   images: OK,
   effort: { ok: false, reason: 'pi takes no effort setting' },
   approveForSession: { ok: false, reason: 'pi has no session approvals' },
-  resume: { ok: false, reason: 'pi cannot resume a conversation' }
+  resume: { ok: false, reason: 'pi cannot resume a conversation' },
+  fork: { ok: false, reason: 'pi cannot fork a conversation' }
 }
 
 const T0 = 1_700_000_000_000

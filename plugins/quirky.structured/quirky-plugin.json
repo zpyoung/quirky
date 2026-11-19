@@ -259,9 +259,10 @@
             "images": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "effort": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "approveForSession": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
-            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
+            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "fork": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
           },
-          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume"]
+          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume", "fork"]
         }
       },
       {
