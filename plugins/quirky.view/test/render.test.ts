@@ -1598,21 +1598,15 @@ describe('pointing', () => {
   })
 })
 
-describe('versions and the change highlight', () => {
-  test('the stepper walks back and forth, and the highlight is only on the newest version', async () => {
+describe('versions', () => {
+  test('the stepper walks back and forth between versions', async () => {
     const { fake } = startVersions(authFlow)
     const { element, press } = await mountSurface(fake)
     expect(text(element)).toContain('v2 of 2')
-    expect(element.querySelector('[data-view-changed-note]')!.textContent).toBe('changed in v2')
-    const outlined = [...element.querySelectorAll<HTMLElement>('[data-view-changed]')]
-    expect(outlined.map((node) => node.firstElementChild!.getAttribute('data-point-key'))).toEqual(['node:auth-diagram', 'node:token-table'])
-    expect(outlined[0]!.style.outlineColor).toBe('var(--ui-working)')
     expect(buttonByLabel(element, 'Newer version')!.disabled).toBe(true)
 
     await press(buttonByLabel(element, 'Older version')!)
     expect(text(element)).toContain('v1 of 2')
-    expect(element.querySelector('[data-view-changed]')).toBeNull()
-    expect(element.querySelector('[data-view-changed-note]')).toBeNull()
     expect(element.querySelectorAll('tbody tr')).toHaveLength(1)
     expect(buttonByLabel(element, 'Older version')!.disabled).toBe(true)
     expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
@@ -1620,14 +1614,12 @@ describe('versions and the change highlight', () => {
     await press(buttonByLabel(element, 'Newer version')!)
     expect(text(element)).toContain('v2 of 2')
     expect(element.querySelectorAll('tbody tr')).toHaveLength(2)
-    expect(element.querySelector('[data-view-changed-note]')).not.toBeNull()
   })
 
   test('a card pinned to a version stays there while a newer one arrives, and an unpinned card follows', async () => {
     const { fake, state, specs } = startVersions([...authFlow])
     const pinned = await mountSurface(fake, { version: 1 })
     expect(text(pinned.element)).toContain('v1 of 2')
-    expect(pinned.element.querySelector('[data-view-changed]')).toBeNull()
     const following = await mountSurface(fake)
     expect(text(following.element)).toContain('v2 of 2')
 
@@ -1638,15 +1630,18 @@ describe('versions and the change highlight', () => {
     expect(text(pinned.element)).toContain('v1 of 3')
     expect(text(following.element)).toContain('v3 of 3')
     expect(text(following.element)).toContain('a third version')
-    expect(following.element.querySelector('[data-view-changed-note]')!.textContent).toBe('changed in v3')
   })
 
-  test('the highlight matches nodes by id, else by position, and a container changes only with its own props', async () => {
+  test('a new version draws its nodes without marking what changed', async () => {
     const before: ViewSpec = { title: 'T', root: { type: 'stack', children: [{ type: 'callout', props: { text: 'same' } }, { type: 'callout', props: { text: 'old' } }, { type: 'callout', id: 'moved', props: { text: 'kept' } }] } }
     const after: ViewSpec = { title: 'T', root: { type: 'stack', children: [{ type: 'callout', props: { text: 'same' } }, { type: 'callout', props: { text: 'new' } }, { type: 'callout', id: 'moved', props: { text: 'kept' } }, { type: 'callout', props: { text: 'added' } }] } }
     const { fake } = startVersions([before, after])
     const { element } = await mountSurface(fake)
-    expect([...element.querySelectorAll('[data-view-changed]')].map((node) => node.textContent)).toEqual(['new', 'added'])
+    expect(text(element)).toContain('v2 of 2')
+    expect(text(element)).toContain('added')
+    expect(element.querySelector('[data-view-changed], [data-view-changed-note]')).toBeNull()
+    expect(text(element)).not.toContain('changed in')
+    expect(fake.callsTo('quirky.view/get').map((call) => call.params)).toEqual([{ viewId: 'view_1' }])
   })
 
   test('a record without version fields counts its updates as versions', async () => {
