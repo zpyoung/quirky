@@ -139,20 +139,46 @@ describe('turn changes', () => {
 })
 
 describe('views', () => {
-  test('journals one view item per new view id, for live sessions only', async () => {
+  test('journals one view item per view and version, for live sessions only', async () => {
+    chat = await bootChat({ view: true })
+    const session = await chat.create()
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v1', version: 1, kind: 'open' })
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v1', version: 1, kind: 'open' })
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v1', version: 2, kind: 'update' })
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v1', version: 3, kind: 'patch' })
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v2', version: 1, kind: 'open' })
+    chat.emitView('changed', { sessionId: 's_unknown', viewId: 'v3', version: 1, kind: 'open' })
+    chat.emitView('changed', { sessionId: session.id })
+    await waitForAsync(async () => (await items(chat!, session.id, 'view')).length === 4)
+    await Bun.sleep(50)
+    expect(await items(chat, session.id, 'view')).toEqual([
+      { kind: 'view', viewId: 'v1', version: 1 },
+      { kind: 'view', viewId: 'v1', version: 2 },
+      { kind: 'view', viewId: 'v1', version: 3 },
+      { kind: 'view', viewId: 'v2', version: 1 }
+    ])
+  })
+
+  test('an event without a version or kind counts as version 1 of an open', async () => {
     chat = await bootChat({ view: true })
     const session = await chat.create()
     chat.emitView('changed', { sessionId: session.id, viewId: 'v1' })
     chat.emitView('changed', { sessionId: session.id, viewId: 'v1' })
-    chat.emitView('changed', { sessionId: session.id, viewId: 'v2' })
-    chat.emitView('changed', { sessionId: 's_unknown', viewId: 'v3' })
-    chat.emitView('changed', { sessionId: session.id })
-    await waitForAsync(async () => (await items(chat!, session.id, 'view')).length === 2)
+    await waitForAsync(async () => (await items(chat!, session.id, 'view')).length === 1)
     await Bun.sleep(50)
-    expect(await items(chat, session.id, 'view')).toEqual([
-      { kind: 'view', viewId: 'v1' },
-      { kind: 'view', viewId: 'v2' }
-    ])
+    expect(await items(chat, session.id, 'view')).toEqual([{ kind: 'view', viewId: 'v1', version: 1 }])
+  })
+
+  test('moving, closing, refusing and render failures are not journaled as versions', async () => {
+    chat = await bootChat({ view: true })
+    const session = await chat.create()
+    for (const kind of ['close', 'move', 'refused', 'render-failed']) {
+      chat.emitView('changed', { sessionId: session.id, viewId: 'v1', version: 2, kind })
+    }
+    chat.emitView('changed', { sessionId: session.id, viewId: 'v9', version: 1, kind: 'open' })
+    await waitForAsync(async () => (await items(chat!, session.id, 'view')).length === 1)
+    await Bun.sleep(50)
+    expect(await items(chat, session.id, 'view')).toEqual([{ kind: 'view', viewId: 'v9', version: 1 }])
   })
 
   test('a rejected spec becomes a view-error item with its source capped at 64 KiB', async () => {

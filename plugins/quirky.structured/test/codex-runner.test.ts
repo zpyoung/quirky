@@ -426,6 +426,27 @@ describe('Codex app-server runner', () => {
     expect(setup.messages.map((message) => message.role)).toEqual(['user', 'user', 'assistant', 'result'])
   })
 
+  test('appended instructions go out as developerInstructions on thread/start and thread/resume', async () => {
+    await setup.runner.start(setup.session, undefined, { appendInstructions: 'draw visuals' })
+    expect(setup.fixture.requests().find((request) => request.method === 'thread/start')?.params).toMatchObject({
+      developerInstructions: 'draw visuals'
+    })
+    await setup.runner.stop(setup.session.id)
+    const resumed = { ...setup.session, providerSession: { id: 'persisted-thread', transcriptPath: null } }
+    await setup.runner.start(resumed, undefined, {
+      appendInstructions: 'draw visuals',
+      providerSession: { id: 'persisted-thread', transcriptPath: null }
+    })
+    expect(setup.fixture.requests().find((request) => request.method === 'thread/resume')?.params).toMatchObject({
+      developerInstructions: 'draw visuals'
+    })
+  })
+
+  test('without instructions thread/start carries no developerInstructions', async () => {
+    await setup.runner.start(setup.session, undefined)
+    expect(setup.fixture.requests().find((request) => request.method === 'thread/start')?.params).not.toHaveProperty('developerInstructions')
+  })
+
   test('resumes an existing thread without a prompt and sends a later turn on it', async () => {
     const resumed = { ...setup.session, providerSession: { id: 'persisted-thread', transcriptPath: null } }
     await setup.runner.start(resumed, undefined, { providerSession: { id: 'persisted-thread', transcriptPath: null } })

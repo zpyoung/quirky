@@ -119,6 +119,26 @@ for (const variant of ['pi', 'omp'] as const) {
       expect(transport.commands('set_ask_dialog').length).toBe(variant === 'omp' ? 1 : 0)
     })
 
+    test('appended instructions reach the launch as --append-system-prompt, on start, resume and an omp relaunch', async () => {
+      const text = 'draw visuals\n[quirky visual level: off]'
+      expect((await begin('hello', { appendInstructions: text })).spec.args).toEqual(['--mode', 'rpc', '--append-system-prompt', text])
+      await setup.runner.stop(setup.session.id)
+
+      setup = makeSetup(variant)
+      await setup.runner.start(setup.session, undefined, {
+        appendInstructions: text,
+        providerSession: { id: 'pi-sess-1', transcriptPath: null }
+      })
+      expect(setup.fake.last().spec.args).toEqual([
+        '--mode',
+        'rpc',
+        variant === 'pi' ? '--session' : '--resume',
+        'pi-sess-1',
+        '--append-system-prompt',
+        text
+      ])
+    })
+
     test('start without a prompt leaves the session running and sends nothing', async () => {
       const transport = await begin(null)
       expect(transport.commands('prompt')).toEqual([])
@@ -614,6 +634,23 @@ describe('omp approval modes', () => {
     }
   })
 
+  test('the relaunch keeps the appended instructions', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omp-mode-'))
+    try {
+      const file = join(dir, 'session.jsonl')
+      writeFileSync(file, '')
+      setup = makeSetup('omp')
+      setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'pi-sess-1', sessionFile: file } }))
+      await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask', appendInstructions: 'draw visuals' })
+      await setup.runner.configure!(setup.session.id, { permissionMode: 'write' })
+      expect(setup.fake.last().spec.args).toEqual([
+        '--mode', 'rpc', '--resume', file, '--approval-mode', 'write', '--append-system-prompt', 'draw visuals'
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test('a turn in progress refuses the switch and leaves the process alone', async () => {
     setup = makeSetup('omp')
     await setup.runner.start(setup.session, 'busy', { permissionMode: 'always-ask' })
@@ -650,6 +687,8 @@ describe('pi launch arguments', () => {
   })
 
   test('pi resumes with --session and omp with --resume', () => {
+    expect(piLaunchArgs('pi', { appendInstructions: 'a b' })).toEqual(['--mode', 'rpc', '--append-system-prompt', 'a b'])
+    expect(piLaunchArgs('omp', { appendInstructions: '' })).toEqual(['--mode', 'rpc'])
     expect(piLaunchArgs('pi', { resume: 'abc' })).toEqual(['--mode', 'rpc', '--session', 'abc'])
     expect(piLaunchArgs('omp', { resume: 'abc', model: 'm', effort: 'low' })).toEqual(['--mode', 'rpc', '--resume', 'abc', '--model', 'm', '--thinking', 'low'])
   })
