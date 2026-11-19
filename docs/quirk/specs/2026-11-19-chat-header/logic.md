@@ -324,4 +324,6 @@ Open questions from the mock's gaps (elements with no existing component):
 
 **Status:** Approved 2026-11-19 in the brainstorm companion. Tech spec: authored (gate: crosses subsystems, >3 files), see tech.md.
 
-**Amendments:** none yet.
+**Amendments:**
+
+- **2026-11-19: dot colors follow Quirky's status tokens.** The hues in SC-2's table came from the mock's neutral palette. The build uses the shared status dot instead: Working in the working color, Waiting on you and Reconnecting… in the needs-you color, Done in the accent, Ready and Ended in muted, and Stopped unexpectedly in the failing color. The labels are unchanged. See tech.md, Status mapping.
