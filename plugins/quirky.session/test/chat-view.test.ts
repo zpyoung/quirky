@@ -2064,6 +2064,30 @@ describe('visual chips in the transcript', () => {
     expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', version: 1, surface: 'panel', focused: true }])
   })
 
+  test('in a resumed chat a chip for an earlier chat\'s visual shows its title and opens it expanded at that version', async () => {
+    const journals: Record<string, StructuredMessage[]> = {
+      first: [{ ...user(1, 'draw'), sessionId: 'first' }, { ...viewMsg(2, 'view_0123456789ab', 1), sessionId: 'first' }, { ...end(3, 'done'), sessionId: 'first' }],
+      chat: [user(1, 'and now?'), prose(2, 'Same as before.')]
+    }
+    const records: Record<string, Session> = { first: session({ id: 'first', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null }) }
+    await mountChat({
+      session: { resumedFrom: 'first' },
+      handlers: {
+        'quirky.structured/messages': ({ session: id }) => journals[id] ?? [],
+        'quirky.session/get': ({ session: id }) => records[id],
+        'quirky.view/list': ({ session: id }) => (id === 'chat' ? [] : [rec('view_0123456789ab', 'Earlier plan')]),
+        'quirky.view/get': ({ viewId }) => (viewId === 'view_0123456789ab' ? { viewId, sessionId: 'first', title: 'Earlier plan', placement: 'pane', closed: false, latestVersion: 3 } : null)
+      }
+    })
+    await settle()
+    expect(fake.callsTo('quirky.view/get').map((call) => call.params)).toEqual([{ viewId: 'view_0123456789ab' }])
+    expect(chipsIn().map((button) => button.textContent)).toEqual(['◈Earlier plan v1'])
+    await click(chipsIn()[0])
+    await settle()
+    expect(byLabel('Expanded visual')).not.toBeNull()
+    expect(input().filter((entry) => entry.surface === 'expanded')).toEqual([{ viewId: 'view_0123456789ab', version: 1, surface: 'expanded', focused: true }])
+  })
+
   test('an inline view keeps today\'s card and gets no chip', async () => {
     await mountChat({
       messages: [user(1, 'ask me'), viewMsg(2, 'v1')],

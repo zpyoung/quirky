@@ -11,7 +11,7 @@ import { PlanChip } from './PlanChip'
 import { PlanPanel } from './PlanPanel'
 import { currentVisualLevel, groupChatTurns } from './turns'
 import { TurnView, VIEW_RENDER_VIEW, type VisualActions } from './Turn'
-import { useBodyMetrics, useViews, VisualPanel } from './VisualPanel'
+import { useBodyMetrics, useViews, VisualPanel, type ViewIndex, type VisualRecord } from './VisualPanel'
 
 const NO_MESSAGES: StructuredMessage[] = []
 type MessagePhase = { status: 'loading' } | { status: 'ready' } | { status: 'off' } | { status: 'failed'; message: string }
@@ -197,7 +197,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const keepDistanceFromEnd = useRef<number | null>(null)
   const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
-  const [expanded, setExpanded] = useState<{ viewId: string; version?: number } | null>(null)
+  const [expanded, setExpanded] = useState<{ viewId: string; version?: number; foreign?: true } | null>(null)
   const [focusRequest, setFocusRequest] = useState<{ viewId: string; version: number | null; nonce: number } | null>(null)
   const [visualizing, setVisualizing] = useState<number | null>(null)
   const sawWorking = useRef(false)
@@ -214,6 +214,12 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     [earlier, session, stored, showAll]
   )
   const history = useMemo(() => [...earlier.flatMap((chat) => chat.messages), ...stored], [earlier, stored])
+  const [otherViews, setOtherViews] = useState<Map<string, VisualRecord>>(() => new Map())
+  const askedViews = useRef(new Set<string>())
+  const turnsIndex = useMemo<ViewIndex>(() => {
+    if (otherViews.size === 0) return viewIndex
+    return { ...viewIndex, byId: new Map([...otherViews, ...viewIndex.byId]) }
+  }, [viewIndex, otherViews])
   const versions = useMemo(() => planVersions(history), [history])
   const mode = useMemo(() => currentMode(history), [history])
   const journaledLevel = useMemo(() => currentVisualLevel(history), [history])
@@ -233,6 +239,10 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   workingNow.current = working
 
   const openVisual = (viewId: string, version: number) => {
+    if (viewIndex.status === 'ready' && !viewIndex.byId.has(viewId)) {
+      setExpanded({ viewId, version, foreign: true })
+      return
+    }
     const latestVersion = viewIndex.byId.get(viewId)?.latestVersion
     setExpanded(null)
     setFocusRequest((current) => ({ viewId, version: latestVersion !== undefined && version >= latestVersion ? null : version, nonce: (current?.nonce ?? 0) + 1 }))
@@ -244,7 +254,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
       context.toast('Could not ask for a visual', messageOf(error))
     })
   }
-  const visual: VisualActions = { views: viewIndex, busySeq: visualizing, onVisualize: visualize, onOpen: openVisual }
+  const visual: VisualActions = { views: turnsIndex, busySeq: visualizing, onVisualize: visualize, onOpen: openVisual }
   const expandRef = useRef((viewId: string, version?: number) => setExpanded({ viewId, ...(version === undefined ? {} : { version }) }))
 
   useEffect(() => registerChatHandle(session.id, { expand: (viewId, version) => expandRef.current(viewId, version) }), [session.id])
@@ -253,7 +263,34 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     setExpanded(null)
     setFocusRequest(null)
     setVisualizing(null)
+    setOtherViews(new Map())
+    askedViews.current = new Set()
   }, [session.id])
+
+  // views an earlier chat of this conversation drew are not in this session's list, so each one is read by id
+  useEffect(() => {
+    if (viewIndex.status !== 'ready') return
+    for (const message of history) {
+      const viewId = message.item?.kind === 'view' ? message.item.viewId : undefined
+      if (viewId === undefined || viewIndex.byId.has(viewId) || askedViews.current.has(viewId)) continue
+      askedViews.current.add(viewId)
+      context
+        .call('quirky.view/get', { viewId })
+        .then((loaded) => {
+          const record = loaded as Partial<VisualRecord> | null
+          if (typeof record?.title !== 'string') return
+          const found: VisualRecord = {
+            viewId,
+            title: record.title,
+            placement: record.placement === 'inline' ? 'inline' : 'pane',
+            closed: record.closed === true,
+            ...(typeof record.latestVersion === 'number' ? { latestVersion: record.latestVersion } : {})
+          }
+          setOtherViews((current) => new Map(current).set(viewId, found))
+        })
+        .catch(() => askedViews.current.delete(viewId))
+    }
+  }, [context, history, viewIndex])
 
   // a Visualize request is done once its visual arrives or the turn that took it ends, whichever is first
   useEffect(() => {
@@ -266,7 +303,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   }, [visualizing, working])
 
   useEffect(() => {
-    if (expanded === null || viewIndex.status !== 'ready') return
+    if (expanded === null || expanded.foreign || viewIndex.status !== 'ready') return
     const record = viewIndex.byId.get(expanded.viewId)
     if (!record || record.closed) setExpanded(null)
   }, [expanded, viewIndex])

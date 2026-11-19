@@ -1439,6 +1439,26 @@ describe('visual reference pills', () => {
     expect(pills()).toEqual(['◈ Schema › Postgres'])
   })
 
+  test('with an empty cache a row, a matrix cell and a board card restore their own labels', async () => {
+    const spec = {
+      title: 'Plan',
+      root: {
+        type: 'stack',
+        children: [
+          { type: 'table', props: { columns: ['name', 'role'], rows: [['Alice', 'lead'], ['Bob', 'dev']] } },
+          { type: 'matrix', props: { columns: ['Codex', 'Claude'], rows: [{ label: 'Patch', cells: ['yes', 'no'] }] } },
+          { type: 'board', props: { columns: [{ title: 'Todo', cards: [{ id: 'a1', title: 'Write tests' }] }, { title: 'Done', cards: [{ id: 'b2', title: 'Ship it' }] }] } }
+        ]
+      }
+    }
+    await mount({
+      'quirky.view/get': () => ({ title: 'Plan', spec }),
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: '@view:view_bbbbbbbbbbbb/v1/row:0 @view:view_bbbbbbbbbbbb/v1/cell:patch:claude @view:view_bbbbbbbbbbbb/v1/item:b2 ok' })
+    })
+    await settle()
+    expect(pills()).toEqual(['◈ Plan › Alice', '◈ Plan › Patch › Claude', '◈ Plan › Ship it'])
+  })
+
   test('the chat no longer answers after its composer is gone', async () => {
     await mount()
     expect(chatHandler('s1', 'point')).toBeDefined()

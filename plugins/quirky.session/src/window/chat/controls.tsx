@@ -352,25 +352,109 @@ export function chatHandler<K extends keyof ChatHandle>(session: string, action:
   return [...(handles.get(session) ?? [])].reverse().find((entry) => entry[action] !== undefined)?.[action]
 }
 
-type LabelRecord = { title?: string; spec?: { root?: { id?: string; props?: Record<string, unknown>; children?: unknown[] } } }
+type SpecNode = { type?: string; id?: string; props?: Record<string, unknown>; children?: unknown[] }
+type LabelRecord = { title?: string; spec?: { root?: SpecNode } }
 
-/** The text an element key reads as in `spec`: the named node's title, label or text, else the key's own words. */
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' && Number.isFinite(value) ? String(value) : '')
+const itemsOf = (value: unknown): Record<string, unknown>[] => (Array.isArray(value) ? value.filter(isRecord) : [])
+const clamp = (text: string, max = 120): string => {
+  const line = text.replace(/\s+/g, ' ').trim()
+  return line.length <= max ? line : `${line.slice(0, max - 1)}…`
+}
+
+/** Mirrors the renderer's key fragment so a stored key can be matched against the spec it was made from. */
+const keyPart = (text: string, fallback: string): string => {
+  const slug = text.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|-+$/g, '').slice(0, 40)
+  return slug === '' ? fallback : slug
+}
+const keyOf = (prefix: string, ...parts: string[]): string => [prefix, ...parts].join(':').slice(0, 80)
+const withUnit = (value: unknown, unit: string): string => (unit === '' ? textOf(value) : `${textOf(value)} ${unit}`)
+
+/** The node text a Mermaid source gives `id`, from `id[text]`, `id(text)`, `id{text}` or `participant id as text`; null when it names none. */
+function mermaidText(source: string, id: string): string | null {
+  const shaped = /([A-Za-z0-9_][\w.-]*)\s*(?:\[\[|\[\(|\(\(|\[|\(|\{\{|\{|>)\s*"?([^"\]\)\}\n]+)/g
+  for (const match of source.matchAll(shaped)) if (keyPart(match[1]!, 'node') === id) return clamp(match[2]!.replace(/<br\s*\/?>/gi, ' '))
+  for (const match of source.matchAll(/(?:participant|actor)\s+([A-Za-z0-9_][\w.-]*)\s+as\s+(.+)/g)) if (keyPart(match[1]!, 'node') === id) return clamp(match[2]!)
+  return null
+}
+
+/** The element keys `node` makes pointable, each with its label, in the shapes the card renderer gives them. */
+function pointsOf(node: SpecNode): [string, string][] {
+  const props = node.props ?? {}
+  const points: [string, string][] = []
+  if (node.id !== undefined) {
+    const named = ['title', 'label', 'caption', 'alt', 'path', 'text'].map((name) => textOf(props[name])).find((value) => value !== '')
+    points.push([keyOf('node', node.id), clamp(named ?? node.id)])
+  }
+  const itemKey = (id: unknown, index: number) => keyOf('item', keyPart(textOf(id), String(index)))
+  switch (node.type) {
+    case 'table':
+      ;(Array.isArray(props.rows) ? props.rows.filter(Array.isArray) : []).forEach((row, index) => points.push([keyOf('row', String(index)), clamp(textOf(row[0]))]))
+      break
+    case 'bar-chart': {
+      const unit = textOf(props.unit)
+      itemsOf(props.series).forEach((entry, index) => points.push([keyOf('pt', keyPart(textOf(entry.label), String(index))), clamp(`${textOf(entry.label)} ${withUnit(entry.value, unit)}`)]))
+      break
+    }
+    case 'line-chart': {
+      const unit = textOf(props.unit)
+      itemsOf(props.points).forEach((point, index) => points.push([keyOf('pt', keyPart(textOf(point.x), String(index))), clamp(`${textOf(point.x)} ${withUnit(point.y, unit)}`)]))
+      break
+    }
+    case 'timeline':
+      itemsOf(props.items).forEach((entry, index) => points.push([itemKey(entry.id, index), clamp(textOf(entry.label))]))
+      break
+    case 'board': {
+      let running = 0
+      for (const column of itemsOf(props.columns)) for (const card of itemsOf(column.cards)) points.push([itemKey(card.id, running++), clamp(textOf(card.title))])
+      break
+    }
+    case 'sketch':
+      itemsOf(props.shapes).forEach((shape, index) => points.push([itemKey(shape.id, index), clamp(textOf(shape.label) || `${textOf(shape.kind)} ${index + 1}`)]))
+      break
+    case 'matrix': {
+      const columns = Array.isArray(props.columns) ? props.columns.map(textOf) : []
+      itemsOf(props.rows).forEach((row, rowIndex) => {
+        const label = textOf(row.label)
+        columns.forEach((column, columnIndex) => {
+          points.push([keyOf('cell', keyPart(label, String(rowIndex)), keyPart(column, String(columnIndex))), clamp(`${label} › ${column}`)])
+        })
+      })
+      break
+    }
+    case 'file-map':
+      itemsOf(props.entries).forEach((entry, index) => points.push([keyOf('file', String(index)), clamp(textOf(entry.path))]))
+      break
+  }
+  return points
+}
+
+/**
+ * The text an element key reads as in `spec`: the named node, row, point, item, cell, file, line, diagram
+ * node or region it points at, else the key itself.
+ */
 function labelOfElement(spec: LabelRecord['spec'], element: string): string {
   const [kind, ...rest] = element.split(':')
   const key = rest.join(':')
-  if (kind === 'node') {
-    const stack: unknown[] = [spec?.root]
-    while (stack.length > 0) {
-      const node = stack.pop() as { id?: string; props?: Record<string, unknown>; children?: unknown[] } | undefined
-      if (!node || typeof node !== 'object') continue
-      if (node.id === key) {
-        const named = [node.props?.title, node.props?.label, node.props?.text].find((value): value is string => typeof value === 'string' && value !== '')
-        return named ?? key
-      }
-      stack.push(...(node.children ?? []))
-    }
+  const stack: unknown[] = [spec?.root]
+  const diagrams: string[] = []
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!isRecord(node)) continue
+    const entry = node as SpecNode
+    const found = pointsOf(entry).find(([candidate]) => candidate === element)
+    if (found) return found[1]
+    if (entry.type === 'diagram' && isRecord(entry.props)) diagrams.push(textOf(entry.props.source))
+    const children = Array.isArray(entry.children) ? entry.children : []
+    for (let index = children.length - 1; index >= 0; index--) stack.push(children[index])
   }
-  return rest.length === 0 ? element : `${kind} ${key}`
+  if (kind === 'dg') return diagrams.map((source) => mermaidText(source, key)).find((text): text is string => text !== null) ?? key
+  if (kind === 'line' && /^\d+$/.test(key)) return `line ${key}`
+  const region = kind === 'region' ? /^(\d+)-(\d+)$/.exec(key) : null
+  if (region) return `region near ${region[1]}%,${region[2]}%`
+  if (kind === 'pt') return key
+  return element
 }
 
 /**
