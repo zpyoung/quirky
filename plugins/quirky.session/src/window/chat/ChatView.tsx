@@ -7,7 +7,6 @@ import { ChatHeader } from './ChatHeader'
 import { chatFrame, useChatLayout } from './chatLayout'
 import { Composer } from './Composer'
 import { defaultVisualLevel, registerChatHandle, useVisualLabels } from './controls'
-import { newestUserAt } from './elapsed'
 import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
@@ -624,7 +623,6 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         session={session}
         capabilities={capabilities}
         working={working}
-        workStartedAt={newestUserAt(history)}
         reportedMode={mode?.mode}
         autoAvailable={autoAvailable}
         previousMode={modeBeforePlan}
