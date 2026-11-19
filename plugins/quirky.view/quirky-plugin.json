@@ -734,15 +734,19 @@
       {
         "id": "control",
         "title": "Control view UI",
-        "description": "Discover mounted view surfaces and control pane tabs, refreshes, and link confirmations.",
+        "description": "Discover mounted view surfaces and control pane tabs, refreshes, link confirmations, version stepping, expand, pop out, pointing at an element, the didn't-render detail and live previews.",
         "palette": false,
         "args": {
           "type": "object",
           "properties": {
-            "action": { "type": "string", "enum": ["state", "refresh", "select-tab", "dismiss-tab", "link-preview", "link-cancel", "link-confirm"] },
+            "action": { "type": "string", "enum": ["state", "refresh", "select-tab", "dismiss-tab", "link-preview", "link-cancel", "link-confirm", "show-version", "expand", "pop-out", "toggle-refused", "point", "show-preview", "reload-preview"] },
             "instance": { "type": "string" },
             "viewId": { "type": "string" },
-            "href": { "type": "string" }
+            "href": { "type": "string" },
+            "version": { "type": "integer", "minimum": 1 },
+            "element": { "type": "string" },
+            "label": { "type": "string" },
+            "node": { "type": "string" }
           },
           "required": ["action"],
           "additionalProperties": false

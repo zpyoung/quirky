@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { RpcError, RpcErrorCode, type CommandHandler, type MountFunction, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type CommandHandler, type MountFunction, type NativeBrowserCapability, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import type { ViewPlacement, ViewRecord, ViewSpec } from '../src/core/catalog'
 
 type Handler = (params: Record<string, unknown>) => unknown
@@ -32,8 +32,14 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const toasts: { title: string; body: string }[] = []
+  /** Commands another plugin would register, such as the chat's point and expand; a command not listed here and not provided rejects. */
+  const commands: Record<string, (args?: unknown) => unknown> = {}
+  const environment: { nativeBrowser?: Partial<NativeBrowserCapability> } = {}
 
   const context = {
+    get nativeBrowser() {
+      return environment.nativeBrowser
+    },
     pluginId: 'quirky.view',
     log() {},
     provide(id: string, implementation: unknown) {
@@ -47,6 +53,11 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     },
     executeCommand: async (id: string, args?: unknown) => {
       commandCalls.push({ id, args })
+      const external = commands[id]
+      if (external) {
+        await external(args)
+        return
+      }
       const command = provided.get(id)
       if (typeof command !== 'function') throw new Error(`No command: ${id}`)
       await (command as CommandHandler)(args)
@@ -69,6 +80,8 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     calls,
     provided,
     toasts,
+    commands,
+    environment,
     commandCalls,
     reports,
     callsTo: (method: string) => calls.filter((call) => call.method === method),
