@@ -1193,14 +1193,24 @@ describe('the error row', () => {
     expect(buttonNamed('Open in terminal')).toBeDefined()
   })
 
-  test('Restart resumes the session and opens the new one', async () => {
+  test('Restart resumes the session in its own tab and opens nothing new', async () => {
     await mountChat({
       messages: errorMessages(true),
-      handlers: { 'quirky.structured/resume': () => session({ id: 'resumed', kind: 'structured', agent: 'claude' }) }
+      handlers: { 'quirky.terminal/resumeSession': () => ({ session: session({ id: 'resumed', kind: 'structured', agent: 'claude' }), pane: 'pane-1', workspace: {} }) }
     })
     await click(buttonNamed('Restart'))
     await settle()
-    expect(fake.callsTo('quirky.structured/resume')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.opened).toEqual([])
+  })
+
+  test('Restart of a chat no tab shows opens the resumed session', async () => {
+    await mountChat({
+      messages: errorMessages(true),
+      handlers: { 'quirky.terminal/resumeSession': () => ({ session: session({ id: 'resumed', kind: 'structured', agent: 'claude' }), pane: null, workspace: null }) }
+    })
+    await click(buttonNamed('Restart'))
+    await settle()
     expect(fake.opened[0]).toEqual({ id: 'view:quirky.session/worktree', input: { worktree: 'wt-main', session: 'resumed' } })
   })
 
@@ -1211,7 +1221,7 @@ describe('the error row', () => {
     expect(restart.getAttribute('title')).toBe('pi cannot resume a conversation')
     expect(text()).toContain('pi cannot resume a conversation')
     await click(restart)
-    expect(fake.callsTo('quirky.structured/resume')).toEqual([])
+    expect(fake.callsTo('quirky.terminal/resumeSession')).toEqual([])
   })
 
   test('Restart falls back to a general reason while capabilities are unknown', async () => {
@@ -1220,7 +1230,7 @@ describe('the error row', () => {
   })
 
   test('a failed restart shows a toast', async () => {
-    await mountChat({ messages: errorMessages(true), handlers: { 'quirky.structured/resume': () => { throw new Error('lease held') } } })
+    await mountChat({ messages: errorMessages(true), handlers: { 'quirky.terminal/resumeSession': () => { throw new Error('lease held') } } })
     await click(buttonNamed('Restart'))
     await settle()
     expect(fake.toasts[0]).toEqual({ title: 'Could not restart', body: 'lease held' })

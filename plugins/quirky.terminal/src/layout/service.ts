@@ -143,6 +143,7 @@ export class LayoutService {
     splitPane: (params) => this.queued(() => this.splitPane(params)),
     closePane: (params) => this.queued(() => this.closePane(params)),
     restartPane: (params) => this.queued(() => this.restartPane(params)),
+    resumeSession: (params) => this.queued(() => this.resumeSession(params)),
     focusPane: (params, caller) => this.queued(() => this.focusPane(params, caller)),
     focusContext: (params) => this.queued(() => this.readOrSetFocusContext(params)),
     setPaneTitle: (params) => this.queued(() => this.editPane(params, (ws, pane) => ops.setPaneTitle(ws, pane, params.title as string))),
@@ -1080,6 +1081,44 @@ export class LayoutService {
     }
     await this.closeQuietly(old.id)
     return { workspace: saved }
+  }
+
+  /**
+   * Resumes an ended agent session and, when a pane shows it, swaps the resumed session into that
+   * pane and focuses it in the same queue slot, so reconciliation never gives it a tab of its own.
+   * A session no pane shows, or one still running, resumes without touching the layout.
+   * `draft` is saved on the resumed session before the pane switches, so its composer opens with it.
+   */
+  private async resumeSession(params: Params): Promise<{ session: Session; pane: string | null; workspace: Workspace | null }> {
+    if (typeof params.session !== 'string' || params.session === '') throw this.context.error('invalid-params', 'session is required')
+    if (params.draft !== undefined && (typeof params.draft !== 'object' || params.draft === null || Array.isArray(params.draft))) {
+      throw this.context.error('invalid-params', 'draft must be an object')
+    }
+    const old = await this.session(params.session)
+    const resumed = (await this.context.call('quirky.session/resume', { session: old.id })) as Session
+    if (params.draft !== undefined) {
+      await this.context
+        .call('quirky.session/saveDraft', { session: resumed.id, draft: params.draft })
+        .catch((error) => this.context.log(`could not carry the draft to session ${resumed.id}: ${messageOf(error)}`))
+    }
+    const target = old.status === 'exited' ? this.locateAnywhere(old.id) : null
+    if (!target || target.ws.id !== resumed.worktreeId) return { session: resumed, pane: null, workspace: null }
+    const { ws, loc } = target
+    const ids = this.ids()
+    const rebound = this.unwrap(ops.rebindPane(ws, loc.pane.id, resumed.id))
+    const saved = this.commit(ws, this.unwrap(ops.focusPaneOp(rebound, loc.pane.id)), ids)
+    if (saved.id !== FLOATING_WORKSPACE || this.floatingIsVisible()) this.updateFocusContext(saved.id)
+    // a structured record stays: the resumed chat pages back through it for its earlier turns
+    if (old.kind === 'terminal') await this.closeQuietly(old.id)
+    return { session: resumed, pane: loc.pane.id, workspace: saved }
+  }
+
+  private locateAnywhere(sessionId: string): { ws: Workspace; loc: ops.PaneLocation } | null {
+    for (const ws of this.workspaces.values()) {
+      const loc = ops.locateSession(ws, sessionId)
+      if (loc) return { ws, loc }
+    }
+    return null
   }
 
   private async focusPane(params: Params, caller: PluginCaller): Promise<{ workspace: Workspace }> {

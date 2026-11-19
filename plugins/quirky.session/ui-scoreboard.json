@@ -2151,14 +2151,18 @@
       "anchor": "onClick",
       "route": {
         "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
-          "quote": "context.call('quirky.structured/resume', { session: session.id })"
+          "file": "plugins/quirky.session/src/window/chat/resumeInPlace.ts",
+          "quote": "context.call('quirky.terminal/resumeSession', {\n    session: session.id,\n    ...(draft === undefined ? {} : { draft })\n  })"
         },
-        "target": "quirky.structured/resume",
+        "target": "quirky.terminal/resumeSession",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
-            "quote": "const restart = async () => {\n    setBusy(true)\n    try {\n      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })\n    } catch (error) {\n      context.toast('Could not restart', messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+            "quote": "const restart = async () => {\n    setBusy(true)\n    try {\n      await resumeInPlace(context, session)\n    } catch (error) {\n      context.toast('Could not restart', messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/resumeInPlace.ts",
+            "quote": "export async function resumeInPlace(context: UiPluginContext, session: Session, draft?: Draft): Promise<Session> {\n  const result = (await context.call('quirky.terminal/resumeSession', {\n    session: session.id,\n    ...(draft === undefined ? {} : { draft })\n  })) as { session: Session; pane: string | null }\n  if (result.pane === null) context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: result.session.id })\n  return result.session\n}"
           }
         ]
       }
@@ -2296,14 +2300,18 @@
       "anchor": "onClick",
       "route": {
         "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/resume', { session: session.id })"
+          "file": "plugins/quirky.session/src/window/chat/resumeInPlace.ts",
+          "quote": "context.call('quirky.terminal/resumeSession', {\n    session: session.id,\n    ...(draft === undefined ? {} : { draft })\n  })"
         },
-        "target": "quirky.structured/resume",
+        "target": "quirky.terminal/resumeSession",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const resume = async () => {\n    try {\n      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session\n      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks })\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })\n    } catch (error) {\n      fail(`Could not resume: ${messageOf(error)}`)\n    }\n  }"
+            "quote": "const resume = async () => {\n    try {\n      const carried = { text, images: images.map((image) => image.path), pastes, picks: draftPicks }\n      await resumeInPlace(context, session, isEmptyDraft(carried) ? undefined : carried)\n    } catch (error) {\n      fail(`Could not resume: ${messageOf(error)}`)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/resumeInPlace.ts",
+            "quote": "export async function resumeInPlace(context: UiPluginContext, session: Session, draft?: Draft): Promise<Session> {\n  const result = (await context.call('quirky.terminal/resumeSession', {\n    session: session.id,\n    ...(draft === undefined ? {} : { draft })\n  })) as { session: Session; pane: string | null }\n  if (result.pane === null) context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: result.session.id })\n  return result.session\n}"
           }
         ]
       }
