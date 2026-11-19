@@ -1,4 +1,4 @@
-import type { CallState, ChatItem, StructuredMessage } from '@quirky/protocol'
+import type { CallState, ChatItem, StructuredMessage, VisualLevel } from '@quirky/protocol'
 import { visibleMessages } from '../transcript'
 
 type Of<K extends ChatItem['kind']> = Extract<ChatItem, { kind: K }>
@@ -67,7 +67,8 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
  * first one goes in a turn with no user message; a `user` item the agent injected itself is
  * dropped. Of the items sharing a `callId` only the last counts, shown where the first appeared, and
  * the same holds for the `plan` items of one version across turns. `mode` items only feed the
- * composer and never render. Messages with no `item` stay as `legacy` blocks, and `status` items and
+ * composer and never render, and neither do `visual-level` items. A turn shows each view once, at the
+ * newest version the turn made. Messages with no `item` stay as `legacy` blocks, and `status` items and
  * diagnostics are left out unless `showAll`.
  */
 export function groupTurns(messages: StructuredMessage[], options: { showAll?: boolean } = {}): Turn[] {
@@ -108,7 +109,7 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
       continue
     }
     if (item.kind === 'status' && !showAll) continue
-    if (item.kind === 'mode') continue
+    if (item.kind === 'mode' || item.kind === 'visual-level') continue
     const draft = drafts[drafts.length - 1] ?? open(message, null)
     if (item.kind === 'turn-end') {
       draft.turn.end = { state: item.state, ...(item.durationMs === undefined ? {} : { durationMs: item.durationMs }) }
@@ -204,8 +205,13 @@ function toBlocks(allEntries: Entry[], end: TurnEnd | null): Block[] {
       case 'plan':
         blocks.push({ kind: 'plan', seq: entry.seq, item })
         break
+      case 'view': {
+        const shown = blocks.find((block): block is Extract<Block, { kind: 'view' }> => block.kind === 'view' && block.item.viewId === item.viewId)
+        if (!shown) blocks.push({ kind: 'view', seq: entry.seq, item })
+        else if ((item.version ?? 1) >= (shown.item.version ?? 1)) shown.item = item
+        break
+      }
       case 'ask':
-      case 'view':
       case 'view-error':
       case 'changes':
       case 'error':
@@ -303,4 +309,13 @@ export function summarizeActivity(calls: ActivityCall[]): string {
 export function lastTurnOpen(turns: Turn[]): boolean {
   const last = turns[turns.length - 1]
   return last !== undefined && last.user !== null && last.end === null
+}
+
+/** The newest visual level the chat journaled in `messages`, or null before it ever changed from the default. */
+export function currentVisualLevel(messages: StructuredMessage[]): VisualLevel | null {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const item = messages[index]!.item
+    if (item?.kind === 'visual-level') return item.level
+  }
+  return null
 }

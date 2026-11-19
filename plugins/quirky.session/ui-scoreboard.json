@@ -303,7 +303,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -323,7 +323,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -343,7 +343,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -363,7 +363,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -603,7 +603,43 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "context.toast('Could not ask for a visual', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.toast('Could not ask for a visual', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "nothing ? (\n            <div style={empty}>\n              <EmptyState message=\"Pictures the agent draws to explain its work, and the plan, show up here.\" />"
+      },
+      "anchor": "nothing ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "<EmptyState message=\"Pictures the agent draws to explain its work, and the plan, show up here.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "import { Badge, ControlIcon, EmptyState, IconButton } from '@quirky/ui'"
         }
       }
     }
@@ -790,14 +826,6 @@
       },
       "anchor": "heading &&",
       "reason": "Drops the picker's own title when a dialog already titles it; it is layout, not a read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "{paneViews > 0 && ("
-      },
-      "anchor": "paneViews > 0 &&",
-      "reason": "Renders the Views pane only when the agent placed a view there; it is layout, not a read state."
     },
     {
       "site": {
@@ -1417,30 +1445,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "panelOpen && shown ? ("
-      },
-      "anchor": "panelOpen && shown ?",
-      "reason": "Builds the plan panel only while the user has it open on a version; the open choice selects layout, not a read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "{planPanel !== null && fits && ("
-      },
-      "anchor": "planPanel !== null && fits &&",
-      "reason": "Places the open plan panel beside the transcript when the body is wide enough; width selects layout, not a read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "{planPanel !== null && !fits && ("
-      },
-      "anchor": "planPanel !== null && !fits &&",
-      "reason": "Places the open plan panel in a sheet when the body is too narrow for a side panel; width selects layout, not a read state."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
         "quote": "{framed ? ("
       },
@@ -1526,6 +1530,118 @@
       },
       "anchor": "older.loading ?",
       "reason": "Relabels the Load earlier messages button while its page is fetched; the transcript already shown stays, so this is a control label, not a loading state of the view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "expanded !== null && ("
+      },
+      "anchor": "expanded !== null &&",
+      "reason": "Shows the expanded layout only while a visual is expanded; a layout choice, not a read of data."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{!block.streaming && ("
+      },
+      "anchor": "!block.streaming &&",
+      "reason": "Offers Visualize only on a finished reply; the presence of a control, not a state of the chat."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (visual) return <VisualizableProse"
+      },
+      "anchor": "if (visual)",
+      "reason": "Chooses prose with the Visualize icon when the chat offers visual actions; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (!visual || visual.views.status === 'unavailable') return inline"
+      },
+      "anchor": "if (!visual || visual.views.status === 'unavailable')",
+      "reason": "Falls back to the inline card, with its quiet fallback text, when views cannot be read or the chat offers no visual actions; the card owns its own states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (visual.views.status === 'loading') return null"
+      },
+      "anchor": "if (visual.views.status === 'loading')",
+      "reason": "Leaves a view block empty until the chat has read where each view lives; the transcript's own loading notice already covers the read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (record?.placement === 'inline') return inline"
+      },
+      "anchor": "if (record?.placement === 'inline')",
+      "reason": "Chooses the inline card or the chip by where the view was placed; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "if (collapsed) {"
+      },
+      "anchor": "if (collapsed)",
+      "reason": "Chooses the rail over the panel by whether the panel is collapsed; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "{fresh > 0 && <Badge"
+      },
+      "anchor": "fresh > 0 &&",
+      "reason": "Shows the new-visuals count only once something was drawn while collapsed; a counter, not a state of the read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "const planCard = plan && ("
+      },
+      "anchor": "plan &&",
+      "reason": "Builds the plan card only while a plan is open; the plan card owns its own states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "{planCard && <div style={planCell}>"
+      },
+      "anchor": "planCard &&",
+      "reason": "Puts the plan card first in the grid when one is open; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "{plan && ("
+      },
+      "anchor": "plan &&",
+      "reason": "Puts a plan tile first in the filmstrip when a plan is open; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": ") : wide ? ("
+      },
+      "anchor": "wide ?",
+      "reason": "Chooses the grid or the filmstrip by the panel width; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "{focusedKey === PLAN ? planCard : focusedView ? visualCard(focusedView) : null}"
+      },
+      "anchor": "focusedKey === PLAN ?",
+      "reason": "Shows the focused card under the filmstrip; layout only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/editor/pills.ts",
+        "quote": "} else if (this.pill.kind === 'command') {"
+      },
+      "anchor": "if (this.pill.kind === 'command')",
+      "reason": "Chooses a chip's text by its kind; presentation of one chip, not a state of the view."
     }
   ],
   "actions": [
@@ -2451,7 +2567,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const wasLevel = before.visualLevel ?? reportedLevelRef.current ?? defaultVisualLevel(context)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.visualLevel !== undefined && next.visualLevel !== wasLevel ? { visualLevel: next.visualLevel } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode,\n          ...((settled.visualLevel ?? current.visualLevel) === undefined ? {} : { visualLevel: settled.visualLevel ?? current.visualLevel })\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
           }
         ]
       }
@@ -2480,7 +2596,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const wasLevel = before.visualLevel ?? reportedLevelRef.current ?? defaultVisualLevel(context)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.visualLevel !== undefined && next.visualLevel !== wasLevel ? { visualLevel: next.visualLevel } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode,\n          ...((settled.visualLevel ?? current.visualLevel) === undefined ? {} : { visualLevel: settled.visualLevel ?? current.visualLevel })\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
           }
         ]
       }
@@ -2882,24 +2998,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "onClose={closePanel}\n        framed={fits}"
-      },
-      "anchor": "onClose",
-      "transient": "draft",
-      "reason": "Hides the plan panel; only local view state changes."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-        "quote": "<Dialog open title=\"Plan\" variant=\"sheet\" scrollBody onClose={closePanel}>"
-      },
-      "anchor": "onClose",
-      "transient": "draft",
-      "reason": "Hides the plan sheet; only local view state changes."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/PlanPanel.tsx",
         "quote": "onChange={(event) => setFeedback(event.target.value)}"
       },
@@ -3044,7 +3142,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const wasLevel = before.visualLevel ?? reportedLevelRef.current ?? defaultVisualLevel(context)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.visualLevel !== undefined && next.visualLevel !== wasLevel ? { visualLevel: next.visualLevel } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode,\n          ...((settled.visualLevel ?? current.visualLevel) === undefined ? {} : { visualLevel: settled.visualLevel ?? current.visualLevel })\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
           }
         ]
       }
@@ -3104,6 +3202,316 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onVisualize: visualize"
+      },
+      "anchor": "onVisualize",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+          "quote": "context.call('quirky.structured/send', { session: session.id, text: request, when: workingNow.current ? 'idle' : 'now' })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+            "quote": "const visualize = (seq: number, request: string) => {\n    setVisualizing(seq)\n    context.call('quirky.structured/send', { session: session.id, text: request, when: workingNow.current ? 'idle' : 'now' }).catch((error) => {\n      setVisualizing(null)\n      context.toast('Could not ask for a visual', messageOf(error))\n    })\n  }\n"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onOpen: openVisual"
+      },
+      "anchor": "onOpen",
+      "transient": "draft",
+      "reason": "Focuses a visual in the visual panel; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onKeyDownCapture={onLayoutKeyDown}"
+      },
+      "anchor": "onKeyDownCapture",
+      "transient": "draft",
+      "reason": "Esc leaves the expanded layout; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onClosePlan={closePanel}"
+      },
+      "anchor": "onClosePlan",
+      "transient": "draft",
+      "reason": "Hides the plan card; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onClick={onLeaveExpanded}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onLeaveExpanded, which only leaves the expanded layout."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<VisualDial level={level} onPick={(next) => void pick({ ...picks, visualLevel: next })} />"
+      },
+      "anchor": "onPick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const wasLevel = before.visualLevel ?? reportedLevelRef.current ?? defaultVisualLevel(context)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.visualLevel !== undefined && next.visualLevel !== wasLevel ? { visualLevel: next.visualLevel } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settled = result?.settings\n      if (settled) {\n        setPicks((current) => ({\n          model: settled.model ?? current.model,\n          effort: settled.effort ?? current.effort,\n          mode: settled.permissionMode ?? current.mode,\n          ...((settled.visualLevel ?? current.visualLevel) === undefined ? {} : { visualLevel: settled.visualLevel ?? current.visualLevel })\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onMouseEnter={() => setShown(true)}"
+      },
+      "anchor": "onMouseEnter",
+      "transient": "hover",
+      "reason": "Shows the Visualize icon while the pointer is over the reply."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onMouseLeave={() => setShown(false)}"
+      },
+      "anchor": "onMouseLeave",
+      "transient": "hover",
+      "reason": "Hides the Visualize icon when the pointer leaves the reply."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onFocus={() => setShown(true)}"
+      },
+      "anchor": "onFocus",
+      "transient": "hover",
+      "reason": "Shows the Visualize icon while keyboard focus is inside the reply."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onBlur={(event) => {"
+      },
+      "anchor": "onBlur",
+      "transient": "hover",
+      "reason": "Hides the Visualize icon when focus leaves the reply."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onClick={() => actions.onVisualize(block.seq, visualizeRequest(block.text))}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onVisualize, which asks the agent for the visual; the send is routed from the chat view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onOpen={() => visual"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards the chip click to onOpen, which only focuses the visual in the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualChip.tsx",
+        "quote": "onClick={onOpen}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpen, which only focuses the visual in the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "document.addEventListener('pointermove', move)"
+      },
+      "anchor": "document.addEventListener('pointermove'",
+      "notAction": "subscription",
+      "reason": "Resizes the panel while the divider is dragged; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "document.addEventListener('pointerup', stop)"
+      },
+      "anchor": "document.addEventListener('pointerup'",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 })"
+        },
+        "target": "quirky.session/setUiPref",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const stop = () => {\n      document.removeEventListener('pointermove', move)\n      document.removeEventListener('pointerup', stop)\n      document.removeEventListener('pointercancel', stop)\n      setDragging(false)\n      saveWidth()\n    }\n"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const saveWidth = () => {\n    context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 }).catch(() => {})\n  }\n"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "document.addEventListener('pointercancel', stop)"
+      },
+      "anchor": "document.addEventListener('pointercancel'",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 })"
+        },
+        "target": "quirky.session/setUiPref",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const stop = () => {\n      document.removeEventListener('pointermove', move)\n      document.removeEventListener('pointerup', stop)\n      document.removeEventListener('pointercancel', stop)\n      setDragging(false)\n      saveWidth()\n    }\n"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const saveWidth = () => {\n    context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 }).catch(() => {})\n  }\n"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClick={onShowPanel}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onShowPanel, which only shows the panel again."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "isNewest={plan.isNewest} onClose={"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onClosePlan, which only hides the plan card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onPointerDown={onStartDrag}"
+      },
+      "anchor": "onPointerDown",
+      "notAction": "forwarded",
+      "reason": "Forwards the press to onStartDrag, which installs the drag listeners; nothing changes until the pointer moves."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onKeyDown={onDividerKey}"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 })"
+        },
+        "target": "quirky.session/setUiPref",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const onDividerKey = (event: KeyboardEvent<HTMLElement>) => {\n    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return\n    event.preventDefault()\n    dragged.current = true\n    setWidth(clampRatio(ratioRef.current + (event.key === 'ArrowLeft' ? RATIO_STEP : -RATIO_STEP)))\n    saveWidth()\n  }\n"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const saveWidth = () => {\n    context.call('quirky.session/setUiPref', { key: WIDTH_RATIO_KEY, value: Math.round(ratioRef.current * 1000) / 1000 }).catch(() => {})\n  }\n"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClick={onCollapsePanel}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onCollapsePanel, which only collapses the panel to its rail."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClick={() => onFocusCard(PLAN)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onFocusCard, which only shows the plan card as the focused card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClick={() => onFocusCard(view.viewId)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onFocusCard, which only shows that visual as the focused card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
+        "quote": "onClick={onToggle}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onToggle, which only opens or closes the visual level list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
+        "quote": "onClose={() => setOpen(false)}>"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Closes the visual level list; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
+        "quote": "onChoose={onPickLevel}"
+      },
+      "anchor": "onChoose",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPickLevel, which hands the level to onPick; the composer applies it through configure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
+        "quote": "          onClose={() => setOpen(false)}\n        />"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Closes the visual level list; no data changes."
     }
   ]
 }

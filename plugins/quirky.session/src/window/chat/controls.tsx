@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react'
-import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@quirky/protocol'
-import { AgentIcon, Badge } from '@quirky/ui'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import type { AgentCapabilities, Capability, Session, UiPluginContext, VisualLevel } from '@quirky/protocol'
+import { AgentIcon, Badge, Button, ContextMenuList, ControlIcon, Popover, type ContextMenuItem } from '@quirky/ui'
+import { clearVisualResolver, setVisualResolver, type VisualLabel, type VisualRef } from './editor/types'
 
 export type Choice = { value: string; label: string }
 type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null; default?: string }
@@ -15,8 +16,8 @@ export type AgentOptions = {
   defaultModel: string | null
 }
 
-/** What the user has picked in the composer; null means the agent's own default. */
-export type Picks = { model: string | null; effort: string | null; mode: string | null }
+/** What the user has picked in the composer; null means the agent's own default. `visualLevel` is left out until the dial is used. */
+export type Picks = { model: string | null; effort: string | null; mode: string | null; visualLevel?: VisualLevel }
 
 export const NO_PICKS: Picks = { model: null, effort: null, mode: null }
 
@@ -275,4 +276,115 @@ export function useTurnSettings(
 export function modeLabel(mode: string): string {
   const words = mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase()
   return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+export const VISUAL_LEVELS: { value: VisualLevel; label: string; detail: string }[] = [
+  { value: 'off', label: 'Off', detail: 'Draws only when you ask' },
+  { value: 'balanced', label: 'Balanced', detail: 'Draws when a picture clearly beats prose' },
+  { value: 'visual-first', label: 'Visual-first', detail: 'Draws for any structured answer' }
+]
+
+export const visualLevelLabel = (level: VisualLevel): string => VISUAL_LEVELS.find((entry) => entry.value === level)?.label ?? level
+
+const DEFAULT_LEVEL_SETTING = 'setting:quirky.structured/default-visual-level'
+
+/** The level a chat with no `visual-level` item draws at: the `default-visual-level` setting. */
+export function defaultVisualLevel(context: UiPluginContext): VisualLevel {
+  try {
+    const value = context.getSetting(DEFAULT_LEVEL_SETTING)
+    return value === 'off' || value === 'balanced' || value === 'visual-first' ? value : 'visual-first'
+  } catch {
+    return 'visual-first'
+  }
+}
+
+const dialChip = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)', borderRadius: 'var(--ui-radius-window)' } satisfies CSSProperties
+
+/** The composer's visual-level dial: names the level the next message goes out at and lists the three to pick from. */
+export function VisualDial({ level, onPick }: { level: VisualLevel; onPick: (level: VisualLevel) => void }) {
+  const [open, setOpen] = useState(false)
+  const anchor = useRef<HTMLDivElement>(null)
+  const items: ContextMenuItem[] = VISUAL_LEVELS.map((entry) => ({ id: entry.value, label: entry.label, detail: entry.detail, checked: entry.value === level }))
+  const onToggle = () => setOpen(!open)
+  const onPickLevel = (item: ContextMenuItem) => {
+    setOpen(false)
+    if (item.id !== undefined && item.id !== level) onPick(item.id as VisualLevel)
+  }
+  return (
+    <div ref={anchor} style={{ display: 'inline-flex' }}>
+      <Button style={dialChip} aria-haspopup="dialog" aria-expanded={open} title="How liberally the agent draws visuals in this chat" onClick={onToggle}>
+        {`Visuals: ${visualLevelLabel(level)}`}
+        <ControlIcon name="caret-down" />
+      </Button>
+      <Popover open={open} label="Visual level" anchor={anchor} onClose={() => setOpen(false)}>
+        <ContextMenuList
+          items={items}
+          label="Visual level"
+          highlightFirst
+          onChoose={onPickLevel}
+          onClose={() => setOpen(false)}
+        />
+      </Popover>
+    </div>
+  )
+}
+
+/** What a chat does when a visual's card asks it to: put a reference in the composer, or expand a visual. */
+export type ChatHandle = {
+  point?: (ref: VisualRef, label: VisualLabel) => void
+  expand?: (viewId: string, version?: number) => void
+}
+
+const handles = new Map<string, ChatHandle[]>()
+
+/** Makes the chat of `session` answer `handle`'s commands for as long as it is mounted. */
+export function registerChatHandle(session: string, handle: ChatHandle): () => void {
+  handles.set(session, [...(handles.get(session) ?? []), handle])
+  return () => {
+    const rest = (handles.get(session) ?? []).filter((entry) => entry !== handle)
+    if (rest.length === 0) handles.delete(session)
+    else handles.set(session, rest)
+  }
+}
+
+/** The newest handler of `action` registered for `session`, or undefined when its chat is not open. */
+export function chatHandler<K extends keyof ChatHandle>(session: string, action: K): ChatHandle[K] {
+  return [...(handles.get(session) ?? [])].reverse().find((entry) => entry[action] !== undefined)?.[action]
+}
+
+type LabelRecord = { title?: string; spec?: { root?: { id?: string; props?: Record<string, unknown>; children?: unknown[] } } }
+
+/** The text an element key reads as in `spec`: the named node's title, label or text, else the key's own words. */
+function labelOfElement(spec: LabelRecord['spec'], element: string): string {
+  const [kind, ...rest] = element.split(':')
+  const key = rest.join(':')
+  if (kind === 'node') {
+    const stack: unknown[] = [spec?.root]
+    while (stack.length > 0) {
+      const node = stack.pop() as { id?: string; props?: Record<string, unknown>; children?: unknown[] } | undefined
+      if (!node || typeof node !== 'object') continue
+      if (node.id === key) {
+        const named = [node.props?.title, node.props?.label, node.props?.text].find((value): value is string => typeof value === 'string' && value !== '')
+        return named ?? key
+      }
+      stack.push(...(node.children ?? []))
+    }
+  }
+  return rest.length === 0 ? element : `${kind} ${key}`
+}
+
+/**
+ * Teaches reference chips whose visual no one pointed at in this window, such as in older messages, to
+ * read as the visual's title and the element, through `quirky.view/get`.
+ */
+export function useVisualLabels(context: UiPluginContext): void {
+  useEffect(() => {
+    const resolve = async (ref: VisualRef): Promise<VisualLabel | null> => {
+      const record = (await context.call('quirky.view/get', { viewId: ref.viewId, version: ref.version })) as LabelRecord | null
+      if (typeof record?.title !== 'string') return null
+      return { title: record.title, label: labelOfElement(record.spec, ref.element) }
+    }
+    setVisualResolver(resolve)
+    return () => clearVisualResolver(resolve)
+  }, [context])
 }

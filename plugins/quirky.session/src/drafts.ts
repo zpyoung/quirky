@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { PluginErrorKind, PluginEvent, PluginStore, QuirkyEvent } from '@quirky/protocol'
+import type { PluginErrorKind, PluginEvent, PluginStore, QuirkyEvent, VisualLevel } from '@quirky/protocol'
 
 /** The unsent composer state kept per session so it survives a restart. */
 export type Draft = {
   text: string
   images: string[]
   pastes: { id: string; text: string }[]
-  picks: { model: string | null; effort: string | null; mode: string | null }
+  /** `visualLevel` is the dial's pick; it is left out until the user picks one. */
+  picks: { model: string | null; effort: string | null; mode: string | null; visualLevel?: VisualLevel }
 }
 
 export const MAX_DRAFT_BYTES = 64 * 1024
@@ -26,12 +27,14 @@ type ImageMime = keyof typeof IMAGE_EXTENSIONS
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 const isStringOrNull = (value: unknown): value is string | null => value === null || typeof value === 'string'
+const VISUAL_LEVELS: readonly unknown[] = ['off', 'balanced', 'visual-first']
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
 
 /**
  * True when `value` is a `Draft`: no missing, extra or wrongly typed fields. Picks written before Plan
- * became a mode carry a fourth `plan` flag; those still count, and `normalizeDraft` folds the flag in.
+ * became a mode carry a `plan` flag; those still count, and `normalizeDraft` folds the flag in. Picks
+ * written before the visual dial have no `visualLevel`, which is optional.
  */
 export function isDraft(value: unknown): value is Draft {
   if (!isRecord(value) || Object.keys(value).length !== 4) return false
@@ -40,11 +43,12 @@ export function isDraft(value: unknown): value is Draft {
   if (!pastes.every((paste) => isRecord(paste) && Object.keys(paste).length === 2 &&
     typeof paste.id === 'string' && typeof paste.text === 'string')) return false
   if (!isRecord(picks) || !isStringOrNull(picks.model) || !isStringOrNull(picks.effort) || !isStringOrNull(picks.mode)) return false
-  const keys = Object.keys(picks).length
-  return keys === 3 || (keys === 4 && typeof picks.plan === 'boolean')
+  const extras = Object.keys(picks).filter((key) => key !== 'model' && key !== 'effort' && key !== 'mode')
+  return extras.every((key) =>
+    (key === 'plan' && typeof picks.plan === 'boolean') || (key === 'visualLevel' && VISUAL_LEVELS.includes(picks.visualLevel)))
 }
 
-/** `draft` with the picks in the current three-key shape; a legacy `plan: true` becomes mode `plan`. */
+/** `draft` without a legacy `plan` flag in its picks; `plan: true` becomes mode `plan`. */
 export function normalizeDraft(draft: Draft): Draft {
   const { plan, ...picks } = draft.picks as Draft['picks'] & { plan?: boolean }
   return { ...draft, picks: plan === true ? { ...picks, mode: 'plan' } : picks }
