@@ -322,6 +322,6 @@ Open questions from the mock's gaps (elements with no existing component):
 
 ## Status & amendments
 
-**Status:** Approved 2026-11-19 in the brainstorm companion.
+**Status:** Approved 2026-11-19 in the brainstorm companion. Tech spec: authored (gate: crosses subsystems, >3 files), see tech.md.
 
 **Amendments:** none yet.
