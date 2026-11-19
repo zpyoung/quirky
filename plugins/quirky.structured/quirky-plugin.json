@@ -392,7 +392,7 @@
       },
       {
         "id": "configure",
-        "description": "Applies composer picks to a running session: model and effort, and permission mode (Plan is one of the modes). Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
+        "description": "Applies composer picks to a running session: model and effort, permission mode (Plan is one of the modes) and visual level. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
         "params": {
           "type": "object",
           "additionalProperties": false,
@@ -400,7 +400,8 @@
             "session": { "type": "string" },
             "model": { "type": "string" },
             "effort": { "type": "string" },
-            "permissionMode": { "type": "string" }
+            "permissionMode": { "type": "string" },
+            "visualLevel": { "type": "string", "enum": ["off", "balanced", "visual-first"], "description": "How liberally the agent draws visuals in this chat. A change is journaled and announced to the agent with its next message." }
           },
           "required": ["session"]
         },
@@ -413,7 +414,8 @@
               "properties": {
                 "model": { "type": "string" },
                 "effort": { "type": "string" },
-                "permissionMode": { "type": "string" }
+                "permissionMode": { "type": "string" },
+                "visualLevel": { "type": "string", "enum": ["off", "balanced", "visual-first"] }
               }
             }
           },
@@ -422,7 +424,7 @@
       },
       {
         "id": "settings",
-        "description": "The settings a running session is in: model, effort, permission mode, as configure reports them. A session that is not running returns empty settings.",
+        "description": "The settings a running session is in: model, effort, permission mode and visual level, as configure reports them. A session that is not running returns empty settings.",
         "readOnly": true,
         "params": {
           "type": "object",
@@ -438,7 +440,8 @@
               "properties": {
                 "model": { "type": "string" },
                 "effort": { "type": "string" },
-                "permissionMode": { "type": "string" }
+                "permissionMode": { "type": "string" },
+                "visualLevel": { "type": "string", "enum": ["off", "balanced", "visual-first"] }
               }
             }
           },
@@ -455,6 +458,16 @@
           "required": ["session", "id"]
         },
         "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      }
+    ],
+    "setting": [
+      {
+        "id": "default-visual-level",
+        "type": "enum",
+        "title": "Default visual level",
+        "description": "How liberally agents draw visuals in a chat that has not set its own level: off, balanced or visual-first.",
+        "default": "visual-first",
+        "values": ["off", "balanced", "visual-first"]
       }
     ],
     "event": [

@@ -25,7 +25,7 @@ export type ChatItem =
     }
   | { kind: 'steps'; callId: string; steps: { text: string; state: 'pending' | 'active' | 'done' }[] }
   | { kind: 'ask'; askId: string; variant: 'approval' | 'question' }
-  | { kind: 'view'; viewId: string }
+  | { kind: 'view'; viewId: string; version?: number }
   | { kind: 'view-error'; title: string; errors: string[]; source: string }
   | { kind: 'changes'; worktree: string; fromTree: string; toTree: string; files: number }
   | { kind: 'turn-end'; state: 'done' | 'stopped' | 'failed'; durationMs?: number }
@@ -44,6 +44,10 @@ export type ChatItem =
       reason?: 'feedback' | 'stopped' | 'mode-switch' | 'restarted'
     }
   | { kind: 'mode'; mode: 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'; autoAvailable?: boolean }
+  | { kind: 'visual-level'; level: VisualLevel }
+
+/** How liberally the agent draws visuals in a chat; the composer dial sets it per chat. */
+export type VisualLevel = 'off' | 'balanced' | 'visual-first'
 
 /** Lifecycle of one plan version shown in the transcript. */
 export type PlanStatus = 'waiting' | 'revised' | 'approved' | 'not-answered'

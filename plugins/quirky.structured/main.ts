@@ -15,6 +15,7 @@ import type {
   SessionProviderSession,
   SessionStatus,
   StructuredMessage,
+  VisualLevel,
   Worktree
 } from '@quirky/protocol'
 import { QuirkyClient, RpcError, RpcErrorCode, type AskRegistration } from '@quirky/protocol'
@@ -30,6 +31,7 @@ import { harnessDefaults, systemHarnessDeps } from './harness-defaults'
 import { Journal, journalMigrations } from './journal'
 import { errorItem, statusItem, stderrLines, userItem } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
+import { parseVisualLevel, visualInstructions, visualLevelMarker } from './visual-guidance'
 import type {
   NewStructuredMessage,
   StructuredContext,
@@ -62,7 +64,16 @@ type LiveSession = {
   lease: { env: Record<string, string>; release(): void } | null
   turnOpen: boolean
   turnStart: Promise<string | null> | null
-  viewIds: Set<string>
+  /** The `viewId@version` pairs already journaled as `view` items. */
+  journaledViews: Set<string>
+  /** The chat's visual level; a change of it is announced to the agent with the next message. */
+  visualLevel: VisualLevel
+  /** The level the agent was last told, by the start guidance or a marker; null until the session launches. */
+  announcedLevel: VisualLevel | null
+  /** True once the level was picked or restored from the journal; only then do the settings report it, so a chat that never chose one reports what it always did. */
+  visualLevelChosen: boolean
+  /** False for a deny-all session: it runs no tools, so it gets neither the visual guidance nor the marker. */
+  visual: boolean
 }
 
 class SessionGone extends Error {
@@ -318,6 +329,41 @@ export function activate(context: PluginContext): void {
     return message
   }
 
+  /** The level a chat without a `visual-level` item uses: the `default-visual-level` setting. */
+  const defaultVisualLevel = (): VisualLevel => {
+    try {
+      return parseVisualLevel(context.getSetting('default-visual-level')) ?? 'visual-first'
+    } catch {
+      return 'visual-first'
+    }
+  }
+
+  /** The newest level journaled for the session, or null when it never changed from the default. */
+  const journaledVisualLevel = (sessionId: string): VisualLevel | null => {
+    let level: VisualLevel | null = null
+    for (let after = 0; ; ) {
+      const page = journal.list(sessionId, after, 500)
+      for (const message of page) if (message.item?.kind === 'visual-level') level = message.item.level
+      if (page.length < 500) return level
+      after = page[page.length - 1]!.seq
+    }
+  }
+
+  const appendVisualLevel = (sessionId: string, level: VisualLevel): void => {
+    appendMessage({ sessionId, role: 'system', text: `Visual level: ${level}`, item: { kind: 'visual-level', level } })
+  }
+
+  /**
+   * The text to hand the agent: `text` behind the level marker when the level changed since the agent was last
+   * told. `sent` records the announcement once the message went through, so a failed send announces again with
+   * the retry.
+   */
+  const withVisualMarker = (entry: LiveSession, text: string): { text: string; sent(): void } => {
+    if (!entry.visual || entry.announcedLevel === entry.visualLevel) return { text, sent: () => {} }
+    const level = entry.visualLevel
+    return { text: `${visualLevelMarker(level)}${text}`, sent: () => { entry.announcedLevel = level } }
+  }
+
   /** The latest slash commands and skills each session's runner reported; not persisted. */
   const commandsBySession = new Map<string, AgentCommand[]>()
 
@@ -399,10 +445,12 @@ export function activate(context: PluginContext): void {
         const undo = await openTurnBaseline(sessionId)
         try {
           if (sessionGone(sessionId, entry)) throw new SessionGone()
-          await runner.send(sessionId, next.text, {
+          const outgoing = withVisualMarker(entry, next.text)
+          await runner.send(sessionId, outgoing.text, {
             ...(images === undefined ? {} : { images }),
             queuedId: next.id
           })
+          outgoing.sent()
         } catch (error) {
           undo()
           throw error
@@ -1024,6 +1072,7 @@ export function activate(context: PluginContext): void {
     })) as Session
     if (!active) return registered
     const token: OwnerToken = { key: '', sessionId: registered.id }
+    const startLevel = defaultVisualLevel()
     const entry: LiveSession = {
       worktreeId: worktree.id,
       agent,
@@ -1037,7 +1086,11 @@ export function activate(context: PluginContext): void {
       interrupting: false,
       turnOpen: false,
       turnStart: null,
-      viewIds: new Set()
+      journaledViews: new Set(),
+      visualLevel: startLevel,
+      visualLevelChosen: false,
+      announcedLevel: toolPolicy === 'deny-all' ? null : startLevel,
+      visual: toolPolicy !== 'deny-all'
     }
     live.set(registered.id, entry)
     if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
@@ -1083,9 +1136,10 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
+      if (entry.visual) entry.announcedLevel = entry.visualLevel
       const launchOptions: StructuredStartOptions = {
         ...(resolution?.structured ?? {}),
-        ...(toolPolicy === 'deny-all' ? { toolPolicy } : {}),
+        ...(toolPolicy === 'deny-all' ? { toolPolicy } : { appendInstructions: visualInstructions(entry.visualLevel) }),
         ...modes,
         env: environmentForLease(lease.env, environment)
       }
@@ -1169,6 +1223,8 @@ export function activate(context: PluginContext): void {
     }
     const resumeModes = await openingModes(agent, undefined)
     ensureActive()
+    const resumedLevel = journaledVisualLevel(old.id)
+    const resumeLevel = resumedLevel ?? defaultVisualLevel()
     const key = `${agent}:${providerSession.id}`
     if (owners.has(key)) throw context.error('conflict', `the ${agent} conversation already has a connected owner`)
     const token: OwnerToken = { key, sessionId: null }
@@ -1223,7 +1279,11 @@ export function activate(context: PluginContext): void {
         interrupting: false,
         turnOpen: false,
         turnStart: null,
-        viewIds: new Set()
+        journaledViews: new Set(),
+        visualLevel: resumeLevel,
+        visualLevelChosen: resumedLevel !== null,
+        announcedLevel: options.toolPolicy === 'deny-all' ? null : resumeLevel,
+        visual: options.toolPolicy !== 'deny-all'
       }
       live.set(registered.id, entry)
       if (lifetimeOwner) pluginLifetimes.set(registered.id, lifetimeOwner)
@@ -1280,11 +1340,14 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
+      if (entry.visual) entry.announcedLevel = entry.visualLevel
       const launchOptions: StructuredStartOptions = {
         ...options,
+        ...(entry.visual ? { appendInstructions: visualInstructions(entry.visualLevel) } : {}),
         ...(agent === 'claude' ? planStateOf(old.id, registered.id) : {}),
         env: environmentForLease(lease.env, environment)
       }
+      if (resumedLevel !== null) appendVisualLevel(registered.id, resumedLevel)
       queue.moveSession(old.id, registered.id)
       queueMoved = true
       emitQueue(old.id)
@@ -1426,8 +1489,10 @@ export function activate(context: PluginContext): void {
     try {
       if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
       flushPaused.delete(session.id)
-      if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
-      else await runner.send(session.id, text, { images: extras.images })
+      const outgoing = entry ? withVisualMarker(entry, text) : { text, sent: () => {} }
+      if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, outgoing.text)
+      else await runner.send(session.id, outgoing.text, { images: extras.images })
+      outgoing.sent()
     } catch (error) {
       undo()
       throw error
@@ -1560,7 +1625,7 @@ export function activate(context: PluginContext): void {
   }
 
   const configure: MethodHandler = async (params) => {
-    const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode'].includes(key))
+    const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode', 'visualLevel'].includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured configure does not support ${unsupported}`)
     if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
     for (const key of ['model', 'effort', 'permissionMode'] as const) {
@@ -1568,6 +1633,10 @@ export function activate(context: PluginContext): void {
       if (value !== undefined && (typeof value !== 'string' || value === '' || value.length > 128)) {
         throw context.error('invalid-params', `${key} must be a string of 1 to 128 characters`)
       }
+    }
+    const visualLevel = params.visualLevel === undefined ? undefined : parseVisualLevel(params.visualLevel)
+    if (params.visualLevel !== undefined && visualLevel === null) {
+      throw context.error('invalid-params', 'visualLevel must be off, balanced or visual-first')
     }
     const session = await requireStructured(params.session)
     if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot configure provider ${session.agent}`)
@@ -1588,7 +1657,8 @@ export function activate(context: PluginContext): void {
     const entry = live.get(session.id)
     const runner = runnerBySession.get(session.id)
     if (!entry || entry.stopping || entry.status === 'exited' || !runner) throw context.error('conflict', 'structured session is not active')
-    if (!runner.configure) throw context.error('conflict', `${session.agent} cannot change settings after it starts`)
+    const levelOnly = visualLevel != null && params.model === undefined && params.effort === undefined && params.permissionMode === undefined
+    if (!runner.configure && !levelOnly) throw context.error('conflict', `${session.agent} cannot change settings after it starts`)
     if (params.permissionMode === 'auto' && runner.autoAvailable?.(session.id) === false) {
       throw context.error('conflict', 'auto mode is not available')
     }
@@ -1597,11 +1667,20 @@ export function activate(context: PluginContext): void {
       ...(params.effort === undefined ? {} : { effort: params.effort as string }),
       ...(params.permissionMode === undefined ? {} : { permissionMode: params.permissionMode as string })
     }
+    let settings: StructuredSettings
     try {
-      return { ok: true, settings: await runner.configure(session.id, picks) }
+      settings = runner.configure ? await runner.configure(session.id, picks) : {}
     } catch (error) {
       throw context.error('conflict', error instanceof Error ? error.message : String(error))
     }
+    if (visualLevel != null) {
+      entry.visualLevelChosen = true
+      if (visualLevel !== entry.visualLevel) {
+        entry.visualLevel = visualLevel
+        appendVisualLevel(session.id, visualLevel)
+      }
+    }
+    return { ok: true, settings: entry.visualLevelChosen ? { ...settings, visualLevel: entry.visualLevel } : settings }
   }
 
   /** The settings a running session is in, as `configure` reports them, so a composer opened later shows the real mode. */
@@ -1616,7 +1695,8 @@ export function activate(context: PluginContext): void {
     if (!entry || entry.stopping || entry.status === 'exited' || !runner?.configure) return { settings: {} }
     try {
       // an empty pick changes nothing, so configure doubles as a read of the settings in force
-      return { settings: await runner.configure(session.id, {}) }
+      const settings = await runner.configure(session.id, {})
+      return { settings: entry.visualLevelChosen ? { ...settings, visualLevel: entry.visualLevel } : settings }
     } catch (error) {
       throw context.error('conflict', error instanceof Error ? error.message : String(error))
     }
@@ -1696,10 +1776,12 @@ export function activate(context: PluginContext): void {
         const undo = await openTurnBaseline(session.id)
         try {
           if (sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
-          await runner.send(session.id, taken.message.text, {
+          const outgoing = withVisualMarker(entry, taken.message.text)
+          await runner.send(session.id, outgoing.text, {
             ...(images === undefined ? {} : { images }),
             queuedId: taken.message.id
           })
+          outgoing.sent()
         } catch (error) {
           undo()
           throw error
@@ -1744,10 +1826,12 @@ export function activate(context: PluginContext): void {
         try {
           if (sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
           flushPaused.delete(session.id)
-          await runner.send(session.id, taken.message.text, {
+          const outgoing = withVisualMarker(entry, taken.message.text)
+          await runner.send(session.id, outgoing.text, {
             ...(images === undefined ? {} : { images }),
             queuedId: taken.message.id
           })
+          outgoing.sent()
         } catch (error) {
           undo()
           throw error
@@ -1930,7 +2014,7 @@ export function activate(context: PluginContext): void {
     await cancelPendingAsks(sessionId)
   }
 
-  /** Journals a view the agent opened, once per view, or the refusal of a view spec, for live sessions only. */
+  /** Journals each version the agent drew, once per view and version, or the refusal of a view spec, for live sessions only. */
   const journalViewEvent = (type: 'quirky.view/changed' | 'quirky.view/rejected', data: unknown): void => {
     if (typeof data !== 'object' || data === null) return
     const fields = data as Record<string, unknown>
@@ -1939,9 +2023,14 @@ export function activate(context: PluginContext): void {
     if (typeof sessionId !== 'string' || !entry) return
     if (type === 'quirky.view/changed') {
       const viewId = fields.viewId
-      if (typeof viewId !== 'string' || viewId === '' || entry.viewIds.has(viewId)) return
-      entry.viewIds.add(viewId)
-      appendMessage({ sessionId, role: 'system', text: 'View', item: { kind: 'view', viewId } })
+      if (typeof viewId !== 'string' || viewId === '') return
+      const kind = fields.kind ?? 'open'
+      if (kind !== 'open' && kind !== 'update' && kind !== 'patch') return
+      const version = typeof fields.version === 'number' && Number.isInteger(fields.version) && fields.version >= 1 ? fields.version : 1
+      const key = `${viewId}@${version}`
+      if (entry.journaledViews.has(key)) return
+      entry.journaledViews.add(key)
+      appendMessage({ sessionId, role: 'system', text: 'View', item: { kind: 'view', viewId, version } })
       return
     }
     const errors = Array.isArray(fields.errors) ? fields.errors.filter((error): error is string => typeof error === 'string') : []

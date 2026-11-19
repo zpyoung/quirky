@@ -53,7 +53,7 @@ const DENY_ALL_ARGS: Record<PiVariant, string[]> = { pi: ['--no-tools', '--no-ex
 /** The command-line arguments that start a pi or omp RPC child, resuming `resume` when given; only omp takes an approval mode. */
 export function piLaunchArgs(
   variant: PiVariant,
-  options: { model?: string; effort?: string; resume?: string; approvalMode?: string; denyAll?: boolean }
+  options: { model?: string; effort?: string; resume?: string; approvalMode?: string; denyAll?: boolean; appendInstructions?: string }
 ): string[] {
   const args = ['--mode', 'rpc']
   if (options.denyAll === true) args.push(...DENY_ALL_ARGS[variant])
@@ -61,6 +61,9 @@ export function piLaunchArgs(
   if (options.model !== undefined) args.push('--model', options.model)
   if (options.effort !== undefined) args.push('--thinking', options.effort)
   if (options.approvalMode !== undefined && variant === 'omp') args.push('--approval-mode', options.approvalMode)
+  if (options.appendInstructions !== undefined && options.appendInstructions !== '') {
+    args.push('--append-system-prompt', options.appendInstructions)
+  }
   return args
 }
 
