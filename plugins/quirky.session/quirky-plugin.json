@@ -89,6 +89,14 @@
                 "type": "boolean",
                 "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
               },
+              "titleCustom": {
+                "type": "boolean",
+                "description": "True when the user set the title, so automatic titling must not overwrite it."
+              },
+              "forked": {
+                "type": "boolean",
+                "description": "True when this session was forked from `resumedFrom` rather than resumed."
+              },
               "launch": {
                 "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
               },
@@ -208,6 +216,14 @@
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -427,6 +443,14 @@
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -560,6 +584,14 @@
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -705,6 +737,14 @@
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
             "launch": {
               "description": "The actual planner record that was launched."
             },
@@ -822,6 +862,145 @@
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
+            "launch": {
+              "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
+            },
+            "launchSettings": {
+              "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing."
+            },
+            "providerSession": {
+              "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored."
+            },
+            "promptDelivery": {
+              "description": "How the first prompt reached the agent: null (no prompt), command-line, pending, pasted, unconfirmed or not-delivered."
+            },
+            "resumedFrom": {
+              "description": "The session this one was resumed or forked from; null otherwise."
+            },
+            "agentStatus": {
+              "description": "The agent-status summary ({state, display, label, detail, progress, stateStartedAt, evidenceAt, restoredUnconfirmed}) the window draws; null or absent when no agent has reported one."
+            },
+            "name": {
+              "description": "The session's name (lowercase; unique among sessions that have not exited), or null when it has none."
+            },
+            "unread": {
+              "description": "Why the session is marked unread: `agent`, `bell` or `notification`; null or absent when it is not."
+            },
+            "badges": {
+              "type": "object",
+              "description": "Chips on the session's tab, keyed `<caller plugin id>/<key>` or `<client role>/<key>`; each is {label, tooltip?, command?, args?}. Absent when there are none."
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "agent",
+            "worktreeId",
+            "cwd",
+            "title",
+            "status",
+            "createdAt",
+            "lastActivityAt",
+            "exitCode"
+          ]
+        }
+      },
+      {
+        "id": "setTitle",
+        "description": "Gives a session a user-chosen title (trimmed, 1 to 200 characters) and marks it custom so automatic titling leaves it alone. Titles need not be unique.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID or name."
+            },
+            "title": {
+              "type": "string",
+              "description": "The new title; trimmed, 1 to 200 characters."
+            }
+          },
+          "required": [
+            "session",
+            "title"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "terminal",
+                "structured"
+              ]
+            },
+            "agent": {
+              "type": "string",
+              "description": "`shell` or the ID of the agent the session runs."
+            },
+            "worktreeId": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "working",
+                "waiting",
+                "done",
+                "exited"
+              ]
+            },
+            "createdAt": {
+              "type": "number"
+            },
+            "lastActivityAt": {
+              "type": "number"
+            },
+            "exitCode": {
+              "description": "The exit code, or null while the process is alive."
+            },
+            "exitSignal": {
+              "description": "The signal that ended the process, or null."
+            },
+            "exitCause": {
+              "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive."
+            },
+            "restorable": {
+              "type": "boolean",
+              "description": "True when the PTY host retains recoverable history after a host loss or reversible stop."
+            },
+            "background": {
+              "type": "boolean",
+              "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -950,6 +1129,14 @@
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -1032,6 +1219,14 @@
             "background": {
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "When true, marks the title as user-chosen so automatic titling leaves it alone."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "When true, records that this session was forked from `resumedFrom` rather than resumed."
             }
           },
           "required": [
@@ -1099,6 +1294,14 @@
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1210,6 +1413,14 @@
             "background": {
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+            },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
             },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
@@ -1375,6 +1586,14 @@
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -1497,6 +1716,14 @@
               "type": "boolean",
               "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
             },
+            "titleCustom": {
+              "type": "boolean",
+              "description": "True when the user set the title, so automatic titling must not overwrite it."
+            },
+            "forked": {
+              "type": "boolean",
+              "description": "True when this session was forked from `resumedFrom` rather than resumed."
+            },
             "launch": {
               "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."
             },
@@ -1580,6 +1807,8 @@
                 "exitCause": { "description": "Why the session ended (exited, killed, stopped, host-restart or host-lost), or null while it is alive." },
                 "restorable": { "type": "boolean", "description": "True when the PTY host retains recoverable history after a host loss or reversible stop." },
                 "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
+                "titleCustom": { "type": "boolean", "description": "True when the user set the title, so automatic titling must not overwrite it." },
+                "forked": { "type": "boolean", "description": "True when this session was forked from `resumedFrom` rather than resumed." },
                 "launch": { "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept." },
                 "launchSettings": { "description": "What the launch applied ({agent, options, args, summary}); null when it applied nothing." },
                 "providerSession": { "description": "The agent CLI's own session ({id, transcriptPath}) that resume passes back; null until one is stored." },
@@ -2028,6 +2257,14 @@
                 "background": {
                   "type": "boolean",
                   "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible."
+                },
+                "titleCustom": {
+                  "type": "boolean",
+                  "description": "True when the user set the title, so automatic titling must not overwrite it."
+                },
+                "forked": {
+                  "type": "boolean",
+                  "description": "True when this session was forked from `resumedFrom` rather than resumed."
                 },
                 "launch": {
                   "description": "What the session launched with ({command, args, env}); null for a shell or a session recorded before launches were kept."

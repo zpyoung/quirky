@@ -6,6 +6,7 @@ import { HistoryView } from './window/HistoryView'
 import { SessionInfoPanel } from './window/SessionInfoPanel'
 import { TranscriptView } from './window/TranscriptView'
 import { publishCopyFeedback } from './window/feedback'
+import { setPinnedSession } from './window/pinned'
 
 const PLUGIN_ID = 'quirky.session-info'
 const PANEL_ID = `panel:${PLUGIN_ID}/info`
@@ -66,7 +67,10 @@ async function resume(context: UiPluginContext, session: string, fork: boolean):
 
 function commands(context: UiPluginContext): Record<string, CommandHandler> {
   return {
-    open: () => context.togglePanel(PANEL_ID, true),
+    open: (raw) => {
+      setPinnedSession(argsOf(raw).session ?? null)
+      context.togglePanel(PANEL_ID, true)
+    },
     'copy-id': (raw) => withToast(context, 'Could not copy ID', async () => {
       const state = await stateForAction(context, argsOf(raw).session)
       const id = state.info!.identity.providerSessionId

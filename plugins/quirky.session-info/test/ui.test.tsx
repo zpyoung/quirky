@@ -465,6 +465,53 @@ describe('Session Info UI contributions', () => {
   })
 })
 
+describe('Session Info opened on a session', () => {
+  const chat = () => state({
+    identity: { agent: 'claude', sessionId: 'chat-1', providerSessionId: null, model: 'Native chat model', pane: null, worktreeId: 'wt-main', cwd: '/repo', startedAt: 1, updatedAt: 2 },
+    usage: { status: 'ready', freshness: 'fresh', totalTokens: 4200, input: 1, output: 2, cacheRead: 3, cacheWrite: 4, updatedAt: 1_700_000_060_000 }
+  }, { openSections: ['identity', 'usage'], pane: null })
+
+  test('shows the requested session until terminal focus moves, then follows focus again', async () => {
+    const gets: Record<string, unknown>[] = []
+    const fake = makeContext({
+      'quirky.session-info/get': (params) => { gets.push(params); return params.session === 'chat-1' ? chat() : state(info({ identity: { ...info().identity, model: 'Focused model' } })) },
+      'quirky.session-info/sections': () => ({ open: ['liveActivity'] })
+    })
+    activate(fake.context)
+    await fake.run('open', { session: 'chat-1' })
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+    expect(gets.at(-1)).toEqual({ session: 'chat-1' })
+    expect(panel.element.textContent).toContain('Native chat model')
+    expect(panel.element.textContent).not.toContain('Live activity')
+    expect(panel.element.textContent).not.toContain('Hooks & MCP')
+    await fake.emit({ type: 'quirky.terminal/focusContextChanged', data: { workspace: 'wt-main' } })
+    await waitForUi()
+    expect(gets.at(-1)).toEqual({})
+    expect(panel.element.textContent).toContain('Focused model')
+    panel.unmount()
+  })
+
+  test('retargets a mounted panel and plain open without a session follows focus', async () => {
+    const gets: Record<string, unknown>[] = []
+    const fake = makeContext({
+      'quirky.session-info/get': (params) => { gets.push(params); return params.session === 'chat-1' ? chat() : state(info()) },
+      'quirky.session-info/sections': () => ({ open: ['liveActivity'] })
+    })
+    activate(fake.context)
+    const panel = fake.mount('panel:quirky.session-info/info')
+    await waitForUi()
+    expect(gets.at(-1)).toEqual({})
+    await act(async () => { await fake.run('open', { session: 'chat-1' }) })
+    await waitForUi()
+    expect(gets.at(-1)).toEqual({ session: 'chat-1' })
+    await act(async () => { await fake.run('open') })
+    await waitForUi()
+    expect(gets.at(-1)).toEqual({})
+    panel.unmount()
+  })
+})
+
 describe('Session Info routed actions and views', () => {
   test('shows Copy ID feedback only after provider-ID clipboard writes succeed and routes history by provider ID', async () => {
     let failClipboard = true

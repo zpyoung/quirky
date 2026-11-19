@@ -131,7 +131,41 @@
             "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
             "launchSettings": { "description": "The original catalog launch snapshot." },
             "providerSession": { "description": "The native provider conversation identity." },
-            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." }
+            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." },
+            "titleCustom": { "type": "boolean", "description": "True once the user has named the chat." },
+            "forked": { "type": "boolean", "description": "True when this chat continues a copy of another chat's conversation." }
+          },
+          "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
+        }
+      },
+      {
+        "id": "fork",
+        "description": "Forks a chat into a new structured session that continues a copy of its conversation, and returns the new session. Fails with conflict (data.reason turn-running) while a turn runs, conflict (data.reason fork-unsupported) for agents that cannot fork, and invalid-params for a chat with no provider conversation.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string", "description": "The structured session to fork." } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["structured"] },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
+            "worktreeId": { "type": "string" },
+            "cwd": { "type": "string" },
+            "title": { "type": "string" },
+            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+            "createdAt": { "type": "number" },
+            "lastActivityAt": { "type": "number" },
+            "exitCode": { "description": "The exit code, or null while the process is alive." },
+            "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
+            "launchSettings": { "description": "The original catalog launch snapshot." },
+            "providerSession": { "description": "The native provider conversation identity." },
+            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." },
+            "titleCustom": { "type": "boolean", "description": "True once the user has named the chat." },
+            "forked": { "type": "boolean", "description": "True when this chat continues a copy of another chat's conversation." }
           },
           "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
         }
@@ -259,9 +293,10 @@
             "images": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "effort": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "approveForSession": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
-            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
+            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "fork": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
           },
-          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume"]
+          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume", "fork"]
         }
       },
       {
@@ -343,6 +378,47 @@
             }
           },
           "required": ["commands"]
+        }
+      },
+      {
+        "id": "usage",
+        "description": "A chat's token usage: its own totals, the whole conversation's across resumes (a fork starts at zero), and the prompt-cache tiers it holds. Each is null when nothing was reported. An unknown session fails with invalid-params.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "own": {
+              "description": "{input, output, cacheRead, cacheWrite, total} token counts, or null"
+            },
+            "conversation": {
+              "description": "{input, output, cacheRead, cacheWrite, total} token counts, or null"
+            },
+            "turns": {
+              "type": "number",
+              "description": "Completed turns across the same conversation; 0 when none"
+            },
+            "cache": {
+              "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
+            }
+          },
+          "required": [
+            "own",
+            "conversation",
+            "turns",
+            "cache"
+          ]
         }
       },
       {
@@ -516,6 +592,73 @@
             "commands": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } }, "required": ["name", "kind"] } }
           },
           "required": ["sessionId", "commands"]
+        }
+      },
+      {
+        "id": "usageChanged",
+        "description": "A structured session's usage summary changed; query usage for the conversation total.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "own": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "cacheRead": {
+                      "type": "number"
+                    },
+                    "cacheWrite": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output",
+                    "cacheRead",
+                    "cacheWrite",
+                    "total"
+                  ]
+                },
+                "turns": {
+                  "type": "number"
+                },
+                "cache": {
+                  "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
+                },
+                "updatedAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sessionId",
+                "own",
+                "turns",
+                "cache",
+                "updatedAt"
+              ]
+            }
+          },
+          "required": [
+            "sessionId",
+            "summary"
+          ]
         }
       },
       {

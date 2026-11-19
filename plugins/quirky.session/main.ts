@@ -38,6 +38,7 @@ export async function activate(context: PluginContext): Promise<void> {
     resume: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.resume(params, caller), caller),
     resumeExternal: sessions.resumeExternal,
     setName: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.setName(params), caller),
+    setTitle: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.setTitle(params), caller),
     setProviderSession: sessions.setProviderSession,
     register: sessions.register,
     close: sessions.close,

@@ -82,6 +82,32 @@ export type AgentCapabilities = {
   effort: Capability
   approveForSession: Capability
   resume: Capability
+  fork: Capability
+}
+
+/** Token counts for one scope of a chat's usage; `total` is the sum of the other four. */
+export type UsageTotals = { input: number; output: number; cacheRead: number; cacheWrite: number; total: number }
+
+/** One prompt-cache lifetime (5 minutes or 1 hour) and the moment its countdown last restarted. */
+export type CacheTier = { ttlMs: 300000 | 3600000; anchorAt: number }
+
+/** The prompt-cache tiers a chat currently holds, so the header can show when each expires. */
+export type CacheState = { tiers: CacheTier[] }
+
+/** A chat session's running usage as the header shows it. */
+export type UsageSummary = { sessionId: string; own: UsageTotals; turns: number; cache: CacheState | null; updatedAt: number }
+
+/**
+ * The answer to a usage query: this chat's own totals, the whole forked-from conversation's, the
+ * conversation's completed turn count (0 when none), and its cache state; null where unknown.
+ */
+export type UsageResult = { own: UsageTotals | null; conversation: UsageTotals | null; turns: number; cache: CacheState | null }
+
+/** What a runner reports to the usage tracker: token counts, a turn boundary, and cache-write/read activity for one call. */
+export type UsageReport = {
+  tokens?: Omit<UsageTotals, 'total'>
+  turnEnded?: boolean
+  cache?: { callStartedAt: number; wrote5m: number; wrote1h: number; read: number }
 }
 
 /**

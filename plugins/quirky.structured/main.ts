@@ -15,6 +15,10 @@ import type {
   SessionProviderSession,
   SessionStatus,
   StructuredMessage,
+  UsageReport,
+  UsageResult,
+  UsageSummary,
+  UsageTotals,
   VisualLevel,
   Worktree
 } from '@quirky/protocol'
@@ -29,7 +33,7 @@ import { resolvePiThroughLoginShell } from './pi-path'
 import { createPiRunner } from './pi-runner'
 import { harnessDefaults, systemHarnessDeps } from './harness-defaults'
 import { Journal, journalMigrations } from './journal'
-import { errorItem, statusItem, stderrLines, userItem } from './items'
+import { claudeResultTotals, errorItem, statusItem, stderrLines, userItem } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
 import { parseVisualLevel, visualInstructions, visualLevelMarker } from './visual-guidance'
 import type {
@@ -421,6 +425,21 @@ export function activate(context: PluginContext): void {
     return kept.length === 0 ? undefined : kept
   }
 
+  /** Forks copying each source right now, counted per source; a send to one waits in its queue so no turn starts mid-copy. */
+  const forkingSources = new Map<string, number>()
+
+  /** Sends past admission whose turn has not opened yet, so a fork can tell a changing transcript from an idle one. */
+  const startingTurns = new Map<string, number>()
+
+  const markTurnStarting = (sessionId: string): (() => void) => {
+    startingTurns.set(sessionId, (startingTurns.get(sessionId) ?? 0) + 1)
+    return () => {
+      const left = (startingTurns.get(sessionId) ?? 1) - 1
+      if (left <= 0) startingTurns.delete(sessionId)
+      else startingTurns.set(sessionId, left)
+    }
+  }
+
   /** Sessions whose queue stays put after a failed queued send, until the user acts on the session. */
   const flushPaused = new Set<string>()
 
@@ -432,12 +451,13 @@ export function activate(context: PluginContext): void {
     enqueueSend(sessionId, async () => {
       const entry = live.get(sessionId)
       const idle = entry?.status === 'done' || (entry?.status === 'running' && !entry.hasSent)
-      if (!active || !entry || entry.stopping || !idle || flushPaused.has(sessionId)) return
+      if (!active || !entry || entry.stopping || !idle || flushPaused.has(sessionId) || forkingSources.has(sessionId)) return
       const next = queue.list(sessionId)[0]
       if (!next) return
       const taken = queue.take(sessionId, next.id)
       if (!taken) return
       emitQueue(sessionId)
+      const turnStarted = markTurnStarting(sessionId)
       try {
         const runner = runnerBySession.get(sessionId) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -465,6 +485,8 @@ export function activate(context: PluginContext): void {
           appendMessage({ sessionId, role: 'system', text, item: statusItem(text) })
         }
         context.log(`could not send queued message to ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        turnStarted()
       }
     }).catch((error: unknown) => {
       if (active) context.log(`could not flush the queue of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
@@ -731,7 +753,45 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  const emptyTotals = (): UsageTotals => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 })
+  const addTotals = (a: UsageTotals, b: Omit<UsageTotals, 'total'>): UsageTotals => {
+    const input = a.input + b.input
+    const output = a.output + b.output
+    const cacheRead = a.cacheRead + b.cacheRead
+    const cacheWrite = a.cacheWrite + b.cacheWrite
+    return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite }
+  }
+
+  /** Applies the cache tier rules: a write anchors its tier at the call start, a read refreshes every tier still warm then. */
+  const nextCache = (previous: UsageSummary['cache'], cache: NonNullable<UsageReport['cache']>): UsageSummary['cache'] => {
+    const anchors = new Map<300000 | 3600000, number>((previous?.tiers ?? []).map((tier) => [tier.ttlMs, tier.anchorAt]))
+    const warm = (ttlMs: 300000 | 3600000): boolean => {
+      const anchorAt = anchors.get(ttlMs)
+      return anchorAt !== undefined && cache.callStartedAt < anchorAt + ttlMs
+    }
+    const refreshed = cache.read > 0 ? ([300000, 3600000] as const).filter(warm) : []
+    for (const ttlMs of refreshed) anchors.set(ttlMs, cache.callStartedAt)
+    if (cache.wrote5m > 0) anchors.set(300000, cache.callStartedAt)
+    if (cache.wrote1h > 0) anchors.set(3600000, cache.callStartedAt)
+    const tiers = [...anchors].map(([ttlMs, anchorAt]) => ({ ttlMs, anchorAt })).sort((a, b) => a.ttlMs - b.ttlMs)
+    return tiers.length === 0 ? null : { tiers }
+  }
+
+  const reportUsage = (sessionId: string, report: UsageReport): void => {
+    const previous = journal.usage(sessionId)
+    const summary: UsageSummary = {
+      sessionId,
+      own: report.tokens ? addTotals(previous?.own ?? emptyTotals(), report.tokens) : (previous?.own ?? emptyTotals()),
+      turns: (previous?.turns ?? 0) + (report.turnEnded === true ? 1 : 0),
+      cache: report.cache ? nextCache(previous?.cache ?? null, report.cache) : (previous?.cache ?? null),
+      updatedAt: Date.now()
+    }
+    journal.saveUsage(summary)
+    context.emit('usageChanged', { sessionId, summary })
+  }
+
   const structuredContext: StructuredContext = {
+    reportUsage,
     process: context.process,
     appendMessage,
     setStatus,
@@ -1152,6 +1212,38 @@ export function activate(context: PluginContext): void {
   }
 
   /**
+   * The Claude totals a continued conversation already carries: those of the nearest session, starting
+   * at `from` and walking back its `resumedFrom` chain, that journaled a result. A session that ended
+   * before completing a turn has none, so the walk reaches past it. Crossing a fork link, the parent's
+   * totals are those at the fork point, since the original chat may have kept spending afterwards.
+   */
+  const usageBaselineOf = async (from: Session): Promise<StructuredStartOptions['usageBaseline']> => {
+    const seen = new Set<string>()
+    let cutoff: number | null = null
+    for (let current: Session | null = from; current !== null && !seen.has(current.id); ) {
+      seen.add(current.id)
+      let found: StructuredStartOptions['usageBaseline']
+      for (let after = 0; ; ) {
+        const page = journal.list(current.id, after, 500)
+        for (const message of page) {
+          if (message.role === 'result' && (cutoff === null || message.at <= cutoff)) found = claudeResultTotals(message.data) ?? found
+        }
+        if (page.length < 500) break
+        after = page[page.length - 1]!.seq
+      }
+      if (found !== undefined) return found
+      if (typeof current.resumedFrom !== 'string' || current.resumedFrom === '') return undefined
+      if (current.forked === true) cutoff = current.createdAt
+      try {
+        current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
+      } catch {
+        current = null
+      }
+    }
+    return undefined
+  }
+
+  /**
    * What a resumed Claude session carries over from the old journal: its last mode, the plan numbering
    * and the newest plan. The newest plan is journaled again on the new session (a waiting one as not
    * answered, since it can never be answered now) so the next resume still finds the numbering.
@@ -1184,7 +1276,28 @@ export function activate(context: PluginContext): void {
     }
   }
 
-  const resume: MethodHandler = async (params, caller) => {
+  const plannedEnvironmentFor = async (agent: StructuredAgent, cwd: string, options: StructuredStartOptions): Promise<Record<string, string | null>> =>
+    plannedEnvironmentOf(
+      await context.call('quirky.agents/plan', {
+        agent,
+        cwd,
+        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(options.effort === undefined ? {} : { options: { effort: options.effort } })
+      })
+    )
+
+  const conflictWithReason = (message: string, reason: string) => {
+    const error = context.error('conflict', message)
+    Object.assign(error, { data: { reason } })
+    return error
+  }
+
+  /**
+   * Reopens a stored structured conversation as a new session. A resume continues the old provider
+   * conversation; with `forking`, the runner first copies it into a new provider conversation and the
+   * new session continues that copy, flagged as a fork and without a prompt.
+   */
+  const reopen = async (params: Record<string, unknown>, caller: PluginCaller, forking = false): Promise<Session> => {
     const ownerPluginId = await ownerPluginFor(caller)
     const unsupported = Object.keys(params).find(
       (key) => key !== 'session' && key !== 'prompt' && key !== 'lifetime' && key !== 'lifetimeKey'
@@ -1200,9 +1313,9 @@ export function activate(context: PluginContext): void {
       throw context.error('conflict', `structured sessions cannot resume provider ${old.agent}`)
     }
     const agent = old.agent
-    const providerSession = old.providerSession
+    let providerSession = old.providerSession
     if (!providerSession || typeof providerSession.id !== 'string') {
-      throw context.error('conflict', `session ${old.id} has no provider session and cannot be resumed`)
+      throw context.error(forking ? 'invalid-params' : 'conflict', `session ${old.id} has no provider session and cannot be ${forking ? 'forked' : 'resumed'}`)
     }
     const problem = providerSessionIdProblem(providerSession.id)
     if (problem) throw context.error('invalid-params', problem)
@@ -1223,6 +1336,27 @@ export function activate(context: PluginContext): void {
     }
     const resumeModes = await openingModes(agent, undefined)
     ensureActive()
+    const usageBaseline = agent === 'claude' ? await usageBaselineOf(old) : undefined
+    ensureActive()
+    let accountPrepare = false
+    let userEnv: Record<string, string | null> = {}
+    let planned = false
+    if (forking) {
+      const source = providerSession
+      const forkRunner = runnerFor(agent)
+      accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
+      if (accountPrepare) userEnv = await plannedEnvironmentFor(agent, old.cwd, options)
+      planned = true
+      ensureActive()
+      try {
+        providerSession = await forkRunner.fork!({ providerSession: source, cwd: old.cwd, launchOptions: { ...options, env: userEnv } })
+      } catch (error) {
+        throw conflictWithReason(error instanceof Error ? error.message : String(error), 'fork-failed')
+      }
+      const forkedProblem = providerSessionIdProblem(providerSession.id)
+      if (forkedProblem) throw context.error('conflict', forkedProblem)
+      ensureActive()
+    }
     const resumedLevel = journaledVisualLevel(old.id)
     const resumeLevel = resumedLevel ?? defaultVisualLevel()
     const key = `${agent}:${providerSession.id}`
@@ -1232,23 +1366,15 @@ export function activate(context: PluginContext): void {
 
     let registered: Session
     let entry: LiveSession | null = null
-    let accountPrepare = false
-    let userEnv: Record<string, string | null> = {}
     try {
       ensureActive()
-      accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
-      if (accountPrepare) {
-        userEnv = plannedEnvironmentOf(
-          await context.call('quirky.agents/plan', {
-            agent,
-            cwd: old.cwd,
-            ...(options.model === undefined ? {} : { model: options.model }),
-            ...(options.effort === undefined ? {} : { options: { effort: options.effort } })
-          })
-        )
+      if (!planned) {
+        accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
+        if (accountPrepare) userEnv = await plannedEnvironmentFor(agent, old.cwd, options)
       }
       ensureActive()
-      const title = await nextTitle(old.worktreeId, agent)
+      const keepsTitle = forking || old.titleCustom === true
+      const title = forking ? `${old.title} (fork)` : old.titleCustom === true ? old.title : await nextTitle(old.worktreeId, agent)
       ensureActive()
       registered = (await context.call('quirky.session/register', {
         worktree: old.worktreeId,
@@ -1257,6 +1383,8 @@ export function activate(context: PluginContext): void {
         agent,
         kind: 'structured',
         title,
+        ...(keepsTitle && old.titleCustom === true ? { titleCustom: true } : {}),
+        ...(forking ? { forked: true } : {}),
         ...(old.background === true ? { background: true } : {}),
         ...(old.launchSettings === null || old.launchSettings === undefined ? {} : { launchSettings: old.launchSettings })
       })) as Session
@@ -1345,13 +1473,16 @@ export function activate(context: PluginContext): void {
         ...options,
         ...(entry.visual ? { appendInstructions: visualInstructions(entry.visualLevel) } : {}),
         ...(agent === 'claude' ? planStateOf(old.id, registered.id) : {}),
+        ...(usageBaseline === undefined ? {} : { usageBaseline }),
         env: environmentForLease(lease.env, environment)
       }
       if (resumedLevel !== null) appendVisualLevel(registered.id, resumedLevel)
-      queue.moveSession(old.id, registered.id)
-      queueMoved = true
-      emitQueue(old.id)
-      emitQueue(registered.id)
+      if (!forking) {
+        queue.moveSession(old.id, registered.id)
+        queueMoved = true
+        emitQueue(old.id)
+        emitQueue(registered.id)
+      }
       startRunner(
         registered,
         agent,
@@ -1359,7 +1490,7 @@ export function activate(context: PluginContext): void {
         { ...resumeModes, ...launchOptions, providerSession: preparedProviderSession },
         token
       )
-      if (typeof params.prompt !== 'string' || params.prompt === '') {
+      if (!forking && (typeof params.prompt !== 'string' || params.prompt === '')) {
         // a promptless resume never settles a turn, so nothing else would send the moved queue
         void startTasks.get(registered.id)?.then(() => flushQueue(registered.id))
       }
@@ -1373,6 +1504,42 @@ export function activate(context: PluginContext): void {
     }
     if (ownerPluginId !== null) await reconcileOwnedSessions()
     return registered
+  }
+
+  const resume: MethodHandler = (params, caller) => reopen(params, caller)
+
+  /**
+   * Forks a chat into a new one that continues a copy of its conversation. Refuses while the source
+   * has a turn running, and for agents whose runner cannot fork. The source is never touched.
+   */
+  const fork: MethodHandler = async (params, caller) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured fork does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    const source = await requireStructured(params.session)
+    ensureActive()
+    if (!isStructuredAgent(source.agent)) throw context.error('invalid-params', `structured sessions cannot fork provider ${source.agent}`)
+    if (!source.providerSession || typeof source.providerSession.id !== 'string') {
+      throw context.error('invalid-params', `session ${source.id} has no provider session and cannot be forked`)
+    }
+    forkingSources.set(source.id, (forkingSources.get(source.id) ?? 0) + 1)
+    try {
+      const status = live.get(source.id)?.status ?? source.status
+      if (status === 'working' || status === 'waiting' || startingTurns.has(source.id)) {
+        throw conflictWithReason('a turn is running; wait for it to finish before forking', 'turn-running')
+      }
+      const capability = capabilitiesFor(source.agent)?.fork
+      if (!capability?.ok || runnerFor(source.agent).fork === undefined) {
+        throw conflictWithReason(capability?.ok === false ? capability.reason : `${source.agent} can't fork from Quirky yet`, 'fork-unsupported')
+      }
+      return await reopen(params, caller, true)
+    } finally {
+      const left = (forkingSources.get(source.id) ?? 1) - 1
+      if (left <= 0) {
+        forkingSources.delete(source.id)
+        void flushQueue(source.id)
+      } else forkingSources.set(source.id, left)
+    }
   }
 
   const messages: MethodHandler = async (params) => {
@@ -1477,25 +1644,30 @@ export function activate(context: PluginContext): void {
     }
     const replay = reserveReceipt()
     if (replay) return replay
-    if (extras.when === 'idle' && entry && (entry.status === 'working' || entry.status === 'waiting')) {
+    if (entry && (forkingSources.has(session.id) || (extras.when === 'idle' && (entry.status === 'working' || entry.status === 'waiting')))) {
       const queued = queue.add(session.id, { text, ...(extras.images === undefined ? {} : { images: extras.images }) }, Date.now())
       emitQueue(session.id)
       if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
       return { ok: true, queuedId: queued.id }
     }
     if (entry) entry.hasSent = true
-    const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
-    const undo = await openTurnBaseline(session.id)
+    const turnStarted = markTurnStarting(session.id)
     try {
-      if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
-      flushPaused.delete(session.id)
-      const outgoing = entry ? withVisualMarker(entry, text) : { text, sent: () => {} }
-      if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, outgoing.text)
-      else await runner.send(session.id, outgoing.text, { images: extras.images })
-      outgoing.sent()
-    } catch (error) {
-      undo()
-      throw error
+      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      const undo = await openTurnBaseline(session.id)
+      try {
+        if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
+        flushPaused.delete(session.id)
+        const outgoing = entry ? withVisualMarker(entry, text) : { text, sent: () => {} }
+        if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, outgoing.text)
+        else await runner.send(session.id, outgoing.text, { images: extras.images })
+        outgoing.sent()
+      } catch (error) {
+        undo()
+        throw error
+      }
+    } finally {
+      turnStarted()
     }
     if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
     return { ok: true }
@@ -1702,6 +1874,39 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  /** A chat's own usage, the whole forked-from conversation's, and its cache state; null where nothing was reported. */
+  const usage: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured usage does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    let session: Session
+    try {
+      session = (await context.call('quirky.session/get', { session: params.session })) as Session
+    } catch {
+      throw context.error('invalid-params', `unknown session ${params.session}`)
+    }
+    const own = journal.usage(session.id)
+    let conversation: UsageTotals | null = null
+    let turns = 0
+    const seen = new Set<string>()
+    for (let current: Session | null = session; current !== null && !seen.has(current.id); ) {
+      seen.add(current.id)
+      const summary = journal.usage(current.id)
+      if (summary) {
+        conversation = addTotals(conversation ?? emptyTotals(), summary.own)
+        turns += summary.turns
+      }
+      if (current.forked === true || typeof current.resumedFrom !== 'string' || current.resumedFrom === '') break
+      try {
+        current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
+      } catch {
+        current = null
+      }
+    }
+    const result: UsageResult = { own: own?.own ?? null, conversation, turns, cache: own?.cache ?? null }
+    return result
+  }
+
   const queuedRequest = (params: Record<string, unknown>, extra: string[] = []): { session: string; id?: string } => {
     const unsupported = Object.keys(params).find((key) => key !== 'session' && !extra.includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured queue does not support ${unsupported}`)
@@ -1765,10 +1970,14 @@ export function activate(context: PluginContext): void {
       if (entry.status !== 'done') {
         throw Object.assign(context.error('conflict', 'structured session is busy'), { data: { reason: 'busy' } })
       }
+      if (forkingSources.has(session.id)) {
+        throw Object.assign(context.error('conflict', 'structured session is being forked'), { data: { reason: 'busy' } })
+      }
       const taken = queue.take(session.id, request.id!)
       if (taken === null) throw context.error('not-found', `no queued message ${request.id}`)
       flushPaused.delete(session.id)
       emitQueue(session.id)
+      const turnStarted = markTurnStarting(session.id)
       try {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -1790,6 +1999,8 @@ export function activate(context: PluginContext): void {
         queue.restore(session.id, taken)
         emitQueue(session.id)
         throw error
+      } finally {
+        turnStarted()
       }
       return { ok: true }
     })
@@ -1815,9 +2026,13 @@ export function activate(context: PluginContext): void {
       ensureActive()
       const entry = live.get(session.id)
       if (!entry || entry.stopping || entry.status === 'exited') throw context.error('conflict', 'structured session is not active')
+      if (forkingSources.has(session.id) && entry.status !== 'working' && entry.status !== 'waiting') {
+        throw Object.assign(context.error('conflict', 'structured session is being forked'), { data: { reason: 'busy' } })
+      }
       const taken = queue.take(session.id, request.id!)
       if (taken === null) throw context.error('not-found', `no queued message ${request.id}`)
       emitQueue(session.id)
+      const turnStarted = markTurnStarting(session.id)
       try {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -1840,6 +2055,8 @@ export function activate(context: PluginContext): void {
         queue.restore(session.id, taken)
         emitQueue(session.id)
         throw error
+      } finally {
+        turnStarted()
       }
       return { ok: true }
     })
@@ -1983,6 +2200,7 @@ export function activate(context: PluginContext): void {
 
   context.provide('method:quirky.structured/create', create)
   context.provide('method:quirky.structured/resume', resume)
+  context.provide('method:quirky.structured/fork', fork)
   context.provide('method:quirky.structured/messages', messages)
   context.provide('method:quirky.structured/send', send)
   context.provide('method:quirky.structured/capabilities', capabilities)
@@ -1999,6 +2217,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/settings', currentSettings)
   context.provide('method:quirky.structured/stop', stop)
   context.provide('method:quirky.structured/interrupt', interrupt)
+  context.provide('method:quirky.structured/usage', usage)
   context.provide('method:quirky.structured/stopOwned', stopOwned)
 
   context.subscribe((event) => {
