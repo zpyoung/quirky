@@ -1,7 +1,8 @@
-import { useMemo, useState, type CSSProperties } from 'react'
-import type { Session, UiPluginContext } from '@quirky/protocol'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import type { Session, UiPluginContext, UsageResult } from '@quirky/protocol'
 import { Badge, Button, Dialog, IconButton, Tabs } from '@quirky/ui'
 import { AgentPicker } from './chat/AgentPicker'
+import { compactTokens } from './chat/ChatHeader'
 import { RUN_BADGE_COMMAND, type WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
@@ -65,11 +66,53 @@ function tabLabel(session: Session, now: number, index: number): string {
   return labels.join(' · ')
 }
 
+/** The conversation token total of each structured session in `sessions`, kept current as the daemon reports usage; sessions without data are absent. */
+function useConversationTotals(context: UiPluginContext, sessions: readonly Session[]): Record<string, number> {
+  const [totals, setTotals] = useState<Record<string, number>>({})
+  const ids = sessions.filter((session) => session.kind === 'structured').map((session) => session.id)
+  const key = ids.join(',')
+  useEffect(() => {
+    let cancelled = false
+    const load = (id: string) => {
+      context
+        .call('quirky.structured/usage', { session: id })
+        .then((result) => {
+          const total = (result as UsageResult).conversation?.total ?? 0
+          if (cancelled) return
+          setTotals((current) => {
+            const { [id]: _previous, ...others } = current
+            return total > 0 ? { ...others, [id]: total } : others
+          })
+        })
+        .catch(() => {})
+    }
+    for (const id of ids) load(id)
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type !== 'quirky.structured/usageChanged') return
+      const changed = (event.data as { sessionId?: string } | undefined)?.sessionId
+      if (changed !== undefined && ids.includes(changed)) load(changed)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [context, key])
+  return totals
+}
+
 export function SessionTabs({ context, store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
   const [choosing, setChoosing] = useState(false)
   const now = useNow()
-  const items = useMemo(() => sessions.map((session, index) => ({ id: session.id, label: tabLabel(session, now, index) })), [sessions, now])
+  const totals = useConversationTotals(context, sessions)
+  const items = useMemo(
+    () =>
+      sessions.map((session, index) => {
+        const total = totals[session.id]
+        return { id: session.id, label: tabLabel(session, now, index), ...(total === undefined ? {} : { tooltip: `${compactTokens(total)} tokens` }) }
+      }),
+    [sessions, now, totals]
+  )
 
   const pick = (request: NewSessionRequest) => {
     if (request.agent === 'shell') void store.create('shell', '', false)
