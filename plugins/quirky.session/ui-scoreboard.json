@@ -662,6 +662,22 @@
           "quote": "import { Badge, InlineError, Menu, StatusDot, TextField, type MenuEntry, type UiStatus } from '@quirky/ui'"
         }
       }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+        "quote": "context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+          "quote": "context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })"
+        }
+      }
     }
   ],
   "notState": [
@@ -3715,6 +3731,46 @@
           {
             "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
             "quote": "  const fork = async () => {\n    setForkError(null)\n    try {\n      const forked = (await context.call('quirky.structured/fork', { session: session.id })) as Session\n      context.openView(WORKTREE_VIEW_ID, { worktree: forked.worktreeId, session: forked.id })\n    } catch (error) {\n      setForkError(messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+        "quote": "onAction: () => setChatLayoutSetting(context, WIDTH_SETTING, width)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+          "quote": "context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+            "quote": "export function setChatLayoutSetting(context: UiPluginContext, name: typeof WIDTH_SETTING | typeof ALIGN_SETTING, value: string): void {\n  void context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error: unknown) => {\n    context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })\n  })\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+        "quote": "onAction: () => setChatLayoutSetting(context, ALIGN_SETTING, align)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+          "quote": "context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/chatLayout.ts",
+            "quote": "export function setChatLayoutSetting(context: UiPluginContext, name: typeof WIDTH_SETTING | typeof ALIGN_SETTING, value: string): void {\n  void context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error: unknown) => {\n    context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })\n  })\n}"
           }
         ]
       }

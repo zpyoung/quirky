@@ -372,13 +372,18 @@ describe('Ended, crashed, offline, failed', () => {
 })
 
 describe('Overflow menu', () => {
-  test('default: Rename, Fork chat, Session info, a separator and Show all events as a checked item', async () => {
+  test('default: Rename, Fork chat, Session info, Show all events as a checked item, then the chat width and alignment', async () => {
     usage = usageOf(null)
     await mount({ showAll: true })
     expect(label('More actions')!.getAttribute('aria-haspopup')).toBe('menu')
     const menu = await openMenu()
-    expect([...menu.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent?.trim())).toEqual(['Rename', 'Fork chat', 'Session info', '✓ Show all events'])
-    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(1)
+    expect([...menu.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent?.trim())).toEqual([
+      'Rename', 'Fork chat', 'Session info', '✓ Show all events',
+      'Narrow', '✓ Comfortable', 'Wide', 'Full width',
+      'Left', '✓ Center', 'Right'
+    ])
+    expect([...menu.querySelectorAll('.ui-menu__note')].map((note) => note.textContent)).toEqual(['Width', 'Alignment'])
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(2)
     expect(menuItem('Show all events').getAttribute('role')).toBe('menuitemcheckbox')
     expect(menuItem('Show all events').getAttribute('aria-checked')).toBe('true')
   })

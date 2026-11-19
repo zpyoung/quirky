@@ -4,6 +4,7 @@ import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirk
 import { showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { ChatHeader } from './ChatHeader'
+import { chatFrame, useChatLayout } from './chatLayout'
 import { Composer } from './Composer'
 import { defaultVisualLevel, registerChatHandle, useVisualLabels } from './controls'
 import { newestUserAt } from './elapsed'
@@ -69,10 +70,7 @@ const column = {
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--ui-space-8)',
-  maxWidth: 'calc(720 * var(--ui-length-unit))',
-  minWidth: 0,
-  margin: '0 auto',
-  padding: '0 var(--ui-space-16)'
+  minWidth: 0
 } satisfies CSSProperties
 /** Whether `element` is scrolled to its end, give or take a few lines. */
 export function atBottom(element: Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>): boolean {
@@ -190,6 +188,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     if (change.kind === undefined || change.kind === 'open' || change.kind === 'update' || change.kind === 'patch') setVisualizing(null)
   })
   useVisualLabels(context)
+  const chatLayout = useChatLayout(context)
   const turns = useMemo(
     () => {
       const chats = [...earlier, { session, messages: stored }]
@@ -215,6 +214,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const lastSeen = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const { width: bodyWidth, unit } = useBodyMetrics(bodyRef)
+  const transcriptRef = useRef<HTMLDivElement>(null)
+  const { width: transcriptWidth } = useBodyMetrics(transcriptRef)
   const shown = versions.find((entry) => entry.version === viewed) ?? newest
   const closePanel = () => setPanelOpen(false)
   const planCard = panelOpen && shown ? { version: shown, isNewest: shown.version === newest?.version } : null
@@ -533,6 +534,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         capabilities={capabilities}
         messages={history}
         showAll={showAll}
+        layout={chatLayout}
         planChip={
           newest && (
             <PlanChip
@@ -547,9 +549,9 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         }
       />
       <div ref={bodyRef} style={expanded === null ? body : bodyHidden}>
-        <div style={transcript}>
+        <div ref={transcriptRef} style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
-            <div ref={columnRef} style={column}>
+            <div ref={columnRef} style={{ ...column, ...chatFrame(chatLayout) }} data-chat-width={chatLayout.width} data-chat-align={chatLayout.align}>
               {older.more && (
                 <Button type="button" disabled={older.loading} onClick={showEarlier}>
                   {older.loading ? 'Loading earlier messages…' : 'Load earlier messages'}
@@ -627,6 +629,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         autoAvailable={autoAvailable}
         previousMode={modeBeforePlan}
         reportedLevel={journaledLevel ?? undefined}
+        layout={chatLayout}
+        endInset={expanded === null && bodyWidth > 0 && transcriptWidth > 0 ? bodyWidth - transcriptWidth : 0}
       />
     </div>
   )

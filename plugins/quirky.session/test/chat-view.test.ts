@@ -363,7 +363,7 @@ afterEach(async () => {
   document.body.innerHTML = ''
 })
 
-type Mount = { messages?: StructuredMessage[]; capabilities?: AgentCapabilities; session?: Partial<Session>; handlers?: Record<string, Handler> }
+type Mount = { messages?: StructuredMessage[]; capabilities?: AgentCapabilities; session?: Partial<Session>; handlers?: Record<string, Handler>; settings?: Record<string, unknown> }
 
 /** `count` messages where only the `shown` seqs render ("line N."); the rest are status items, hidden without Show all events, so the test stays fast. */
 function longChat(count: number, shown: number[]): StructuredMessage[] {
@@ -396,7 +396,7 @@ async function withClippedLines(mount: () => Promise<void>) {
   }
 }
 
-async function mountChat({ messages = [], capabilities = CLAUDE, session: over = {}, handlers = {} }: Mount = {}) {
+async function mountChat({ messages = [], capabilities = CLAUDE, session: over = {}, handlers = {}, settings = {} }: Mount = {}) {
   fake = fakeContext({
     'quirky.structured/messages': () => messages,
     'quirky.structured/capabilities': () => capabilities,
@@ -405,7 +405,7 @@ async function mountChat({ messages = [], capabilities = CLAUDE, session: over =
     'quirky.session/draft': () => null,
     'quirky.structured/commands': () => ({ commands: [] }),
     ...handlers
-  })
+  }, settings)
   const chat = session({ id: 'chat', kind: 'structured', agent: capabilities.agent, status: 'done', title: 'Add backoff', ...over })
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -670,6 +670,120 @@ describe('the chat view', () => {
     await click(host!.querySelector('button[aria-label="Stop"]'))
     expect(fake.callsTo('quirky.structured/interrupt')[0]!.params).toEqual({ session: 'chat' })
     expect(fake.callsTo('quirky.structured/stop')).toEqual([])
+  })
+})
+
+describe('chat width and alignment', () => {
+  // the column sits inside the transcript log; the composer's framed stack is the other element tagged with the layout
+  const column = () => host!.querySelector<HTMLElement>('[role="log"] [data-chat-width]')!
+  const composer = () => [...host!.querySelectorAll<HTMLElement>('[data-chat-width]')].find((element) => !element.closest('[role="log"]'))!
+  const layoutOf = (element: HTMLElement) => [element.dataset.chatWidth, element.dataset.chatAlign]
+  const margins = (element: HTMLElement) => [element.style.marginInlineStart, element.style.marginInlineEnd]
+  const free = (units: number) => `(100% - ${units} * var(--ui-length-unit))`
+  const menuItem = (label: string) => [...host!.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((item) => item.textContent?.replace(/^[✓\s]+/u, '') === label)
+
+  test('with nothing stored the chat is comfortable and centered, as before the settings existed', async () => {
+    await mountChat({ messages: [user(1, 'go')] })
+    expect(layoutOf(column())).toEqual(['comfortable', 'center'])
+    expect(layoutOf(composer())).toEqual(['comfortable', 'center'])
+    expect(margins(column())).toEqual([`max(0px, ${free(720)} / 2)`, `max(0px, ${free(720)} / 2)`])
+    expect(column().style.paddingInline).toBe('var(--ui-space-16)')
+  })
+
+  for (const [width, units] of [['narrow', 560], ['comfortable', 720], ['wide', 960]] as const) {
+    test(`${width} caps the column and the composer at ${units} units`, async () => {
+      await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': width, 'chat-align': 'center' } })
+      expect(layoutOf(column())).toEqual([width, 'center'])
+      expect(layoutOf(composer())).toEqual([width, 'center'])
+      expect(margins(column())).toEqual([`max(0px, ${free(units)} / 2)`, `max(0px, ${free(units)} / 2)`])
+      expect(margins(composer())).toEqual([`max(0px, ${free(units)} / 2)`, `max(2.5rem, ${free(units)} / 2)`])
+    })
+  }
+
+  test('full width drops the cap, and the composer still clears the layout toggle', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'full', 'chat-align': 'center' } })
+    expect(layoutOf(column())).toEqual(['full', 'center'])
+    expect(layoutOf(composer())).toEqual(['full', 'center'])
+    expect(margins(column())).toEqual(['0px', '0px'])
+    expect(margins(composer())).toEqual(['0px', '2.5rem'])
+    expect(composer().style.paddingInline).toBe('var(--ui-space-16)')
+  })
+
+  test('left puts the free space after the column and the composer', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'comfortable', 'chat-align': 'left' } })
+    expect(layoutOf(column())).toEqual(['comfortable', 'left'])
+    expect(layoutOf(composer())).toEqual(['comfortable', 'left'])
+    expect(margins(column())).toEqual(['0px', `max(0px, ${free(720)})`])
+    expect(margins(composer())).toEqual(['0px', `max(2.5rem, ${free(720)})`])
+  })
+
+  test('center splits the free space on both sides', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'narrow', 'chat-align': 'center' } })
+    expect(layoutOf(column())).toEqual(['narrow', 'center'])
+    expect(layoutOf(composer())).toEqual(['narrow', 'center'])
+    expect(margins(column())).toEqual([`max(0px, ${free(560)} / 2)`, `max(0px, ${free(560)} / 2)`])
+    expect(margins(composer())).toEqual([`max(0px, ${free(560)} / 2)`, `max(2.5rem, ${free(560)} / 2)`])
+  })
+
+  test('right puts the free space before the column and the composer', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'wide', 'chat-align': 'right' } })
+    expect(layoutOf(column())).toEqual(['wide', 'right'])
+    expect(layoutOf(composer())).toEqual(['wide', 'right'])
+    expect(margins(column())).toEqual([`max(0px, ${free(960)})`, '0px'])
+    expect(margins(composer())).toEqual([`max(0px, ${free(960)})`, '2.5rem'])
+  })
+
+  test('margins never go below zero, so a pane narrower than the cap does not scroll sideways', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'wide', 'chat-align': 'center' } })
+    for (const value of [...margins(column()), ...margins(composer())]) expect(value).toMatch(/^max\((0px|2\.5rem), /)
+    expect(column().style.maxWidth).toBe('')
+    expect(column().style.width).toBe('')
+  })
+
+  test('an ended chat lays out its Session ended card the same way', async () => {
+    await mountChat({ messages: [user(1, 'go')], session: { status: 'exited' }, settings: { 'chat-width': 'narrow', 'chat-align': 'left' } })
+    expect(text()).toContain('Session ended')
+    expect(layoutOf(composer())).toEqual(['narrow', 'left'])
+    expect(margins(composer())).toEqual(['0px', `max(2.5rem, ${free(560)})`])
+  })
+
+  test('an unknown stored value falls back to the default', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'huge', 'chat-align': 'diagonal' } })
+    expect(layoutOf(column())).toEqual(['comfortable', 'center'])
+    expect(layoutOf(composer())).toEqual(['comfortable', 'center'])
+  })
+
+  test('a setting change from Settings or the CLI applies live to the column and the composer', async () => {
+    await mountChat({ messages: [user(1, 'go')] })
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.session/chat-width', value: 'wide' })
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.session/chat-align', value: 'right' })
+    expect(layoutOf(column())).toEqual(['wide', 'right'])
+    expect(layoutOf(composer())).toEqual(['wide', 'right'])
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.other/chat-width', value: 'narrow' })
+    expect(layoutOf(column())).toEqual(['wide', 'right'])
+  })
+
+  test('the header ⋯ menu shows the current choices and stores a pick through setting.set', async () => {
+    await mountChat({ messages: [user(1, 'go')], settings: { 'chat-width': 'wide', 'chat-align': 'left' }, handlers: { 'setting.set': () => ({}) } })
+    await click(byLabel('More actions'))
+    expect(menuItem('Wide')!.getAttribute('aria-checked')).toBe('true')
+    expect(menuItem('Left')!.getAttribute('aria-checked')).toBe('true')
+    expect(menuItem('Narrow')!.getAttribute('aria-checked')).toBe('false')
+    await click(menuItem('Full width'))
+    await settle()
+    expect(fake.callsTo('setting.set')[0]!.params).toEqual({ id: 'setting:quirky.session/chat-width', value: 'full' })
+    await click(byLabel('More actions'))
+    await click(menuItem('Right'))
+    await settle()
+    expect(fake.callsTo('setting.set')[1]!.params).toEqual({ id: 'setting:quirky.session/chat-align', value: 'right' })
+  })
+
+  test('a refused pick says so in a toast', async () => {
+    await mountChat({ messages: [user(1, 'go')], handlers: { 'setting.set': () => { throw new Error('read-only') } } })
+    await click(byLabel('More actions'))
+    await click(menuItem('Narrow'))
+    await settle()
+    expect(fake.toasts[0]).toEqual({ title: 'Setting failed', body: 'read-only' })
   })
 })
 

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { AgentCapabilities, CacheTier, Session, StructuredMessage, UiPluginContext, UsageResult, UsageTotals } from '@quirky/protocol'
 import { Badge, InlineError, Menu, StatusDot, TextField, type MenuEntry, type UiStatus } from '@quirky/ui'
 import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, WORKTREE_VIEW_ID } from '../model'
+import { chatLayoutEntries, DEFAULT_CHAT_LAYOUT, type ChatLayout } from './chatLayout'
 import { formatElapsed, newestUserAt, useClock, useTurnStart } from './elapsed'
 
 const SESSION_INFO_COMMAND = 'command:quirky.session-info/open'
@@ -187,9 +188,10 @@ type Status = { ui: UiStatus; label: string; announced: string }
 
 /**
  * The row above a native chat's transcript: title (click to rename), plan chip, status, session
- * tokens, cache timer and the ⋯ menu with Rename, Fork chat, Session info and Show all events. It is
- * a normal flex row, so it never covers the transcript. Figures a narrow pane cannot hold move to the
- * top of the menu, and an offline connection freezes and dims them.
+ * tokens, cache timer and the ⋯ menu with Rename, Fork chat, Session info, Show all events and the
+ * chat width and alignment picks for `layout`. It is a normal flex row, so it never covers the
+ * transcript. Figures a narrow pane cannot hold move to the top of the menu, and an offline
+ * connection freezes and dims them.
  */
 export function ChatHeader({
   context,
@@ -197,6 +199,7 @@ export function ChatHeader({
   capabilities,
   messages,
   showAll,
+  layout = DEFAULT_CHAT_LAYOUT,
   planChip
 }: {
   context: UiPluginContext
@@ -205,6 +208,7 @@ export function ChatHeader({
   /** Every loaded message, oldest first; decides crashed versus ended and when the running turn began. */
   messages: readonly StructuredMessage[]
   showAll: boolean
+  layout?: ChatLayout
   planChip?: ReactNode
 }) {
   const { usage, settled } = useUsage(context, session.id)
@@ -362,9 +366,11 @@ export function ChatHeader({
           rememberShowAllEvents(session, !showAll)
           void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled: !showAll }, { activateOwner: false })
         }
-      }
+      },
+      { kind: 'separator', id: 'layout-rule' },
+      ...chatLayoutEntries(context, layout)
     ],
-    [droppedText, offline, forkReason, showAll, context, session, title]
+    [droppedText, offline, forkReason, showAll, layout, context, session, title]
   )
 
   return (

@@ -2338,6 +2338,22 @@
         "title": "Send with Cmd+Enter",
         "description": "Enter inserts a new line and Cmd+Enter sends.",
         "default": false
+      },
+      {
+        "id": "chat-width",
+        "type": "enum",
+        "title": "Chat width",
+        "description": "How wide the chat transcript and composer run: narrow (560), comfortable (720), wide (960) or the full view.",
+        "default": "comfortable",
+        "values": ["narrow", "comfortable", "wide", "full"]
+      },
+      {
+        "id": "chat-align",
+        "type": "enum",
+        "title": "Chat alignment",
+        "description": "Which side of the view the chat transcript and composer sit on when the chat is narrower than the view.",
+        "default": "center",
+        "values": ["left", "center", "right"]
       }
     ],
     "view": [

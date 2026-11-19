@@ -6,6 +6,7 @@ import type { QuirkyCommandName } from './commands'
 import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
 import { absolutePathsOf, AgentChip, defaultVisualLevel, NO_PICKS, reasonOf, registerChatHandle, useAgentOptions, useTurnSettings, useVisualLabels, VisualDial, type Picks } from './controls'
 import { createChat } from './createChat'
+import { chatFrame, DEFAULT_CHAT_LAYOUT, type ChatLayout } from './chatLayout'
 import { useElapsed, useTurnStart } from './elapsed'
 import { ComposerEditor } from './editor/ComposerEditor'
 import { parsePills } from './editor/pills'
@@ -29,12 +30,12 @@ const outer = {
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
-  padding: 'var(--ui-space-8)',
-  // the surrounding view's layout toggle floats over the bottom-right corner, so the card stops short of it
-  paddingInlineEnd: 'calc(2.5rem + var(--ui-space-16))',
+  paddingBlock: 'var(--ui-space-8)',
   color: 'var(--ui-text)',
   background: 'var(--ui-surface)'
 } satisfies CSSProperties
+// the surrounding view's layout toggle floats over the bottom-right corner, so the card stops short of it
+const TOGGLE_CLEARANCE = '2.5rem'
 const stack = { display: 'flex', flexDirection: 'column', minWidth: 0 } satisfies CSSProperties
 const chips = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)' } satisfies CSSProperties
 const editorBox = { minWidth: 0, flex: '0 0 auto', padding: 'var(--ui-space-2) var(--ui-space-4)' } satisfies CSSProperties
@@ -96,6 +97,7 @@ let pasteSeq = 0
  * to. `onPick` reports model, effort and permission mode changes to whoever starts the next turn.
  * The visual dial shows `reportedLevel`, the level the chat last journaled, or the default level setting
  * before there is one. Pointing at part of a visual puts a reference chip in front of the typed text.
+ * `layout` gives the card the transcript column's width and alignment.
  */
 export function Composer({
   context,
@@ -107,6 +109,8 @@ export function Composer({
   autoAvailable,
   previousMode,
   reportedLevel,
+  layout = DEFAULT_CHAT_LAYOUT,
+  endInset = 0,
   onPick
 }: {
   context: UiPluginContext
@@ -119,6 +123,9 @@ export function Composer({
   autoAvailable?: boolean
   previousMode?: PermissionModeName
   reportedLevel?: VisualLevel
+  layout?: ChatLayout
+  /** Pixels at the end edge taken by whatever sits beside the transcript, so the card lines up with its column. */
+  endInset?: number
   onPick?: (picks: Picks) => void
 }) {
   const [text, setText] = useState('')
@@ -512,16 +519,18 @@ export function Composer({
     />
   )
   const onRetry = failure?.retry
+  const frame = chatFrame(layout, TOGGLE_CLEARANCE)
+  const framedStack = { ...stack, ...frame }
   const problem = failure && (
-    <div style={errorBox}>
+    <div style={{ ...errorBox, ...frame }}>
       <InlineError message={failure.message} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />
     </div>
   )
 
   if (ended) {
     return (
-      <div style={outer}>
-        <div style={stack}>
+      <div style={{ ...outer, paddingInlineEnd: endInset }}>
+        <div style={framedStack} data-chat-width={layout.width} data-chat-align={layout.align}>
           {rows}
           <div style={{ ...endedCard, borderRadius: queue.length > 0 ? '0 0 var(--ui-radius-window) var(--ui-radius-window)' : 'var(--ui-radius-window)' }} role="status">
             <span style={grow}>Session ended</span>
@@ -539,7 +548,7 @@ export function Composer({
 
   return (
     <div
-      style={outer}
+      style={{ ...outer, paddingInlineEnd: endInset }}
       onDragOver={(event) => {
         if (hasFiles(event)) event.preventDefault()
       }}
@@ -549,7 +558,7 @@ export function Composer({
         void takeFiles([...event.dataTransfer.files])
       }}
     >
-      <div style={stack}>
+      <div style={framedStack} data-chat-width={layout.width} data-chat-align={layout.align}>
         {listOpen ? (
           <SuggestionList
             items={items}
