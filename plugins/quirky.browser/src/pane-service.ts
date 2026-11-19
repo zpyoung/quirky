@@ -644,7 +644,7 @@ export class PaneService {
         ...(explicit.exists ? {} : { error: `Local file does not exist: ${explicit.path}` })
       }
     }
-    const absolute = this.resolveWorkspaceFile(worktree, explicit.path)
+    const absolute = this.resolveLocalFile(worktree, explicit.path)
     resourceType(absolute)
     return { ...normalized, url, localPath: absolute, sourcePath: this.sourcePathWithinWorktree(worktree, absolute), historyUrl }
   }
@@ -683,9 +683,26 @@ export class PaneService {
     return candidate
   }
 
+  /**
+   * Canonicalizes one regular file for a passive single-file resource. Unlike a worktree document,
+   * the file may live anywhere: the resource grant reads that file alone, never its folder.
+   * Relative paths resolve against the worktree root.
+   */
+  private resolveLocalFile(worktree: Worktree, requested: string): string {
+    let candidate: string
+    try {
+      candidate = realpathSync(isAbsolute(requested) ? requested : join(realpathSync(worktree.path), requested))
+    } catch {
+      throw fault('invalid_argument', 'local browser previews must name an existing file')
+    }
+    const info = lstatSync(candidate)
+    if (!info.isFile() || info.isSymbolicLink()) throw fault('invalid_argument', 'local browser previews require a regular file')
+    return candidate
+  }
+
   private async resourceFor(tab: PaneTab, path: string): Promise<string> {
     const worktree = await this.worktreeInfo(tab.worktreeId)
-    const canonical = this.resolveWorkspaceFile(worktree, path)
+    const canonical = this.resolveLocalFile(worktree, path)
     const current = this.resources.get(tab.id)
     if (current && current.url === tab.preview?.url && tab.preview.path === canonical) return current.url
     current?.revoke()
@@ -945,7 +962,7 @@ export class PaneService {
   private async ensureRestoredResource(tab: PaneTab): Promise<void> {
     if (!tab.preview?.path || this.resources.has(tab.id)) return
     const worktree = await this.worktreeInfo(tab.worktreeId)
-    const path = this.resolveWorkspaceFile(worktree, tab.preview.path)
+    const path = this.resolveLocalFile(worktree, tab.preview.path)
     if (isDirectHtml(path)) {
       const url = pathToFileURL(path).href
       tab.preview = { path, url }
