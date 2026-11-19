@@ -229,8 +229,8 @@ export function ChatHeader({
     return lastError > lastUser
   }, [exited, messages])
 
-  const own = usage?.own ?? null
-  const ready = !exited && (own === null || own.total === 0)
+  const turns = usage?.turns ?? 0
+  const ready = !exited && turns === 0
   const status: Status = offline
     ? { ui: 'needs-you', label: 'Reconnecting…', announced: 'Reconnecting…' }
     : exited
@@ -246,7 +246,7 @@ export function ChatHeader({
             : { ui: 'done', label: 'Done', announced: 'Done' }
 
   const conversation = usage?.conversation ?? null
-  const tokensText = conversation !== null && conversation.total > 0 ? `${compactTokens(conversation.total)} tokens` : null
+  const tokensText = conversation !== null && turns >= 1 && conversation.total > 0 ? `${compactTokens(conversation.total)} tokens` : null
   const cache = working ? null : cacheDisplay(tiers, shownNow)
   const cacheText = cache === null ? null : cache.kind === 'cold' ? 'Cache cold' : cache.text
 

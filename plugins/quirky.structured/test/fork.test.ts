@@ -171,6 +171,21 @@ describe('quirky.structured/fork', () => {
     expect((await chat.call('quirky.structured/usage', { session: source.id })).conversation.total).toBe(45)
   })
 
+  test('a send during the provider copy is queued, then goes out once the fork is done', async () => {
+    const { source, chat } = await prepared()
+    const gate = Promise.withResolvers<void>()
+    chat.runner.forkGate = gate.promise
+    const forking = chat.call('quirky.structured/fork', { session: source.id })
+    await waitFor(() => chat.runner.forks.length === 1)
+    const result = await chat.call('quirky.structured/send', { session: source.id, text: 'mid-fork' })
+    expect(result).toMatchObject({ ok: true, queuedId: expect.any(String) })
+    expect(chat.runner.sent).toEqual([])
+    gate.resolve()
+    await forking
+    await waitFor(() => chat.runner.sent.length === 1)
+    expect(chat.runner.sent[0]).toMatchObject({ sessionId: source.id, text: 'mid-fork' })
+  })
+
   for (const status of ['working', 'waiting'] as const) {
     test(`refuses a ${status} source with turn-running`, async () => {
       const { source, chat } = await prepared({ status })

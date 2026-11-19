@@ -257,7 +257,7 @@ describe('usage summary in the plugin', () => {
     chat = await bootChat()
     const s = await chat.create()
     const ctx = chat.runner.context
-    expect(await chat.call('quirky.structured/usage', { session: s.id })).toEqual({ own: null, conversation: null, cache: null })
+    expect(await chat.call('quirky.structured/usage', { session: s.id })).toEqual({ own: null, conversation: null, turns: 0, cache: null })
     ctx.reportUsage!(s.id, { tokens: { input: 10, output: 5, cacheRead: 3, cacheWrite: 2 } })
     ctx.reportUsage!(s.id, { tokens: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 }, turnEnded: true })
     await waitFor(() => summaryEvents(chat!).length === 2)
@@ -267,6 +267,7 @@ describe('usage summary in the plugin', () => {
     expect(await chat.call('quirky.structured/usage', { session: s.id })).toEqual({
       own: { input: 11, output: 6, cacheRead: 4, cacheWrite: 3, total: 24 },
       conversation: { input: 11, output: 6, cacheRead: 4, cacheWrite: 3, total: 24 },
+      turns: 1,
       cache: null
     })
   })
@@ -383,7 +384,7 @@ describe('usage summary in the plugin', () => {
       report('s_c', 100)
       chat.world.sessions.delete(b.id)
       expect((await chat.call('quirky.structured/usage', { session: c.id })).conversation.input).toBe(100)
-      expect(await chat.call('quirky.structured/usage', { session: 's_a' })).toEqual({ own: null, conversation: null, cache: null })
+      expect(await chat.call('quirky.structured/usage', { session: 's_a' })).toEqual({ own: null, conversation: null, turns: 0, cache: null })
     })
   })
 
@@ -407,6 +408,43 @@ describe('usage summary in the plugin', () => {
     await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === resumed.id))
     const options = chat.runner.started.find((entry) => entry.sessionId === resumed.id)!.options
     expect(options.usageBaseline).toEqual({ input: 30, output: 4, cacheRead: 5, cacheWrite: 6 })
+  })
+
+  test('a resume through a session with no completed turn keeps the earlier session\'s baseline', async () => {
+    const home = mkdtempSync('/tmp/qs-')
+    chat = await bootChat({ home })
+    chat.world.worktree.path = home
+    const a = await chat.create()
+    await waitFor(() => chat!.runner.started.length === 1)
+    chat.world.sessions.get(a.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    chat.runner.context.appendMessage({
+      sessionId: a.id,
+      role: 'result',
+      text: 'done',
+      data: { type: 'result', modelUsage: { m: { inputTokens: 100, outputTokens: 20 } } }
+    })
+    await chat.call('quirky.structured/stop', { session: a.id })
+    const b = (await chat.call('quirky.structured/resume', { session: a.id })) as Session
+    await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === b.id))
+    chat.world.sessions.get(b.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    await chat.call('quirky.structured/stop', { session: b.id })
+    const c = (await chat.call('quirky.structured/resume', { session: b.id })) as Session
+    await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === c.id))
+    expect(chat.runner.started.find((entry) => entry.sessionId === c.id)!.options.usageBaseline).toEqual({ input: 100, output: 20, cacheRead: 0, cacheWrite: 0 })
+    chat.runner.context.reportUsage!(a.id, { tokens: { input: 100, output: 20, cacheRead: 0, cacheWrite: 0 }, turnEnded: true })
+    chat.runner.context.reportUsage!(c.id, { tokens: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 }, turnEnded: true })
+    const usage = await chat.call('quirky.structured/usage', { session: c.id })
+    expect(usage.conversation.total).toBe(135)
+    expect(usage.turns).toBe(2)
+  })
+
+  test('turns counts completed turns only, so mid-turn deltas leave it at zero', async () => {
+    chat = await bootChat()
+    const s = await chat.create()
+    chat.runner.context.reportUsage!(s.id, { tokens: { input: 4, output: 1, cacheRead: 0, cacheWrite: 0 } })
+    const usage = await chat.call('quirky.structured/usage', { session: s.id })
+    expect(usage.conversation.total).toBe(5)
+    expect(usage.turns).toBe(0)
   })
 
   test('the summary survives a daemon reboot', async () => {

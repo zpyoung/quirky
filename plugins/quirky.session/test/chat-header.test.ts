@@ -32,6 +32,7 @@ const TOTALS = { input: 12_400, output: 9_800, cacheRead: 141_200, cacheWrite: 2
 const usageOf = (cache: CacheTier[] | null, totals: typeof TOTALS | null = TOTALS): UsageResult => ({
   own: totals,
   conversation: totals,
+  turns: totals === null ? 0 : 1,
   cache: cache === null ? null : { tiers: cache }
 })
 const both = (anchorAt: number): CacheTier[] => [{ ttlMs: FIVE, anchorAt }, { ttlMs: HOUR, anchorAt }]
@@ -322,6 +323,25 @@ describe('Ended, crashed, offline, failed', () => {
     expect(fake.callsTo('quirky.structured/usage')).toHaveLength(2)
     expect(text()).not.toContain('Reconnecting…')
     expect(text()).toContain('Cache')
+  })
+
+  test('no token total and a Ready label until a turn has ended, even when mid-turn counts arrived', async () => {
+    usage = { ...usageOf(null), turns: 0 }
+    await mount()
+    expect(text()).toContain('Ready')
+    expect(text()).not.toContain('tokens')
+  })
+
+  test('a cache that expired while offline shows cold after reconnecting', async () => {
+    usage = usageOf([{ ttlMs: FIVE, anchorAt: NOW - 48_000 }])
+    await mount()
+    expect(figureByText('Cache 4:12')).toBeDefined()
+    await fake.setConnection('reconnecting')
+    setSystemTime(new Date(NOW + FIVE))
+    await fake.setConnection('connected')
+    await flush()
+    expect(text()).toContain('Cache cold')
+    expect(text()).not.toContain('Cache 4:')
   })
 
   test('fork-failed: an error row under the header with Retry; Retry forks again and clears the row', async () => {
@@ -616,7 +636,7 @@ describe('session tab tooltip', () => {
     const shell = session({ id: 'shell-1', kind: 'terminal', title: 'zsh' })
     let total = 184_000
     fake = fakeContext({
-      'quirky.structured/usage': () => ({ own: null, conversation: { ...TOTALS, total }, cache: null }),
+      'quirky.structured/usage': () => ({ own: null, conversation: { ...TOTALS, total }, turns: 1, cache: null }),
       'quirky.agents/list': () => ({ agents: [], defaultAgent: 'auto' })
     })
     host = document.createElement('div')
@@ -635,10 +655,33 @@ describe('session tab tooltip', () => {
     expect(tabs()[0]).toBe('190.5k tokens')
   })
 
+  test('a structured tab re-queries its total on reconnect', async () => {
+    vi.useRealTimers()
+    const chat = session({ id: 'chat-1', kind: 'structured', agent: 'claude', status: 'done', title: 'Chat one' })
+    let total = 184_000
+    fake = fakeContext({
+      'quirky.structured/usage': () => ({ own: null, conversation: { ...TOTALS, total }, turns: 1, cache: null }),
+      'quirky.agents/list': () => ({ agents: [], defaultAgent: 'auto' })
+    })
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root!.render(createElement(SessionTabs, { context: fake.context, store: {} as WorktreeSessions, sessions: [chat], active: chat }))
+    })
+    await settleTabs()
+    expect(tabs()).toEqual(['184k tokens'])
+    total = 250_000
+    await fake.setConnection('reconnecting')
+    await fake.setConnection('connected')
+    await settleTabs()
+    expect(tabs()).toEqual(['250k tokens'])
+  })
+
   test('a structured tab without usage data has no tooltip', async () => {
     vi.useRealTimers()
     const chat = session({ id: 'chat-1', kind: 'structured', agent: 'claude', status: 'done', title: 'Chat one' })
-    fake = fakeContext({ 'quirky.structured/usage': () => ({ own: null, conversation: null, cache: null }), 'quirky.agents/list': () => ({ agents: [], defaultAgent: 'auto' }) })
+    fake = fakeContext({ 'quirky.structured/usage': () => ({ own: null, conversation: null, turns: 0, cache: null }), 'quirky.agents/list': () => ({ agents: [], defaultAgent: 'auto' }) })
     host = document.createElement('div')
     document.body.appendChild(host)
     root = createRoot(host)

@@ -405,6 +405,10 @@
             "conversation": {
               "description": "{input, output, cacheRead, cacheWrite, total} token counts, or null"
             },
+            "turns": {
+              "type": "number",
+              "description": "Completed turns across the same conversation; 0 when none"
+            },
             "cache": {
               "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
             }
@@ -412,6 +416,7 @@
           "required": [
             "own",
             "conversation",
+            "turns",
             "cache"
           ]
         }
