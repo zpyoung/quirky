@@ -3,12 +3,13 @@ import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
-import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session, UsageTotals } from '@quirky/protocol'
 import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
 import {
   CallTracker,
   ProseStream,
   claudeEntries,
+  claudeResultTotals,
   claudeTextDelta,
   closingEntries,
   errorItem,
@@ -25,6 +26,10 @@ import { hoistCommand } from './slash-commands'
 
 const TOOLS_DISABLED = 'tools are disabled for this session'
 const denyEveryTool: CanUseTool = async () => ({ behavior: 'deny', message: TOOLS_DISABLED })
+
+function nonNegativeCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
 
 function numberOr0(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
@@ -239,6 +244,10 @@ type Running = {
   commands: AgentCommand[]
   /** Settles once the command list has loaded or failed; messages are written to the CLI after it. */
   commandsLoaded: Promise<void>
+  /** Totals the previous result (or the predecessor's last result, after a resume) already counted. */
+  usageBaseline: Omit<UsageTotals, 'total'>
+  /** When the request behind the next assistant message was sent; the cache timer counts from it. */
+  callStartedAt: number
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -387,6 +396,8 @@ class ClaudeRunner implements StructuredRunner {
       lastPlanText: launchOptions.lastPlanText ?? null,
       plans: new Map(launchOptions.lastPlan === undefined ? [] : [[launchOptions.lastPlan.version, launchOptions.lastPlan]]),
       pendingPlan: null,
+      usageBaseline: launchOptions.usageBaseline ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      callStartedAt: Date.now(),
       planQueue: Promise.resolve(),
       planArrivals: 0,
       planInFlight: 0,
@@ -455,6 +466,7 @@ class ClaudeRunner implements StructuredRunner {
   private write(run: Running, text: string, images: EncodedImage[] = []): void {
     void run.commandsLoaded.then(() => {
       if (run.stopped || run.ended) return
+      run.callStartedAt = Date.now()
       run.input.push(userMessage(hoistCommand(text, run.commands), run.providerSessionId, images))
     })
   }
@@ -897,6 +909,38 @@ class ClaudeRunner implements StructuredRunner {
     run.stream.reset()
   }
 
+  /** Reports this turn's spend: the result's cumulative totals minus what earlier results already counted. */
+  private reportResultUsage(sessionId: string, run: Running, msg: any): void {
+    const current = claudeResultTotals(msg)
+    if (current === null) {
+      this.context.reportUsage?.(sessionId, { turnEnded: true })
+      return
+    }
+    const before = run.usageBaseline
+    run.usageBaseline = current
+    this.context.reportUsage?.(sessionId, {
+      turnEnded: true,
+      tokens: {
+        input: Math.max(0, current.input - before.input),
+        output: Math.max(0, current.output - before.output),
+        cacheRead: Math.max(0, current.cacheRead - before.cacheRead),
+        cacheWrite: Math.max(0, current.cacheWrite - before.cacheWrite)
+      }
+    })
+  }
+
+  /** Reports one main-thread call's prompt-cache writes and reads; subagent calls do not move the main timer. */
+  private reportCacheUsage(sessionId: string, run: Running, msg: any): void {
+    if (msg.parent_tool_use_id) return
+    const usage = msg.message?.usage
+    if (typeof usage !== 'object' || usage === null) return
+    const created = usage.cache_creation
+    const wrote5m = nonNegativeCount(created?.ephemeral_5m_input_tokens)
+    const wrote1h = nonNegativeCount(created?.ephemeral_1h_input_tokens)
+    const read = nonNegativeCount(usage.cache_read_input_tokens)
+    this.context.reportUsage?.(sessionId, { cache: { callStartedAt: run.callStartedAt, wrote5m, wrote1h, read } })
+  }
+
   private async journal(sessionId: string, msg: any): Promise<void> {
     const run = this.running.get(sessionId)
     const delta = claudeTextDelta(msg)
@@ -941,7 +985,12 @@ class ClaudeRunner implements StructuredRunner {
       this.reportCommands(sessionId, run)
       return
     }
-    if (msg?.type === 'result' && run) run.pendingApprovalTarget = null
+    if (msg?.type === 'result' && run) {
+      run.pendingApprovalTarget = null
+      this.reportResultUsage(sessionId, run, msg)
+    }
+    if (msg?.type === 'user' && run && !msg.parent_tool_use_id) run.callStartedAt = Date.now()
+    if (msg?.type === 'assistant' && run) this.reportCacheUsage(sessionId, run, msg)
     if (msg?.type === 'result' && run?.interrupted) {
       run.interrupted = false
       // the result of the turn that was interrupted is already journaled as stopped
