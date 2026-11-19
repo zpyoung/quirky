@@ -322,6 +322,6 @@ Open questions from the mock's gaps (elements with no existing component):
 
 ## Status & amendments
 
-**Status:** Draft, awaiting review.
+**Status:** Approved 2026-11-19 in the brainstorm companion.
 
 **Amendments:** none yet.
