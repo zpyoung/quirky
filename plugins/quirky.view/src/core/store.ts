@@ -21,7 +21,8 @@ export const viewsMigration: StoreMigration = `
 /**
  * Version history. `views` keeps the latest spec, so a list stays one table read; every version,
  * the latest included, also has a `view_versions` row. A view that existed before this migration
- * gets one row, as version 1, from its current spec.
+ * gets one row, as version 1, from its current spec. `render_reported_version` is the newest version
+ * whose render failure the agent was told about, so a restart does not tell it twice.
  */
 export const viewVersionsMigration: StoreMigration = `
   CREATE TABLE view_versions (
@@ -33,8 +34,11 @@ export const viewVersionsMigration: StoreMigration = `
   );
   ALTER TABLE views ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE views ADD COLUMN refused_json TEXT;
+  ALTER TABLE views ADD COLUMN render_reported_version INTEGER NOT NULL DEFAULT 0;
   INSERT INTO view_versions (view_id, version, spec_json, created_at)
-    SELECT view_id, 1, spec_json, COALESCE(CAST(strftime('%s', updated_at) AS INTEGER) * 1000, 0) FROM views;
+    SELECT view_id, 1, spec_json,
+      COALESCE(CAST(strftime('%s', updated_at) AS INTEGER) * 1000 + CAST(substr(strftime('%f', updated_at), 4, 3) AS INTEGER), 0)
+    FROM views;
 `
 
 type Row = {
@@ -139,6 +143,14 @@ export class ViewStore {
   setRefused(viewId: string, refused: Refused | null): StoredViewRecord | null {
     this.store.run('UPDATE views SET refused_json = ? WHERE view_id = ?', refused === null ? null : JSON.stringify(refused), viewId)
     return this.get(viewId)
+  }
+
+  /**
+   * Claims the render-failure report for `version`: true the first time, false for every later call
+   * on the same version. Kept apart from the refused state, which a refused update overwrites.
+   */
+  claimRenderReport(viewId: string, version: number): boolean {
+    return this.store.run('UPDATE views SET render_reported_version = ? WHERE view_id = ? AND render_reported_version < ?', version, viewId, version).changes > 0
   }
 
   /** Records the user's choice of placement, which later updates keep. */

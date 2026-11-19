@@ -790,6 +790,23 @@ describe('render-failed', () => {
     expect(h.sends).toHaveLength(1)
   })
 
+  test('a duplicate is still recognised after a refused update and a restart', async () => {
+    const path = tempDatabasePath()
+    const before = start(path)
+    const { viewId } = await before.call('open', { spec: authFlowV1 })
+    await before.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)
+    await rejection(before.call('update', { viewId, spec: { title: 'x', root: { type: 'nope' } } }))
+    expect(before.sends).toHaveLength(1)
+    before.stop()
+
+    const after = start(path)
+    expect(await after.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)).toEqual({ duplicate: true })
+    expect(after.sends).toHaveLength(0)
+    await after.call('update', { viewId, spec: authFlowV2 })
+    expect(await after.call('render-failed', { viewId, version: 2, error: 'boom' }, windowCaller)).toEqual({ ok: true })
+    expect(after.sends).toHaveLength(1)
+  })
+
   test('a failure for a version that is not the latest is ignored', async () => {
     const h = start()
     const { viewId } = await h.call('open', { spec: authFlowV1 })
@@ -871,6 +888,20 @@ describe('migration 2', () => {
     expect(fresh).toMatchObject({ viewId: 'view_new', closed: true, version: 1, latestVersion: 1 })
     expect(await h.call('get', { viewId: 'view_old', version: 1 }, windowCaller)).toMatchObject({ version: 1, spec: authFlowV1, updatedAt: '2026-11-02T11:30:00.000Z' })
     expect((await rejection(h.call('get', { viewId: 'view_old', version: 2 }, windowCaller))).code).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('the backfilled v1 keeps the milliseconds of updated_at', async () => {
+    const path = tempDatabasePath()
+    const db = new Database(path)
+    sqliteStore(db, [viewsMigration])
+    db.query(
+      `INSERT INTO views (view_id, session_id, title, spec_json, placement, moved_by_user, updates, created_at, updated_at, closed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('view_ms', 's1', 'Auth flow', JSON.stringify(authFlowV1), 'inline', 0, 0, '2026-11-01T10:00:00.000Z', '2026-11-02T11:30:00.123Z', 0)
+    db.close()
+    const h = start(path)
+    await h.call('update', { viewId: 'view_ms', spec: authFlowV2 })
+    expect(await h.call('get', { viewId: 'view_ms', version: 1 }, windowCaller)).toMatchObject({ version: 1, updatedAt: '2026-11-02T11:30:00.123Z' })
   })
 
   test('an old view carries on from its v1, and the original table is untouched', async () => {
