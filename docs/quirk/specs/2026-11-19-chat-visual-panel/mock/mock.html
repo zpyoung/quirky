@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock review</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --border: #d6d6d0;
+  --text: #1c1c1a;
+  --muted: #62625c;
+  --accent: #2f5fd0;
+  --accent-text: #ffffff;
+  --accent-soft: #e4ebfb;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d6;
+  --danger: #b3261e;
+  --ok: #1f7a3d;
+  --change: #c2410c;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --surface-2: #2a2a27;
+    --border: #3d3d38;
+    --text: #ececE8;
+    --muted: #a5a59d;
+    --accent: #7ba0ff;
+    --accent-text: #0d1424;
+    --accent-soft: #232c45;
+    --warn: #f0c36a;
+    --warn-soft: #3a2f14;
+    --danger: #ff8a80;
+    --ok: #6fd08c;
+    --change: #fb923c;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+[hidden] { display: none !important; }
+
+.app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); position: relative; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.status { color: var(--muted); font-size: 13px; margin-left: auto; min-height: 1.4em; }
+.status.error { color: var(--danger); }
+
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+.rail {
+  overflow: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 10px 10px 16px;
+}
+.rail h2 { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 6px; }
+.rail h2:first-child { margin-top: 2px; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.screen-item { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.screen-item.current { background: var(--accent-soft); }
+.screen-item > button.go {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+}
+.screen-item .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; border: 2px solid var(--muted); align-self: center; }
+.dot.visited { background: var(--ok); border-color: var(--ok); }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.mark { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); padding-right: 6px; cursor: pointer; }
+.note { color: var(--muted); font-size: 12px; margin: 2px 8px 4px; }
+.skipped li { margin: 2px 8px; font-size: 12px; color: var(--muted); }
+.pin-row { border: 1px solid var(--border); border-radius: 8px; margin: 0 2px 6px; background: var(--surface); }
+.pin-row.selected { border-color: var(--accent); }
+.pin-row > button.head { width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; display: block; }
+.pin-row .meta { color: var(--muted); font-size: 12px; }
+.badge { font-size: 11px; border-radius: 999px; padding: 0 7px; background: var(--surface-2); border: 1px solid var(--border); margin-left: 4px; white-space: nowrap; }
+.badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge.ok { color: var(--ok); }
+.thread { padding: 0 8px 8px; }
+.msg { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.agent { background: var(--accent-soft); }
+.msg .who { display: block; font-size: 11px; color: var(--muted); }
+.msg.last-reply { outline: 2px solid var(--ok); }
+
+.stage { position: relative; min-width: 0; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 12px; background: var(--surface-2); }
+.frame-box { position: relative; width: 100%; max-width: 100%; height: 100%; min-height: 360px; background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--border), 0 1px 4px rgba(0,0,0,0.12); }
+.frame-box.mobile { width: 390px; }
+.frame-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 6px; }
+.box { position: absolute; pointer-events: none; border-radius: 2px; }
+.box.hover { outline: 2px solid var(--accent); outline-offset: 0; background: rgba(47, 95, 208, 0.08); }
+.box.changed { outline: 2px dashed var(--change); outline-offset: 1px; }
+.box .tag { position: absolute; left: 0; top: -20px; background: var(--accent); color: var(--accent-text); font-size: 11px; line-height: 16px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.box.changed .tag { background: var(--change); color: #fff; }
+.pin {
+  position: absolute;
+  pointer-events: auto;
+  width: 26px; height: 26px; padding: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent); color: var(--accent-text); border: 2px solid #fff;
+  font-weight: 700; font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.pin:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+.pin.resolved { background: var(--ok); color: #fff; }
+.pin.selected { outline: 3px solid var(--text); }
+.pop {
+  position: absolute;
+  pointer-events: auto;
+  width: min(300px, calc(100% - 16px));
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 10px;
+  z-index: 5;
+}
+.pop h3 { margin: 0 0 6px; font-size: 13px; }
+.pop textarea { width: 100%; min-height: 76px; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.pop .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; align-items: center; }
+.pop .err { color: var(--danger); font-size: 12px; margin-right: auto; }
+
+.verdict { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.verdict .spacer { flex: 1; }
+.verdict .panel { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.verdict .panel textarea { width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.verdict .panel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.verdict .err { color: var(--danger); }
+.verdict .info { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .stage { padding: 6px; }
+  .frame-box.mobile { width: 390px; max-width: 100%; }
+  .status { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="banner" id="banner" hidden></div>
+  <header class="bar" id="toolbar">
+    <span class="chip" id="version-chip"></span>
+    <label id="version-wrap" hidden>Version <select id="version-picker" aria-label="Mock version"></select></label>
+    <div class="seg" role="group" aria-label="Mode">
+      <button type="button" id="mode-interact" aria-pressed="true">Interact</button>
+      <button type="button" id="mode-comment" aria-pressed="false">Comment</button>
+    </div>
+    <div class="seg" role="group" aria-label="Viewport">
+      <button type="button" id="vp-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="vp-mobile" aria-pressed="false">Mobile 390px</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="show-changes"> Show changes</label>
+    <div class="seg" role="group" aria-label="State" id="state-switch" hidden></div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </header>
+  <div class="body">
+    <nav class="rail" id="rail" aria-label="Screens"></nav>
+    <main class="stage">
+      <div class="frame-box" id="frame-box">
+        <iframe id="mock-frame" title="Mock under review"></iframe>
+        <div class="overlay" id="overlay">
+          <div id="layer-changes"></div>
+          <div id="layer-hover"></div>
+          <div id="layer-pins"></div>
+          <div id="layer-pop"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="verdict" id="verdict" hidden></footer>
+</div>
+<script id="quirk-mock-boot" type="application/json">{"mode":"offline","version":2,"latest":2,"versions":[2],"revision":"91f20f6695c9a438","screens":{"ui_layer":true,"screens":[{"id":"chat","title":"Chat with the visual panel","purpose":"Native chat with the docked panel beside the transcript, showing several visuals side by side when it's wide enough.","states":["default","empty","building","broken","pointing"],"skipped_states":[],"elements":[{"pin":"transcript","label":"Transcript","component":"ChatView / Turn"},{"pin":"msg-chip","label":"Visual chip on a message","component":null},{"pin":"visualize-btn","label":"Visualize action on a message","component":null},{"pin":"composer","label":"Composer","component":"Composer"},{"pin":"ref-chip","label":"Reference chip from clicking a visual","component":null},{"pin":"visual-dial","label":"Visual level dial","component":null},{"pin":"divider","label":"Resizable divider","component":null},{"pin":"panel-header","label":"Panel header","component":"quirky.view Pane"},{"pin":"panel-collapse","label":"Collapse panel","component":null},{"pin":"plan-card","label":"Plan, pinned first","component":"PlanPanel"},{"pin":"visual-card","label":"Visual card","component":"quirky.view Pane"},{"pin":"version-stepper","label":"Version stepper","component":null},{"pin":"change-highlight","label":"What changed in this version","component":null},{"pin":"expand-btn","label":"Expand","component":null},{"pin":"popout-btn","label":"Pop out","component":null},{"pin":"diagram","label":"Diagram","component":"MermaidBlock"},{"pin":"chart","label":"Bar chart","component":"quirky.view bar-chart"},{"pin":"table","label":"Table","component":"quirky.view table"},{"pin":"empty-panel","label":"Empty panel","component":null},{"pin":"building-card","label":"Visual building up","component":null},{"pin":"broken-badge","label":"Didn't render badge","component":"ViewError"},{"pin":"refused-row","label":"Refused update row in transcript","component":"Activity"}]},{"id":"narrow","title":"Narrow window","purpose":"When the panel is too narrow for side by side, one visual is big and the rest sit in a filmstrip; collapsed, it becomes a rail with a badge.","states":["default","collapsed"],"skipped_states":[{"state":"empty","reason":"same empty panel as the Chat screen"}],"elements":[{"pin":"filmstrip","label":"Filmstrip of visuals","component":null},{"pin":"focus-visual","label":"Focused visual","component":"quirky.view Pane"},{"pin":"rail","label":"Collapsed rail with badge","component":null}]},{"id":"expanded","title":"Expanded visual","purpose":"One visual fills the chat window; the composer stays so you can keep pointing and asking.","states":["default"],"skipped_states":[{"state":"error","reason":"a broken version shows the same badge as on the Chat screen"}],"elements":[{"pin":"expanded-visual","label":"Expanded visual","component":null},{"pin":"back-btn","label":"Back to chat","component":null},{"pin":"popout-btn","label":"Pop out","component":null},{"pin":"mini-composer","label":"Composer under the visual","component":"Composer"}]},{"id":"prototype","title":"Prototype and live preview","purpose":"A clickable prototype the agent wrote, running sandboxed with no network, next to a live preview of the worktree's dev server.","states":["default"],"skipped_states":[{"state":"loading","reason":"prototypes appear whole; a live preview shows the browser pane's own loading state"}],"elements":[{"pin":"sandbox-tag","label":"Sandboxed, no network tag","component":null},{"pin":"prototype-frame","label":"Interactive prototype","component":null},{"pin":"live-preview","label":"Live preview of the dev server","component":"quirky.browser pane"}]},{"id":"kinds","title":"More kinds","purpose":"A tour of the visual kinds beyond diagrams, data and images, as they'd look in the panel.","states":["default"],"skipped_states":[],"elements":[{"pin":"timeline","label":"Timeline","component":null},{"pin":"board","label":"Board","component":null},{"pin":"matrix","label":"Decision matrix","component":null},{"pin":"annotated-code","label":"Annotated code","component":"quirky.view code"},{"pin":"file-map","label":"File map","component":null},{"pin":"plot","label":"Math plot","component":null},{"pin":"sketch","label":"Sketch","component":null},{"pin":"screenshot","label":"Worktree screenshot","component":"ImageChip"}]}]},"changed":["visualize-btn"],"mock_html":"\u003c!doctype html>\u003chtml lang=\"en\">\u003chead>\u003cmeta charset=\"utf-8\">\u003cmeta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\u003ctitle>Chat visual panel mock\u003c/title>\u003cstyle>\n*{box-sizing:border-box}\nbody{margin:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,\"Segoe UI\",system-ui,sans-serif;color:#1d1f23;background:#eceef1}\na{color:inherit}\n.mnav{display:flex;gap:4px;padding:6px 10px;background:#dfe2e6;font-size:11px;align-items:center;flex-wrap:wrap}\n.mnav span{color:#6b7280;margin-right:4px}\n.mnav a{padding:2px 8px;border-radius:10px;text-decoration:none;background:#fff;border:1px solid #cfd3d9}\n.win{display:flex;flex-direction:column;height:calc(100vh - 30px);min-height:620px;background:#fafafa}\n.win.narrowwin{max-width:860px;margin:0 auto;border-left:1px solid #d6d9de;border-right:1px solid #d6d9de}\n.hdr{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #e3e5e8;background:#fff}\n.hdr b{font-size:13px}.hdr .sub{color:#6b7280;font-size:12px}\n.body{flex:1;display:flex;min-height:0}\n.left{flex:1;display:flex;flex-direction:column;min-width:0}\n.log{flex:1;overflow:auto;padding:16px 22px;display:flex;flex-direction:column;gap:14px}\n.msg{max-width:640px}\n.msg.user{align-self:flex-end;background:#e9edf5;border-radius:10px;padding:8px 12px;max-width:420px}\n.msg.agent{position:relative;padding-right:30px}\n.msg.agent .who{font-size:11px;color:#6b7280;margin-bottom:2px}\n.chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}\n.chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;border:1px solid #9db4f5;color:#2b55d6;background:#f2f5ff;border-radius:10px;padding:1px 8px;cursor:pointer}\n.chip.ref{background:#3b6cf6;color:#fff;border-color:#3b6cf6}\n.vis-btn{position:absolute;right:4px;top:16px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;border-radius:5px;cursor:pointer;color:#6b7280;opacity:0;transition:opacity .12s}\n.msg.agent:hover .vis-btn,.msg.agent:focus-within .vis-btn,.vis-btn.busy{opacity:1}\n.vis-btn:hover{background:#eef2ff;color:#2b55d6}\n.vis-btn:hover:after{content:'Visualize';position:absolute;right:24px;top:1px;white-space:nowrap;font-size:10.5px;background:#1f2937;color:#fff;border-radius:4px;padding:2px 6px}\n.act{font:11px ui-monospace,Menlo,monospace;color:#6b7280;border-left:2px solid #d6d9de;padding:2px 8px}\n.act.bad{border-color:#d97706;color:#92400e;background:#fffbeb}\n.composer{margin:0 18px 14px;border:1px solid #d6d9de;border-radius:10px;background:#fff;padding:8px 10px}\n.composer .input{min-height:34px;display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap;color:#1d1f23}\n.composer .input .ph{color:#9ca3af}\n.composer .ctl{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:11px;color:#4b5563}\n.pill{border:1px solid #d6d9de;border-radius:6px;padding:2px 7px;background:#fff;cursor:pointer;position:relative}\n.pill.dial{border-color:#9db4f5;color:#2b55d6}\n.menu{position:absolute;bottom:24px;left:0;background:#fff;border:1px solid #d6d9de;border-radius:8px;box-shadow:0 6px 18px #0002;min-width:210px;padding:4px;display:none;z-index:5}\n.menu.open{display:block}\n.menu div{padding:5px 8px;border-radius:5px;cursor:pointer}\n.menu div:hover{background:#f2f5ff}\n.menu small{display:block;color:#6b7280}\n.send{margin-left:auto;background:#3b6cf6;color:#fff;border-radius:6px;padding:2px 10px}\n.divider{width:7px;cursor:col-resize;display:flex;align-items:center;justify-content:center;background:#f1f2f4;border-left:1px solid #e3e5e8;border-right:1px solid #e3e5e8}\n.divider i{width:2px;height:28px;background:#c4c8ce;border-radius:2px}\n.panel{width:46%;min-width:300px;display:flex;flex-direction:column;background:#f4f5f7}\n.panel.collapsed{display:none}\n.phdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e3e5e8;background:#fff}\n.phdr b{font-size:12px}.phdr .count{font-size:11px;color:#6b7280}\n.phdr .sp{flex:1}\n.ibtn{border:1px solid #d6d9de;background:#fff;border-radius:5px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;color:#4b5563;text-decoration:none}\n.ibtn:hover{border-color:#3b6cf6;color:#2b55d6}\n.grid{flex:1;overflow:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-content:start}\n.card{background:#fff;border:1px solid #e0e3e7;border-radius:8px;display:flex;flex-direction:column;min-height:120px}\n.card.wide{grid-column:1/-1}\n.card.focus{outline:2px solid #3b6cf6}\n.chdr{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid #f0f1f3;font-size:12px}\n.chdr b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.by{font-size:10px;color:#6b7280}\n.step{font-size:11px;color:#4b5563;display:inline-flex;gap:3px;align-items:center}\n.step a{cursor:pointer;padding:0 3px;border-radius:3px}\n.step a:hover{background:#f2f5ff}\n.cbody{padding:8px;flex:1}\n.plan li{margin:2px 0}.plan .done{color:#6b7280;text-decoration:line-through}\n.plan .now{font-weight:600}\nsvg text{font:11px -apple-system,system-ui,sans-serif;fill:#1d1f23}\n.node rect{fill:#fff;stroke:#9aa1ab}\n.node{cursor:pointer}\n.node:hover rect{stroke:#3b6cf6}\n.node.sel rect{stroke:#3b6cf6;stroke-width:2.5;fill:#f2f5ff}\n.node.chg rect{stroke:#16a34a;stroke-width:2;fill:#f0fdf4}\n.edge{stroke:#9aa1ab;fill:none;marker-end:url(#arr)}\n.edge.chg{stroke:#16a34a}\n.chgnote{font-size:10px;color:#15803d;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;display:inline-block;margin-top:4px}\ntable.t{border-collapse:collapse;width:100%;font-size:11px}\ntable.t th,table.t td{border-bottom:1px solid #eef0f2;padding:3px 4px;text-align:left}\ntable.t tr{cursor:pointer}table.t tr:hover td{background:#f7f9ff}\ntable.t tr.sel td{background:#e8eefe}\n.bars{display:flex;align-items:flex-end;gap:8px;height:90px;padding:0 4px}\n.bar{flex:1;background:#9db4f5;border-radius:3px 3px 0 0;position:relative;cursor:pointer}\n.bar:hover{background:#3b6cf6}\n.bar span{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:10px;color:#4b5563}\n.bar em{position:absolute;top:-15px;left:0;right:0;text-align:center;font-size:10px;font-style:normal}\n.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#4b5563;padding:30px;gap:8px}\n.empty .ill{display:flex;gap:6px;opacity:.55}\n.empty .ill div{width:46px;height:34px;border:1.5px dashed #9aa1ab;border-radius:6px}\n.badge-bad{font-size:10px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:4px;padding:1px 6px;cursor:pointer}\n.errbox{display:none;margin:0 8px 8px;font:10.5px ui-monospace,Menlo,monospace;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px;color:#78350f;white-space:pre-wrap}\n.errbox.open{display:block}\n.pending rect{stroke-dasharray:4 3;fill:#fafafa}\n.pending{animation:pulse 1.4s ease-in-out infinite}\n@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}\n.drawing{font-size:11px;color:#2b55d6}\n.rail{width:30px;border-left:1px solid #e3e5e8;background:#fff;display:none;flex-direction:column;align-items:center;padding-top:10px;gap:10px;cursor:pointer}\n.rail.show{display:flex}\n.rail .rb{background:#3b6cf6;color:#fff;border-radius:9px;min-width:18px;height:18px;font-size:10px;display:flex;align-items:center;justify-content:center}\n.rail .rl{writing-mode:vertical-rl;font-size:11px;color:#4b5563}\n.film{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid #e3e5e8;background:#fff;overflow-x:auto}\n.thumb{flex:none;width:92px;height:58px;border:1px solid #d6d9de;border-radius:6px;padding:4px;font-size:10px;cursor:pointer;background:#fafafa;display:flex;flex-direction:column;justify-content:space-between}\n.thumb.on{border:2px solid #3b6cf6;background:#fff}\n.thumb .mini{height:22px;border-radius:3px;background:repeating-linear-gradient(90deg,#dfe4ee 0 10px,transparent 10px 14px)}\n.focuswrap{flex:1;padding:10px;overflow:auto}\n.fv{display:none}.fv.on{display:block}\n.xwrap{flex:1;display:flex;flex-direction:column;padding:14px 18px;gap:10px;min-height:0}\n.xcard{flex:1;background:#fff;border:1px solid #e0e3e7;border-radius:10px;display:flex;flex-direction:column;min-height:0}\n.xcard .cbody{display:flex;align-items:center;justify-content:center}\n.sbx{font-size:10px;border:1px solid #c7d2fe;background:#eef2ff;color:#3730a3;border-radius:4px;padding:1px 6px}\n.proto{border:1px dashed #a5b4fc;border-radius:8px;margin:8px;background:#fff}\n.proto .ptabs{display:flex;border-bottom:1px solid #eee}\n.proto .ptabs a{padding:6px 10px;cursor:pointer;font-size:12px}\n.proto .ptabs a.on{border-bottom:2px solid #3b6cf6;color:#2b55d6}\n.proto .pp{padding:10px;display:none}.proto .pp.on{display:block}\n.tog{display:inline-block;width:30px;height:16px;border-radius:8px;background:#d1d5db;position:relative;vertical-align:middle;cursor:pointer}\n.tog i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:#fff;transition:left .15s}\n.tog.on{background:#3b6cf6}.tog.on i{left:16px}\n.prow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:12px}\n.urlbar{display:flex;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid #f0f1f3;font:11px ui-monospace,Menlo,monospace;color:#4b5563}\n.urlbar span.u{flex:1;background:#f4f5f7;border-radius:4px;padding:2px 6px}\n.site{padding:12px}\n.site .hero{height:60px;border-radius:6px;background:linear-gradient(90deg,#e0e7ff,#f5f3ff);margin-bottom:8px;display:flex;align-items:center;padding-left:12px;font-weight:600}\n.site .row{height:10px;border-radius:4px;background:#eceef1;margin:6px 0}\n.board{display:flex;gap:6px}.board .col{flex:1;background:#f4f5f7;border-radius:6px;padding:4px;font-size:10.5px}\n.board .col b{display:block;font-size:10px;color:#6b7280;margin-bottom:3px}\n.board .tk{background:#fff;border:1px solid #e3e5e8;border-radius:4px;padding:3px;margin-bottom:3px}\n.tl{position:relative;height:96px;font-size:10px}\n.tl .ln{position:absolute;left:0;right:0;top:20px;border-top:1px solid #d6d9de}\n.tl .bar2{position:absolute;height:14px;border-radius:3px;background:#9db4f5;font-size:9.5px;padding-left:4px;color:#1e3a8a;white-space:nowrap}\n.mx td,.mx th{text-align:center!important}\n.mx td.hi{background:#dcfce7}\npre.code{margin:0;font:10.5px/1.5 ui-monospace,Menlo,monospace;background:#fafafa;border-radius:4px;padding:6px;position:relative}\npre.code .hl{background:#fef9c3;display:block}\n.anno{font-size:10px;background:#fef9c3;border:1px solid #fde047;border-radius:4px;padding:2px 5px;display:inline-block;margin-top:4px}\n.ftree{font:11px/1.6 ui-monospace,Menlo,monospace}.ftree .t{color:#16a34a;font-weight:600}.ftree .m{color:#d97706;font-weight:600}\n.shot{height:120px;border-radius:6px;border:1px solid #e3e5e8;background:linear-gradient(#fff 0 18px,#f4f5f7 18px);position:relative}\n.shot:before{content:\"\";position:absolute;left:8px;top:6px;width:30px;height:6px;border-radius:3px;background:#d6d9de}\n.shot .w{position:absolute;left:10px;right:40%;top:28px;bottom:10px;background:#fff;border:1px solid #e3e5e8;border-radius:4px}\n.shot .p{position:absolute;right:10px;width:34%;top:28px;bottom:10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:4px}\n.notin{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1f2937;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;display:none;z-index:20}\n.notin.show{display:block}\n@media (max-width:640px){\n .body{flex-direction:column}.panel{width:auto;min-width:0;height:55%}.divider{display:none}\n .vis-btn{opacity:.5}\n .grid{grid-template-columns:1fr}\n}\n\u003c/style>\u003c/head>\u003cbody>\u003csvg width=\"0\" height=\"0\" style=\"position:absolute\" aria-hidden=\"true\">\u003cdefs>\u003cmarker id=\"arr\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"7\" markerHeight=\"7\" orient=\"auto\">\u003cpath d=\"M0 0L10 5L0 10z\" fill=\"#9aa1ab\"/>\u003c/marker>\u003c/defs>\u003c/svg>\u003cdiv class=\"mnav\">\u003cspan>Mock screens:\u003c/span>\u003ca href=\"#/chat\">Chat\u003c/a>\u003ca href=\"#/narrow\">Narrow window\u003c/a>\u003ca href=\"#/expanded\">Expanded visual\u003c/a>\u003ca href=\"#/prototype\">Prototype + live preview\u003c/a>\u003ca href=\"#/kinds\">More kinds\u003c/a>\u003c/div>\u003csection data-screen=\"chat\">\u003cdiv data-state=\"default\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\" title=\"Drag to resize\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">4 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"grid\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003cdiv class=\"card \" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003cdiv>\u003cspan class=\"chgnote\" data-pin=\"change-highlight\">changed in v2: Token refresh loop\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card wide\">\u003cdiv class=\"chdr\">\u003cb>Where the token is checked\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t\" data-pin=\"table\">\u003ctr>\u003cth>Hop\u003c/th>\u003cth>Check\u003c/th>\u003cth>File\u003c/th>\u003c/tr>\u003ctr data-ref=\"Token table › CLI\">\u003ctd>CLI\u003c/td>\u003ctd>env present\u003c/td>\u003ctd>cli.ts\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Daemon\">\u003ctd>Daemon\u003c/td>\u003ctd>sessionAuthority\u003c/td>\u003ctd>main.ts:291\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Refresh\">\u003ctd>Refresh\u003c/td>\u003ctd>expiry &lt; 5 min\u003c/td>\u003ctd>lease.ts\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv data-state=\"empty\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>New chat\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv style=\"margin:auto;color:#6b7280;text-align:center\">Ask Claude anything about \u003cb>chat-super-visual\u003c/b>.\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"empty\" data-pin=\"empty-panel\">\u003cdiv class=\"ill\">\u003cdiv>\u003c/div>\u003cdiv>\u003c/div>\u003cdiv>\u003c/div>\u003c/div>\u003cb>Visuals show up here\u003c/b>\u003cdiv>Claude draws diagrams, tables, mockups and charts as it answers.\u003cbr>Click anything in a visual to ask about it.\u003c/div>\u003cdiv style=\"font-size:11px\">Visual level: \u003cb>Visual-first\u003c/b> · change it from the composer\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">0\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv data-state=\"building\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Plan the views table migration\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Three steps, the risky one is the backfill. \u003cspan class=\"drawing\">● drawing Migration plan, step 3 of 3\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\" title=\"Drag to resize\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">5 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"grid\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003cdiv class=\"card wide focus\" data-pin=\"building-card\">\u003cdiv class=\"chdr\">\u003cb>Migration plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 3…\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 120\" width=\"300\">\u003cg class=\"node\">\u003crect x=\"5\" y=\"40\" width=\"80\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45\" y=\"59\" text-anchor=\"middle\">Snapshot\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M85 55 L110 55\"/>\u003cg class=\"node\">\u003crect x=\"110\" y=\"40\" width=\"80\" height=\"30\" rx=\"6\"/>\u003ctext x=\"150\" y=\"59\" text-anchor=\"middle\">Migrate\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M190 55 L215 55\" style=\"stroke-dasharray:3 3\"/>\u003cg class=\"node pending\">\u003crect x=\"215\" y=\"40\" width=\"80\" height=\"30\" rx=\"6\"/>\u003ctext x=\"255\" y=\"59\" text-anchor=\"middle\">Verify…\u003c/text>\u003c/g>\u003c/svg>\u003cdiv class=\"drawing\">building · every frame is a complete diagram\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003cdiv>\u003cspan class=\"chgnote\" data-pin=\"change-highlight\">changed in v2: Token refresh loop\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv data-state=\"broken\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Show the restart case too\u003c/div>\u003cdiv class=\"act bad\" data-pin=\"refused-row\">quirky view update \"Auth flow\" → refused: line 4 unexpected \"-->>\" · error returned to Claude\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Fixing the diagram syntax, one moment. \u003cspan class=\"drawing\">● retrying\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\" title=\"Drag to resize\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">4 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"grid\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003cdiv class=\"card\" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"badge-bad\" data-pin=\"broken-badge\">v3 didn't render ▾\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 3\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"errbox\">v3 refused · sent back to Claude\nline 4: unexpected \"-->>\" (sequence arrow in a flowchart)\n\nshowing v2, the last version that rendered\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card wide\">\u003cdiv class=\"chdr\">\u003cb>Where the token is checked\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t\" data-pin=\"table\">\u003ctr>\u003cth>Hop\u003c/th>\u003cth>Check\u003c/th>\u003cth>File\u003c/th>\u003c/tr>\u003ctr data-ref=\"Token table › CLI\">\u003ctd>CLI\u003c/td>\u003ctd>env present\u003c/td>\u003ctd>cli.ts\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Daemon\">\u003ctd>Daemon\u003c/td>\u003ctd>sessionAuthority\u003c/td>\u003ctd>main.ts:291\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Refresh\">\u003ctd>Refresh\u003c/td>\u003ctd>expiry &lt; 5 min\u003c/td>\u003ctd>lease.ts\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv data-state=\"pointing\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"chip ref\" data-pin=\"ref-chip\">◈ Auth flow › Daemon ✕\u003c/span> why does every call go through this hop?\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\" title=\"Drag to resize\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">4 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"grid\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003cdiv class=\"card \" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node sel\" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003cdiv>\u003cspan class=\"chgnote\" data-pin=\"change-highlight\">changed in v2: Token refresh loop\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card wide\">\u003cdiv class=\"chdr\">\u003cb>Where the token is checked\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t\" data-pin=\"table\">\u003ctr>\u003cth>Hop\u003c/th>\u003cth>Check\u003c/th>\u003cth>File\u003c/th>\u003c/tr>\u003ctr data-ref=\"Token table › CLI\">\u003ctd>CLI\u003c/td>\u003ctd>env present\u003c/td>\u003ctd>cli.ts\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Daemon\">\u003ctd>Daemon\u003c/td>\u003ctd>sessionAuthority\u003c/td>\u003ctd>main.ts:291\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Refresh\">\u003ctd>Refresh\u003c/td>\u003ctd>expiry &lt; 5 min\u003c/td>\u003ctd>lease.ts\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen=\"narrow\">\u003cdiv data-state=\"default\">\u003cdiv class=\"win narrowwin\">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\" style=\"width:42%;min-width:260px\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">4 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"film\" data-pin=\"filmstrip\">\u003cdiv class=\"thumb\" data-fv=\"plan\">📌 Plan\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb on\" data-fv=\"auth\">Auth flow\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb\" data-fv=\"bundle\">Bundle size\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb\" data-fv=\"table\">Token checks\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"focuswrap\" data-pin=\"focus-visual\">\u003cdiv class=\"fv\" data-fv=\"plan\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv on\" data-fv=\"auth\">\u003cdiv class=\"card \" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003cdiv>\u003cspan class=\"chgnote\" data-pin=\"change-highlight\">changed in v2: Token refresh loop\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv\" data-fv=\"bundle\">\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv\" data-fv=\"table\">\u003cdiv class=\"card wide\">\u003cdiv class=\"chdr\">\u003cb>Where the token is checked\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t\" data-pin=\"table\">\u003ctr>\u003cth>Hop\u003c/th>\u003cth>Check\u003c/th>\u003cth>File\u003c/th>\u003c/tr>\u003ctr data-ref=\"Token table › CLI\">\u003ctd>CLI\u003c/td>\u003ctd>env present\u003c/td>\u003ctd>cli.ts\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Daemon\">\u003ctd>Daemon\u003c/td>\u003ctd>sessionAuthority\u003c/td>\u003ctd>main.ts:291\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Refresh\">\u003ctd>Refresh\u003c/td>\u003ctd>expiry &lt; 5 min\u003c/td>\u003ctd>lease.ts\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\" data-pin=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv data-state=\"collapsed\">\u003cdiv class=\"win narrowwin\">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\">\u003cdiv class=\"msg user\">How does the session token get from the app to the agent?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>It rides the lease env. The daemon is the only hop that actually checks it; the CLI just forwards. See \u003cb>Auth flow\u003c/b> for the path and the table for where each check lives.\u003cdiv class=\"chips\">\u003cspan class=\"chip\" data-pin=\"msg-chip\">◈ Auth flow v1\u003c/span>\u003cspan class=\"chip\">◈ Where the token is checked v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Add the refresh path, and how much does the view work add to the bundle?\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Added the refresh loop under the daemon (green in v2). It only fires when the token has under five minutes left. The view plugin adds about 38k, mostly the new diagram kind.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v2\u003c/span>\u003cspan class=\"chip\">◈ Bundle size v1\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Want me to also check what happens when the daemon restarts mid-refresh?\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003cdiv class=\"msg user\">Show the restart case too\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Drew it as a new step in Auth flow (v3).\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Auth flow v3\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\">◈\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"panel collapsed\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">4 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"film\" data-pin=\"filmstrip\">\u003cdiv class=\"thumb\" data-fv=\"plan\">📌 Plan\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb on\" data-fv=\"auth\">Auth flow\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb\" data-fv=\"bundle\">Bundle size\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003cdiv class=\"thumb\" data-fv=\"table\">Token checks\u003cdiv class=\"mini\">\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"focuswrap\" data-pin=\"focus-visual\">\u003cdiv class=\"fv\" data-fv=\"plan\">\u003cdiv class=\"card \" data-pin=\"plan-card\">\u003cdiv class=\"chdr\">\u003cb>Plan\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"by\">📌 pinned\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003col class=\"plan\" style=\"margin:0;padding-left:18px\">\u003cli class=\"done\">Trace the lease token\u003c/li>\u003cli class=\"now\">Add the refresh path\u003c/li>\u003cli>Measure bundle impact\u003c/li>\u003c/ol>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv on\" data-fv=\"auth\">\u003cdiv class=\"card \" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Auth flow\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\" data-pin=\"version-stepper\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\" data-pin=\"expand-btn\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\" data-pin=\"popout-btn\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"300\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003cdiv>\u003cspan class=\"chgnote\" data-pin=\"change-highlight\">changed in v2: Token refresh loop\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv\" data-fv=\"bundle\">\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Bundle size\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"bars\" data-pin=\"chart\">\u003cdiv class=\"bar\" data-ref=\"Bundle size › main\" style=\"height:80%\">\u003cem>412k\u003c/em>\u003cspan>main\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › chat\" style=\"height:46%\">\u003cem>236k\u003c/em>\u003cspan>chat\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › view\" style=\"height:22%;background:#86efac\">\u003cem>+38k\u003c/em>\u003cspan>view\u003c/span>\u003c/div>\u003cdiv class=\"bar\" data-ref=\"Bundle size › mermaid\" style=\"height:35%\">\u003cem>180k\u003c/em>\u003cspan>mermaid\u003c/span>\u003c/div>\u003c/div>\u003cdiv style=\"height:18px\">\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"fv\" data-fv=\"table\">\u003cdiv class=\"card wide\">\u003cdiv class=\"chdr\">\u003cb>Where the token is checked\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t\" data-pin=\"table\">\u003ctr>\u003cth>Hop\u003c/th>\u003cth>Check\u003c/th>\u003cth>File\u003c/th>\u003c/tr>\u003ctr data-ref=\"Token table › CLI\">\u003ctd>CLI\u003c/td>\u003ctd>env present\u003c/td>\u003ctd>cli.ts\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Daemon\">\u003ctd>Daemon\u003c/td>\u003ctd>sessionAuthority\u003c/td>\u003ctd>main.ts:291\u003c/td>\u003c/tr>\u003ctr data-ref=\"Token table › Refresh\">\u003ctd>Refresh\u003c/td>\u003ctd>expiry &lt; 5 min\u003c/td>\u003ctd>lease.ts\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail show\" data-pin=\"rail\" title=\"Open visuals\">\u003cspan class=\"rb\">1 new\u003c/span>\u003cspan class=\"rl\">Visuals · Auth flow v3\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen=\"expanded\">\u003cdiv data-state=\"default\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"xwrap\">\u003cdiv style=\"display:flex;gap:8px;align-items:center\">\u003ca class=\"pill\" href=\"#/chat\" data-pin=\"back-btn\">← Back to chat (Esc)\u003c/a>\u003cb style=\"flex:1\">Auth flow\u003c/b>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"pill\" data-notin=\"Pop out opens this visual in its own window, still live\" data-pin=\"popout-btn\">⧉ Pop out\u003c/a>\u003c/div>\u003cdiv class=\"xcard\" data-pin=\"expanded-visual\">\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 300 200\" width=\"640\" data-pin=\"diagram\">\u003cg class=\"node \" data-ref=\"Auth flow › Client app\" transform=\"translate(10,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Client app\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Daemon\" transform=\"translate(110,85)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Daemon\u003c/text>\u003c/g>\u003cg class=\"node \" data-ref=\"Auth flow › Agent runner\" transform=\"translate(200,20)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Agent runner\u003c/text>\u003c/g>\u003cpath class=\"edge\" d=\"M55 50 L130 85\"/>\u003cpath class=\"edge\" d=\"M180 85 L245 50\"/>\u003ctext x=\"40\" y=\"78\" font-size=\"10\">lease token\u003c/text>\u003ctext x=\"215\" y=\"78\">QUIRKY_*\u003c/text>\u003cg class=\"node chg\" data-ref=\"Auth flow › Token refresh\" transform=\"translate(110,150)\">\u003crect width=\"90\" height=\"30\" rx=\"6\"/>\u003ctext x=\"45.0\" y=\"19\" text-anchor=\"middle\">Token refresh\u003c/text>\u003c/g>\u003cpath class=\"edge chg\" d=\"M140 115 L140 150\"/>\u003cpath class=\"edge chg\" d=\"M175 150 Q215 135 185 115\"/>\u003c/svg>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"mini-composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen=\"prototype\">\u003cdiv data-state=\"default\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>Token flow\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"left\">\u003cdiv class=\"log\" data-pin=\"transcript\">\u003cdiv class=\"msg user\">Sketch the settings page for the visual level, clickable\u003c/div>\u003cdiv class=\"msg agent\">\u003cdiv class=\"who\">Claude\u003c/div>Here's a clickable prototype: try the tabs and toggles. The live preview on the right is your running dev server, so you can compare.\u003cdiv class=\"chips\">\u003cspan class=\"chip\">◈ Settings › Visuals v1\u003c/span>\u003cspan class=\"chip\">◈ Live preview\u003c/span>\u003c/div>\u003cspan class=\"vis-btn\" tabindex=\"0\" role=\"button\" aria-label=\"Visualize\" data-pin=\"visualize-btn\">◈\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"composer\" data-pin=\"composer\">\u003cdiv class=\"input\">\u003cspan class=\"ph\">Ask Claude… (click anything in a visual to point at it)\u003c/span>\u003c/div>\u003cdiv class=\"ctl\">\u003cspan class=\"pill\">Claude · Opus\u003c/span>\u003cspan class=\"pill\">Plan\u003c/span>\u003cspan class=\"pill dial\" data-pin=\"visual-dial\">◈ Visuals: \u003cspan class=\"dlabel\">Visual-first\u003c/span> ▾\u003cspan class=\"menu\">\u003cdiv data-level=\"Off\">Off\u003csmall>Text only unless you ask\u003c/small>\u003c/div>\u003cdiv data-level=\"Balanced\">Balanced\u003csmall>Visuals when a picture clearly helps\u003c/small>\u003c/div>\u003cdiv data-level=\"Visual-first\">Visual-first\u003csmall>Any structured answer gets a visual\u003c/small>\u003c/div>\u003c/span>\u003c/span>\u003cspan class=\"pill send\">Send\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"divider\" data-pin=\"divider\" title=\"Drag to resize\">\u003ci>\u003c/i>\u003c/div>\u003cdiv class=\"panel\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">2 visuals\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003ca class=\"ibtn collapse\" title=\"Collapse\" data-pin=\"panel-collapse\">⟩\u003c/a>\u003c/div>\u003cdiv class=\"grid\">\u003cdiv class=\"card wide\" data-pin=\"visual-card\">\u003cdiv class=\"chdr\">\u003cb>Settings › Visuals (prototype)\u003c/b>\u003cspan class=\"sbx\" data-pin=\"sandbox-tag\">sandboxed · no network\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\">⤢\u003c/a>\u003c/div>\u003cdiv class=\"proto\" data-pin=\"prototype-frame\">\u003cdiv class=\"ptabs\">\u003ca class=\"on\" data-pt=\"g\">General\u003c/a>\u003ca data-pt=\"v\">Visuals\u003c/a>\u003ca data-pt=\"a\">Agents\u003c/a>\u003c/div>\u003cdiv class=\"pp on\" data-pt=\"g\">\u003cdiv class=\"prow\">Theme \u003cspan class=\"pill\">System ▾\u003c/span>\u003c/div>\u003cdiv class=\"prow\">Open chats in a new window \u003cspan class=\"tog\">\u003ci>\u003c/i>\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"pp\" data-pt=\"v\">\u003cdiv class=\"prow\">Default visual level \u003cspan class=\"pill\">Visual-first ▾\u003c/span>\u003c/div>\u003cdiv class=\"prow\">Highlight what changed \u003cspan class=\"tog on\">\u003ci>\u003c/i>\u003c/span>\u003c/div>\u003cdiv class=\"prow\">Pop-out window on top \u003cspan class=\"tog\">\u003ci>\u003c/i>\u003c/span>\u003c/div>\u003c/div>\u003cdiv class=\"pp\" data-pt=\"a\">\u003cdiv class=\"prow\">Claude \u003cspan class=\"tog on\">\u003ci>\u003c/i>\u003c/span>\u003c/div>\u003cdiv class=\"prow\">Codex \u003cspan class=\"tog on\">\u003ci>\u003c/i>\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card wide\" data-pin=\"live-preview\">\u003cdiv class=\"chdr\">\u003cb>Live preview\u003c/b>\u003cspan class=\"by\">worktree dev server\u003c/span>\u003c/div>\u003cdiv class=\"urlbar\">\u003cspan>↻\u003c/span>\u003cspan class=\"u\">localhost:5173/settings\u003c/span>\u003cspan>⧉\u003c/span>\u003c/div>\u003cdiv class=\"site\">\u003cdiv class=\"hero\">Quirky settings\u003c/div>\u003cdiv class=\"row\">\u003c/div>\u003cdiv class=\"row\" style=\"width:70%\">\u003c/div>\u003cdiv class=\"row\" style=\"width:50%\">\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"rail\">\u003cspan class=\"rb\">4\u003c/span>\u003cspan class=\"rl\">Visuals\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/section>\u003csection data-screen=\"kinds\">\u003cdiv data-state=\"default\">\u003cdiv class=\"win \">\u003cdiv class=\"hdr\">\u003cb>More kinds (each as it would sit in the panel)\u003c/b>\u003cspan class=\"sub\">quirky / chat-super-visual · Claude Opus\u003c/span>\u003c/div>\u003cdiv class=\"body\">\u003cdiv class=\"panel\" style=\"width:100%\">\u003cdiv class=\"phdr\" data-pin=\"panel-header\">\u003cb>Visuals\u003c/b>\u003cspan class=\"count\">8 kinds\u003c/span>\u003cspan class=\"sp\">\u003c/span>\u003ca class=\"ibtn\" data-notin=\"Layout follows width: side by side here, filmstrip when narrow\" title=\"Layout\">▦\u003c/a>\u003c/div>\u003cdiv class=\"grid\" style=\"padding:14px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))\">\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Rollout timeline\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"tl\" data-pin=\"timeline\">\u003cdiv class=\"ln\">\u003c/div>\u003cdiv style=\"position:absolute;top:2px;left:0\">Nov 20\u003c/div>\u003cdiv style=\"position:absolute;top:2px;left:45%\">Nov 27\u003c/div>\u003cdiv style=\"position:absolute;top:2px;right:0\">Dec 4\u003c/div>\u003cdiv class=\"bar2\" style=\"top:30px;left:0;width:40%\">Catalog kinds\u003c/div>\u003cdiv class=\"bar2\" style=\"top:50px;left:25%;width:45%;background:#c4b5fd\">Panel layout\u003c/div>\u003cdiv class=\"bar2\" style=\"top:70px;left:55%;width:40%;background:#86efac\">Agent guidance\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Work board\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v3 of 3\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"board\" data-pin=\"board\">\u003cdiv class=\"col\">\u003cb>To do\u003c/b>\u003cdiv class=\"tk\">Sketch kind\u003c/div>\u003cdiv class=\"tk\">Pop-out window\u003c/div>\u003c/div>\u003cdiv class=\"col\">\u003cb>Doing\u003c/b>\u003cdiv class=\"tk\">Filmstrip\u003c/div>\u003c/div>\u003cdiv class=\"col\">\u003cb>Done\u003c/b>\u003cdiv class=\"tk\">Diagram kind\u003c/div>\u003cdiv class=\"tk\">Dial\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Approach matrix\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003ctable class=\"t mx\" data-pin=\"matrix\">\u003ctr>\u003cth>\u003c/th>\u003cth>Reach\u003c/th>\u003cth>Errors back\u003c/th>\u003cth>Effort\u003c/th>\u003c/tr>\u003ctr>\u003ctd style=\"text-align:left!important\">quirky view\u003c/td>\u003ctd class=\"hi\">4/4\u003c/td>\u003ctd class=\"hi\">yes\u003c/td>\u003ctd>M\u003c/td>\u003c/tr>\u003ctr>\u003ctd style=\"text-align:left!important\">Fences\u003c/td>\u003ctd>4/4\u003c/td>\u003ctd>no\u003c/td>\u003ctd class=\"hi\">S\u003c/td>\u003c/tr>\u003ctr>\u003ctd style=\"text-align:left!important\">MCP Apps\u003c/td>\u003ctd>1/4?\u003c/td>\u003ctd>yes\u003c/td>\u003ctd>L\u003c/td>\u003c/tr>\u003c/table>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Why the refresh fires early\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv data-pin=\"annotated-code\">\u003cpre class=\"code\">function needsRefresh(lease) {\n\u003cspan class=\"hl\">  return lease.expiresAt - now() &lt; 5 * MIN;\u003c/span>  return false;\n}\u003c/pre>\u003cspan class=\"anno\">② five-minute margin covers a slow daemon restart\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Files this change touches\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"ftree\" data-pin=\"file-map\">plugins/\u003cbr>&nbsp;quirky.view/src/core/\u003cbr>&nbsp;&nbsp;\u003cspan class=\"m\">● catalog.ts\u003c/span>\u003cbr>&nbsp;quirky.session/src/window/chat/\u003cbr>&nbsp;&nbsp;\u003cspan class=\"m\">● ChatView.tsx\u003c/span>\u003cbr>&nbsp;&nbsp;\u003cspan class=\"t\">+ VisualPanel.tsx\u003c/span>\u003cbr>&nbsp;quirky.structured/\u003cbr>&nbsp;&nbsp;\u003cspan class=\"m\">● claude-runner.ts\u003c/span>\u003c/div>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Retry backoff\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 260 110\" width=\"260\" data-pin=\"plot\">\u003cpath d=\"M20 95 H250 M20 95 V10\" stroke=\"#9aa1ab\" fill=\"none\"/>\u003cpath d=\"M20 92 C80 90 130 80 170 55 S230 15 250 12\" stroke=\"#3b6cf6\" stroke-width=\"2\" fill=\"none\"/>\u003ctext x=\"150\" y=\"40\">t = 2ⁿ · 100ms\u003c/text>\u003ctext x=\"225\" y=\"108\">n\u003c/text>\u003c/svg>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Rough idea\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v2 of 2\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003csvg viewBox=\"0 0 260 110\" width=\"260\" data-pin=\"sketch\" style=\"font-family:'Comic Sans MS',cursive\">\u003cpath d=\"M15 30 q5 -18 50 -14 q40 4 38 22 q-2 18 -46 16 q-44 -2 -42 -24z\" fill=\"none\" stroke=\"#1d1f23\" stroke-width=\"1.6\"/>\u003ctext x=\"30\" y=\"40\">chat\u003c/text>\u003cpath d=\"M110 40 q30 -6 50 6\" stroke=\"#1d1f23\" fill=\"none\" stroke-width=\"1.6\" marker-end=\"url(#arr)\"/>\u003cpath d=\"M170 20 l70 2 l-2 70 l-68 -2z\" fill=\"none\" stroke=\"#1d1f23\" stroke-width=\"1.6\"/>\u003ctext x=\"185\" y=\"60\">panel!\u003c/text>\u003c/svg>\u003c/div>\u003c/div>\u003cdiv class=\"card \">\u003cdiv class=\"chdr\">\u003cb>Screenshot: settings after change\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"step\">\u003ca data-step=\"-1\">‹\u003c/a>\u003cspan class=\"vlabel\">v1 of 1\u003c/span>\u003ca data-step=\"1\">›\u003c/a>\u003c/span>\u003ca class=\"ibtn\" href=\"#/expanded\" title=\"Expand\">⤢\u003c/a>\u003ca class=\"ibtn\" data-notin=\"Pop out opens this visual in its own window\" title=\"Pop out\">⧉\u003c/a>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"shot\" data-pin=\"screenshot\">\u003cdiv class=\"w\">\u003c/div>\u003cdiv class=\"p\">\u003c/div>\u003c/div>\u003cdiv class=\"by\" style=\"margin-top:4px\">.quirk/shots/settings.png · from the worktree\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/div>\u003c/section>\u003cdiv class=\"notin\" id=\"notin\">\u003c/div>\u003cscript>\n(function(){\n function toast(t){var n=document.getElementById('notin');n.textContent=t;n.classList.add('show');clearTimeout(n._t);n._t=setTimeout(function(){n.classList.remove('show')},2200)}\n function route(){var id=(location.hash.replace(/^#\\/?/,'')||'chat');var any=false;document.querySelectorAll('[data-screen]').forEach(function(s){var on=s.getAttribute('data-screen')===id;s.hidden=!on;any=any||on});\n  if(!any){document.querySelector('[data-screen=\"chat\"]').hidden=false;toast('Not in this mock')}}\n window.addEventListener('hashchange',route);route();\n document.addEventListener('keydown',function(e){if(e.key==='Escape'&&location.hash.indexOf('expanded')>=0)location.hash='#/chat'});\n document.addEventListener('click',function(e){\n  var t=e.target;\n  var ni=t.closest('[data-notin]');if(ni){toast(ni.getAttribute('data-notin')+' (not in this mock)');return}\n  var dial=t.closest('.dial');var lvl=t.closest('[data-level]');\n  if(lvl){var d=lvl.closest('.dial');d.querySelector('.dlabel').textContent=lvl.getAttribute('data-level');d.querySelector('.menu').classList.remove('open');e.stopPropagation();return}\n  document.querySelectorAll('.menu.open').forEach(function(m){if(!dial||m.parentNode!==dial)m.classList.remove('open')});\n  if(dial){dial.querySelector('.menu').classList.toggle('open');return}\n  var ref=t.closest('[data-ref]');\n  if(ref){var win=ref.closest('.win');var inp=win.querySelector('.composer .input');var ph=inp.querySelector('.ph');if(ph)ph.remove();\n   win.querySelectorAll('.sel').forEach(function(x){x.classList.remove('sel')});ref.classList.add('sel');\n   var c=document.createElement('span');c.className='chip ref';c.textContent='◈ '+ref.getAttribute('data-ref')+' ✕';inp.insertBefore(c,inp.firstChild);return}\n  if(t.closest('.chip.ref')){t.closest('.chip.ref').remove();return}\n  var st=t.closest('[data-step]');\n  if(st){var lab=st.parentNode.querySelector('.vlabel');var m=lab.textContent.match(/v(\\d+) of (\\d+)/);if(m){var v=Math.max(1,Math.min(+m[2],+m[1]+(+st.getAttribute('data-step'))));lab.textContent='v'+v+' of '+m[2];\n    var cardEl=st.closest('.card,.xwrap');if(cardEl){cardEl.querySelectorAll('.node.chg,.edge.chg,.chgnote').forEach(function(x){x.style.display=(v\u003c+m[2])?'none':''})}}return}\n  var bb=t.closest('.badge-bad');if(bb){bb.closest('.card').querySelector('.errbox').classList.toggle('open');return}\n  var col=t.closest('.collapse');if(col){var w=col.closest('.win');w.querySelector('.panel').classList.add('collapsed');var dv=w.querySelector('.divider');if(dv)dv.style.display='none';w.querySelector('.rail').classList.add('show');return}\n  var rail=t.closest('.rail');if(rail){var w2=rail.closest('.win');w2.querySelector('.panel').classList.remove('collapsed');var dv2=w2.querySelector('.divider');if(dv2)dv2.style.display='';rail.classList.remove('show');return}\n  var th=t.closest('.thumb');if(th){var p=th.closest('.panel');var k=th.getAttribute('data-fv');p.querySelectorAll('.thumb').forEach(function(x){x.classList.toggle('on',x===th)});p.querySelectorAll('.fv').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-fv')===k)});return}\n  var chipEl=t.closest('.chip');if(chipEl){var w3=chipEl.closest('.win');var name=chipEl.textContent.replace('◈','').trim().replace(/ v\\d+$/,'');var hit=null;\n   w3.querySelectorAll('.card').forEach(function(cd){cd.classList.remove('focus');var b=cd.querySelector('.chdr b');if(b&&name.indexOf(b.textContent.split(' (')[0])===0)hit=cd});\n   if(hit){hit.classList.add('focus');hit.scrollIntoView({block:'nearest'})}else toast('That visual is in another chat (not in this mock)');return}\n  var vb=t.closest('.vis-btn');if(vb){var w4=vb.closest('.win');var g=w4.querySelector('.grid');if(!g){toast('Not in this mock');return}\n   var cd=document.createElement('div');cd.className='card focus';cd.innerHTML='\u003cdiv class=\"chdr\">\u003cb>Daemon restart mid-refresh\u003c/b>\u003cspan class=\"by\">by claude\u003c/span>\u003cspan class=\"drawing\">● drawing…\u003c/span>\u003c/div>\u003cdiv class=\"cbody\">\u003cdiv class=\"drawing\">Claude is turning that message into a visual\u003c/div>\u003c/div>';\n   g.insertBefore(cd,g.children[1]||null);vb.classList.add('busy');vb.textContent='…';setTimeout(function(){cd.querySelector('.cbody').innerHTML='\u003ctable class=\"t\">\u003ctr>\u003cth>Moment\u003c/th>\u003cth>What happens\u003c/th>\u003c/tr>\u003ctr>\u003ctd>restart before refresh\u003c/td>\u003ctd>agent keeps old token, refresh retried\u003c/td>\u003c/tr>\u003ctr>\u003ctd>restart during refresh\u003c/td>\u003ctd>refresh replayed, idempotent\u003c/td>\u003c/tr>\u003c/table>';cd.querySelector('.drawing').remove();vb.classList.remove('busy');vb.textContent='◈'},1400);return}\n  var pt=t.closest('[data-pt]');if(pt&&pt.tagName==='A'){var pr=pt.closest('.proto');var k2=pt.getAttribute('data-pt');pr.querySelectorAll('[data-pt]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-pt')===k2)});return}\n  var tg=t.closest('.tog');if(tg){tg.classList.toggle('on');return}\n });\n})();\n\u003c/script>\u003c/body>\u003c/html>"}</script>
+<script>/**
+ * Pure logic for the mock review harness. Loaded two ways: inlined as a classic script in
+ * mock-harness.html (exposes `QuirkMockCore`) and `require`d by app/scripts/check-harness.ts.
+ * No DOM access, no network, so every rule here is testable from Node.
+ */
+(function (root) {
+  'use strict'
+
+  var PIN_ID = /^mock:v([1-9][0-9]{0,3})\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})\/([a-z0-9][a-z0-9._-]{0,79})\/x([0-9]{1,3})-y([0-9]{1,3})$/
+
+  function clampPct(n) {
+    var v = Math.round(Number(n))
+    if (!isFinite(v)) return 0
+    return Math.max(0, Math.min(100, v))
+  }
+
+  /** Parses a pin block id into its parts, or returns null for anything that is not exactly a pin id. */
+  function parsePinId(id) {
+    if (typeof id !== 'string') return null
+    var m = PIN_ID.exec(id)
+    if (!m) return null
+    var x = Number(m[5])
+    var y = Number(m[6])
+    if (x > 100 || y > 100) return null
+    return { version: Number(m[1]), screen: m[2], state: m[3], pin: m[4], x: x, y: y }
+  }
+
+  /** Builds a pin block id; offsets are rounded and clamped to 0-100, anything else invalid throws. */
+  function formatPinId(p) {
+    var id = 'mock:v' + p.version + '/' + p.screen + '/' + p.state + '/' + p.pin + '/x' + clampPct(p.x) + '-y' + clampPct(p.y)
+    if (!parsePinId(id)) throw new Error('invalid pin id parts: ' + id)
+    return id
+  }
+
+  /**
+   * Decides how a pin is shown while `viewed` is on screen.
+   *   draw        its own version: drawn at the element plus offset
+   *   reanchored  older version and the element key still exists: drawn there with a "from vN" badge
+   *   orphaned    older version and the key is gone: listed, never drawn on another element
+   *   hidden      newer than the version viewed (or than the latest)
+   * `keys` is the set (or array) of data-pin keys present in the pin's screen and state in the viewed version.
+   */
+  function placePin(pin, viewed, latest, keys) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var present = keys instanceof Set ? keys.has(pin.pin) : Array.isArray(keys) && keys.indexOf(pin.pin) !== -1
+    return present ? 'reanchored' : 'orphaned'
+  }
+
+  /**
+   * Placement of a pin from the viewed version's own screen inventory. A pin of an older version whose
+   * screen or state the viewed version no longer lists is orphaned. When the screen and state exist,
+   * `keysFor(screen, state)` returns the data-pin keys rendered there (array or Set), or null when that
+   * screen is not rendered right now, which leaves the pin `unknown`: neither orphaned nor drawn.
+   */
+  function classifyPin(pin, viewed, latest, doc, keysFor) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var screen = screenList(doc).filter(function (s) { return s.id === pin.screen })[0]
+    if (!screen || !Array.isArray(screen.states) || screen.states.indexOf(pin.state) === -1) return 'orphaned'
+    var keys = keysFor(pin.screen, pin.state)
+    if (keys === null || keys === undefined) return 'unknown'
+    return placePin(pin, viewed, latest, keys)
+  }
+
+  /**
+   * The data-pin keys a pin's screen and state offers for classification, as a Set, or null for "cannot
+   * tell yet". `keys` is the array of keys found in the viewed document, or null when no element for the
+   * screen exists there. A missing screen element is only evidence of absence once the viewed document
+   * has loaded and the pin's screen is the one on show; before that, or for another screen, it is unknown.
+   */
+  function viewedKeys(loaded, currentScreen, screenId, keys) {
+    if (keys !== null && keys !== undefined) return new Set(keys)
+    return loaded && currentScreen === screenId ? new Set() : null
+  }
+
+  /**
+   * The elements of a screen that carry data-pin for `state`: the screen element itself (when it has a
+   * data-pin) followed by its descendants. `descendants` is every `[data-pin]` node inside `scr`.
+   */
+  function pinNodes(scr, state, descendants) {
+    var all = [scr].concat(Array.prototype.slice.call(descendants))
+    return all.filter(function (p) {
+      if (p.getAttribute('data-pin') === null) return false
+      var st = p.closest('[data-state]')
+      if (!st || st === scr || !scr.contains(st)) return true
+      return !state || st.getAttribute('data-state') === state
+    })
+  }
+
+  function screenList(doc) {
+    if (Array.isArray(doc)) return doc
+    return doc && Array.isArray(doc.screens) ? doc.screens : []
+  }
+
+  function isKnownScreen(doc, id) {
+    return screenList(doc).some(function (s) { return s.id === id })
+  }
+
+  /** Inventory screen ids not yet visited, in inventory order. */
+  function unvisitedScreens(doc, visited) {
+    var seen = visited instanceof Set ? visited : new Set(visited || [])
+    return screenList(doc)
+      .map(function (s) { return s.id })
+      .filter(function (id) { return !seen.has(id) })
+  }
+
+  /** Elements with no repo component while the repo has a UI layer. */
+  function deriveGaps(doc) {
+    if (!doc || doc.ui_layer !== true) return []
+    var gaps = []
+    screenList(doc).forEach(function (s) {
+      ;(s.elements || []).forEach(function (e) {
+        if (e.component === null) gaps.push({ screen: s.id, pin: e.pin, label: e.label })
+      })
+    })
+    return gaps
+  }
+
+  /** Screen id named by `#/<id>`; an empty hash is the first screen, an unknown id is returned as is. */
+  function currentScreenId(hash, doc) {
+    var h = String(hash || '').replace(/^#/, '').replace(/^\//, '')
+    var id = h.split(/[/?]/)[0]
+    try {
+      id = decodeURIComponent(id)
+    } catch (e) {
+      // keep the raw text
+    }
+    if (id) return id
+    var screens = screenList(doc)
+    return screens.length ? screens[0].id : null
+  }
+
+  var RAW_TEXT = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1 }
+
+  /**
+   * Inserts <base href="about:srcdoc"> as the first child of the mock's real <head>. Comments, raw-text
+   * elements (script, style, ...) and quoted attribute values are skipped, so `<head>` text inside them is
+   * never mistaken for the head. With no head before the body, one is created right after <html>, else
+   * after the doctype, else at the start.
+   */
+  function withBase(html) {
+    var base = '<base href="about:srcdoc">'
+    var len = html.length
+    var i = 0
+    var doctypeEnd = 0
+    var htmlEnd = -1
+    var sawTag = false
+    while (i < len) {
+      var lt = html.indexOf('<', i)
+      if (lt === -1) break
+      var next = html.charAt(lt + 1)
+      if (html.substr(lt, 4) === '<!--') {
+        var close = html.indexOf('-->', lt + 2)
+        i = close === -1 ? len : close + 3
+        continue
+      }
+      if (next === '!' || next === '?' || next === '/') {
+        var gt = html.indexOf('>', lt + 2)
+        if (next === '!' && !sawTag && gt !== -1 && /^<!doctype/i.test(html.substr(lt, 9))) doctypeEnd = gt + 1
+        i = gt === -1 ? len : gt + 1
+        continue
+      }
+      if (!/[a-zA-Z]/.test(next)) {
+        i = lt + 1
+        continue
+      }
+      var j = lt + 1
+      while (j < len && !/[\s/>]/.test(html.charAt(j))) j += 1
+      var name = html.slice(lt + 1, j).toLowerCase()
+      while (j < len && html.charAt(j) !== '>') {
+        if (html.charAt(j) === '=') {
+          j += 1
+          while (j < len && /\s/.test(html.charAt(j))) j += 1
+          var q = html.charAt(j)
+          if (q === '"' || q === "'") {
+            var endQuote = html.indexOf(q, j + 1)
+            j = endQuote === -1 ? len : endQuote + 1
+          }
+          continue
+        }
+        j += 1
+      }
+      var tagEnd = j < len ? j + 1 : len
+      sawTag = true
+      if (name === 'head') return html.slice(0, tagEnd) + base + html.slice(tagEnd)
+      if (name === 'body' || name === 'frameset') break
+      if (name === 'html' && htmlEnd === -1) htmlEnd = tagEnd
+      i = tagEnd
+      if (RAW_TEXT[name] === 1) {
+        var closer = new RegExp('</' + name + '(?=[\\s/>])', 'ig')
+        closer.lastIndex = tagEnd
+        var found = closer.exec(html)
+        i = found ? found.index : len
+      }
+    }
+    var pos = htmlEnd !== -1 ? htmlEnd : doctypeEnd
+    return html.slice(0, pos) + '<head>' + base + '</head>' + html.slice(pos)
+  }
+
+  /**
+   * Whether the version registered under `boot.version` was replaced after this page was served. Only
+   * app mode compares, and only when both sides carry a revision.
+   */
+  function isStale(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.mocks || !snap.mocks.revisions) return false
+    var current = snap.mocks.revisions[String(boot.version)]
+    return typeof boot.revision === 'string' && typeof current === 'string' && current !== boot.revision
+  }
+
+  /** Whether comment mode and the verdict bar are allowed for this boot and snapshot. */
+  function canReview(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.step) return false
+    if (isStale(boot, snap)) return false
+    if (snap.step_state !== 'open') return false
+    if (snap.step.kind !== 'mock-review' || snap.step.version !== boot.version) return false
+    return !!snap.mocks && snap.mocks.latest === boot.version
+  }
+
+  /** Integer percentage offset of a point inside a box, clamped to 0-100. */
+  function offsetPct(rect, clientX, clientY) {
+    if (!rect.width || !rect.height) return { x: 0, y: 0 }
+    return {
+      x: clampPct(((clientX - rect.left) / rect.width) * 100),
+      y: clampPct(((clientY - rect.top) / rect.height) * 100),
+    }
+  }
+
+  function lastAgentMessage(thread) {
+    var msgs = (thread && thread.messages) || []
+    for (var i = msgs.length - 1; i >= 0; i -= 1) if (msgs[i].from === 'agent') return msgs[i]
+    return null
+  }
+
+  var api = {
+    parsePinId: parsePinId,
+    formatPinId: formatPinId,
+    placePin: placePin,
+    classifyPin: classifyPin,
+    viewedKeys: viewedKeys,
+    pinNodes: pinNodes,
+    isStale: isStale,
+    isKnownScreen: isKnownScreen,
+    unvisitedScreens: unvisitedScreens,
+    deriveGaps: deriveGaps,
+    currentScreenId: currentScreenId,
+    withBase: withBase,
+    canReview: canReview,
+    offsetPct: offsetPct,
+    lastAgentMessage: lastAgentMessage,
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  else root.QuirkMockCore = api
+})(typeof globalThis !== 'undefined' ? globalThis : this)
+</script>
+<script>
+(function () {
+  'use strict'
+  var Core = window.QuirkMockCore
+  var bootNode = document.querySelector('script[type="application/json"]')
+  var boot = null
+  try { boot = JSON.parse(bootNode.textContent) } catch (e) { boot = null }
+  var $ = function (id) { return document.getElementById(id) }
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag)
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k]
+      if (v === null || v === undefined || v === false) return
+      if (k === 'class') n.className = v
+      else if (k === 'text') n.textContent = v
+      else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), v)
+      else n.setAttribute(k, v === true ? '' : v)
+    })
+    ;(kids || []).forEach(function (c) {
+      if (c === null || c === undefined || c === false) return
+      n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c)
+    })
+    return n
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild) }
+
+  if (!boot || !boot.screens) {
+    document.body.insertBefore(el('p', { text: 'This page needs a mock to review. It was opened without one.', style: 'padding:16px' }), document.body.firstChild)
+    return
+  }
+
+  var appMode = boot.mode === 'app' && !!boot.token
+  var screens = boot.screens.screens || []
+  var uiLayer = boot.screens.ui_layer === true
+  var changed = new Set(boot.changed || [])
+  var gaps = Core.deriveGaps(boot.screens)
+  var frame = $('mock-frame')
+  var frameBox = $('frame-box')
+
+  var S = {
+    mode: 'interact',
+    viewport: 'desktop',
+    showChanges: false,
+    screenId: Core.currentScreenId('', boot.screens),
+    states: {},
+    visited: new Set(),
+    marks: new Set(),
+    snap: null,
+    paused: false,
+    openThread: null,
+    note: null,
+    panel: null,
+    changesText: '',
+    submitting: false,
+    verdictError: '',
+    notice: '',
+    noticeError: false,
+  }
+  var inner = null
+  var hoverEl = null
+  var dotPos = {}
+  var noticeTimer = null
+  var frameTick = 0
+
+  var visitedKey = 'quirk-mock-visited-v' + boot.version
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(visitedKey) || '[]')
+    if (Array.isArray(saved)) saved.forEach(function (id) { S.visited.add(id) })
+  } catch (e) { /* storage can be unavailable; visited then lives for this page only */ }
+  function saveVisited() {
+    try { sessionStorage.setItem(visitedKey, JSON.stringify(Array.from(S.visited))) } catch (e) { /* see above */ }
+  }
+
+  // ---- derived values -------------------------------------------------------
+  function screenById(id) {
+    for (var i = 0; i < screens.length; i += 1) if (screens[i].id === id) return screens[i]
+    return null
+  }
+  function currentState() {
+    var s = screenById(S.screenId)
+    if (!s || !s.states || !s.states.length) return null
+    return S.states[s.id] || s.states[0]
+  }
+  function latestVersion() {
+    return S.snap && S.snap.mocks && S.snap.mocks.latest ? S.snap.mocks.latest : boot.latest
+  }
+  function versionList() {
+    var v = S.snap && S.snap.mocks && S.snap.mocks.versions ? S.snap.mocks.versions : boot.versions
+    return v && v.length ? v : [boot.version]
+  }
+  function canReview() { return Core.canReview(boot, S.snap) }
+  function staleVersion() { return Core.isStale(boot, S.snap) }
+  function readOnlyVersion() { return appMode && S.snap !== null && boot.version !== latestVersion() }
+
+  // ---- inner document lookups (attribute compares avoid selector escaping) ----
+  function findAttr(nodes, attr, value) {
+    for (var i = 0; i < nodes.length; i += 1) if (nodes[i].getAttribute(attr) === value) return nodes[i]
+    return null
+  }
+  function screenEl(id) {
+    return inner ? findAttr(inner.doc.querySelectorAll('[data-screen]'), 'data-screen', id) : null
+  }
+  function stateEls(scr) {
+    return Array.prototype.filter.call(scr.querySelectorAll('[data-state]'), function (e) { return e.closest('[data-screen]') === scr })
+  }
+  /** Elements keyed with data-pin in a screen and state, or null when the screen is not in the DOM. */
+  function pinEls(screenId, state) {
+    var scr = screenEl(screenId)
+    if (!scr) return null
+    var states = stateEls(scr)
+    if (states.length && state && !findAttr(states, 'data-state', state)) return []
+    return Core.pinNodes(scr, state, scr.querySelectorAll('[data-pin]'))
+  }
+  function visibleBox(node) {
+    var r = node.getBoundingClientRect()
+    return r.width > 0 || r.height > 0 ? r : null
+  }
+  function inventoryLabel(key) {
+    var s = screenById(S.screenId)
+    var elements = (s && s.elements) || []
+    for (var i = 0; i < elements.length; i += 1) {
+      if (elements[i].pin !== key) continue
+      if (uiLayer) return elements[i].component === null ? 'gap' : elements[i].component
+      return elements[i].label
+    }
+    return ''
+  }
+
+  // ---- pins -----------------------------------------------------------------
+  /** Every thread that is a pin, with its placement relative to the version on screen. */
+  function pinThreads() {
+    var out = []
+    var threads = (S.snap && S.snap.threads) || []
+    var n = 0
+    threads.forEach(function (t) {
+      var pin = Core.parsePinId(t.block_id)
+      if (!pin) return
+      n += 1
+      var placement = Core.classifyPin(pin, boot.version, latestVersion(), boot.screens, function (screenId, state) {
+        var els = pinEls(screenId, state)
+        return Core.viewedKeys(!!inner, S.screenId, screenId, els === null ? null : els.map(function (e) { return e.getAttribute('data-pin') }))
+      })
+      out.push({ n: n, thread: t, pin: pin, placement: placement })
+    })
+    return out.filter(function (p) { return p.placement !== 'hidden' })
+  }
+
+  function renderOverlay() {
+    var changesLayer = $('layer-changes')
+    var pinsLayer = $('layer-pins')
+    clear(changesLayer)
+    clear(pinsLayer)
+    dotPos = {}
+    if (!inner) return
+    if (S.showChanges) {
+      Array.prototype.forEach.call(inner.doc.querySelectorAll('[data-pin]'), function (node) {
+        if (!changed.has(node.getAttribute('data-pin'))) return
+        var r = visibleBox(node)
+        if (!r) return
+        changesLayer.appendChild(el('div', { class: 'box changed', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [el('span', { class: 'tag', text: 'changed' })]))
+      })
+    }
+    if (appMode) {
+      var state = currentState()
+      pinThreads().forEach(function (p) {
+        if (p.placement !== 'draw' && p.placement !== 'reanchored') return
+        if (p.pin.screen !== S.screenId || (state && p.pin.state !== state)) return
+        var els = pinEls(p.pin.screen, p.pin.state) || []
+        var target = null
+        for (var i = 0; i < els.length; i += 1) {
+          if (els[i].getAttribute('data-pin') === p.pin.pin && visibleBox(els[i])) { target = els[i]; break }
+        }
+        if (!target) return
+        var r = target.getBoundingClientRect()
+        var left = r.left + (p.pin.x / 100) * r.width
+        var top = r.top + (p.pin.y / 100) * r.height
+        dotPos[p.thread.id] = { left: left, top: top }
+        var cls = 'pin' + (p.thread.resolution ? ' resolved' : '') + (S.openThread === p.thread.id ? ' selected' : '')
+        pinsLayer.appendChild(el('button', {
+          type: 'button',
+          class: cls,
+          style: 'left:' + left + 'px;top:' + top + 'px',
+          'aria-label': 'Pin ' + p.n + (p.thread.resolution ? ' (resolved)' : ''),
+          onclick: function (ev) { ev.stopPropagation(); selectThread(p.thread.id, false) },
+          text: String(p.n),
+        }))
+      })
+    }
+    renderThreadPop()
+  }
+
+  function messageNode(m, isLastReply) {
+    return el('div', { class: 'msg ' + (m.from === 'agent' ? 'agent' : 'user') + (isLastReply ? ' last-reply' : '') }, [
+      el('span', { class: 'who', text: m.from === 'agent' ? 'Agent' : 'You' }),
+      el('span', { text: String(m.text) }),
+    ])
+  }
+  function threadBody(p) {
+    var reply = Core.lastAgentMessage(p.thread)
+    var wrap = el('div', { class: 'thread' })
+    if (p.thread.resolution) {
+      wrap.appendChild(el('div', { class: 'meta', text: 'Resolved' + (typeof p.thread.resolution === 'string' ? ': ' + p.thread.resolution : '') }))
+      if (reply) wrap.appendChild(messageNode(reply, true))
+      var rest = p.thread.messages.filter(function (m) { return m !== reply })
+      rest.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    } else {
+      p.thread.messages.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    }
+    return wrap
+  }
+
+  function renderThreadPop() {
+    var layer = $('layer-pop')
+    layer.querySelectorAll('.pop.thread-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    if (!S.openThread || !dotPos[S.openThread]) return
+    var p = pinThreads().filter(function (x) { return x.thread.id === S.openThread })[0]
+    if (!p) return
+    var at = dotPos[S.openThread]
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(at.left, boxW - 308))
+    var pop = el('div', { class: 'pop thread-pop', style: 'left:' + left + 'px;top:' + (at.top + 16) + 'px' }, [
+      el('h3', { text: 'Pin ' + p.n + ' on ' + p.pin.pin }),
+      el('div', { class: 'meta', text: p.placement === 'reanchored' ? 'Placed in v' + p.pin.version + ', shown on the same element here' : 'v' + p.pin.version }),
+      threadBody(p),
+      el('div', { class: 'row' }, [el('button', { type: 'button', text: 'Close', onclick: function () { S.openThread = null; renderOverlay(); renderRail() } })]),
+    ])
+    layer.appendChild(pop)
+  }
+
+  var noteShown = null
+  var noteUi = null
+  var NOTE_CLOSED_REASON = 'This review is no longer open for comments. Your text is kept so you can copy it.'
+
+  function syncNoteGate() {
+    if (!noteUi) return
+    var open = canReview()
+    noteUi.send.disabled = !open || noteUi.busy
+    if (!open) noteUi.err.textContent = NOTE_CLOSED_REASON
+    else if (noteUi.err.textContent === NOTE_CLOSED_REASON) noteUi.err.textContent = ''
+  }
+
+  function renderNote() {
+    var layer = $('layer-pop')
+    if (S.note && S.note === noteShown && layer.querySelector('.pop.note-pop')) { syncNoteGate(); return }
+    noteUi = null
+    layer.querySelectorAll('.pop.note-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    noteShown = S.note
+    if (!S.note) return
+    var note = S.note
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(note.x, boxW - 308))
+    var area = el('textarea', { 'aria-label': 'Comment', placeholder: 'What should change here?' })
+    var err = el('span', { class: 'err' })
+    var send = el('button', { type: 'button', class: 'primary', text: 'Send' })
+    var cancel = el('button', { type: 'button', text: 'Cancel', onclick: function () { S.note = null; renderNote() } })
+    var ui = { send: send, err: err, busy: false }
+    send.addEventListener('click', function () {
+      if (!canReview()) { syncNoteGate(); return }
+      var text = area.value.trim()
+      if (!text) { err.textContent = 'Write a comment first.'; return }
+      ui.busy = true
+      send.disabled = true
+      cancel.disabled = true
+      err.textContent = ''
+      postEvent('comment', { block_id: note.blockId, text: text }, {}).then(function (result) {
+        ui.busy = false
+        if (result === 'ok') {
+          S.note = null
+          renderNote()
+          setNotice('Comment sent.', false)
+          pollNow()
+        } else {
+          cancel.disabled = false
+          err.textContent = 'Could not send. Try again.'
+          syncNoteGate()
+        }
+      })
+    })
+    var pop = el('div', { class: 'pop note-pop', style: 'left:' + left + 'px;top:' + (note.y + 10) + 'px', role: 'dialog', 'aria-label': 'New comment' }, [
+      el('h3', { text: 'Comment on ' + note.label }),
+      area,
+      el('div', { class: 'row' }, [err, cancel, send]),
+    ])
+    layer.appendChild(pop)
+    noteUi = ui
+    syncNoteGate()
+    area.focus()
+  }
+
+  function selectThread(id, navigate) {
+    S.openThread = S.openThread === id && !navigate ? null : id
+    var p = pinThreads().filter(function (x) { return x.thread.id === id })[0]
+    if (navigate && p && inner && p.placement !== 'orphaned') {
+      var s = screenById(p.pin.screen)
+      if (s && s.states.indexOf(p.pin.state) !== -1) S.states[s.id] = p.pin.state
+      if (p.pin.screen !== S.screenId) {
+        goToScreen(p.pin.screen)
+        S.openThread = id
+      }
+    }
+    renderAll()
+  }
+
+  // ---- hover and click in the mock -----------------------------------------
+  function commentAllowed() { return S.mode === 'comment' && canReview() }
+
+  function onInnerMove(ev) {
+    if (!commentAllowed()) return clearHover()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (node === hoverEl) return
+    hoverEl = node
+    paintHover()
+  }
+  function clearHover() {
+    if (!hoverEl) return
+    hoverEl = null
+    paintHover()
+  }
+  function paintHover() {
+    var layer = $('layer-hover')
+    clear(layer)
+    if (!hoverEl || !hoverEl.isConnected) return
+    var r = visibleBox(hoverEl)
+    if (!r) return
+    var label = inventoryLabel(hoverEl.getAttribute('data-pin'))
+    layer.appendChild(el('div', { class: 'box hover', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [label ? el('span', { class: 'tag', text: label }) : null]))
+  }
+  function onInnerClick(ev) {
+    if (!commentAllowed()) return
+    ev.preventDefault()
+    ev.stopPropagation()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (!node) {
+      setNotice('This element has no pin key, so it cannot take a comment. Hover to see which elements can.', true)
+      return
+    }
+    var state = currentState()
+    if (!screenById(S.screenId) || !state) {
+      setNotice('Open a screen from the rail first. Comments need a screen and state from the inventory.', true)
+      return
+    }
+    var r = node.getBoundingClientRect()
+    var off = Core.offsetPct(r, ev.clientX, ev.clientY)
+    var blockId
+    try {
+      blockId = Core.formatPinId({ version: boot.version, screen: S.screenId, state: state, pin: node.getAttribute('data-pin'), x: off.x, y: off.y })
+    } catch (e) {
+      setNotice('This element\'s pin key is not valid, so it cannot take a comment.', true)
+      return
+    }
+    S.openThread = null
+    S.note = { blockId: blockId, x: ev.clientX, y: ev.clientY, label: inventoryLabel(node.getAttribute('data-pin')) || node.getAttribute('data-pin') }
+    renderOverlay()
+    renderNote()
+  }
+
+  // ---- inner frame wiring ---------------------------------------------------
+  function applyStates() {
+    var scr = screenEl(S.screenId)
+    if (!scr) return
+    var cur = currentState()
+    stateEls(scr).forEach(function (node) {
+      var hide = node.getAttribute('data-state') !== cur
+      if (node.hidden !== hide) node.hidden = hide
+    })
+  }
+  function refreshFrame() {
+    frameTick = 0
+    if (!inner) return
+    applyStates()
+    renderOverlay()
+    paintHover()
+    renderRail()
+  }
+  function scheduleRefresh() {
+    if (frameTick) return
+    frameTick = requestAnimationFrame(refreshFrame)
+  }
+  function onInnerHash() {
+    if (!inner) return
+    var nextId = Core.currentScreenId(inner.win.location.hash, boot.screens)
+    var moved = nextId !== S.screenId
+    S.screenId = nextId
+    if (Core.isKnownScreen(boot.screens, S.screenId) && !S.visited.has(S.screenId)) {
+      S.visited.add(S.screenId)
+      saveVisited()
+    }
+    if (moved) {
+      S.note = null
+      S.openThread = null
+    }
+    hoverEl = null
+    renderAll()
+  }
+  function goToScreen(id) {
+    if (!inner) return
+    inner.win.location.hash = '#/' + id
+    onInnerHash()
+  }
+  function attach() {
+    var win = frame.contentWindow
+    var doc = null
+    try { doc = frame.contentDocument } catch (e) { doc = null }
+    if (!doc || !doc.documentElement) {
+      inner = null
+      setNotice('The mock document could not be read, so review tools are unavailable.', true)
+      return
+    }
+    inner = { win: win, doc: doc }
+    var style = doc.createElement('style')
+    style.textContent = '[hidden]{display:none !important}'
+    ;(doc.head || doc.documentElement).appendChild(style)
+    win.addEventListener('hashchange', onInnerHash)
+    win.addEventListener('resize', scheduleRefresh)
+    doc.addEventListener('scroll', scheduleRefresh, true)
+    doc.addEventListener('click', onInnerClick, true)
+    doc.addEventListener('mousemove', onInnerMove, true)
+    doc.documentElement.addEventListener('mouseleave', clearHover)
+    if (win.MutationObserver && doc.body) new win.MutationObserver(scheduleRefresh).observe(doc.body, { childList: true, subtree: true })
+    onInnerHash()
+  }
+
+  // ---- rail -----------------------------------------------------------------
+  function pinCountFor(list, id) {
+    return list.filter(function (p) { return p.pin.screen === id }).length
+  }
+  function renderRail() {
+    var rail = $('rail')
+    var list = appMode ? pinThreads() : []
+    var reviewing = canReview()
+    clear(rail)
+    rail.appendChild(el('h2', { text: 'Screens' }))
+    var ul = el('ul')
+    screens.forEach(function (s) {
+      var seen = S.visited.has(s.id)
+      var count = pinCountFor(list, s.id)
+      var item = el('li', { class: 'screen-item' + (s.id === S.screenId ? ' current' : '') }, [
+        el('button', { type: 'button', class: 'go', 'aria-current': s.id === S.screenId ? 'page' : null, onclick: function () { goToScreen(s.id) } }, [
+          el('span', { class: 'dot' + (seen ? ' visited' : ''), title: seen ? 'Visited' : 'Not visited' }),
+          el('span', { class: 'title', text: s.title }),
+          el('span', { class: 'count', text: (seen ? 'visited' : 'not visited') + (appMode ? ', ' + count + (count === 1 ? ' pin' : ' pins') : '') }),
+        ]),
+      ])
+      if (reviewing) {
+        var box = el('input', { type: 'checkbox', 'aria-label': 'Mark ' + s.title + ' as reviewed' })
+        box.checked = S.marks.has(s.id)
+        box.addEventListener('change', function () { if (box.checked) S.marks.add(s.id); else S.marks.delete(s.id) })
+        item.appendChild(el('label', { class: 'mark', title: 'Mark this screen as reviewed' }, [box, 'ok']))
+      }
+      ul.appendChild(item)
+    })
+    rail.appendChild(ul)
+
+    var cur = screenById(S.screenId)
+    if (!cur && S.screenId) {
+      rail.appendChild(el('p', { class: 'note' }, [el('span', { class: 'chip warn', text: 'Screen "' + S.screenId + '" is not in the inventory' })]))
+    }
+    if (cur && cur.skipped_states && cur.skipped_states.length) {
+      rail.appendChild(el('h2', { text: 'Skipped states here' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, cur.skipped_states.map(function (k) { return el('li', { text: k.state + ': ' + k.reason }) })))
+    }
+    var gapsHere = gaps.filter(function (g) { return g.screen === S.screenId })
+    if (gapsHere.length) {
+      rail.appendChild(el('h2', { text: 'Gaps on this screen' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, gapsHere.map(function (g) { return el('li', { text: g.label + ': no matching component' }) })))
+    }
+
+    if (appMode && list.length) {
+      var orphaned = list.filter(function (p) { return p.placement === 'orphaned' })
+      var placed = list.filter(function (p) { return p.placement !== 'orphaned' })
+      if (placed.length) {
+        rail.appendChild(el('h2', { text: 'Pins' }))
+        placed.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+      if (orphaned.length) {
+        rail.appendChild(el('h2', { text: 'Orphaned pins' }))
+        orphaned.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+    }
+  }
+  function pinRow(p) {
+    var open = S.openThread === p.thread.id
+    var first = p.thread.messages[0]
+    var badges = []
+    if (p.thread.resolution) badges.push(el('span', { class: 'badge ok', text: 'resolved' }))
+    if (p.placement === 'reanchored') badges.push(el('span', { class: 'badge', text: 'from v' + p.pin.version }))
+    if (p.placement === 'orphaned') badges.push(el('span', { class: 'badge warn', text: 'element removed in v' + boot.version }))
+    var screen = screenById(p.pin.screen)
+    var head = el('button', { type: 'button', class: 'head', 'aria-expanded': open ? 'true' : 'false', onclick: function () { selectThread(p.thread.id, true) } }, [
+      el('strong', { text: 'Pin ' + p.n }),
+      ' ',
+      el('span', { class: 'meta', text: (screen ? screen.title : p.pin.screen) + ' / ' + p.pin.state + ' / ' + p.pin.pin }),
+      ...badges,
+      el('div', { text: first ? String(first.text).slice(0, 90) : '' }),
+    ])
+    var row = el('div', { class: 'pin-row' + (open ? ' selected' : '') }, [head])
+    var reply = p.thread.resolution ? Core.lastAgentMessage(p.thread) : null
+    if (open) row.appendChild(threadBody(p))
+    else if (reply) row.appendChild(el('div', { class: 'thread' }, [messageNode(reply, true)]))
+    return row
+  }
+
+  // ---- toolbar, banner, verdict bar ----------------------------------------
+  function setNotice(text, isError) {
+    S.notice = text
+    S.noticeError = !!isError
+    clearTimeout(noticeTimer)
+    renderStatus()
+    if (text) noticeTimer = setTimeout(function () { S.notice = ''; renderStatus() }, 6000)
+  }
+  function renderStatus() {
+    var node = $('status')
+    var text = S.paused ? 'Lost contact with the companion, retrying' : S.notice
+    node.textContent = text
+    node.className = 'status' + (S.paused || S.noticeError ? ' error' : '')
+  }
+  function pressed(id, on) { $(id).setAttribute('aria-pressed', on ? 'true' : 'false') }
+
+  function renderToolbar() {
+    $('version-chip').textContent = 'Mock v' + boot.version + (!appMode || boot.version === latestVersion() ? '' : ' (not latest)')
+    var wrap = $('version-wrap')
+    var picker = $('version-picker')
+    if (appMode) {
+      wrap.hidden = false
+      clear(picker)
+      var latest = latestVersion()
+      versionList().forEach(function (v) {
+        var o = el('option', { value: String(v), text: 'v' + v + (v === latest ? ' (latest)' : '') })
+        if (v === boot.version) o.selected = true
+        picker.appendChild(o)
+      })
+    }
+    var reviewing = canReview()
+    if (!reviewing && S.mode === 'comment') { S.mode = 'interact'; clearHover() }
+    pressed('mode-interact', S.mode === 'interact')
+    pressed('mode-comment', S.mode === 'comment')
+    var cm = $('mode-comment')
+    cm.hidden = !appMode
+    cm.disabled = !reviewing
+    cm.title = reviewing ? 'Click an element to pin a comment' : (readOnlyVersion() ? 'Only the latest version takes comments' : 'Comments are open while a review is waiting on you')
+    pressed('vp-desktop', S.viewport === 'desktop')
+    pressed('vp-mobile', S.viewport === 'mobile')
+    frameBox.className = 'frame-box' + (S.viewport === 'mobile' ? ' mobile' : '')
+    var sw = $('state-switch')
+    clear(sw)
+    var s = screenById(S.screenId)
+    if (s && s.states && s.states.length > 1) {
+      sw.hidden = false
+      s.states.forEach(function (st) {
+        sw.appendChild(el('button', { type: 'button', 'aria-pressed': currentState() === st ? 'true' : 'false', onclick: function () { S.states[s.id] = st; S.note = null; renderAll() }, text: st }))
+      })
+    } else sw.hidden = true
+    renderStatus()
+  }
+
+  function renderBanner() {
+    var b = $('banner')
+    clear(b)
+    if (!appMode) {
+      b.hidden = false
+      b.appendChild(el('span', { text: 'Mock v' + boot.version + ' · not the product' }))
+    } else if (staleVersion()) {
+      b.hidden = false
+      b.appendChild(el('span', { role: 'alert', text: 'This version was updated \u2014 reload to review it' }))
+      b.appendChild(el('button', { type: 'button', text: 'Reload', onclick: function () { window.location.reload() } }))
+    } else if (readOnlyVersion()) {
+      b.hidden = false
+      var latest = latestVersion()
+      b.appendChild(el('span', { text: 'v' + boot.version + ' is read-only. New comments go on v' + latest + '.' }))
+      b.appendChild(el('button', { type: 'button', text: 'Go to v' + latest, onclick: function () { goToVersion(latest) } }))
+    } else b.hidden = true
+  }
+  function goToVersion(v) {
+    window.location.href = '/_quirk/mock/' + encodeURIComponent(String(v)) + '?t=' + encodeURIComponent(boot.token)
+  }
+
+  var verdictSig = ''
+  function renderVerdict() {
+    var bar = $('verdict')
+    if (!appMode) { bar.hidden = true; return }
+    var reviewing = canReview()
+    var unvisited = Core.unvisitedScreens(boot.screens, S.visited)
+    var sig = JSON.stringify([reviewing, S.panel, S.submitting, S.verdictError, unvisited])
+    if (sig === verdictSig) return
+    verdictSig = sig
+    var typing = document.activeElement && bar.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'
+      ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }
+      : null
+    clear(bar)
+    if (!reviewing) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    bar.appendChild(el('strong', { text: 'Your verdict' }))
+    var busy = S.submitting
+    bar.appendChild(el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Looks right', onclick: onLooksRight }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Needs changes', onclick: function () { S.panel = 'changes'; S.verdictError = ''; renderVerdict() } }))
+    bar.appendChild(el('span', { class: 'spacer' }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Skip review', onclick: function () { submitVerdict('skip', null) } }))
+    if (S.verdictError) bar.appendChild(el('span', { class: 'err', role: 'alert', text: S.verdictError }))
+    if (S.panel === 'confirm') {
+      var names = unvisited.map(function (id) { var s = screenById(id); return s ? s.title : id })
+      bar.appendChild(el('div', { class: 'panel' }, [
+        el('div', { text: 'You have not opened ' + names.join(', ') + '. Sign off anyway?' }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Confirm: looks right', onclick: function () { submitVerdict('looks-right', null) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Keep reviewing', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+    if (S.panel === 'changes') {
+      var area = el('textarea', { 'aria-label': 'Overall comment (optional)', placeholder: 'Overall comment (optional)' })
+      area.value = S.changesText
+      area.addEventListener('input', function () { S.changesText = area.value })
+      if (typing) {
+        queueMicrotask(function () {
+          area.focus()
+          area.setSelectionRange(typing.start, typing.end)
+        })
+      }
+      bar.appendChild(el('div', { class: 'panel' }, [
+        area,
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Send: needs changes', onclick: function () { submitVerdict('needs-changes', S.changesText.trim()) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Cancel', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+  }
+  function onLooksRight() {
+    S.verdictError = ''
+    if (Core.unvisitedScreens(boot.screens, S.visited).length) { S.panel = 'confirm'; renderVerdict() } else submitVerdict('looks-right', null)
+  }
+  function submitVerdict(verdict, comment) {
+    if (S.submitting || !canReview()) return
+    var ids = screens.map(function (s) { return s.id })
+    var payload = {
+      verdict: verdict,
+      visited: ids.filter(function (id) { return S.visited.has(id) }),
+      marks: ids.filter(function (id) { return S.marks.has(id) }),
+    }
+    if (comment) payload.comment = comment
+    S.submitting = true
+    S.verdictError = ''
+    renderVerdict()
+    var step = S.snap.step
+    postEvent('submit', payload, { nonce: step.nonce, step: step.id }).then(function (result) {
+      S.submitting = false
+      if (result === 'ok') {
+        S.panel = null
+        setNotice('Verdict sent.', false)
+      } else if (result === 'superseded') {
+        S.panel = null
+        S.verdictError = 'That review was replaced by a newer one. Refreshing.'
+      } else S.verdictError = 'Could not send the verdict. Try again.'
+      renderVerdict()
+      pollNow()
+    })
+  }
+
+  function renderAll() {
+    renderToolbar()
+    renderBanner()
+    applyStates()
+    renderRail()
+    renderOverlay()
+    renderNote()
+    paintHover()
+    renderVerdict()
+  }
+
+  // ---- companion transport (same-origin app endpoints only) ------------------
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+    return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+  }
+  /** Posts one event, retrying network errors with the same client_id so the server can dedupe. */
+  function postEvent(type, payload, scope) {
+    var body = { client_id: uuid(), type: type, payload: payload }
+    if (scope.nonce) body.nonce = scope.nonce
+    if (scope.step) body.step = scope.step
+    var text = JSON.stringify(body)
+    function attempt(n) {
+      return fetch('/_quirk/app/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Quirk-Token': boot.token },
+        body: text,
+      }).then(function (r) {
+        if (r.status === 409) return 'superseded'
+        return r.ok ? 'ok' : 'error'
+      }, function () {
+        if (n >= 3) return 'error'
+        return new Promise(function (resolve) { setTimeout(resolve, 200 * (n + 1)) }).then(function () { return attempt(n + 1) })
+      })
+    }
+    return attempt(0)
+  }
+
+  var rev = ''
+  var failures = 0
+  var inflight = false
+  var pollTimer = null
+  function pollDelay() {
+    return failures < 3 ? 1000 : Math.min(5000, 1000 * Math.pow(2, failures - 2))
+  }
+  function poll() {
+    if (inflight) return
+    inflight = true
+    fetch('/_quirk/app/snapshot?rev=' + encodeURIComponent(rev), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 200) {
+          return r.json().then(function (snap) {
+            rev = String(snap.rev)
+            S.snap = snap
+            renderAll()
+          })
+        }
+        if (r.status !== 204) throw new Error('snapshot ' + r.status)
+        return null
+      })
+      .then(function () {
+        var recovered = failures > 0
+        failures = 0
+        if (S.paused || recovered) { S.paused = false; renderStatus() }
+      })
+      .catch(function () {
+        failures += 1
+        if (failures >= 3 && !S.paused) { S.paused = true; renderStatus() }
+      })
+      .then(function () {
+        inflight = false
+        clearTimeout(pollTimer)
+        pollTimer = setTimeout(poll, pollDelay())
+      })
+  }
+  function pollNow() {
+    if (!appMode) return
+    clearTimeout(pollTimer)
+    poll()
+  }
+
+  // ---- controls ------------------------------------------------------------
+  $('mode-interact').addEventListener('click', function () { S.mode = 'interact'; clearHover(); renderToolbar() })
+  $('mode-comment').addEventListener('click', function () { if (canReview()) { S.mode = 'comment'; renderToolbar() } })
+  $('vp-desktop').addEventListener('click', function () { S.viewport = 'desktop'; renderToolbar(); scheduleRefresh() })
+  $('vp-mobile').addEventListener('click', function () { S.viewport = 'mobile'; renderToolbar(); scheduleRefresh() })
+  $('show-changes').addEventListener('change', function (ev) {
+    S.showChanges = ev.target.checked
+    if (S.showChanges && !changed.size) setNotice('Nothing was recorded as changed in this version.', false)
+    renderOverlay()
+  })
+  $('version-picker').addEventListener('change', function (ev) {
+    var v = Number(ev.target.value)
+    if (v !== boot.version) goToVersion(v)
+  })
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && (S.note || S.openThread)) { S.note = null; S.openThread = null; renderNote(); renderOverlay(); renderRail() }
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pollNow() })
+
+  frame.addEventListener('load', attach)
+  frame.srcdoc = Core.withBase(String(boot.mock_html || ''))
+  renderAll()
+  if (appMode) poll()
+})()
+</script>
+</body>
+</html>

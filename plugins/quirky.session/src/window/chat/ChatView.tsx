@@ -1,25 +1,24 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
+import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { ChatHeader } from './ChatHeader'
 import { Composer } from './Composer'
+import { defaultVisualLevel, registerChatHandle, useVisualLabels } from './controls'
 import { newestUserAt } from './elapsed'
 import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
 import { PlanPanel } from './PlanPanel'
-import { groupChatTurns } from './turns'
-import { TurnView, VIEW_PANE_VIEW } from './Turn'
+import { currentVisualLevel, groupChatTurns } from './turns'
+import { TurnView, VIEW_RENDER_VIEW, type VisualActions } from './Turn'
+import { useBodyMetrics, useViews, VisualPanel, type ViewIndex, type VisualRecord } from './VisualPanel'
 
 const NO_MESSAGES: StructuredMessage[] = []
 type MessagePhase = { status: 'loading' } | { status: 'ready' } | { status: 'off' } | { status: 'failed'; message: string }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
-/** The transcript column's width plus the Views pane's, in length units; a narrower body shows the plan in a sheet. */
-const PLAN_ASIDE_MIN_UNITS = 720 + 320
 
 /** How far from the end the transcript may be scrolled and still follow new content. */
 const BOTTOM_SLACK = 24
@@ -37,6 +36,18 @@ const layout = {
   background: 'var(--ui-surface)'
 } satisfies CSSProperties
 const body = { display: 'flex', flex: 1, minHeight: 0, minWidth: 0 } satisfies CSSProperties
+const bodyHidden = { ...body, display: 'none' } satisfies CSSProperties
+const expandedBox = { display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, minWidth: 0 } satisfies CSSProperties
+const expandedBar = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--ui-space-8)',
+  minHeight: 'var(--ui-row-single)',
+  paddingInline: 'var(--ui-space-8)',
+  borderBlockEnd: 'var(--ui-border-width) solid var(--ui-border)'
+} satisfies CSSProperties
+const expandedHint = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
+const expandedCard = { flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' } satisfies CSSProperties
 const transcript = { position: 'relative', display: 'flex', flex: 1, minHeight: 0, minWidth: 0 } satisfies CSSProperties
 const jump = {
   position: 'absolute',
@@ -63,23 +74,6 @@ const column = {
   margin: '0 auto',
   padding: '0 var(--ui-space-16)'
 } satisfies CSSProperties
-const pane = {
-  display: 'flex',
-  flex: '0 0 calc(320 * var(--ui-length-unit))',
-  flexDirection: 'column',
-  minHeight: 0,
-  minWidth: 0,
-  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
-} satisfies CSSProperties
-const plan = {
-  display: 'flex',
-  flex: '0 0 calc(380 * var(--ui-length-unit))',
-  flexDirection: 'column',
-  minHeight: 0,
-  minWidth: 0,
-  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
-} satisfies CSSProperties
-
 /** Whether `element` is scrolled to its end, give or take a few lines. */
 export function atBottom(element: Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_SLACK
@@ -99,68 +93,6 @@ function readingAnchor(scroller: HTMLElement, column: HTMLElement): { element: E
     if (next.getBoundingClientRect().top >= top) break
   }
   return node === column ? null : { element: node, offset: node.getBoundingClientRect().top - top }
-}
-
-/** The number of this session's views the agent placed in the pane, read again whenever views change. */
-function usePaneViews(context: UiPluginContext, sessionId: string): number {
-  const [count, setCount] = useState(0)
-  useEffect(() => {
-    let cancelled = false
-    let latest = 0
-    const load = () => {
-      const attempt = ++latest
-      context
-        .call('quirky.view/list', { session: sessionId })
-        .then((records) => {
-          if (cancelled || attempt !== latest) return
-          const views = Array.isArray(records) ? (records as { placement?: string; closed?: boolean }[]) : []
-          setCount(views.filter((view) => view.placement === 'pane' && view.closed !== true).length)
-        })
-        .catch(() => {
-          if (!cancelled && attempt === latest) setCount(0)
-        })
-    }
-    const unsubscribe = context.subscribe((event) => {
-      if (event.type !== 'quirky.view/changed') return
-      const changed = (event.data as { sessionId?: string } | undefined)?.sessionId
-      if (changed === undefined || changed === sessionId) load()
-    })
-    const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') load()
-    })
-    setCount(0)
-    load()
-    return () => {
-      cancelled = true
-      unsubscribe()
-      unsubscribeConnection()
-    }
-  }, [context, sessionId])
-  return count
-}
-
-/**
- * Whether `ref`'s element is wide enough to hold the plan panel beside the transcript. An element
- * with no layout yet counts as wide, so the panel never flashes in a sheet before the first measure.
- */
-function usePlanFits(ref: RefObject<HTMLElement | null>): boolean {
-  const [fits, setFits] = useState(true)
-  useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const measure = () => {
-      const width = element.getBoundingClientRect().width
-      if (width === 0) return
-      const unit = Number.parseFloat(getComputedStyle(element).getPropertyValue('--ui-length-unit'))
-      setFits(width >= PLAN_ASIDE_MIN_UNITS * (Number.isFinite(unit) ? unit : 1))
-    }
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [ref])
-  return fits
 }
 
 /** The static feature set of `agent`, or null while it loads or when it cannot be read. */
@@ -223,12 +155,14 @@ function prependEarlier(chats: EarlierChat[], record: Session, page: StructuredM
 
 /**
  * A structured session as a chat: turns with prose, folded activity, cards, asks and views, the
- * Views pane and the plan panel beside them and the composer below. It opens on the newest
- * `CHAT_PAGE_SIZE` messages, and Load earlier messages pages back through this session, then through
- * the sessions it was resumed from, oldest shown first. The plan panel shows the newest loaded plan
- * version, opens when a version waits on load or any newer one arrives, and is a sheet when the chat
- * is too narrow for it. Messages without a chat item still show as plain rows, and the transcript
- * follows new content only while it is scrolled to the end.
+ * visual panel beside them and the composer below. It opens on the newest `CHAT_PAGE_SIZE` messages,
+ * and Load earlier messages pages back through this session, then through the sessions it was resumed
+ * from, oldest shown first. The visual panel holds the visuals the agent placed in the pane, with the
+ * plan card first: that card shows the newest loaded plan version, opens when a version waits on load
+ * or any newer one arrives. A visual the agent drew leaves a chip in the turn that drew it, which
+ * opens that version in the panel, and a visual can expand to fill the chat above the composer until
+ * Esc. Messages without a chat item still show as plain rows, and the transcript follows new content
+ * only while it is scrolled to the end.
  */
 export function ChatView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
@@ -248,7 +182,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const [behind, setBehind] = useState(false)
   const keepDistanceFromEnd = useRef<number | null>(null)
   const capabilities = useCapabilities(context, session.agent)
-  const paneViews = usePaneViews(context, session.id)
+  const [expanded, setExpanded] = useState<{ viewId: string; version?: number; foreign?: true } | null>(null)
+  const [focusRequest, setFocusRequest] = useState<{ viewId: string; version: number | null; nonce: number } | null>(null)
+  const [visualizing, setVisualizing] = useState<number | null>(null)
+  const sawWorking = useRef(false)
+  const viewIndex = useViews(context, session.id, (change) => {
+    if (change.kind === undefined || change.kind === 'open' || change.kind === 'update' || change.kind === 'patch') setVisualizing(null)
+  })
+  useVisualLabels(context)
   const turns = useMemo(
     () => {
       const chats = [...earlier, { session, messages: stored }]
@@ -258,31 +199,108 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     [earlier, session, stored, showAll]
   )
   const history = useMemo(() => [...earlier.flatMap((chat) => chat.messages), ...stored], [earlier, stored])
+  const [otherViews, setOtherViews] = useState<Map<string, VisualRecord>>(() => new Map())
+  const askedViews = useRef(new Set<string>())
+  const turnsIndex = useMemo<ViewIndex>(() => {
+    if (otherViews.size === 0) return viewIndex
+    return { ...viewIndex, byId: new Map([...otherViews, ...viewIndex.byId]) }
+  }, [viewIndex, otherViews])
   const versions = useMemo(() => planVersions(history), [history])
   const mode = useMemo(() => currentMode(history), [history])
+  const journaledLevel = useMemo(() => currentVisualLevel(history), [history])
   const modeBeforePlan = useMemo(() => previousMode(history), [history])
   const newest = versions.at(-1)
   const [panelOpen, setPanelOpen] = useState(false)
   const [viewed, setViewed] = useState<number | null>(null)
   const lastSeen = useRef<number | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const fits = usePlanFits(bodyRef)
+  const { width: bodyWidth, unit } = useBodyMetrics(bodyRef)
   const shown = versions.find((entry) => entry.version === viewed) ?? newest
   const closePanel = () => setPanelOpen(false)
-  const planPanel =
-    panelOpen && shown ? (
-      <PlanPanel
-        key={shown.version}
-        context={context}
-        session={session}
-        version={shown}
-        isNewest={shown.version === newest?.version}
-        onClose={closePanel}
-        framed={fits}
-      />
-    ) : null
+  const planCard = panelOpen && shown ? { version: shown, isNewest: shown.version === newest?.version } : null
   const autoAvailable = mode !== null ? mode.autoAvailable === true : stored.length === 0 ? undefined : false
   const working = session.status === 'working' || session.status === 'waiting'
+  const workingNow = useRef(working)
+  workingNow.current = working
+
+  const openVisual = (viewId: string, version: number) => {
+    if (viewIndex.status === 'ready' && !viewIndex.byId.has(viewId)) {
+      setExpanded({ viewId, version, foreign: true })
+      return
+    }
+    const latestVersion = viewIndex.byId.get(viewId)?.latestVersion
+    setExpanded(null)
+    setFocusRequest((current) => ({ viewId, version: latestVersion !== undefined && version >= latestVersion ? null : version, nonce: (current?.nonce ?? 0) + 1 }))
+  }
+  const visualize = (seq: number, request: string) => {
+    setVisualizing(seq)
+    context.call('quirky.structured/send', { session: session.id, text: request, when: workingNow.current ? 'idle' : 'now' }).catch((error) => {
+      setVisualizing(null)
+      context.toast('Could not ask for a visual', messageOf(error))
+    })
+  }
+  const visual: VisualActions = { views: turnsIndex, busySeq: visualizing, onVisualize: visualize, onOpen: openVisual }
+  const expandRef = useRef((viewId: string, version?: number) => setExpanded({ viewId, ...(version === undefined ? {} : { version }) }))
+
+  useEffect(() => registerChatHandle(session.id, { expand: (viewId, version) => expandRef.current(viewId, version) }), [session.id])
+
+  useEffect(() => {
+    setExpanded(null)
+    setFocusRequest(null)
+    setVisualizing(null)
+    setOtherViews(new Map())
+    askedViews.current = new Set()
+  }, [session.id])
+
+  // views an earlier chat of this conversation drew are not in this session's list, so each one is read by id
+  useEffect(() => {
+    if (viewIndex.status !== 'ready') return
+    for (const message of history) {
+      const viewId = message.item?.kind === 'view' ? message.item.viewId : undefined
+      if (viewId === undefined || viewIndex.byId.has(viewId) || askedViews.current.has(viewId)) continue
+      askedViews.current.add(viewId)
+      context
+        .call('quirky.view/get', { viewId })
+        .then((loaded) => {
+          const record = loaded as Partial<VisualRecord> | null
+          if (typeof record?.title !== 'string') return
+          const found: VisualRecord = {
+            viewId,
+            title: record.title,
+            placement: record.placement === 'inline' ? 'inline' : 'pane',
+            closed: record.closed === true,
+            ...(typeof record.latestVersion === 'number' ? { latestVersion: record.latestVersion } : {})
+          }
+          setOtherViews((current) => new Map(current).set(viewId, found))
+        })
+        .catch(() => askedViews.current.delete(viewId))
+    }
+  }, [context, history, viewIndex])
+
+  // a Visualize request is done once its visual arrives or the turn that took it ends, whichever is first
+  useEffect(() => {
+    if (visualizing === null) {
+      sawWorking.current = false
+      return
+    }
+    if (working) sawWorking.current = true
+    else if (sawWorking.current) setVisualizing(null)
+  }, [visualizing, working])
+
+  useEffect(() => {
+    if (expanded === null || expanded.foreign || viewIndex.status !== 'ready') return
+    const record = viewIndex.byId.get(expanded.viewId)
+    if (!record || record.closed) setExpanded(null)
+  }, [expanded, viewIndex])
+
+  const onLeaveExpanded = () => setExpanded(null)
+
+  const onLayoutKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (expanded === null || event.key !== 'Escape' || event.defaultPrevented) return
+    event.preventDefault()
+    event.stopPropagation()
+    setExpanded(null)
+  }
 
   const latest = useRef(0)
   const generation = useRef(0)
@@ -508,7 +526,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   if (phase.status === 'off') return <EmptyState message="Structured sessions are off" />
 
   return (
-    <div style={layout}>
+    <div style={layout} onKeyDownCapture={onLayoutKeyDown}>
       <ChatHeader
         context={context}
         session={session}
@@ -528,7 +546,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           )
         }
       />
-      <div ref={bodyRef} style={body}>
+      <div ref={bodyRef} style={expanded === null ? body : bodyHidden}>
         <div style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
             <div ref={columnRef} style={column}>
@@ -553,6 +571,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
                   capabilities={capabilities}
                   data={turn}
                   index={index}
+                  visual={visual}
                   onOpenPlan={(version) => {
                     setViewed(version === newest?.version ? null : version)
                     setPanelOpen(true)
@@ -567,21 +586,36 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
             </button>
           )}
         </div>
-        {paneViews > 0 && (
-          <aside style={pane} aria-label="Views">
-            <Embedded context={context} viewId={VIEW_PANE_VIEW} input={{ session: session.id }} fallback="" />
-          </aside>
-        )}
-        {planPanel !== null && fits && (
-          <aside style={plan} aria-label="Plan">
-            {planPanel}
-          </aside>
-        )}
+        <VisualPanel
+          context={context}
+          session={session}
+          views={viewIndex.views}
+          plan={planCard}
+          onClosePlan={closePanel}
+          working={working}
+          level={journaledLevel ?? defaultVisualLevel(context)}
+          bodyRef={bodyRef}
+          bodyWidth={bodyWidth}
+          unit={unit}
+          focus={focusRequest}
+        />
       </div>
-      {planPanel !== null && !fits && (
-        <Dialog open title="Plan" variant="sheet" scrollBody onClose={closePanel}>
-          {planPanel}
-        </Dialog>
+      {expanded !== null && (
+        <section style={expandedBox} aria-label="Expanded visual">
+          <div style={expandedBar}>
+            <Button onClick={onLeaveExpanded}>
+              <ControlIcon name="caret-left" /> Back to chat
+            </Button>
+            <span style={expandedHint}>Esc</span>
+          </div>
+          <Embedded
+            context={context}
+            viewId={VIEW_RENDER_VIEW}
+            input={{ viewId: expanded.viewId, ...(expanded.version === undefined ? {} : { version: expanded.version }), surface: 'expanded', focused: true }}
+            fallback="Visuals are turned off."
+            style={expandedCard}
+          />
+        </section>
       )}
       <Composer
         context={context}
@@ -592,6 +626,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         reportedMode={mode?.mode}
         autoAvailable={autoAvailable}
         previousMode={modeBeforePlan}
+        reportedLevel={journaledLevel ?? undefined}
       />
     </div>
   )

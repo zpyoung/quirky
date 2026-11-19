@@ -3,6 +3,7 @@ import { ComposerDrafts } from './src/drafts'
 import { createMarkdownAssets } from './src/markdownAssets'
 import { SessionRecords, sessionMigrations } from './src/records'
 import { SessionService } from './src/sessions'
+import { UiPrefs, uiPrefsMigration } from './src/uiPrefs'
 
 /** Launch plans contain environment credentials; only trusted local consumers receive them. */
 function withoutLaunch(session: Session): Session {
@@ -16,9 +17,10 @@ function sessionForCaller(result: Session | Promise<Session>, caller: PluginCall
 }
 
 export async function activate(context: PluginContext): Promise<void> {
-  const store = context.openStore(sessionMigrations(context.home))
+  const store = context.openStore([...sessionMigrations(context.home), uiPrefsMigration])
   const records = new SessionRecords(store)
   const drafts = new ComposerDrafts(store, context.dataDir, (id) => records.get(id) !== null, (kind, message) => context.error(kind, message))
+  const uiPrefs = new UiPrefs(store, (kind, message) => context.error(kind, message))
   const sessions = new SessionService(context, records)
 
   const markdownAssets = createMarkdownAssets({ context, sessionOf: (ref) => sessions.get({ session: ref }) })
@@ -50,7 +52,9 @@ export async function activate(context: PluginContext): Promise<void> {
     pasteImage: drafts.pasteImage,
     draft: drafts.draft,
     saveDraft: drafts.saveDraft,
-    clearDraft: drafts.clearDraft
+    clearDraft: drafts.clearDraft,
+    uiPref: uiPrefs.uiPref,
+    setUiPref: uiPrefs.setUiPref
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
 

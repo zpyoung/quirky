@@ -13,7 +13,7 @@ const PRESENT_AGAIN = 'Please present the plan again.'
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-const root = { display: 'flex', flex: 1, flexDirection: 'column', minHeight: 0, minWidth: 0, height: '100%' } satisfies CSSProperties
+const root = { display: 'flex', flexDirection: 'column', minWidth: 0, border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-window)', overflow: 'hidden' } satisfies CSSProperties
 const header = {
   display: 'flex',
   alignItems: 'center',
@@ -27,7 +27,7 @@ const marker = { minWidth: 0, color: 'var(--ui-muted)', fontSize: 'var(--ui-font
 const markerApproved = { ...marker, color: 'var(--ui-working)' } satisfies CSSProperties
 const markerGrow = { flex: 1 } satisfies CSSProperties
 const markerSheet = { padding: 'var(--ui-space-4) var(--ui-space-12) 0' } satisfies CSSProperties
-const body = { flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--ui-space-12)' } satisfies CSSProperties
+const body = { maxHeight: 'calc(360 * var(--ui-length-unit))', minHeight: 0, overflowY: 'auto', padding: 'var(--ui-space-12)' } satisfies CSSProperties
 const file = { marginBlockStart: 'var(--ui-space-8)' } satisfies CSSProperties
 const actions = {
   display: 'flex',
@@ -43,7 +43,8 @@ const buttons = { display: 'flex', gap: 'var(--ui-space-6)' } satisfies CSSPrope
 /**
  * One plan version: its marker, the plan as Claude wrote it, a link to the plan file and, for the
  * newest version, the way to answer it. Approval is click-only; nothing here listens for keys.
- * `framed` adds the panel's own title and close button, which a sheet supplies itself.
+ * It is a card in the visual panel; `framed` adds its own title and close button, which a host that
+ * supplies them leaves out.
  */
 export function PlanPanel({
   context,

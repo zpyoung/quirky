@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
-import type { AgentCapabilities, PermissionModeName, QueuedMessage, Session, StructuredMessage, UiPluginContext } from '@quirky/protocol'
+import type { AgentCapabilities, PermissionModeName, QueuedMessage, Session, StructuredMessage, UiPluginContext, VisualLevel } from '@quirky/protocol'
 import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'
 import { WORKTREE_VIEW_ID } from '../model'
 import type { QuirkyCommandName } from './commands'
 import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
-import { absolutePathsOf, AgentChip, NO_PICKS, reasonOf, useAgentOptions, useTurnSettings, type Picks } from './controls'
+import { absolutePathsOf, AgentChip, defaultVisualLevel, NO_PICKS, reasonOf, registerChatHandle, useAgentOptions, useTurnSettings, useVisualLabels, VisualDial, type Picks } from './controls'
 import { createChat } from './createChat'
 import { useElapsed, useTurnStart } from './elapsed'
 import { ComposerEditor } from './editor/ComposerEditor'
+import { parsePills } from './editor/pills'
+import { rememberVisualLabel, type VisualLabel, type VisualRef } from './editor/types'
 import { ImageChip } from './ImageChip'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
 import { useFileSearch } from './Mentions'
@@ -15,7 +17,7 @@ import { QueuedList, useQueue, type SteeredMessage } from './QueuedList'
 import { ModeBadges, SettingsChip, type SettingsSection } from './SettingsChip'
 import { fileSuggestions, slashSuggestions, SuggestionList, useAgentCommands, type Suggestion } from './SuggestionList'
 
-type ReportedSettings = { model?: string; effort?: string; permissionMode?: string }
+type ReportedSettings = { model?: string; effort?: string; permissionMode?: string; visualLevel?: VisualLevel }
 type Snapshot = { text: string; images: Attachment[]; pastes: PasteChip[] }
 type Failure = { message: string; retry?: () => void }
 
@@ -92,6 +94,8 @@ let pasteSeq = 0
  * permission mode that follows `reportedMode`, the mode Claude says it is in; `autoAvailable` says whether
  * Claude offers Auto (undefined before the chat has started) and `previousMode` is where `/plan` returns
  * to. `onPick` reports model, effort and permission mode changes to whoever starts the next turn.
+ * The visual dial shows `reportedLevel`, the level the chat last journaled, or the default level setting
+ * before there is one. Pointing at part of a visual puts a reference chip in front of the typed text.
  */
 export function Composer({
   context,
@@ -102,6 +106,7 @@ export function Composer({
   reportedMode,
   autoAvailable,
   previousMode,
+  reportedLevel,
   onPick
 }: {
   context: UiPluginContext
@@ -113,6 +118,7 @@ export function Composer({
   reportedMode?: PermissionModeName
   autoAvailable?: boolean
   previousMode?: PermissionModeName
+  reportedLevel?: VisualLevel
   onPick?: (picks: Picks) => void
 }) {
   const [text, setText] = useState('')
@@ -134,6 +140,11 @@ export function Composer({
   const settings = useTurnSettings(context, session, capabilities, options, picks, autoAvailable)
   const reported = useRef(reportedMode)
   reported.current = reportedMode
+  const reportedLevelRef = useRef(reportedLevel)
+  reportedLevelRef.current = reportedLevel
+  const latestText = useRef(text)
+  latestText.current = text
+  useVisualLabels(context)
   const queue = useQueue(context, session.id)
   const commands = useAgentCommands(context, session.id)
   const filePicker = useFilePicker(context)
@@ -154,10 +165,12 @@ export function Composer({
   const pick = async (next: Picks, before: Picks = picks) => {
     setPicks(next)
     onPick?.(next)
+    const wasLevel = before.visualLevel ?? reportedLevelRef.current ?? defaultVisualLevel(context)
     const changes = {
       ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),
       ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),
-      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {})
+      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),
+      ...(next.visualLevel !== undefined && next.visualLevel !== wasLevel ? { visualLevel: next.visualLevel } : {})
     }
     if (Object.keys(changes).length === 0) return
     try {
@@ -167,7 +180,8 @@ export function Composer({
         setPicks((current) => ({
           model: settled.model ?? current.model,
           effort: settled.effort ?? current.effort,
-          mode: settled.permissionMode ?? current.mode
+          mode: settled.permissionMode ?? current.mode,
+          ...((settled.visualLevel ?? current.visualLevel) === undefined ? {} : { visualLevel: settled.visualLevel ?? current.visualLevel })
         }))
       }
     } catch (error) {
@@ -180,20 +194,30 @@ export function Composer({
     if (reportedMode !== undefined) setPicks((current) => (current.mode === reportedMode ? current : { ...current, mode: reportedMode }))
   }, [reportedMode])
 
-  // once Claude reports its mode the pick only mirrors it, so the stored pick is dropped from the draft
-  const draftPicks: Picks = reportedMode === undefined ? picks : { ...picks, mode: null }
+  useEffect(() => {
+    if (reportedLevel !== undefined) setPicks((current) => (current.visualLevel === reportedLevel ? current : { ...current, visualLevel: reportedLevel }))
+  }, [reportedLevel])
+
+  // once Claude reports its mode, or the chat its visual level, the pick only mirrors it, so the stored pick is dropped from the draft
+  const { visualLevel: levelPick, ...otherPicks } = picks
+  const draftPicks: Picks = {
+    ...(reportedMode === undefined ? otherPicks : { ...otherPicks, mode: null }),
+    ...(levelPick !== undefined && reportedLevel === undefined ? { visualLevel: levelPick } : {})
+  }
   const draft = useDraftSync(context, session.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks }, (restored) => {
     const known = reported.current
+    const knownLevel = reportedLevelRef.current
     const stored = restored?.picks ?? NO_PICKS
+    const level = knownLevel ?? stored.visualLevel
     setText(restored?.text ?? '')
     setImages((restored?.images ?? []).map((path) => ({ name: basename(path), path })))
     setPastes(restored?.pastes ?? [])
-    setPicks({ ...stored, mode: known ?? stored.mode })
+    setPicks({ model: stored.model, effort: stored.effort, mode: known ?? stored.mode, ...(level === undefined ? {} : { visualLevel: level }) })
     setTrigger(null)
     setFailure(null)
     if (!restored) setSteered([])
-    else if (stored.model !== null || stored.effort !== null || (known === undefined && stored.mode !== null)) {
-      void pick({ ...stored, mode: known ?? stored.mode }, { ...NO_PICKS, mode: known ?? null })
+    else if (stored.model !== null || stored.effort !== null || (known === undefined && stored.mode !== null) || (knownLevel === undefined && stored.visualLevel !== undefined)) {
+      void pick({ model: stored.model, effort: stored.effort, mode: known ?? stored.mode, ...(level === undefined ? {} : { visualLevel: level }) }, { ...NO_PICKS, mode: known ?? null })
     }
   })
 
@@ -290,6 +314,24 @@ export function Composer({
     }
   }
   submitRef.current = submit
+
+  const point = (ref: VisualRef, label: VisualLabel) => {
+    rememberVisualLabel(ref, label)
+    const handle = editor.current
+    if (!handle) return
+    const pills = parsePills(latestText.current)
+    const present = pills.some(({ pill }) => pill.kind === 'visual' && pill.viewId === ref.viewId && pill.version === ref.version && pill.element === ref.element)
+    if (!present) {
+      // new references join the chips already at the front, so the typed text stays after them
+      let at = 0
+      for (const { from, to, pill } of pills) if (pill.kind === 'visual' && from === at) at = to
+      handle.insertPill({ kind: 'visual', ...ref }, { from: at, to: at })
+    }
+    handle.focus()
+  }
+  const pointRef = useRef(point)
+  pointRef.current = point
+  useEffect(() => registerChatHandle(session.id, { point: (ref, label) => pointRef.current(ref, label) }), [session.id])
 
   const stop = async () => {
     try {
@@ -493,6 +535,7 @@ export function Composer({
   }
 
   const attached = listOpen || queue.length > 0 || steered.length > 0
+  const level = picks.visualLevel ?? reportedLevel ?? defaultVisualLevel(context)
 
   return (
     <div
@@ -570,6 +613,7 @@ export function Composer({
             <AgentChip session={session} />
             <SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />
             <ModeBadges settings={settings} picks={picks} onPicks={(next) => void pick(next)} />
+            <VisualDial level={level} onPick={(next) => void pick({ ...picks, visualLevel: next })} />
             <IconButton label="Attach images" style={round} disabled={attachReason !== undefined} title={attachReason ?? 'Attach images'} onClick={onAttach}>
               <ControlIcon name="plus" />
             </IconButton>

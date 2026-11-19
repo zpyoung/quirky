@@ -213,6 +213,23 @@ describe('configure', () => {
   })
 })
 
+describe('appended instructions', () => {
+  test('a fresh session and a resumed one both append the instructions to the Claude Code preset', async () => {
+    await runner.start(session, 'hello', { appendInstructions: 'draw visuals' })
+    expect(queries[0].params.options?.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'draw visuals' })
+    await runner.start({ ...session, id: 's_2' }, undefined, {
+      appendInstructions: 'draw visuals',
+      providerSession: { id: 'native-1', transcriptPath: null }
+    })
+    expect(queries[1].params.options?.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'draw visuals' })
+  })
+
+  test('without instructions the system prompt is left to the SDK default', async () => {
+    await runner.start(session, 'hello')
+    expect(queries[0].params.options).not.toHaveProperty('systemPrompt')
+  })
+})
+
 describe('start permission mode', () => {
   test('a session opens in default and may later switch into bypass permissions', async () => {
     const query = await begin()

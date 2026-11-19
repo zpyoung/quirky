@@ -2089,6 +2089,11 @@
                     "mode": {},
                     "plan": {
                       "type": "boolean"
+                    },
+                    "visualLevel": {
+                      "type": "string",
+                      "enum": ["off", "balanced", "visual-first"],
+                      "description": "The visual dial's pick; absent until one is made."
                     }
                   },
                   "required": [
@@ -2150,6 +2155,38 @@
             "ok"
           ]
         }
+      },
+      {
+        "id": "uiPref",
+        "description": "A saved window interface preference, such as the visual panel's width ratio. Window only.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string", "description": "1 to 64 lowercase letters, digits, dots or dashes." }
+          },
+          "required": ["key"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "value": { "description": "The stored value, or null when none is saved." }
+          },
+          "required": ["value"]
+        }
+      },
+      {
+        "id": "setUiPref",
+        "description": "Saves a window interface preference of at most 4 KiB of JSON. `chat.visual-panel.width-ratio` takes a number from 0.2 to 0.8. Window only.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "key": { "type": "string", "description": "1 to 64 lowercase letters, digits, dots or dashes." },
+            "value": { "description": "Any JSON value." }
+          },
+          "required": ["key", "value"]
+        },
+        "result": { "type": "object", "properties": {} }
       }
     ],
     "event": [
@@ -2378,6 +2415,34 @@
             "session",
             "badge"
           ]
+        }
+      },
+      {
+        "id": "chat-point",
+        "title": "Point at part of a visual",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "viewId": { "type": "string" },
+            "version": { "type": "integer", "minimum": 1 },
+            "element": { "type": "string", "description": "1 to 80 lowercase letters, digits, dots, colons or dashes, starting with a letter or digit." },
+            "label": { "type": "string", "description": "At most 120 characters." }
+          },
+          "required": ["session", "viewId", "version", "element", "label"]
+        }
+      },
+      {
+        "id": "chat-expand-visual",
+        "title": "Expand a visual to fill the chat",
+        "args": {
+          "type": "object",
+          "properties": {
+            "session": { "type": "string" },
+            "viewId": { "type": "string" },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["session", "viewId"]
         }
       },
       {

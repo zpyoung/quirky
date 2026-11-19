@@ -437,6 +437,9 @@ class ClaudeRunner implements StructuredRunner {
           // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
           allowDangerouslySkipPermissions: !denyAll,
           includePartialMessages: true,
+          ...(typeof launchOptions.appendInstructions === 'string' && launchOptions.appendInstructions !== ''
+            ? { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: launchOptions.appendInstructions } }
+            : {}),
           canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
           ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
           env: environmentOf({ ...launchOptions.env, CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1' }),

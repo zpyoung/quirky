@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { StatusDot, type UiStatus } from '@quirky/ui'
+import { clampLabel, pointKey } from './point'
 import { asItems, asString, oneOf, type Props } from './props'
 import { LIST, MONO, MUTED, PANEL, ROW, TONE_COLOR, type Tone } from './styles'
 
@@ -61,7 +62,7 @@ export function DataTable({ props }: { props: Props }) {
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
+            <tr key={rowIndex} data-point-key={pointKey('row', String(rowIndex))} data-point-label={clampLabel(asString(row[0]))}>
               {row.map((cell: unknown, cellIndex: number) => (
                 <td key={cellIndex} style={CELL}>{asString(cell)}</td>
               ))}

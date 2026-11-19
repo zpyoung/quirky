@@ -339,6 +339,7 @@ class PiRunner implements StructuredRunner {
       ...(old.launch.options.env === undefined ? {} : { env: old.launch.options.env }),
       ...(model === undefined ? {} : { model }),
       ...(effort === undefined ? {} : { effort }),
+      ...(old.launch.options.appendInstructions === undefined ? {} : { appendInstructions: old.launch.options.appendInstructions }),
       permissionMode
     }
     const next = this.createRun(old.launch.session, old.launch.executable, options, resume)
@@ -473,6 +474,7 @@ class PiRunner implements StructuredRunner {
           ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
           ...(!denyAll && this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
           ...(denyAll ? { denyAll } : {}),
+          ...(typeof options.appendInstructions === 'string' ? { appendInstructions: options.appendInstructions } : {}),
           ...(resume === undefined ? {} : { resume })
         }),
         cwd: session.cwd,

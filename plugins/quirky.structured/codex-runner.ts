@@ -320,6 +320,10 @@ class CodexRunner implements StructuredRunner {
       }
       if (startup.stopped) return
 
+      const instructions =
+        typeof startOptions.appendInstructions === 'string' && startOptions.appendInstructions !== ''
+          ? { developerInstructions: startOptions.appendInstructions }
+          : {}
       if (providerSession) {
         run.threadId = providerSession.id
         const response = await connection.request('thread/resume', {
@@ -327,6 +331,7 @@ class CodexRunner implements StructuredRunner {
           cwd: session.cwd,
           ...permissions,
           ...(threadConfig === undefined ? {} : { config: threadConfig }),
+          ...instructions,
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -343,6 +348,7 @@ class CodexRunner implements StructuredRunner {
           cwd: session.cwd,
           ...permissions,
           ...(threadConfig === undefined ? {} : { config: threadConfig }),
+          ...instructions,
           ...(options.model === undefined ? {} : { model: options.model })
         })
         run.threadId = this.threadIdFromResponse(response, 'thread/start')

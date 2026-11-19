@@ -234,41 +234,51 @@ const PLAN_MESSAGES = [
   }
 ]
 
-describe('the plan panel layout', () => {
-  test.skipIf(!executable)('a narrow chat shows the plan in a sheet over the chat, not beside it', async () => {
-    const { context, page } = await openComposer({ messages: PLAN_MESSAGES })
+describe('the plan in the visual panel', () => {
+  test.skipIf(!executable)('a narrow chat starts with the visual panel collapsed to a rail', async () => {
+    const { context, page } = await openComposer()
     try {
-      const sheet = page.getByRole('dialog', { name: 'Plan' })
-      await sheet.waitFor()
-      await sheet.getByText('Handle ExitPlanMode').waitFor()
-      expect(await page.locator('aside[aria-label="Plan"]').count()).toBe(0)
-      const box = (await sheet.boundingBox())!
-      expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width)
-      expect(box.height).toBeGreaterThan(0)
-      await sheet.getByRole('button', { name: 'Approve, auto mode' }).waitFor()
-      await page.keyboard.press('Escape')
-      await sheet.waitFor({ state: 'detached' })
-      await page.getByRole('button', { name: 'Plan · v1 waiting' }).click()
-      await sheet.waitFor()
+      const rail = page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]')
+      await rail.waitFor()
+      await rail.getByRole('button', { name: 'Show visual panel' }).click()
+      await page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])').waitFor()
     } finally {
       await context.close()
     }
   }, 60_000)
 
-  test.skipIf(!executable)('a wide chat shows the plan in an aside beside the transcript', async () => {
+  // a waiting plan needs an answer, so it opens the panel even in a narrow chat, as the plan sheet did
+  test.skipIf(!executable)('a waiting plan opens the panel in a narrow chat with the plan first, and collapse leaves a rail', async () => {
+    const { context, page } = await openComposer({ messages: PLAN_MESSAGES })
+    try {
+      const panel = page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])')
+      await panel.waitFor()
+      await panel.locator('section[aria-label="Plan"]').getByText('Handle ExitPlanMode').waitFor()
+      expect(await page.getByRole('dialog', { name: 'Plan' }).count()).toBe(0)
+      const box = (await panel.boundingBox())!
+      expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width)
+      expect(box.height).toBeGreaterThan(0)
+      await panel.getByRole('button', { name: 'Collapse visual panel' }).click()
+      await page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]').waitFor()
+    } finally {
+      await context.close()
+    }
+  }, 60_000)
+
+  test.skipIf(!executable)('a wide chat docks the visual panel beside the transcript with the plan pinned first', async () => {
     const { context, page } = await openComposer({ centerWidth: 1300, messages: PLAN_MESSAGES })
     try {
-      const aside = page.locator('aside[aria-label="Plan"]')
-      await aside.waitFor()
-      await aside.getByText('Handle ExitPlanMode').waitFor()
+      const panel = page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])')
+      await panel.waitFor()
+      const plan = panel.locator('section[aria-label="Plan"]')
+      await plan.getByText('Handle ExitPlanMode').waitFor()
       expect(await page.getByRole('dialog').count()).toBe(0)
-      const asideBox = (await aside.boundingBox())!
+      const panelBox = (await panel.boundingBox())!
       const logBox = (await page.getByRole('log').boundingBox())!
-      expect(logBox.x + logBox.width).toBeLessThanOrEqual(asideBox.x + 1)
-      expect(asideBox.width).toBeGreaterThan(300)
-      expect(asideBox.width).toBeLessThanOrEqual(440)
-      await aside.getByRole('button', { name: 'Close plan' }).click()
-      await aside.waitFor({ state: 'detached' })
+      expect(logBox.x + logBox.width).toBeLessThanOrEqual(panelBox.x + 1)
+      expect(panelBox.width).toBeGreaterThan(280)
+      await panel.getByRole('button', { name: 'Collapse visual panel' }).click()
+      await page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]').waitFor()
     } finally {
       await context.close()
     }

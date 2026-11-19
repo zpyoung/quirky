@@ -1,0 +1,114 @@
+{
+  "title": "Every visual kind",
+  "root": {
+    "type": "stack",
+    "id": "kinds",
+    "children": [
+      {
+        "type": "markdown",
+        "props": { "text": "Inline math $E = mc^2$ and a block:\n\n$$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$" }
+      },
+      {
+        "type": "diagram",
+        "id": "auth-diagram",
+        "props": {
+          "source": "flowchart LR\n  client[Client app] --> daemon[Daemon]\n  daemon --> runner[Agent runner]",
+          "caption": "How a session proves who it is"
+        }
+      },
+      { "type": "image", "id": "screenshot", "props": { "path": "docs/shots/login.png", "alt": "The login screen", "caption": "Before" } },
+      {
+        "type": "html",
+        "id": "prototype",
+        "props": {
+          "html": "<style>button{padding:4px 8px}</style><button data-point=\"save\" data-point-label=\"Save\">Save</button><img src=\"data:image/gif;base64,R0lGODlhAQABAAAAACw=\" alt=\"\">",
+          "interactive": true,
+          "height": 240
+        }
+      },
+      { "type": "live-preview", "id": "dev-server", "props": { "url": "http://localhost:5173/", "caption": "The dev server" } },
+      {
+        "type": "timeline",
+        "id": "rollout",
+        "props": {
+          "items": [
+            { "id": "design", "label": "Design", "start": "2026-11-02", "end": "2026-11-06", "tone": "good" },
+            { "id": "build", "label": "Build", "start": "2026-11-09", "end": "2026-11-20", "tone": "warn" },
+            { "label": "Launch", "start": "2026-11-23" }
+          ]
+        }
+      },
+      {
+        "type": "board",
+        "id": "tasks",
+        "props": {
+          "columns": [
+            { "title": "To do", "cards": [{ "id": "card-docs", "title": "Write docs", "detail": "README and guide" }] },
+            { "title": "Doing", "cards": [{ "id": "card-patch", "title": "Patch method", "tone": "warn" }] },
+            { "title": "Done", "cards": [] }
+          ]
+        }
+      },
+      {
+        "type": "matrix",
+        "id": "support",
+        "props": {
+          "columns": ["Claude", "Codex", "pi"],
+          "rows": [
+            { "label": "Visual guidance", "cells": ["yes", "yes", "yes"], "highlight": ["Codex"] },
+            { "label": "Patch", "cells": ["yes", "no", "yes"] }
+          ]
+        }
+      },
+      {
+        "type": "annotated-code",
+        "id": "refresh-code",
+        "props": {
+          "language": "ts",
+          "code": "function refresh(token: Token) {\n  if (token.expiresIn > 300) return token\n  return renew(token)\n}\n",
+          "notes": [
+            { "lines": "2", "note": "Skip while the token is fresh." },
+            { "lines": "2-3", "note": "Renew inside the five minute window." }
+          ]
+        }
+      },
+      {
+        "type": "file-map",
+        "id": "touched-files",
+        "props": {
+          "entries": [
+            { "path": "plugins/quirky.view/src/core/catalog.ts", "status": "modified", "note": "new kinds" },
+            { "path": "plugins/quirky.view/src/core/patch.ts", "status": "added" },
+            { "path": "plugins/quirky.view/old.ts", "status": "deleted" }
+          ]
+        }
+      },
+      {
+        "type": "plot",
+        "id": "latency",
+        "props": {
+          "xLabel": "Request",
+          "yLabel": "ms",
+          "series": [
+            { "label": "p50", "points": [{ "x": 1, "y": 12 }, { "x": 2, "y": 14 }, { "x": 3, "y": 13 }] },
+            { "label": "p99", "points": [{ "x": 1, "y": 40 }, { "x": 2, "y": 55 }, { "x": 3, "y": 48 }] }
+          ]
+        }
+      },
+      {
+        "type": "sketch",
+        "id": "wireframe",
+        "props": {
+          "width": 320,
+          "height": 200,
+          "shapes": [
+            { "id": "frame", "kind": "box", "x": 10, "y": 10, "w": 300, "h": 180, "label": "Window" },
+            { "id": "dot", "kind": "ellipse", "x": 30, "y": 40, "w": 40, "h": 40 },
+            { "id": "link", "kind": "arrow", "x": 70, "y": 60, "x2": 140, "y2": 60 },
+            { "id": "caption", "kind": "text", "x": 150, "y": 64, "label": "Daemon" }
+          ]
+        }
+      }
+    ]
+  }
+}

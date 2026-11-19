@@ -10,6 +10,7 @@ import type {
   SessionStatus,
   StructuredMessage,
   StructuredRole,
+  VisualLevel,
   UsageReport,
   UsageTotals
 } from '@quirky/protocol'
@@ -84,6 +85,8 @@ export type StructuredStartOptions = StructuredLaunchOptions & {
   lastPlanText?: string
   /** The newest plan version as journaled for the resumed session, so the next version can mark it revised. */
   lastPlan?: PlanItem
+  /** Standing instructions appended to the agent's own system prompt for the whole session, on start and on resume. */
+  appendInstructions?: string
   /**
    * What the resumed Claude conversation's last journaled result already counted, so the first result
    * after a resume reports only this session's own spend.
@@ -95,7 +98,7 @@ export type StructuredStartOptions = StructuredLaunchOptions & {
 export type StructuredSendOptions = { images?: string[]; queuedId?: string }
 
 /** The composer picks a running session can take; plan mode is one of the permission modes. */
-export type StructuredSettings = { model?: string; effort?: string; permissionMode?: string }
+export type StructuredSettings = { model?: string; effort?: string; permissionMode?: string; visualLevel?: VisualLevel }
 
 /** Drives background (no PTY) agent sessions. One runner serves every structured session. */
 export interface StructuredRunner {

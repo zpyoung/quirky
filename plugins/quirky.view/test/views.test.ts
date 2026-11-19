@@ -4,9 +4,14 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { RpcErrorCode, type ApiDescription, type PluginInfo } from '@quirky/protocol'
 import { makeTempHome, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import authFlowV1 from './fixtures/auth-flow-v1.json'
+import authFlowV2 from './fixtures/auth-flow-v2.json'
 import bundleSize from './fixtures/bundle-size.json'
+import visualKinds from './fixtures/visual-kinds.json'
+import { Database } from 'bun:sqlite'
+import { viewsMigration } from '../src/core/store'
 import { MAX_REJECTED_SOURCE_BYTES } from '../src/core/views'
-import { agent, cleanupViews, spec, startView, strangerCaller, tempDatabasePath, windowCaller, type ViewHarness } from './support'
+import { agent, cleanupViews, spec, sqliteStore, startView, strangerCaller, tempDatabasePath, windowCaller, type ViewHarness } from './support'
 
 const started: ViewHarness[] = []
 const harnesses: Harness[] = []
@@ -35,7 +40,7 @@ async function rejection(promise: Promise<unknown>): Promise<{ code: number; mes
 }
 
 describe('open', () => {
-  test('stores the checked spec for the caller session, inline by default, and announces it once', async () => {
+  test('stores the checked spec for the caller session, in the pane by default, and announces it once', async () => {
     const h = start()
     const { viewId } = await h.call('open', { spec: bundleSize })
     expect(viewId).toMatch(/^view_[0-9a-f]{12}$/)
@@ -44,14 +49,31 @@ describe('open', () => {
       sessionId: 's1',
       title: 'Bundle size by route',
       spec: bundleSize,
-      placement: 'inline',
+      placement: 'pane',
       movedByUser: false,
       updates: 0,
       createdAt: expect.any(String),
       updatedAt: expect.any(String),
-      closed: false
+      closed: false,
+      version: 1,
+      latestVersion: 1,
+      refused: null
     })
-    expect(h.events).toEqual([{ event: 'changed', data: { sessionId: 's1', viewId } }])
+    expect(h.events).toEqual([{ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'open' } }])
+  })
+
+  test('inline placement is still accepted, and an agent that names no placement gets the pane', async () => {
+    const h = start()
+    const inline = (await h.call('open', { spec: spec(), placement: 'inline' })).viewId
+    const none = (await h.call('open', { spec: spec() })).viewId
+    expect((await h.call('get', { viewId: inline }, windowCaller)).placement).toBe('inline')
+    expect((await h.call('get', { viewId: none }, windowCaller)).placement).toBe('pane')
+  })
+
+  test('a spec with every new kind opens', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: visualKinds })
+    expect((await h.call('get', { viewId }, windowCaller)).spec).toEqual(visualKinds)
   })
 
   test('an agent can open a view in the pane', async () => {
@@ -126,7 +148,7 @@ describe('update', () => {
     await h.call('update', { viewId, spec: spec('Second', 'two') })
     await h.call('update', { viewId, spec: spec('Third', 'three') })
     const record = await h.call('get', { viewId }, windowCaller)
-    expect(record).toMatchObject({ title: 'Third', spec: spec('Third', 'three'), updates: 2, placement: 'inline' })
+    expect(record).toMatchObject({ title: 'Third', spec: spec('Third', 'three'), updates: 2, placement: 'pane', version: 3, latestVersion: 3 })
     expect(record.updatedAt >= record.createdAt).toBe(true)
     expect(await h.call('list', { session: 's1' }, windowCaller)).toHaveLength(1)
     expect(h.events.map((event) => event.event)).toEqual(['changed', 'changed', 'changed'])
@@ -150,7 +172,7 @@ describe('move', () => {
     expect(moved).toMatchObject({ placement: 'inline', movedByUser: true, updates: 0 })
     await h.call('update', { viewId, spec: spec('Updated') })
     expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ placement: 'inline', movedByUser: true, updates: 1, title: 'Updated' })
-    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId } })
+    expect(h.events[1]).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'move' } })
   })
 
   test('an update with no move keeps the placement the agent chose', async () => {
@@ -452,6 +474,8 @@ describe('as a built-in plugin', () => {
       'quirky.view/list',
       'quirky.view/move',
       'quirky.view/open',
+      'quirky.view/patch',
+      'quirky.view/render-failed',
       'quirky.view/update',
       'quirky.view/wait'
     ])
@@ -459,7 +483,9 @@ describe('as a built-in plugin', () => {
     expect(api.cli.commands.filter((command) => command.plugin === 'quirky.view').map((command) => command.words).sort()).toEqual([
       'view',
       'view close',
+      'view get',
       'view open',
+      'view patch',
       'view update',
       'view wait'
     ])
@@ -473,5 +499,443 @@ describe('as a built-in plugin', () => {
     expect((await rejection(window.callAny('quirky.view/open', { spec: spec() }))).code).toBe(RpcErrorCode.Conflict)
     expect(await window.callAny('quirky.view/list', { session: 's1' })).toEqual([])
     expect((await rejection(cli.callAny('quirky.view/move', { viewId: 'view_x', placement: 'pane' }))).code).toBe(RpcErrorCode.Conflict)
+  })
+})
+
+describe('versions', () => {
+  test('open stores v1, and every update appends a version that get can return', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('update', { viewId, spec: authFlowV2 })
+    await h.call('update', { viewId, spec: spec('Third', 'three') })
+    const latest = await h.call('get', { viewId }, windowCaller)
+    expect(latest).toMatchObject({ version: 3, latestVersion: 3, updates: 2, title: 'Third', spec: spec('Third', 'three') })
+    expect(await h.call('get', { viewId, version: 3 }, windowCaller)).toEqual(latest)
+    const v1 = await h.call('get', { viewId, version: 1 }, windowCaller)
+    expect(v1).toMatchObject({ version: 1, latestVersion: 3, updates: 2, title: 'Auth flow', spec: authFlowV1 })
+    expect(v1.updatedAt <= latest.updatedAt).toBe(true)
+    expect(await h.call('get', { viewId, version: 2 }, windowCaller)).toMatchObject({ version: 2, spec: authFlowV2 })
+  })
+
+  test('an old version keeps the time it was made', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('A') })
+    const opened = await h.call('get', { viewId }, windowCaller)
+    await Bun.sleep(5)
+    await h.call('update', { viewId, spec: spec('B') })
+    expect((await h.call('get', { viewId, version: 1 }, windowCaller)).updatedAt).toBe(opened.updatedAt)
+    expect((await h.call('get', { viewId }, windowCaller)).updatedAt > opened.updatedAt).toBe(true)
+  })
+
+  test('an unknown or malformed version is not found or invalid', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    expect((await rejection(h.call('get', { viewId, version: 2 }, windowCaller))).code).toBe(RpcErrorCode.NotFound)
+    expect((await rejection(h.call('get', { viewId, version: 0 }, windowCaller))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await rejection(h.call('get', { viewId, version: 1.5 }, windowCaller))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await rejection(h.call('get', { viewId, version: '1' }, windowCaller))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+
+  test('another session cannot read an old version either', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    expect((await rejection(h.call('get', { viewId, version: 1 }, agent('s2')))).code).toBe(RpcErrorCode.Conflict)
+    expect((await rejection(h.call('get', { viewId, version: 9 }, agent('s2')))).code).toBe(RpcErrorCode.Conflict)
+    expect((await h.call('get', { viewId, version: 1 }, agent('s1'))).version).toBe(1)
+  })
+
+  test('the changed event carries the version and what happened', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    await h.call('update', { viewId, spec: spec('Two') })
+    await h.call('close', { viewId })
+    expect(h.events.map((event) => [event.event, event.data.version, event.data.kind])).toEqual([
+      ['changed', 1, 'open'],
+      ['changed', 2, 'update'],
+      ['changed', 2, 'close']
+    ])
+  })
+
+  test('list returns the latest version of each view with the version fields', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('One') })
+    await h.call('update', { viewId, spec: spec('Two') })
+    expect(await h.call('list', { session: 's1' }, windowCaller)).toEqual([expect.objectContaining({ viewId, title: 'Two', version: 2, latestVersion: 2, updates: 1, refused: null })])
+  })
+
+  test('a refused spec is never a version', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('Good') })
+    await rejection(h.call('update', { viewId, spec: { title: 'Bad', root: { type: 'nope' } } }))
+    expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ version: 1, latestVersion: 1, title: 'Good' })
+    expect((await rejection(h.call('get', { viewId, version: 2 }, windowCaller))).code).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('refused state', () => {
+  const invalid = { title: 'Broken view', root: { type: 'tabel', props: {} } }
+
+  test('a refused update keeps the latest version and records what was refused', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('Good') })
+    await rejection(h.call('update', { viewId, spec: invalid }))
+    const record = await h.call('get', { viewId }, windowCaller)
+    expect(record).toMatchObject({ title: 'Good', version: 1, latestVersion: 1, updates: 0 })
+    expect(record.refused).toEqual({
+      attempt: 'update',
+      version: null,
+      errors: ["root.type: unknown type 'tabel'; did you mean table?"],
+      source: JSON.stringify(invalid, null, 2),
+      at: expect.any(Number)
+    })
+    expect(h.events.map((event) => [event.event, event.data.kind])).toEqual([['changed', 'open'], ['changed', 'refused'], ['rejected', undefined]])
+    expect(h.events[1].data).toEqual({ sessionId: 's1', viewId, version: 1, kind: 'refused' })
+  })
+
+  test('the next good version clears it, from update and from patch', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await rejection(h.call('update', { viewId, spec: invalid }))
+    await h.call('update', { viewId, spec: authFlowV2 })
+    expect((await h.call('get', { viewId }, windowCaller)).refused).toBeNull()
+    await rejection(h.call('update', { viewId, spec: invalid }))
+    await h.call('patch', { viewId, ops: [{ op: 'replace', path: '/title', value: 'Auth flow 3' }] })
+    expect((await h.call('get', { viewId }, windowCaller)).refused).toBeNull()
+  })
+
+  test('the source of a refusal is capped at 64 KiB', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    const big = { title: 'Big', root: { type: 'stack', children: [{ type: 'code', props: { text: 'x'.repeat(100_000) } }, { type: 'nope' }] } }
+    await rejection(h.call('update', { viewId, spec: big }))
+    expect(Buffer.byteLength((await h.call('get', { viewId }, windowCaller)).refused.source)).toBe(MAX_REJECTED_SOURCE_BYTES)
+  })
+
+  test('a refused open has no view, so it only emits rejected', async () => {
+    const h = start()
+    await rejection(h.call('open', { spec: invalid }))
+    expect(h.events.map((event) => event.event)).toEqual(['rejected'])
+    expect(await h.call('list', { session: 's1' }, windowCaller)).toEqual([])
+  })
+
+  test('a refused update of a view the caller does not own changes nothing', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    await rejection(h.call('update', { viewId, spec: invalid }, agent('s2')))
+    expect((await h.call('get', { viewId }, windowCaller)).refused).toBeNull()
+  })
+
+  test('daemon checks refuse new kinds on the same call', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    const remote = { title: 'Remote', root: { type: 'html', props: { html: '<img src="https://x.test/a.png">', interactive: false } } }
+    const error = await rejection(h.call('update', { viewId, spec: remote }))
+    expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams, message: 'root.props.html: remote content is not allowed in html; inline it as data:' })
+  })
+})
+
+describe('patch', () => {
+  const ops = [
+    { op: 'replace', path: '/root/children/0/props/source', value: authFlowV2.root.children[0].props!.source },
+    { op: 'add', path: '/root/children/1/props/rows/-', value: ['Refresh', 'expiry under 5 min', 'lease.ts'] }
+  ]
+
+  test('applies the ops to the latest spec as a new version and returns it', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    expect(await h.call('patch', { viewId, ops })).toEqual({ viewId, version: 2 })
+    expect((await h.call('get', { viewId }, windowCaller)).spec).toEqual(authFlowV2)
+    expect((await h.call('get', { viewId, version: 1 }, windowCaller)).spec).toEqual(authFlowV1)
+    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 2, kind: 'patch' } })
+  })
+
+  test('ops may be given as JSON text', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    expect(await h.call('patch', { viewId, ops: JSON.stringify(ops) })).toEqual({ viewId, version: 2 })
+  })
+
+  test('add inserts at an index, replace and remove address arrays and objects, ~ escapes work', async () => {
+    const h = start()
+    const base = {
+      title: 'Escapes',
+      root: {
+        type: 'stack',
+        children: [
+          { type: 'markdown', props: { text: 'a' } },
+          { type: 'markdown', props: { text: 'c' } }
+        ]
+      }
+    }
+    const { viewId } = await h.call('open', { spec: base })
+    await h.call('patch', { viewId, ops: [{ op: 'add', path: '/root/children/1', value: { type: 'markdown', props: { text: 'b' } } }] })
+    await h.call('patch', { viewId, ops: [{ op: 'remove', path: '/root/children/0' }, { op: 'replace', path: '/title', value: 'Done' }] })
+    const record = await h.call('get', { viewId }, windowCaller)
+    expect(record.title).toBe('Done')
+    expect(record.spec.root.children.map((child: { props: { text: string } }) => child.props.text)).toEqual(['b', 'c'])
+    expect(record).toMatchObject({ version: 3, updates: 2 })
+  })
+
+  test('a node id can be added with a pointer', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('T', 'x') })
+    await h.call('patch', { viewId, ops: [{ op: 'add', path: '/root/id', value: 'intro' }] })
+    expect((await h.call('get', { viewId }, windowCaller)).spec.root.id).toBe('intro')
+  })
+
+  test.each([
+    ['a missing target', [{ op: 'replace', path: '/root/children/9/props', value: {} }], 'ops[0].path: /root/children/9/props does not exist'],
+    ['a missing parent', [{ op: 'add', path: '/root/nope/deeper', value: 1 }], 'ops[0].path: /root/nope/deeper does not exist'],
+    ['a pointer with no leading slash', [{ op: 'replace', path: 'title', value: 'x' }], "ops[0].path: 'title' is not a JSON Pointer"],
+    ['an unknown op', [{ op: 'move', path: '/title' }], "ops[0].op: must be one of add | replace | remove"],
+    ['an add with no value', [{ op: 'add', path: '/root/id' }], 'ops[0].value: is required for add'],
+    ['an index past the end', [{ op: 'add', path: '/root/children/5', value: { type: 'stack' } }], 'ops[0].path: index 5 is out of range'],
+    ['a remove of the whole spec', [{ op: 'remove', path: '' }], 'ops[0].path: the whole spec cannot be removed'],
+    ['a result that is not a valid spec', [{ op: 'replace', path: '/root/type', value: 'carousel' }], "root.type: unknown type 'carousel'; the catalog has stack, columns"]
+  ])('%s is refused with path: message, and nothing is stored', async (_name, badOps, message) => {
+    const h = start()
+    const start1 = { title: 'Start', root: { type: 'stack', children: [{ type: 'markdown', props: { text: 'x' } }] } }
+    const { viewId } = await h.call('open', { spec: start1 })
+    const error = await rejection(h.call('patch', { viewId, ops: badOps }))
+    expect(error.code).toBe(RpcErrorCode.InvalidParams)
+    expect(error.message).toStartWith(message)
+    const record = await h.call('get', { viewId }, windowCaller)
+    expect(record).toMatchObject({ version: 1, spec: start1 })
+    expect(record.refused).toMatchObject({ attempt: 'patch', version: null, errors: [expect.stringContaining(message.split(':')[0])], source: JSON.stringify(badOps, null, 2) })
+    expect(h.events.map((event) => event.event)).toEqual(['changed', 'changed', 'rejected'])
+    expect(h.events.at(-1)!.data).toMatchObject({ sessionId: 's1', title: 'Start' })
+  })
+
+  test('ops apply atomically: one bad op leaves the stored spec as it was', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await rejection(h.call('patch', { viewId, ops: [ops[0], { op: 'remove', path: '/root/children/7' }] }))
+    expect((await h.call('get', { viewId }, windowCaller)).spec).toEqual(authFlowV1)
+  })
+
+  test('at most 200 ops, and ops must be a list', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('T') })
+    const many = Array.from({ length: 201 }, () => ({ op: 'replace', path: '/title', value: 'x' }))
+    expect((await rejection(h.call('patch', { viewId, ops: many }))).message).toBe('ops: at most 200 ops allowed')
+    const fine = Array.from({ length: 200 }, (_, i) => ({ op: 'replace', path: '/title', value: `t${i}` }))
+    expect(await h.call('patch', { viewId, ops: fine })).toEqual({ viewId, version: 2 })
+    expect((await rejection(h.call('patch', { viewId, ops: { op: 'add' } }))).message).toContain('ops: must be an array')
+    expect((await rejection(h.call('patch', { viewId, ops: '[oops' }))).message).toContain('ops is not valid JSON')
+    expect((await rejection(h.call('patch', { viewId }))).message).toBe('ops is required')
+  })
+
+  test('a __proto__ key cannot reach the prototype', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    await rejection(h.call('patch', { viewId, ops: [{ op: 'add', path: '/root/props/__proto__', value: { polluted: true } }] }))
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
+  test('only the owning session can patch, and only an open view', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec() })
+    const op = [{ op: 'replace', path: '/title', value: 'x' }]
+    expect((await rejection(h.call('patch', { viewId, ops: op }, agent('s2')))).code).toBe(RpcErrorCode.NotFound)
+    expect((await rejection(h.call('patch', { viewId, ops: op }, windowCaller))).message).toContain('Quirky agent session')
+    await h.call('close', { viewId })
+    expect((await rejection(h.call('patch', { viewId, ops: op }))).code).toBe(RpcErrorCode.Conflict)
+  })
+
+  test('patching a view with a refused update applies to the last good version', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: spec('Good') })
+    await rejection(h.call('update', { viewId, spec: { title: 'Bad', root: { type: 'nope' } } }))
+    await h.call('patch', { viewId, ops: [{ op: 'replace', path: '/title', value: 'Better' }] })
+    expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ title: 'Better', version: 2, refused: null })
+  })
+})
+
+describe('render-failed', () => {
+  const text = (viewId: string, version = 1, title = 'Auth flow', error = 'Parse error on line 2') =>
+    `Visual "${title}" v${version} didn't render: ${error}. Fix it with quirky view update or patch (view ${viewId}).`
+
+  test('marks the version refused and tells the live session once', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'Parse error on line 2' }, windowCaller)).toEqual({ ok: true })
+    expect(h.sends).toEqual([{ session: 's1', text: text(viewId), when: 'idle' }])
+    const record = await h.call('get', { viewId }, windowCaller)
+    expect(record.refused).toEqual({
+      attempt: 'render',
+      version: 1,
+      errors: ['Parse error on line 2'],
+      source: JSON.stringify(authFlowV1, null, 2),
+      at: expect.any(Number)
+    })
+    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'render-failed' } })
+  })
+
+  test('a second report for the same view and version is a no-op', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)
+    const events = h.events.length
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'boom again' }, windowCaller)).toEqual({ duplicate: true })
+    expect(h.sends).toHaveLength(1)
+    expect(h.events).toHaveLength(events)
+  })
+
+  test('a duplicate is still recognised after the refused state was replaced by a refused update', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)
+    await rejection(h.call('update', { viewId, spec: { title: 'x', root: { type: 'nope' } } }))
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)).toEqual({ duplicate: true })
+    expect(h.sends).toHaveLength(1)
+  })
+
+  test('a duplicate is still recognised after a refused update and a restart', async () => {
+    const path = tempDatabasePath()
+    const before = start(path)
+    const { viewId } = await before.call('open', { spec: authFlowV1 })
+    await before.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)
+    await rejection(before.call('update', { viewId, spec: { title: 'x', root: { type: 'nope' } } }))
+    expect(before.sends).toHaveLength(1)
+    before.stop()
+
+    const after = start(path)
+    expect(await after.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)).toEqual({ duplicate: true })
+    expect(after.sends).toHaveLength(0)
+    await after.call('update', { viewId, spec: authFlowV2 })
+    expect(await after.call('render-failed', { viewId, version: 2, error: 'boom' }, windowCaller)).toEqual({ ok: true })
+    expect(after.sends).toHaveLength(1)
+  })
+
+  test('a failure for a version that is not the latest is ignored', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('update', { viewId, spec: authFlowV2 })
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'old' }, windowCaller)).toEqual({ ignored: true })
+    expect(await h.call('render-failed', { viewId, version: 7, error: 'future' }, windowCaller)).toEqual({ ignored: true })
+    expect(h.sends).toEqual([])
+    expect((await h.call('get', { viewId }, windowCaller)).refused).toBeNull()
+    expect(await h.call('render-failed', { viewId, version: 2, error: 'new' }, windowCaller)).toEqual({ ok: true })
+    expect(h.sends).toEqual([{ session: 's1', text: text(viewId, 2, 'Auth flow', 'new'), when: 'idle' }])
+  })
+
+  test('each version reports once, so a fixed version that fails again is reported again', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('render-failed', { viewId, version: 1, error: 'one' }, windowCaller)
+    await h.call('update', { viewId, spec: authFlowV2 })
+    await h.call('render-failed', { viewId, version: 2, error: 'two' }, windowCaller)
+    expect(h.sends.map((send) => send.text)).toEqual([text(viewId, 1, 'Auth flow', 'one'), text(viewId, 2, 'Auth flow', 'two')])
+  })
+
+  test('a session that cannot take the message does not fail the report', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    h.sendResult.value = () => {
+      throw new Error('session is stopped')
+    }
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'boom' }, windowCaller)).toEqual({ ok: true })
+    expect((await h.call('get', { viewId }, windowCaller)).refused).toMatchObject({ attempt: 'render', version: 1 })
+  })
+
+  test('the window reports and nobody else does', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    for (const caller of [agent('s1'), strangerCaller, { role: 'plugin', pluginId: 'quirky.structured' } as const, { role: 'mobile' } as const]) {
+      expect((await rejection(h.call('render-failed', { viewId, version: 1, error: 'x' }, caller))).code).toBe(RpcErrorCode.Conflict)
+    }
+    expect(h.sends).toEqual([])
+  })
+
+  test('checks its input and the view', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    const bad: Record<string, unknown>[] = [{ version: 0, error: 'x' }, { version: 'one', error: 'x' }, { version: 1.5, error: 'x' }, { version: 1, error: '' }, { version: 1 }]
+    for (const params of bad) expect((await rejection(h.call('render-failed', { viewId, ...params }, windowCaller))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await rejection(h.call('render-failed', { viewId: 'view_missing', version: 1, error: 'x' }, windowCaller))).code).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('a closed view is ignored', async () => {
+    const h = start()
+    const { viewId } = await h.call('open', { spec: authFlowV1 })
+    await h.call('close', { viewId })
+    expect(await h.call('render-failed', { viewId, version: 1, error: 'x' }, windowCaller)).toEqual({ ignored: true })
+    expect(h.sends).toEqual([])
+  })
+})
+
+describe('migration 2', () => {
+  function legacyDatabase(path: string): void {
+    const db = new Database(path)
+    sqliteStore(db, [viewsMigration])
+    db.query(
+      `INSERT INTO views (view_id, session_id, title, spec_json, placement, moved_by_user, updates, created_at, updated_at, closed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('view_old', 's1', 'Auth flow', JSON.stringify(authFlowV1), 'inline', 1, 2, '2026-11-01T10:00:00.000Z', '2026-11-02T11:30:00.000Z', 0)
+    db.query(
+      `INSERT INTO views (view_id, session_id, title, spec_json, placement, moved_by_user, updates, created_at, updated_at, closed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('view_new', 's1', 'Bundle size by route', JSON.stringify(bundleSize), 'pane', 0, 0, '2026-11-03T10:00:00.000Z', '2026-11-03T10:00:00.000Z', 1)
+    db.close()
+  }
+
+  test('a database that ran only migration 1 gets every view a v1 and keeps what it had', async () => {
+    const path = tempDatabasePath()
+    legacyDatabase(path)
+    const h = start(path)
+    const [old, fresh] = await h.call('list', { session: 's1' }, windowCaller)
+    expect(old).toMatchObject({ viewId: 'view_old', spec: authFlowV1, placement: 'inline', movedByUser: true, version: 1, latestVersion: 1, updates: 0, refused: null, closed: false })
+    expect(fresh).toMatchObject({ viewId: 'view_new', closed: true, version: 1, latestVersion: 1 })
+    expect(await h.call('get', { viewId: 'view_old', version: 1 }, windowCaller)).toMatchObject({ version: 1, spec: authFlowV1, updatedAt: '2026-11-02T11:30:00.000Z' })
+    expect((await rejection(h.call('get', { viewId: 'view_old', version: 2 }, windowCaller))).code).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('the backfilled v1 keeps the milliseconds of updated_at', async () => {
+    const path = tempDatabasePath()
+    const db = new Database(path)
+    sqliteStore(db, [viewsMigration])
+    db.query(
+      `INSERT INTO views (view_id, session_id, title, spec_json, placement, moved_by_user, updates, created_at, updated_at, closed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run('view_ms', 's1', 'Auth flow', JSON.stringify(authFlowV1), 'inline', 0, 0, '2026-11-01T10:00:00.000Z', '2026-11-02T11:30:00.123Z', 0)
+    db.close()
+    const h = start(path)
+    await h.call('update', { viewId: 'view_ms', spec: authFlowV2 })
+    expect(await h.call('get', { viewId: 'view_ms', version: 1 }, windowCaller)).toMatchObject({ version: 1, updatedAt: '2026-11-02T11:30:00.123Z' })
+  })
+
+  test('an old view carries on from its v1, and the original table is untouched', async () => {
+    const path = tempDatabasePath()
+    legacyDatabase(path)
+    const h = start(path)
+    await h.call('update', { viewId: 'view_old', spec: authFlowV2 })
+    expect(await h.call('get', { viewId: 'view_old', version: 1 }, windowCaller)).toMatchObject({ spec: authFlowV1 })
+    expect(await h.call('get', { viewId: 'view_old' }, windowCaller)).toMatchObject({ version: 2, spec: authFlowV2 })
+    h.stop()
+    const db = new Database(path)
+    expect((db.query('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2)
+    expect(db.query('SELECT count(*) AS n FROM view_versions').get()).toEqual({ n: 3 })
+    expect(db.query('SELECT updates FROM views WHERE view_id = ?').get('view_old')).toEqual({ updates: 1 })
+    db.close()
+  })
+})
+
+describe('persistence of versions', () => {
+  test('versions, the refused state and render failures survive a restart', async () => {
+    const path = tempDatabasePath()
+    const before = start(path)
+    const { viewId } = await before.call('open', { spec: authFlowV1 })
+    await before.call('update', { viewId, spec: authFlowV2 })
+    await before.call('render-failed', { viewId, version: 2, error: 'boom' }, windowCaller)
+    const latest = await before.call('get', { viewId }, windowCaller)
+    before.stop()
+
+    const after = start(path)
+    expect(await after.call('get', { viewId }, windowCaller)).toEqual(latest)
+    expect(await after.call('get', { viewId, version: 1 }, windowCaller)).toMatchObject({ spec: authFlowV1, version: 1, latestVersion: 2 })
+    expect(await after.call('render-failed', { viewId, version: 2, error: 'boom' }, windowCaller)).toEqual({ duplicate: true })
+    await after.call('patch', { viewId, ops: [{ op: 'replace', path: '/title', value: 'Auth flow 3' }] })
+    expect(await after.call('get', { viewId }, windowCaller)).toMatchObject({ version: 3, refused: null })
+    expect(await after.call('get', { viewId, version: 2 }, windowCaller)).toMatchObject({ spec: authFlowV2 })
   })
 })

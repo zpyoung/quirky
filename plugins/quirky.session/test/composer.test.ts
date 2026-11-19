@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { EditorView } from '@codemirror/view'
-import { RpcError, RpcErrorCode, type AgentCapabilities, type PermissionModeName, type QueuedMessage } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type AgentCapabilities, type PermissionModeName, type QueuedMessage, type VisualLevel } from '@quirky/protocol'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
 type Props = {
@@ -16,6 +16,7 @@ type Props = {
   reportedMode?: PermissionModeName
   autoAvailable?: boolean
   previousMode?: PermissionModeName
+  reportedLevel?: VisualLevel
   /** The model and effort the session launched with; claude defaults to Opus · Low, other agents to none. */
   launched?: { model?: string; effort?: string } | null
 }
@@ -85,6 +86,8 @@ const COMMANDS = {
 
 let createRoot: typeof import('react-dom/client').createRoot
 let Composer: typeof import('../src/window/chat/Composer').Composer
+let chatHandler: typeof import('../src/window/chat/controls').chatHandler
+let rememberVisualLabel: typeof import('../src/window/chat/editor/types').rememberVisualLabel
 let CMView: typeof import('@codemirror/view').EditorView
 let fake: FakeContext
 let root: Root | null = null
@@ -96,6 +99,8 @@ beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
   ;({ Composer } = await import('../src/window/chat/Composer'))
+  ;({ chatHandler } = await import('../src/window/chat/controls'))
+  ;({ rememberVisualLabel } = await import('../src/window/chat/editor/types'))
   ;({ EditorView: CMView } = await import('@codemirror/view'))
 })
 afterAll(async () => {
@@ -125,7 +130,8 @@ const render = (props: Props) =>
         workStartedAt: props.workStartedAt,
         reportedMode: props.reportedMode,
         autoAvailable: props.autoAvailable,
-        previousMode: props.previousMode
+        previousMode: props.previousMode,
+        reportedLevel: props.reportedLevel
       })
     )
   })
@@ -1289,5 +1295,192 @@ describe('screens: ended (SC-17)', () => {
     await mount({}, { status: 'exited', capabilities: PI, agent: 'pi' })
     expect(buttonNamed('Resume')).toBeUndefined()
     expect(buttonNamed('New chat')).toBeDefined()
+  })
+})
+
+describe('the visual level dial', () => {
+  const DEFAULT_LEVEL = 'setting:quirky.structured/default-visual-level'
+  const dial = () => [...host!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.startsWith('Visuals:'))!
+  const levelMenu = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="Visual level"]')
+  const levelItem = (label: string) => [...levelMenu()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((item) => labelOf(item) === label)!
+  const configured = () => fake.callsTo('quirky.structured/configure').map((call) => call.params)
+  const saved = () => fake.callsTo('quirky.session/saveDraft').at(-1)?.params.draft
+
+  test('a chat with no level of its own shows the default-visual-level setting, Visual-first when it is unreadable', async () => {
+    await mount({}, { settings: { [DEFAULT_LEVEL]: 'balanced' } })
+    expect(dial().textContent).toBe('Visuals: Balanced')
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mount()
+    expect(dial().textContent).toBe('Visuals: Visual-first')
+  })
+
+  test('the level the chat journaled wins over the default setting', async () => {
+    await mount({}, { settings: { [DEFAULT_LEVEL]: 'balanced' }, reportedLevel: 'off' })
+    expect(dial().textContent).toBe('Visuals: Off')
+  })
+
+  test('the dial lists Off, Balanced and Visual-first with the current one checked', async () => {
+    await mount()
+    await click(dial())
+    expect([...levelMenu()!.querySelectorAll('[role="menuitem"]')].map(labelOf)).toEqual(['Off', 'Balanced', 'Visual-first'])
+    expect(levelItem('Visual-first').getAttribute('aria-checked')).toBe('true')
+    expect(levelItem('Off').getAttribute('aria-checked')).not.toBe('true')
+  })
+
+  test('picking a level calls configure with only the level and the dial follows', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { visualLevel: 'balanced' } }) })
+    await click(dial())
+    await click(levelItem('Balanced'))
+    await settle()
+    expect(configured()).toEqual([{ session: 's1', visualLevel: 'balanced' }])
+    expect(dial().textContent).toBe('Visuals: Balanced')
+  })
+
+  test('picking the level already shown calls nothing', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
+    await click(dial())
+    await click(levelItem('Visual-first'))
+    await settle()
+    expect(configured()).toEqual([])
+  })
+
+  test('a rejected change reverts the dial and shows an inline error', async () => {
+    await mount({ 'quirky.structured/configure': () => { throw new Error('chat is closed') } })
+    await click(dial())
+    await click(levelItem('Off'))
+    await settle()
+    expect(dial().textContent).toBe('Visuals: Visual-first')
+    expect(host!.querySelector('[role="alert"]')!.textContent).toContain('Could not change the setting: chat is closed')
+  })
+
+  test('the pick is saved in the draft picks until the chat journals it', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { visualLevel: 'off' } }) })
+    await click(dial())
+    await click(levelItem('Off'))
+    await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 450))))
+    expect(saved().picks).toEqual({ model: null, effort: null, mode: null, visualLevel: 'off' })
+    await render({ reportedLevel: 'off' })
+    await typeText('x')
+    await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 450))))
+    expect(saved().picks).toEqual({ model: null, effort: null, mode: null })
+  })
+
+  test('a stored visualLevel is applied through configure and shown', async () => {
+    await mount({
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half', picks: { model: null, effort: null, mode: null, visualLevel: 'off' } }),
+      'quirky.structured/configure': () => ({ ok: true })
+    })
+    expect(dial().textContent).toBe('Visuals: Off')
+    expect(configured()).toEqual([{ session: 's1', visualLevel: 'off' }])
+  })
+
+  test('a stored visualLevel that is the default calls nothing, and a draft without one loads as before', async () => {
+    await mount({
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half', picks: { model: null, effort: null, mode: null, visualLevel: 'visual-first' } }),
+      'quirky.structured/configure': () => ({ ok: true })
+    })
+    expect(configured()).toEqual([])
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mount({ 'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'old draft' }), 'quirky.structured/configure': () => ({ ok: true }) })
+    expect(doc()).toBe('old draft')
+    expect(dial().textContent).toBe('Visuals: Visual-first')
+    expect(configured()).toEqual([])
+  })
+
+  test('a stored visualLevel never overrides the level the chat already journaled', async () => {
+    await mount(
+      {
+        'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: 'half', picks: { model: null, effort: null, mode: null, visualLevel: 'off' } }),
+        'quirky.structured/configure': () => ({ ok: true })
+      },
+      { reportedLevel: 'balanced' }
+    )
+    expect(configured()).toEqual([])
+    expect(dial().textContent).toBe('Visuals: Balanced')
+  })
+})
+
+describe('visual reference pills', () => {
+  const ref = { viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon' }
+  const text = '@view:view_0123456789ab/v2/dg:daemon '
+  const pills = () => [...host!.querySelectorAll('.cm-composer-pill-visual')].map((pill) => pill.textContent)
+
+  test('a reference in a stored draft renders as a chip and goes out as the same text', async () => {
+    rememberVisualLabel(ref, { title: 'Auth flow', label: 'Daemon' })
+    await mount({ 'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: `${text}why this hop?` }) })
+    expect(pills()).toEqual(['◈ Auth flow › Daemon'])
+    expect(doc()).toBe(`${text}why this hop?`)
+    await press({ key: 'Enter' })
+    await settle()
+    expect(sent()[0]!.text).toBe(`${text}why this hop?`)
+  })
+
+  test('chat-point puts a chip in front of the typed text and focuses the editor', async () => {
+    await mount()
+    await typeText('why this hop?')
+    await act(async () => void chatHandler('s1', 'point')!(ref, { title: 'Auth flow', label: 'Daemon' }))
+    expect(doc()).toBe(`${text}why this hop?`)
+    expect(pills()).toEqual(['◈ Auth flow › Daemon'])
+    expect(view().hasFocus || document.activeElement === view().contentDOM).toBe(true)
+  })
+
+  test('a second reference joins the first; the same one twice adds nothing', async () => {
+    await mount()
+    const other = { viewId: 'view_0123456789ab', version: 2, element: 'node:token' }
+    await typeText('ask')
+    await act(async () => void chatHandler('s1', 'point')!(ref, { title: 'Auth flow', label: 'Daemon' }))
+    await act(async () => void chatHandler('s1', 'point')!(other, { title: 'Auth flow', label: 'Token' }))
+    await act(async () => void chatHandler('s1', 'point')!(ref, { title: 'Auth flow', label: 'Daemon' }))
+    expect(doc()).toBe(`${text}@view:view_0123456789ab/v2/node:token ask`)
+    expect(pills()).toEqual(['◈ Auth flow › Daemon', '◈ Auth flow › Token'])
+  })
+
+  test('a chip nobody pointed at in this window reads its title from the view', async () => {
+    const stray = { viewId: 'view_aaaaaaaaaaaa', version: 1, element: 'node:db' }
+    await mount({
+      'quirky.view/get': () => ({ title: 'Schema', spec: { title: 'Schema', root: { type: 'stack', children: [{ type: 'stat', id: 'db', props: { label: 'Postgres' } }] } } }),
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: '@view:view_aaaaaaaaaaaa/v1/node:db ok' })
+    })
+    await settle()
+    expect(fake.callsTo('quirky.view/get')[0]!.params).toEqual({ viewId: stray.viewId, version: 1 })
+    expect(pills()).toEqual(['◈ Schema › Postgres'])
+  })
+
+  test('with an empty cache a row, a matrix cell and a board card restore their own labels', async () => {
+    const spec = {
+      title: 'Plan',
+      root: {
+        type: 'stack',
+        children: [
+          { type: 'table', props: { columns: ['name', 'role'], rows: [['Alice', 'lead'], ['Bob', 'dev']] } },
+          { type: 'matrix', props: { columns: ['Codex', 'Claude'], rows: [{ label: 'Patch', cells: ['yes', 'no'] }] } },
+          { type: 'board', props: { columns: [{ title: 'Todo', cards: [{ id: 'a1', title: 'Write tests' }] }, { title: 'Done', cards: [{ id: 'b2', title: 'Ship it' }] }] } }
+        ]
+      }
+    }
+    await mount({
+      'quirky.view/get': () => ({ title: 'Plan', spec }),
+      'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: '@view:view_bbbbbbbbbbbb/v1/row:0 @view:view_bbbbbbbbbbbb/v1/cell:patch:claude @view:view_bbbbbbbbbbbb/v1/item:b2 ok' })
+    })
+    await settle()
+    expect(pills()).toEqual(['◈ Plan › Alice', '◈ Plan › Patch › Claude', '◈ Plan › Ship it'])
+  })
+
+  test('the chat no longer answers after its composer is gone', async () => {
+    await mount()
+    expect(chatHandler('s1', 'point')).toBeDefined()
+    await act(async () => root!.unmount())
+    root = null
+    expect(chatHandler('s1', 'point')).toBeUndefined()
+  })
+
+  test('removing the chip deletes the reference text', async () => {
+    rememberVisualLabel(ref, { title: 'Auth flow', label: 'Daemon' })
+    await mount({ 'quirky.session/draft': () => ({ ...EMPTY_DRAFT, text: `${text}hi` }) })
+    await act(async () => view().dispatch({ changes: { from: 0, to: text.length, insert: '' } }))
+    expect(pills()).toEqual([])
+    expect(doc()).toBe('hi')
   })
 })

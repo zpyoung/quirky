@@ -4,7 +4,7 @@ import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type AgentCapabilities, type ChatItem, type PermissionModeName, type PlanItem, type Session, type StructuredMessage } from '@quirky/protocol'
 import { currentMode, planVersions, previousMode } from '../src/window/chat/plan'
-import { groupChatTurns, groupTurns, summarizeActivity, type ActivityCall } from '../src/window/chat/turns'
+import { currentVisualLevel, groupChatTurns, groupTurns, summarizeActivity, type ActivityCall } from '../src/window/chat/turns'
 import { agentInfo, agentListing, fakeContext, session, settle, type FakeContext } from './ui-fake'
 
 type Handler = (params: Record<string, any>) => unknown
@@ -139,6 +139,40 @@ describe('plan blocks', () => {
     const turns = groupTurns([modeMsg(1, 'plan', true), user(2, 'hi'), modeMsg(3, 'acceptEdits')])
     expect(turns).toHaveLength(1)
     expect(turns[0]!.blocks).toEqual([])
+  })
+})
+
+const viewMsg = (seq: number, viewId: string, version?: number) => msg(seq, { kind: 'view', viewId, ...(version === undefined ? {} : { version }) })
+
+describe('visual items in turns', () => {
+  test('a turn shows each view once, at the newest version that turn made, where the view first appeared', () => {
+    const [turn] = groupTurns([user(1, 'draw'), viewMsg(2, 'v1', 1), prose(3, 'ok'), viewMsg(4, 'v2', 1), viewMsg(5, 'v1', 2), viewMsg(6, 'v1', 3)])
+    const views = turn!.blocks.flatMap((block) => (block.kind === 'view' ? [[block.seq, block.item.viewId, block.item.version]] : []))
+    expect(views).toEqual([[2, 'v1', 3], [4, 'v2', 1]])
+  })
+
+  test('an item with no version is v1, and an older version never replaces a newer one', () => {
+    const [turn] = groupTurns([user(1, 'draw'), viewMsg(2, 'v1'), viewMsg(3, 'v1', 2), viewMsg(4, 'v1', 1)])
+    const [block] = turn!.blocks
+    expect(block!.kind === 'view' && block!.item.version).toBe(2)
+    const [legacy] = groupTurns([user(1, 'draw'), viewMsg(2, 'v1')])
+    expect(legacy!.blocks.map((b) => b.kind === 'view' && b.item.version)).toEqual([undefined])
+  })
+
+  test('the same view in two turns leaves a block in each, at that turn\'s own version', () => {
+    const turns = groupTurns([user(1, 'draw'), viewMsg(2, 'v1', 1), end(3, 'done'), user(4, 'change'), viewMsg(5, 'v1', 2), end(6, 'done')])
+    expect(turns.map((turn) => turn.blocks.map((b) => b.kind === 'view' && b.item.version))).toEqual([[1], [2]])
+  })
+
+  test('visual-level items never open a turn or render', () => {
+    const turns = groupTurns([msg(1, { kind: 'visual-level', level: 'off' }), user(2, 'hi'), msg(3, { kind: 'visual-level', level: 'balanced' })])
+    expect(turns).toHaveLength(1)
+    expect(turns[0]!.blocks).toEqual([])
+  })
+
+  test('currentVisualLevel is the newest visual-level item, or null', () => {
+    expect(currentVisualLevel([user(1, 'hi')])).toBeNull()
+    expect(currentVisualLevel([msg(1, { kind: 'visual-level', level: 'off' }), prose(2, 'x'), msg(3, { kind: 'visual-level', level: 'balanced' }), prose(4, 'y')])).toBe('balanced')
   })
 })
 
@@ -974,39 +1008,33 @@ describe('embedded views', () => {
     expect(embedded('view:quirky.ask/card').map((mount) => mount.input)).toEqual([{ askId: 'ask-2' }])
   })
 
-  test('a view item mounts quirky.view/render and a changes item mounts quirky.git/turn-changes', async () => {
+  test('an inline view item mounts quirky.view/render as a card and a changes item mounts quirky.git/turn-changes', async () => {
     await mountChat({
       messages: [
         user(1, 'go'),
         msg(2, { kind: 'view', viewId: 'v1' }),
         msg(3, { kind: 'changes', worktree: 'wt-main', fromTree: 'aaa', toTree: 'bbb', files: 3 })
-      ]
+      ],
+      handlers: { 'quirky.view/list': () => [{ viewId: 'v1', title: 'Menu', placement: 'inline', closed: false }] }
     })
     expect(embedded('view:quirky.view/render').map((mount) => mount.input)).toEqual([{ viewId: 'v1' }])
     expect(embedded('view:quirky.git/turn-changes').map((mount) => mount.input)).toEqual([{ worktree: 'wt-main', fromTree: 'aaa', toTree: 'bbb' }])
   })
 
-  test('the Views pane mounts beside the transcript only while a view is placed there', async () => {
-    const records = [{ viewId: 'v1', placement: 'inline', closed: false }]
-    await mountChat({ handlers: { 'quirky.view/list': () => records } })
-    expect(fake.callsTo('quirky.view/list')[0]!.params).toEqual({ session: 'chat' })
-    expect(embedded('view:quirky.view/pane')).toEqual([])
-
-    records[0]!.placement = 'pane'
-    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1' } })
-    await settle()
-    expect(embedded('view:quirky.view/pane').map((mount) => mount.input)).toEqual([{ session: 'chat' }])
-    expect(host!.querySelector('aside[aria-label="Views"]')).not.toBeNull()
-  })
-
-  test('a view change in another session leaves the pane alone', async () => {
+  test('the views are listed once for the session, and a change in another session leaves them alone', async () => {
     await mountChat()
+    expect(fake.callsTo('quirky.view/list')[0]!.params).toEqual({ session: 'chat' })
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'other', viewId: 'v1' } })
     expect(fake.callsTo('quirky.view/list')).toHaveLength(1)
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1' } })
+    expect(fake.callsTo('quirky.view/list')).toHaveLength(2)
   })
 
   test('an embedded view unmounts with its turn and when the chat goes away', async () => {
-    await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'view', viewId: 'v1' })] })
+    await mountChat({
+      messages: [user(1, 'go'), msg(2, { kind: 'view', viewId: 'v1' })],
+      handlers: { 'quirky.view/list': () => [{ viewId: 'v1', title: 'Menu', placement: 'inline', closed: false }] }
+    })
     const [mount] = embedded('view:quirky.view/render')
     expect(mount!.unmounted).toBe(false)
     await act(async () => root!.unmount())
@@ -1168,7 +1196,7 @@ describe('auto-scroll', () => {
     test('holds the reading position when a block above it grows', async () => {
       await mountChat({ messages: [user(1, 'a'), prose(2, 'one'), user(3, 'b'), prose(4, 'two')] })
       const log = host!.querySelector<HTMLElement>('[role="log"]')!
-      const turns = [...host!.querySelectorAll<HTMLElement>('section')]
+      const turns = [...host!.querySelectorAll<HTMLElement>('section[aria-label^="Turn"]')]
       expect(turns).toHaveLength(2)
       const geometry: Geometry = { height: 1200, top: 700, client: 200 }
       const content = { second: 600 }
@@ -1283,7 +1311,7 @@ describe('auto-scroll', () => {
 const PLAN_TEXT = '# Handle ExitPlanMode\n\n1. Read the plan file\n2. Journal the plan item'
 const waiting = (seq: number, version: number, over: Partial<PlanItem> = {}) =>
   planMsg(seq, version, 'waiting', { askId: `ask-${version}`, text: PLAN_TEXT, ...over })
-const panel = () => host!.querySelector<HTMLElement>('aside[aria-label="Plan"]')
+const panel = () => host!.querySelector<HTMLElement>('aside[aria-label="Visual panel"] section[aria-label="Plan"]')
 const chip = () => [...host!.querySelectorAll<HTMLButtonElement>('header button')].find((button) => button.textContent?.startsWith('Plan'))
 const within = (scope: ParentNode | null, name: string) =>
   [...(scope?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((button) => button.textContent?.trim().startsWith(name))
@@ -1608,26 +1636,23 @@ describe('the plan panel in a narrow chat', () => {
     await mountChat({ messages, handlers: answerHandlers })
   }
 
-  test('below the width of the transcript plus the panel the plan opens in a sheet, above it in an aside', async () => {
+  test('a waiting plan opens its card in the visual panel and keeps the panel open in a narrow chat', async () => {
     await mountNarrow([user(1, 'go'), waiting(2, 1)])
     expect(panel()).not.toBeNull()
-    await resize(900)
-    expect(panel()).toBeNull()
-    const open = host!.querySelector<HTMLElement>('[role="dialog"]')!
-    expect(open.textContent).toContain('Handle ExitPlanMode')
-    expect(within(open, 'Approve, auto mode')).toBeDefined()
-    await resize(1100)
+    await resize(600)
+    expect(panel()!.textContent).toContain('Handle ExitPlanMode')
     expect(host!.querySelector('[role="dialog"]')).toBeNull()
-    expect(panel()).not.toBeNull()
+    expect(within(panel(), 'Approve, auto mode')).toBeDefined()
   })
 
-  test('the sheet closes with its close button and the chip reopens it', async () => {
-    await mountNarrow([user(1, 'go'), waiting(2, 1)])
-    await resize(800)
-    await click(host!.querySelector('[role="dialog"] .ui-dialog__close'))
-    expect(host!.querySelector('[role="dialog"]')).toBeNull()
+  test('a plan that is not waiting stays behind the rail of a narrow chat until the chip opens it', async () => {
+    await mountNarrow([user(1, 'go'), planMsg(2, 1, 'approved', { text: PLAN_TEXT, approvedMode: 'auto' })])
+    await resize(600)
+    expect(byLabel('Show visual panel')).not.toBeNull()
+    expect(panel()).toBeNull()
     await click(chip())
-    expect(host!.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(panel()!.textContent).toContain('v1 · approved · auto mode')
+    expect(byLabel('Show visual panel')).toBeNull()
   })
 })
 
@@ -1791,5 +1816,526 @@ describe('the agent picker', () => {
     await settle()
     expect(fake.toasts[0]).toEqual({ title: 'Could not start chat', body: 'agent missing' })
     expect(created).toEqual([])
+  })
+})
+
+type ViewRecordFixture = { viewId: string; title: string; placement: 'inline' | 'pane'; closed: boolean; version: number; latestVersion: number }
+const rec = (viewId: string, title: string, over: Partial<ViewRecordFixture> = {}): ViewRecordFixture => ({
+  viewId,
+  title,
+  placement: 'pane',
+  closed: false,
+  version: 1,
+  latestVersion: 1,
+  ...over
+})
+
+/* helpers shared by the visual panel tests */
+let observers: (() => void)[] = []
+const originalObserver = (globalThis as { ResizeObserver?: unknown }).ResizeObserver
+const bodyOf = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!.parentElement!
+const resize = async (width: number) => {
+  bodyOf().getBoundingClientRect = () => ({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) }) as DOMRect
+  await act(async () => void observers.forEach((callback) => callback()))
+}
+afterEach(() => {
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = originalObserver
+  observers = []
+})
+
+
+/** Mounts a chat whose body is `width` pixels wide and whose view list is `records`, which a test may change before emitting a change. */
+async function mountPanel({ width, records = [], ...rest }: Mount & { width?: number; records?: ViewRecordFixture[] } = {}) {
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+    constructor(callback: () => void) {
+      observers.push(callback)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  const chat = await mountChat({ ...rest, handlers: { 'quirky.view/list': () => records, ...rest.handlers } })
+  if (width !== undefined) await resize(width)
+  return chat
+}
+const rerender = (chat: Session, over: Partial<Session>) =>
+  act(async () => void root!.render(createElement(ChatView, { context: fake.context, session: { ...chat, ...over } })))
+
+
+describe('the visual panel', () => {
+  const cards = () => fake.mounted.filter((mount) => mount.viewId === 'view:quirky.view/render' && !mount.unmounted)
+  const inputs = () => cards().map((mount) => mount.input as { viewId: string; surface: string; [key: string]: unknown }).sort((a, b) => a.viewId.localeCompare(b.viewId) || a.surface.localeCompare(b.surface))
+  const panelCards = () => [...host!.querySelectorAll<HTMLElement>('aside[aria-label="Visual panel"] section[data-visual]')]
+  const visualPanel = () => host!.querySelector<HTMLElement>('aside[aria-label="Visual panel"]')
+  const rail = () => host!.querySelector<HTMLElement>('aside[data-collapsed="true"]')
+  const separator = () => host!.querySelector<HTMLElement>('[role="separator"]')
+  const changed = (viewId: string, kind?: string, sessionId = 'chat') => fake.emit({ type: 'quirky.view/changed', data: { sessionId, viewId, ...(kind === undefined ? {} : { kind }) } })
+
+  test('empty: it says what will appear and shows the visual level', async () => {
+    await mountPanel()
+    expect(visualPanel()!.textContent).toContain('Pictures the agent draws')
+    expect(visualPanel()!.textContent).toContain('Visual level: Visual-first')
+  })
+
+  test('the empty panel shows the level the chat journaled, not the default', async () => {
+    await mountPanel({ messages: [user(1, 'hi'), msg(2, { kind: 'visual-level', level: 'balanced' })] })
+    expect(visualPanel()!.textContent).toContain('Visual level: Balanced')
+  })
+
+  test('it replaces the Views pane: nothing mounts view:quirky.view/pane and no Views aside exists', async () => {
+    await mountPanel({ records: [rec('v1', 'Auth flow')] })
+    expect(fake.mounted.some((mount) => mount.viewId === 'view:quirky.view/pane')).toBe(false)
+    expect(host!.querySelector('aside[aria-label="Views"]')).toBeNull()
+  })
+
+  test('wide enough for two cards it shows a grid with the plan first and the newest visual focused', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
+    const found = panelCards()
+    expect(found.map((card) => card.getAttribute('aria-label'))).toEqual(['Auth flow', 'Costs'])
+    expect(panel()!.compareDocumentPosition(found[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(host!.querySelector('[role="tablist"]')).toBeNull()
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel' }, { viewId: 'v2', surface: 'panel' }])
+    expect(panel()!.getAttribute('data-focused')).toBe('true')
+  })
+
+  test('with no plan the newest visual of the grid is the focused one', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')] })
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel' }, { viewId: 'v2', surface: 'panel', focused: true }])
+    expect(panelCards().map((card) => card.getAttribute('data-focused'))).toEqual([null, 'true'])
+  })
+
+  test('a narrower panel shows a filmstrip with the plan first and one focused card', async () => {
+    await mountPanel({ width: 1000, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
+    const tabs = [...host!.querySelectorAll<HTMLElement>('[role="tab"]')]
+    expect(tabs.map((tab) => tab.getAttribute('aria-label') ?? tab.textContent)).toEqual(['Plan v1', 'Auth flow', 'Costs'])
+    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true')
+    expect(panel()).not.toBeNull()
+    expect(panelCards()).toEqual([])
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'thumbnail' }, { viewId: 'v2', surface: 'thumbnail' }])
+  })
+
+  test('in the filmstrip a tile focuses its visual, and the newest visual drawn takes focus', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1000, records })
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+    await click([...host!.querySelectorAll('[role="tab"]')].find((tab) => tab.getAttribute('aria-label') === 'Auth flow'))
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+    records.push(rec('v3', 'Schema'))
+    await changed('v3', 'open')
+    await settle()
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v3', surface: 'panel', focused: true }])
+    await changed('v1', 'update')
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+  })
+
+  test('only open views placed in the pane are listed', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Pane'), rec('v2', 'Inline', { placement: 'inline' }), rec('v3', 'Gone', { closed: true })] })
+    expect(panelCards().map((card) => card.getAttribute('aria-label'))).toEqual(['Pane'])
+  })
+
+  test('a chat narrower than 720 units starts with a rail, and the rail reopens the panel', async () => {
+    await mountPanel({ width: 700, records: [rec('v1', 'Auth flow')] })
+    expect(rail()).not.toBeNull()
+    expect(separator()).toBeNull()
+    expect(cards()).toEqual([])
+    await click(byLabel('Show visual panel'))
+    expect(rail()).toBeNull()
+    expect(panelCards()).toHaveLength(1)
+  })
+
+  test('the rail counts what was drawn or updated since collapse, and reopening clears it', async () => {
+    const records = [rec('v1', 'Auth flow')]
+    await mountPanel({ width: 1800, records })
+    await click(byLabel('Collapse visual panel'))
+    expect(rail()!.textContent).not.toContain('new')
+    await changed('v1', 'update')
+    expect(rail()!.textContent).toContain('1 new')
+    records.push(rec('v2', 'Costs'))
+    await changed('v2', 'open')
+    await changed('v2', 'patch')
+    expect(rail()!.textContent).toContain('3 new')
+    await changed('v2', 'move')
+    await changed('v2', 'refused')
+    await changed('v2', 'update', 'other')
+    expect(rail()!.textContent).toContain('3 new')
+    await click(byLabel('Show visual panel'))
+    await click(byLabel('Collapse visual panel'))
+    expect(rail()!.textContent).not.toContain('new')
+  })
+
+  test('the width ratio loads from the saved preference', async () => {
+    await mountPanel({ width: 1800, handlers: { 'quirky.session/uiPref': () => ({ value: 0.6 }) } })
+    expect(fake.callsTo('quirky.session/uiPref')[0]!.params).toEqual({ key: 'chat.visual-panel.width-ratio' })
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('60')
+    expect(visualPanel()!.style.flex).toContain('60%')
+  })
+
+  test('a saved width outside 0.2 to 0.8 or none at all leaves the default 45%', async () => {
+    await mountPanel({ width: 1800, handlers: { 'quirky.session/uiPref': () => ({ value: 0.95 }) } })
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('45')
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountPanel({ width: 1800, handlers: { 'quirky.session/uiPref': () => { throw new Error('off') } } })
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('45')
+  })
+
+  test('dragging the divider sets the width and saves it once, when the drag ends', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointermove', { clientX: 700 })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('30')
+    expect(fake.callsTo('quirky.session/setUiPref')).toEqual([])
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    expect(fake.callsTo('quirky.session/setUiPref').map((call) => call.params)).toEqual([{ key: 'chat.visual-panel.width-ratio', value: 0.3 }])
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointermove', { clientX: 100 })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('30')
+  })
+
+  test('a drag cannot take the panel under 20% or over 80% of the chat', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointermove', { clientX: 990 })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('20')
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointermove', { clientX: 10 })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('80')
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    expect(fake.callsTo('quirky.session/setUiPref')[0]!.params.value).toBe(0.8)
+  })
+
+  test('the arrow keys on the divider resize it and save each step', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    await act(async () => void separator()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('47')
+    await act(async () => void separator()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })))
+    await act(async () => void separator()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })))
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('43')
+    expect(fake.callsTo('quirky.session/setUiPref').map((call) => call.params.value)).toEqual([0.47, 0.45, 0.43])
+  })
+
+  test('a failed width save is ignored', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => { throw new Error('disk') } } })
+    await act(async () => void separator()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })))
+    await settle()
+    expect(separator()!.getAttribute('aria-valuenow')).toBe('47')
+  })
+
+  test('a card is drawing from a change during a working turn until the turn ends', async () => {
+    const chat = await mountPanel({ width: 1800, session: { status: 'working' }, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')] })
+    expect(inputs().some((input) => 'drawing' in (input as object))).toBe(false)
+    await changed('v1', 'update')
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', drawing: true, focused: true }, { viewId: 'v2', surface: 'panel' }])
+    await rerender(chat, { status: 'done' })
+    await settle()
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }, { viewId: 'v2', surface: 'panel' }])
+  })
+
+  test('a change while no turn is working draws nothing', async () => {
+    await mountPanel({ width: 1800, session: { status: 'done' }, records: [rec('v1', 'Auth flow')] })
+    await changed('v1', 'open')
+    expect(inputs().some((input) => 'drawing' in (input as object))).toBe(false)
+  })
+
+  test('the plan chip reopens the plan card and expands a collapsed panel', async () => {
+    await mountPanel({ width: 1800, messages: [user(1, 'go'), planMsg(2, 1, 'approved', { text: PLAN_TEXT, approvedMode: 'auto' })] })
+    await click(byLabel('Collapse visual panel'))
+    expect(rail()).not.toBeNull()
+    await click(chip())
+    expect(rail()).toBeNull()
+    expect(panel()!.textContent).toContain('v1 · approved')
+    await click(byLabel('Close plan'))
+    expect(panel()).toBeNull()
+  })
+})
+
+describe('visual chips in the transcript', () => {
+  const chipsIn = () => [...host!.querySelectorAll<HTMLButtonElement>('section[aria-label^="Turn"] button[title^="Open "]')]
+  const input = () => fake.mounted.filter((mount) => mount.viewId === 'view:quirky.view/render' && !mount.unmounted).map((mount) => mount.input as Record<string, unknown>)
+
+  test('a pane view leaves a chip with its title and version, and no card in the transcript', async () => {
+    await mountChat({
+      messages: [user(1, 'how does auth work?'), viewMsg(2, 'v1', 1), prose(3, 'See Auth flow.')],
+      handlers: { 'quirky.view/list': () => [rec('v1', 'Auth flow', { version: 1, latestVersion: 1 })] }
+    })
+    expect(chipsIn().map((button) => button.textContent)).toEqual(['◈Auth flow v1'])
+    expect(input().filter((entry) => entry.surface === undefined)).toEqual([])
+  })
+
+  test('one chip per view per turn shows the newest version that turn made; an older item has no version and reads v1', async () => {
+    await mountChat({
+      messages: [user(1, 'draw'), viewMsg(2, 'v1'), viewMsg(3, 'v1', 2), viewMsg(4, 'v2', 1)],
+      handlers: { 'quirky.view/list': () => [rec('v1', 'Auth flow', { version: 2, latestVersion: 2 }), rec('v2', 'Costs')] }
+    })
+    expect(chipsIn().map((button) => button.textContent)).toEqual(['◈Auth flow v2', '◈Costs v1'])
+  })
+
+  test('a chip for an earlier version pins that version in the panel, and a chip for the latest follows it', async () => {
+    await mountChat({
+      messages: [user(1, 'draw'), viewMsg(2, 'v1', 1), end(3, 'done'), user(4, 'change'), viewMsg(5, 'v1', 2), end(6, 'done')],
+      handlers: { 'quirky.view/list': () => [rec('v1', 'Auth flow', { version: 2, latestVersion: 2 })] }
+    })
+    expect(chipsIn().map((button) => button.textContent)).toEqual(['◈Auth flow v1', '◈Auth flow v2'])
+    await click(chipsIn()[0])
+    await settle()
+    expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', version: 1, surface: 'panel', focused: true }])
+    await click(chipsIn()[1])
+    await settle()
+    expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+  })
+
+  test('a chip opens a collapsed panel on its visual', async () => {
+    const records = [rec('v1', 'Auth flow', { version: 2, latestVersion: 2 })]
+    await mountPanel({ width: 600, messages: [user(1, 'draw'), viewMsg(2, 'v1', 1)], records })
+    expect(host!.querySelector('aside[data-collapsed="true"]')).not.toBeNull()
+    await click(chipsIn()[0])
+    await settle()
+    expect(host!.querySelector('aside[data-collapsed="true"]')).toBeNull()
+    expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', version: 1, surface: 'panel', focused: true }])
+  })
+
+  test('in a resumed chat a chip for an earlier chat\'s visual shows its title and opens it expanded at that version', async () => {
+    const journals: Record<string, StructuredMessage[]> = {
+      first: [{ ...user(1, 'draw'), sessionId: 'first' }, { ...viewMsg(2, 'view_0123456789ab', 1), sessionId: 'first' }, { ...end(3, 'done'), sessionId: 'first' }],
+      chat: [user(1, 'and now?'), prose(2, 'Same as before.')]
+    }
+    const records: Record<string, Session> = { first: session({ id: 'first', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null }) }
+    await mountChat({
+      session: { resumedFrom: 'first' },
+      handlers: {
+        'quirky.structured/messages': ({ session: id }) => journals[id] ?? [],
+        'quirky.session/get': ({ session: id }) => records[id],
+        'quirky.view/list': ({ session: id }) => (id === 'chat' ? [] : [rec('view_0123456789ab', 'Earlier plan')]),
+        'quirky.view/get': ({ viewId }) => (viewId === 'view_0123456789ab' ? { viewId, sessionId: 'first', title: 'Earlier plan', placement: 'pane', closed: false, latestVersion: 3 } : null)
+      }
+    })
+    await settle()
+    expect(fake.callsTo('quirky.view/get').map((call) => call.params)).toEqual([{ viewId: 'view_0123456789ab' }])
+    expect(chipsIn().map((button) => button.textContent)).toEqual(['◈Earlier plan v1'])
+    await click(chipsIn()[0])
+    await settle()
+    expect(byLabel('Expanded visual')).not.toBeNull()
+    expect(input().filter((entry) => entry.surface === 'expanded')).toEqual([{ viewId: 'view_0123456789ab', version: 1, surface: 'expanded', focused: true }])
+  })
+
+  test('an inline view keeps today\'s card and gets no chip', async () => {
+    await mountChat({
+      messages: [user(1, 'ask me'), viewMsg(2, 'v1')],
+      handlers: { 'quirky.view/list': () => [rec('v1', 'Menu', { placement: 'inline' })] }
+    })
+    expect(chipsIn()).toEqual([])
+    expect(input()).toEqual([{ viewId: 'v1' }])
+  })
+
+  test('before the list answers a view block shows nothing, and when views cannot be read the card shows its quiet fallback', async () => {
+    let answer: (value: unknown) => void = () => {}
+    await mountChat({ messages: [user(1, 'draw'), viewMsg(2, 'v1')], handlers: { 'quirky.view/list': () => new Promise((resolve) => (answer = resolve)) } })
+    expect(chipsIn()).toEqual([])
+    expect(input()).toEqual([])
+    await act(async () => answer([rec('v1', 'Auth flow')]))
+    expect(chipsIn()).toHaveLength(1)
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    fake = fakeContext({
+      'quirky.structured/messages': () => [user(1, 'draw'), viewMsg(2, 'v1')],
+      'quirky.structured/capabilities': () => CLAUDE,
+      'quirky.view/list': () => { throw new RpcError(RpcErrorCode.MethodNotFound, 'unknown method') }
+    })
+    fake.missingViews.add('view:quirky.view/render')
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => void root!.render(createElement(ChatView, { context: fake.context, session: session({ id: 'chat', kind: 'structured', agent: 'claude', status: 'done' }) })))
+    await settle()
+    expect(text()).toContain('A view was opened here, but views are turned off.')
+  })
+
+  test('the refused row stays in the transcript beside the chip', async () => {
+    await mountChat({
+      messages: [user(1, 'draw'), viewMsg(2, 'v1', 2), msg(3, { kind: 'view-error', title: 'Auth flow', errors: ["line 4: unexpected '-->>'"], source: 'x' })],
+      handlers: { 'quirky.view/list': () => [rec('v1', 'Auth flow', { version: 2, latestVersion: 2 })] }
+    })
+    expect(chipsIn()).toHaveLength(1)
+    expect(text()).toContain("line 4: unexpected '-->>'")
+  })
+
+  test('the visual level marker never shows in a user message', async () => {
+    await mountChat({ messages: [msg(1, { kind: 'user', text: '[quirky visual level: balanced]\nwhy is it slow?' }, { role: 'user', text: '[quirky visual level: balanced]\nwhy is it slow?' })] })
+    expect(byLabel('Your message')!.textContent).toBe('why is it slow?')
+  })
+})
+
+describe('Visualize', () => {
+  const visualize = () => host!.querySelector<HTMLButtonElement>('button[aria-label="Visualize"]')
+  const sentRequests = () => fake.callsTo('quirky.structured/send').map((call) => call.params)
+  const REPLY = 'The token rides the lease env.'
+
+  test('the icon is hidden until the message is hovered or focused, and says Visualize', async () => {
+    await mountChat({ messages: [user(1, 'how?'), prose(2, REPLY)] })
+    const button = visualize()!
+    expect(button.title).toBe('Visualize')
+    expect(button.style.opacity).toBe('0')
+    await act(async () => void button.parentElement!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+        expect(button.style.opacity).toBe('1')
+    await act(async () => void button.parentElement!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })))
+    expect(button.style.opacity).toBe('0')
+    await act(async () => void button.dispatchEvent(new FocusEvent('focusin', { bubbles: true })))
+    expect(button.style.opacity).toBe('1')
+    await act(async () => void button.dispatchEvent(new FocusEvent('focusout', { bubbles: true })))
+    expect(button.style.opacity).toBe('0')
+  })
+
+  test('there is no icon on a streaming reply or on the user\'s own message', async () => {
+    await mountChat({ messages: [user(1, 'how?'), prose(2, REPLY, true)] })
+    expect(visualize()).toBeNull()
+  })
+
+  test('clicking sends the exact request through send, now when idle', async () => {
+    await mountChat({ messages: [user(1, 'how?'), prose(2, REPLY)], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    await click(visualize())
+    expect(sentRequests()).toEqual([{ session: 'chat', text: `Visualize this part of your earlier reply as a visual in the panel:\n\n> ${REPLY}`, when: 'now' }])
+  })
+
+  test('while the agent works the request queues for idle', async () => {
+    await mountChat({ session: { status: 'working' }, messages: [user(1, 'how?'), prose(2, REPLY)], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    await click(visualize())
+    expect(sentRequests()[0]).toMatchObject({ when: 'idle' })
+  })
+
+  test('only the first 600 characters of a long reply are quoted', async () => {
+    const long = 'x'.repeat(900)
+    await mountChat({ messages: [user(1, 'how?'), prose(2, long)], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    await click(visualize())
+    expect(sentRequests()[0]!.text).toBe(`Visualize this part of your earlier reply as a visual in the panel:\n\n> ${'x'.repeat(600)}`)
+  })
+
+  test('it shows as busy until a visual arrives, and a new visual ends it', async () => {
+    await mountChat({ messages: [user(1, 'how?'), prose(2, REPLY)], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    const button = visualize()!
+    await click(button)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    expect(button.disabled).toBe(true)
+    expect(button.style.opacity).toBe('1')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1', kind: 'open' } })
+    expect(button.getAttribute('aria-busy')).toBeNull()
+    expect(button.disabled).toBe(false)
+  })
+
+  test('the busy state ends when the turn that took the request ends without a visual', async () => {
+    const chat = await mountChat({ session: { status: 'working' }, messages: [user(1, 'how?'), prose(2, REPLY)], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    await click(visualize())
+    expect(visualize()!.getAttribute('aria-busy')).toBe('true')
+    await act(async () => void root!.render(createElement(ChatView, { context: fake.context, session: { ...chat, status: 'done' } })))
+    expect(visualize()!.getAttribute('aria-busy')).toBeNull()
+  })
+
+  test('a failed request clears busy and says so', async () => {
+    await mountChat({ messages: [user(1, 'how?'), prose(2, REPLY)], handlers: { 'quirky.structured/send': () => { throw new Error('agent is gone') } } })
+    await click(visualize())
+    await settle()
+    expect(visualize()!.getAttribute('aria-busy')).toBeNull()
+    expect(fake.toasts).toEqual([{ title: 'Could not ask for a visual', body: 'agent is gone' }])
+  })
+})
+
+describe('expanding a visual and pointing at it', () => {
+  let activate: typeof import('../src/ui').activate
+  const region = () => byLabel('Expanded visual')
+  const view = () => CMView.findFromDOM(host!)!
+  const records = [rec('view_0123456789ab', 'Auth flow', { version: 2, latestVersion: 2 })]
+  const open = async (over: Mount = {}) => {
+    const chat = await mountChat({ ...over, handlers: { 'quirky.view/list': () => records, ...over.handlers } })
+    ;({ activate } = await import('../src/ui'))
+    activate(fake.context)
+    return chat
+  }
+  const expand = (args: Record<string, unknown> = { session: 'chat', viewId: 'view_0123456789ab' }) => fake.command('chat-expand-visual', args)
+  const cardsNow = () => fake.mounted.filter((mount) => mount.viewId === 'view:quirky.view/render' && !mount.unmounted).map((mount) => mount.input)
+
+  test('the command swaps the panel for one expanded card and keeps the composer and the transcript', async () => {
+    await open({ messages: [user(1, 'draw'), prose(2, 'done')] })
+    await expand()
+    expect(region()).not.toBeNull()
+    expect(cardsNow().filter((entry) => (entry as { surface: string }).surface === 'expanded')).toEqual([{ viewId: 'view_0123456789ab', surface: 'expanded', focused: true }])
+    expect(host!.querySelector('[role="textbox"][aria-label="Message"]')).not.toBeNull()
+    expect(host!.querySelector('[role="log"]')).not.toBeNull()
+    expect(bodyChild().style.display).toBe('none')
+  })
+
+  const bodyChild = () => host!.querySelector<HTMLElement>('[role="log"]')!.parentElement!.parentElement!
+
+  test('a version in the command pins the expanded card to it', async () => {
+    await open()
+    await expand({ session: 'chat', viewId: 'view_0123456789ab', version: 1 })
+    expect(cardsNow().filter((entry) => (entry as { surface: string }).surface === 'expanded')).toEqual([{ viewId: 'view_0123456789ab', version: 1, surface: 'expanded', focused: true }])
+  })
+
+  test('Esc and Back leave it, and the panel is back', async () => {
+    await open()
+    await expand()
+    await act(async () => void view().contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })))
+    expect(region()).toBeNull()
+    expect(bodyChild().style.display).not.toBe('none')
+    await expand()
+    await click(buttonNamed('Back to chat'))
+    expect(region()).toBeNull()
+  })
+
+  test('Esc while expanded leaves the expanded layout and does not stop the working turn', async () => {
+    await open({ session: { status: 'working' }, handlers: { 'quirky.structured/interrupt': () => ({ ok: true }) } })
+    await expand()
+    await act(async () => void view().contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })))
+    expect(region()).toBeNull()
+    expect(fake.callsTo('quirky.structured/interrupt')).toEqual([])
+  })
+
+  test('a visual that goes away ends the expanded layout', async () => {
+    await open()
+    await expand()
+    records[0]!.closed = true
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'view_0123456789ab', kind: 'close' } })
+    await settle()
+    expect(region()).toBeNull()
+    records[0]!.closed = false
+  })
+
+  test('the commands refuse a chat that is not open and bad arguments', async () => {
+    await open()
+    await expect(expand({ session: 'nope', viewId: 'view_0123456789ab' })).rejects.toThrow('not open')
+    await expect(expand({ session: 'chat' })).rejects.toThrow('viewId')
+    await expect(expand({ session: 'chat', viewId: 'view_0123456789ab', version: 0 })).rejects.toThrow('version')
+  })
+
+  test('chat-point puts a reference chip in the composer, titled from the visual', async () => {
+    await open({ handlers: { 'quirky.view/get': () => ({ title: 'Auth flow', version: 2 }) } })
+    await fake.command('chat-point', { session: 'chat', viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon', label: 'Daemon' })
+    expect(fake.callsTo('quirky.view/get')[0]!.params).toEqual({ viewId: 'view_0123456789ab', version: 2 })
+    expect(view().state.doc.toString()).toBe('@view:view_0123456789ab/v2/dg:daemon ')
+    expect(host!.querySelector('.cm-composer-pill-visual')!.textContent).toBe('◈ Auth flow › Daemon')
+  })
+
+  test('chat-point still points when the view cannot be read', async () => {
+    await open()
+    await fake.command('chat-point', { session: 'chat', viewId: 'view_0123456789ab', version: 2, element: 'row:1', label: 'First' })
+    expect(view().state.doc.toString()).toBe('@view:view_0123456789ab/v2/row:1 ')
+  })
+
+  test('chat-point refuses a bad element or label and a chat that is not open', async () => {
+    await open()
+    const point = (over: Record<string, unknown>) => fake.command('chat-point', { session: 'chat', viewId: 'view_0123456789ab', version: 2, element: 'dg:a', label: 'A', ...over })
+    await expect(point({ element: 'Has Caps' })).rejects.toThrow('element')
+    await expect(point({ element: '' })).rejects.toThrow('element')
+    await expect(point({ label: 'x'.repeat(121) })).rejects.toThrow('label')
+    await expect(point({ version: 0 })).rejects.toThrow('version')
+    await expect(point({ session: 'nope' })).rejects.toThrow('not open')
+    expect(view().state.doc.toString()).toBe('')
+  })
+
+  test('a reference chip in the composer goes out as text and renders as a chip in the transcript', async () => {
+    await open({ handlers: { 'quirky.view/get': () => ({ title: 'Auth flow' }), 'quirky.structured/send': () => ({ ok: true }) } })
+    await fake.command('chat-point', { session: 'chat', viewId: 'view_0123456789ab', version: 2, element: 'dg:daemon', label: 'Daemon' })
+    await act(async () => view().dispatch({ changes: { from: view().state.doc.length, insert: 'why this hop?' } }))
+    await click(host!.querySelector('button[aria-label="Send"]'))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params.text).toBe('@view:view_0123456789ab/v2/dg:daemon why this hop?')
+    await push(msg(9, { kind: 'user', text: '@view:view_0123456789ab/v2/dg:daemon why this hop?' }, { role: 'user', text: '@view:view_0123456789ab/v2/dg:daemon why this hop?' }))
+    expect(byLabel('Your message')!.textContent).toBe('◈ Auth flow › Daemon why this hop?')
   })
 })

@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "exported_at": "2026-11-19T15:12:13+00:00",
+  "pins": [
+    {
+      "thread_id": "t-0001",
+      "version": 1,
+      "screen": "chat",
+      "state": "default",
+      "pin": "visualize-btn",
+      "messages": [
+        {
+          "from": "user",
+          "text": "This is too big and always visible. Instead, make it more subtle and only show on hover",
+          "timestamp": "2026-11-19T14:54:12+00:00"
+        },
+        {
+          "from": "agent",
+          "text": "Agreed. In v2 it becomes a small icon-only button that fades in when you hover the message (and when the message has keyboard focus), with a Visualize tooltip.",
+          "timestamp": "2026-11-19T14:54:22+00:00"
+        },
+        {
+          "from": "agent",
+          "text": "Done in v2: icon-only, fades in on hover or keyboard focus, tooltip says Visualize.",
+          "timestamp": "2026-11-19T14:56:29+00:00"
+        }
+      ],
+      "resolution": "addressed"
+    }
+  ]
+}

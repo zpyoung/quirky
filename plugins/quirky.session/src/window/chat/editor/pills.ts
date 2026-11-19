@@ -1,12 +1,15 @@
 import { EditorView, Decoration, WidgetType, type DecorationSet } from '@codemirror/view'
 import { invertedEffects } from '@codemirror/commands'
 import { StateEffect, StateField, type ChangeDesc, type EditorState, type Extension } from '@codemirror/state'
-import type { Pill } from './types'
+import { visualPillLabel, visualRefText, VISUAL_REF, watchVisualLabel, type Pill } from './types'
 
 const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path
 
-/** The plain text a pill serialises to: `@<path> ` or `/<name> `. */
-export const pillText = (pill: Pill): string => (pill.kind === 'file' ? `@${pill.path} ` : `/${pill.name} `)
+/** The plain text a pill serialises to: `@<path> `, `/<name> ` or `@view:<id>/v<n>/<element> `. */
+export const pillText = (pill: Pill): string =>
+  pill.kind === 'file' ? `@${pill.path} ` : pill.kind === 'command' ? `/${pill.name} ` : `${visualRefText(pill)} `
+
+const stops = new WeakMap<HTMLElement, () => void>()
 
 class PillWidget extends WidgetType {
   constructor(readonly pill: Pill) {
@@ -34,10 +37,22 @@ class PillWidget extends WidgetType {
       path.setAttribute('stroke-linejoin', 'round')
       icon.append(path)
       el.append(icon, document.createTextNode(basename(this.pill.path)))
-    } else {
+    } else if (this.pill.kind === 'command') {
       el.textContent = `/${this.pill.name}`
+    } else {
+      const ref = this.pill
+      el.title = visualRefText(ref)
+      const watch = watchVisualLabel(ref, (label) => {
+        el.textContent = visualPillLabel(ref, label)
+      })
+      el.textContent = visualPillLabel(ref, watch.label)
+      stops.set(el, watch.stop)
     }
     return el
+  }
+  destroy(dom: HTMLElement) {
+    stops.get(dom)?.()
+    stops.delete(dom)
   }
   ignoreEvent() {
     return false
@@ -46,12 +61,23 @@ class PillWidget extends WidgetType {
 
 const decorate = (pill: Pill, from: number, to: number) => Decoration.replace({ widget: new PillWidget(pill) }).range(from, to)
 
-/** Pills found in plain text: `@<path> ` and `/<name> ` at the start or after whitespace; a command name never holds a `/`. */
+// the visual branch comes before @path, which would otherwise take every `@view:` reference as a file
+const PILL = new RegExp(`(?<=^|\\s)(?:\\/([^\\s/]+)|${VISUAL_REF}|@(\\S+)) `, 'g')
+
+/**
+ * Pills found in plain text at the start or after whitespace: `/<name> `, `@view:<id>/v<n>/<element> ` and
+ * `@<path> `. A command name never holds a `/`.
+ */
 export function parsePills(text: string): { from: number; to: number; pill: Pill }[] {
-  return [...text.matchAll(/(?<=^|\s)(?:\/([^\s/]+)|@(\S+)) /g)].map((match) => {
+  return [...text.matchAll(PILL)].map((match) => {
     const from = match.index!
     const to = from + match[0].length
-    const pill: Pill = match[1] !== undefined ? { kind: 'command', name: match[1] } : { kind: 'file', path: match[2]! }
+    const pill: Pill =
+      match[1] !== undefined
+        ? { kind: 'command', name: match[1] }
+        : match[2] !== undefined
+          ? { kind: 'visual', viewId: match[2], version: Number(match[3]), element: match[4]! }
+          : { kind: 'file', path: match[5]! }
     return { from, to, pill }
   })
 }
@@ -105,7 +131,7 @@ const pillField = StateField.define<DecorationSet>({
     EditorView.decorations.from(field), EditorView.atomicRanges.of((view) => view.state.field(field))]
 })
 
-/** Atomic, replace-widget pills over `@path ` / `/name ` text. */
+/** Atomic, replace-widget pills over `@path `, `/name ` and visual reference text. */
 export const pillsExtension: Extension = pillField
 
 /** The pill ranges currently in the document, in order. */
