@@ -172,7 +172,7 @@ const heading = { margin: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-l
 const scroller = { flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', padding: 'var(--ui-space-8)' } satisfies CSSProperties
 const grid = {
   display: 'grid',
-  gridTemplateColumns: `repeat(auto-fill, minmax(calc(${CARD_MIN_UNITS} * var(--ui-length-unit)), 1fr))`,
+  gridTemplateColumns: `repeat(auto-fit, minmax(calc(${CARD_MIN_UNITS} * var(--ui-length-unit)), 1fr))`,
   gap: 'var(--ui-space-8)',
   alignItems: 'start'
 } satisfies CSSProperties

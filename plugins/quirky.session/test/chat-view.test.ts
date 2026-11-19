@@ -2018,6 +2018,12 @@ describe('the visual panel', () => {
     expect(panelCards().map((card) => card.getAttribute('data-focused'))).toEqual([null, 'true'])
   })
 
+  test('a lone visual in the grid fills the panel instead of leaving empty columns beside it', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow')] })
+    // happy-dom has no layout, so the track rule is the observable: auto-fill keeps empty tracks, auto-fit drops them
+    expect(panelCards()[0]!.parentElement!.style.gridTemplateColumns).toMatch(/^repeat\(auto-fit,/)
+  })
+
   test('a narrower panel shows a filmstrip with the plan first and one focused card', async () => {
     await mountPanel({ width: 1000, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
     const tabs = [...host!.querySelectorAll<HTMLElement>('[role="tab"]')]
