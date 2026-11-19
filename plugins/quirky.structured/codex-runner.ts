@@ -1,4 +1,4 @@
-import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, Session, SessionProviderSession } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import {
   CallTracker,
@@ -16,6 +16,7 @@ import {
 import { mentionsCommand, referencedCommands } from './slash-commands'
 import type {
   StructuredContext,
+  StructuredForkSource,
   StructuredLaunchOptions,
   StructuredRunner,
   StructuredSendOptions,
@@ -374,6 +375,39 @@ class CodexRunner implements StructuredRunner {
       throw new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure })
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
+    }
+  }
+
+  /**
+   * Forks the source thread over a short-lived app-server of its own, so the source's live process keeps
+   * its thread. The new thread holds the source history and no turn runs on it.
+   */
+  async fork(source: StructuredForkSource): Promise<SessionProviderSession> {
+    const executable = await this.context.resolveCodexPath()
+    const failures: Error[] = []
+    const connection = new CodexConnection(
+      this.context.process,
+      executable,
+      source.cwd,
+      environmentWithPatch(this.deps.env ?? process.env, source.launchOptions.env),
+      {
+        notification: () => {},
+        serverRequest: () => {},
+        failure: (error) => failures.push(error)
+      }
+    )
+    try {
+      await connection.request('initialize', { clientInfo: CLIENT_INFO })
+      connection.notify('initialized', {})
+      const response = await connection.request('thread/fork', { threadId: source.providerSession.id, cwd: source.cwd, excludeTurns: true })
+      const thread = (response as { thread?: { path?: unknown } } | null)?.thread
+      return { id: this.threadIdFromResponse(response, 'thread/fork'), transcriptPath: typeof thread?.path === 'string' ? thread.path : null }
+    } catch (error) {
+      const stderrTail = connection.stderrTail
+      const failure = failures[0] ?? (error instanceof Error ? error : new Error(String(error)))
+      throw stderrTail ? new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure }) : failure
+    } finally {
+      await connection.close()
     }
   }
 

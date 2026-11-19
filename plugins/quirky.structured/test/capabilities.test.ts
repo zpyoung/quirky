@@ -67,6 +67,13 @@ describe('capabilities values', () => {
     expect((capabilitiesFor('pi')!.planMode as { reason: string }).reason).toBe('pi has no plan mode')
   })
 
+  test('fork is ok for claude and codex and unsupported, with a reason, for pi and omp', () => {
+    expect(capabilitiesFor('claude')!.fork).toEqual({ ok: true })
+    expect(capabilitiesFor('codex')!.fork).toEqual({ ok: true })
+    expect(capabilitiesFor('pi')!.fork).toEqual({ ok: false, reason: "pi can't fork from Quirky yet" })
+    expect(capabilitiesFor('omp')!.fork).toEqual({ ok: false, reason: "omp can't fork from Quirky yet" })
+  })
+
   test('every agent advertises a fork capability', () => {
     for (const agent of ['claude', 'codex', 'pi', 'omp']) {
       const fork = capabilitiesFor(agent)!.fork

@@ -131,7 +131,41 @@
             "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
             "launchSettings": { "description": "The original catalog launch snapshot." },
             "providerSession": { "description": "The native provider conversation identity." },
-            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." }
+            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." },
+            "titleCustom": { "type": "boolean", "description": "True once the user has named the chat." },
+            "forked": { "type": "boolean", "description": "True when this chat continues a copy of another chat's conversation." }
+          },
+          "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
+        }
+      },
+      {
+        "id": "fork",
+        "description": "Forks a chat into a new structured session that continues a copy of its conversation, and returns the new session. Fails with conflict (data.reason turn-running) while a turn runs, conflict (data.reason fork-unsupported) for agents that cannot fork, and invalid-params for a chat with no provider conversation.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string", "description": "The structured session to fork." } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["structured"] },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
+            "worktreeId": { "type": "string" },
+            "cwd": { "type": "string" },
+            "title": { "type": "string" },
+            "status": { "type": "string", "enum": ["starting", "running", "working", "waiting", "done", "exited"] },
+            "createdAt": { "type": "number" },
+            "lastActivityAt": { "type": "number" },
+            "exitCode": { "description": "The exit code, or null while the process is alive." },
+            "background": { "type": "boolean", "description": "True when automatic terminal tab adoption is disabled; explicit viewing remains possible." },
+            "launchSettings": { "description": "The original catalog launch snapshot." },
+            "providerSession": { "description": "The native provider conversation identity." },
+            "resumedFrom": { "type": "string", "description": "The Quirky session this record resumes." },
+            "titleCustom": { "type": "boolean", "description": "True once the user has named the chat." },
+            "forked": { "type": "boolean", "description": "True when this chat continues a copy of another chat's conversation." }
           },
           "required": ["id", "kind", "agent", "worktreeId", "cwd", "title", "status"]
         }

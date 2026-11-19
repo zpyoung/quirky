@@ -487,6 +487,31 @@ try {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
   })
 
+  test('resume keeps a user-set title and regenerates a generated one', async () => {
+    const home = shortHome()
+    await boot({ home })
+    world.worktree.path = home
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const record = world.sessions.get(original.id)!
+    record.providerSession = { id: 'provider-1', transcriptPath: null }
+    record.title = 'My own name'
+    record.titleCustom = true
+    await call('quirky.structured/stop', { session: original.id })
+    const kept = (await call('quirky.structured/resume', { session: original.id })) as Session
+    expect(kept).toMatchObject({ title: 'My own name', titleCustom: true })
+    expect(world.registerCalls.at(-1)).toMatchObject({ title: 'My own name', titleCustom: true })
+
+    delete record.titleCustom
+    record.title = 'Renamed by nobody'
+    world.sessions.get(kept.id)!.providerSession = { id: 'provider-2', transcriptPath: null }
+    await call('quirky.structured/stop', { session: kept.id })
+    const regenerated = (await call('quirky.structured/resume', { session: original.id })) as Session
+    expect(regenerated.title).not.toBe('Renamed by nobody')
+    expect(regenerated.titleCustom).toBeUndefined()
+    expect(world.registerCalls.at(-1)!.titleCustom).toBeUndefined()
+  })
+
   test('resume without a prompt sends the moved queue in order', async () => {
     const home = shortHome()
     await boot({ home })
