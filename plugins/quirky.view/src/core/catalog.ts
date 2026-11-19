@@ -3,7 +3,7 @@
  * is stored, and the guide text `quirky view --help` prints. Specs are data; nothing here renders.
  */
 
-import { loadsImages } from '../../../../packages/ui/src/markdown/blocks/mermaid-safety'
+import { loadsImages } from './mermaid-guard'
 import { CATALOG_TYPES, FORMAT_PATTERNS, textAnswerError } from './contract'
 import type {
   CatalogType,
