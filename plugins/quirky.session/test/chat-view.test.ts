@@ -19,7 +19,8 @@ const CLAUDE: AgentCapabilities = {
   images: OK,
   effort: OK,
   approveForSession: OK,
-  resume: OK
+  resume: OK,
+  fork: OK
 }
 const PI: AgentCapabilities = {
   agent: 'pi',
@@ -30,7 +31,8 @@ const PI: AgentCapabilities = {
   images: OK,
   effort: { ok: false, reason: 'pi takes no effort setting' },
   approveForSession: { ok: false, reason: 'pi has no session approvals' },
-  resume: { ok: false, reason: 'pi cannot resume a conversation' }
+  resume: { ok: false, reason: 'pi cannot resume a conversation' },
+  fork: { ok: false, reason: 'pi cannot fork a conversation' }
 }
 
 const T0 = 1_700_000_000_000
@@ -440,7 +442,10 @@ describe('the chat view', () => {
   test('Show all events reveals status items and diagnostics', async () => {
     await mountChat({ messages: [user(1, 'go'), msg(2, { kind: 'status', text: 'rate limit hit' })] })
     expect(text()).not.toContain('rate limit hit')
-    await click(host!.querySelector('input[type="checkbox"]'))
+    await click(byLabel('More actions'))
+    const item = [...host!.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((entry) => entry.textContent?.includes('Show all events'))!
+    expect(item.getAttribute('aria-checked')).toBe('false')
+    await click(item)
     expect(text()).toContain('rate limit hit')
   })
 
@@ -529,6 +534,28 @@ describe('the chat view', () => {
     await settle()
     expect(byLabel('Your message')!.textContent).toBe('from before')
     expect(buttonNamed('Load earlier messages')).toBeUndefined()
+  })
+
+  test('a fork shows its source only up to the moment it was forked', async () => {
+    const own = longChat(1_000, [1_000])
+    const forkedAt = T0 + 5_500
+    const source = [
+      { ...user(1, 'before the fork'), sessionId: 'before' },
+      { ...user(5, 'also before the fork'), sessionId: 'before' },
+      { ...user(6, 'after the fork'), sessionId: 'before' }
+    ]
+    await mountChat({
+      session: { resumedFrom: 'before', forked: true, createdAt: forkedAt },
+      handlers: {
+        'quirky.structured/messages': (params) => params.session === 'before' ? pageOf(source, params) : pageOf(own, params),
+        'quirky.session/get': () => session({ id: 'before', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null })
+      }
+    })
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(text()).toContain('before the fork')
+    expect(text()).toContain('also before the fork')
+    expect(text()).not.toContain('after the fork')
   })
 
   test('a failed earlier page offers a retry and keeps what is shown', async () => {
@@ -631,6 +658,7 @@ describe('the cards', () => {
     await mountChat({ session: { title: 'Claude 2' } })
     const heading = host!.querySelector('h2')!
     expect(heading.textContent).toBe('Claude 2')
+    expect(heading.querySelector('button')!.getAttribute('aria-label')).toBe('Rename chat: Claude 2')
     expect(heading.style.textTransform).toBe('')
   })
 

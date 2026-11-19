@@ -487,6 +487,31 @@ try {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
   })
 
+  test('resume keeps a user-set title and regenerates a generated one', async () => {
+    const home = shortHome()
+    await boot({ home })
+    world.worktree.path = home
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const record = world.sessions.get(original.id)!
+    record.providerSession = { id: 'provider-1', transcriptPath: null }
+    record.title = 'My own name'
+    record.titleCustom = true
+    await call('quirky.structured/stop', { session: original.id })
+    const kept = (await call('quirky.structured/resume', { session: original.id })) as Session
+    expect(kept).toMatchObject({ title: 'My own name', titleCustom: true })
+    expect(world.registerCalls.at(-1)).toMatchObject({ title: 'My own name', titleCustom: true })
+
+    delete record.titleCustom
+    record.title = 'Renamed by nobody'
+    world.sessions.get(kept.id)!.providerSession = { id: 'provider-2', transcriptPath: null }
+    await call('quirky.structured/stop', { session: kept.id })
+    const regenerated = (await call('quirky.structured/resume', { session: original.id })) as Session
+    expect(regenerated.title).not.toBe('Renamed by nobody')
+    expect(regenerated.titleCustom).toBeUndefined()
+    expect(world.registerCalls.at(-1)!.titleCustom).toBeUndefined()
+  })
+
   test('resume without a prompt sends the moved queue in order', async () => {
     const home = shortHome()
     await boot({ home })
@@ -1126,7 +1151,7 @@ describe('v1 journal import', () => {
 })
 
 describe('structured journal store upgrades', () => {
-  test('preserves an existing v1 journal while appending the receipt, item and queue migrations', async () => {
+  test('preserves an existing v1 journal while appending the receipt, item, queue and usage migrations', async () => {
     const home = shortHome()
     const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
     mkdirSync(dirname(storePath), { recursive: true })
@@ -1157,7 +1182,7 @@ describe('structured journal store upgrades', () => {
 
     const upgraded = new Database(storePath, { readonly: true })
     try {
-      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 5 })
       expect(
         upgraded
           .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
@@ -1166,6 +1191,9 @@ describe('structured journal store upgrades', () => {
       expect(
         upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_queue'").all()
       ).toEqual([{ name: 'structured_queue' }])
+      expect(
+        upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_usage'").all()
+      ).toEqual([{ name: 'structured_usage' }])
     } finally {
       upgraded.close()
     }

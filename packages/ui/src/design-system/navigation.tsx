@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { ListRowProps, MenuProps, SectionHeaderProps, TabsProps } from './contracts'
+import type { ListRowProps, MenuEntry, MenuItem, MenuProps, SectionHeaderProps, TabsProps } from './contracts'
 import { classNames } from './shared'
 import { Badge, StatusDot } from './primitives'
 
@@ -110,6 +110,7 @@ export function Tabs({ label, items, value, onChange, variant }: TabsProps) {
           aria-selected={item.id === value}
           aria-controls={item.panelId}
           disabled={item.disabled}
+          title={item.tooltip}
           tabIndex={index === rovingIndex ? 0 : -1}
           onClick={() => { if (!item.disabled) onChange(item.id) }}
           onKeyDown={(event) => onTabKeyDown(event, index)}
@@ -122,7 +123,10 @@ export function Tabs({ label, items, value, onChange, variant }: TabsProps) {
   )
 }
 
-export function Menu({ label, trigger, items }: MenuProps) {
+const isAction = (entry: MenuEntry): entry is MenuItem => !('kind' in entry)
+const isEnabled = (entry: MenuEntry | undefined): boolean => entry !== undefined && isAction(entry) && !entry.disabled
+
+export function Menu({ label, trigger, items, align }: MenuProps) {
   const generatedId = useId()
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -138,7 +142,8 @@ export function Menu({ label, trigger, items }: MenuProps) {
   const moveFocus = (start: number, direction: 1 | -1) => {
     for (let offset = 1; offset <= items.length; offset += 1) {
       const index = (start + direction * offset + items.length) % items.length
-      if (items[index].disabled) continue
+      const candidate = items[index]
+      if (!isAction(candidate) || candidate.disabled) continue
       setActiveIndex(index)
       itemRefs.current[index]?.focus()
       return
@@ -148,10 +153,10 @@ export function Menu({ label, trigger, items }: MenuProps) {
   useEffect(() => {
     if (!open) return
     const focusedIndex = itemRefs.current.findIndex((item) => item === document.activeElement)
-    if (focusedIndex >= 0 && !items[focusedIndex]?.disabled) {
+    if (focusedIndex >= 0 && isEnabled(items[focusedIndex])) {
       setActiveIndex(focusedIndex)
     } else {
-      const firstEnabled = items.findIndex((item) => !item.disabled)
+      const firstEnabled = items.findIndex(isEnabled)
       if (firstEnabled >= 0) {
         setActiveIndex(firstEnabled)
         itemRefs.current[firstEnabled]?.focus()
@@ -182,14 +187,14 @@ export function Menu({ label, trigger, items }: MenuProps) {
       moveFocus(index, -1)
     } else if (event.key === 'Home') {
       event.preventDefault()
-      const first = items.findIndex((item) => !item.disabled)
+      const first = items.findIndex(isEnabled)
       if (first >= 0) {
         setActiveIndex(first)
         itemRefs.current[first]?.focus()
       }
     } else if (event.key === 'End') {
       event.preventDefault()
-      const last = lastEnabled(items)
+      const last = items.findLastIndex(isEnabled)
       if (last >= 0) {
         setActiveIndex(last)
         itemRefs.current[last]?.focus()
@@ -217,29 +222,37 @@ export function Menu({ label, trigger, items }: MenuProps) {
         {trigger ?? label}{trigger === undefined && <span className="ui-menu__trigger-icon" aria-hidden="true">⌄</span>}
       </button>
       {open && (
-        <ul ref={menuRef} id={`${generatedId}-menu`} className="ui-menu__list" role="menu" aria-label={label} tabIndex={-1}>
-          {items.map((item, index) => (
-            <li key={item.id} role="none">
-              <button
-                ref={(element) => { itemRefs.current[index] = element }}
-                type="button"
-                className={classNames('ui-menu__item', item.destructive && 'ui-menu__item--destructive')}
-                role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-                aria-checked={item.checked}
-                aria-disabled={item.disabled || undefined}
-                disabled={item.disabled}
-                tabIndex={!item.disabled && index === activeIndex ? 0 : -1}
-                onClick={() => {
-                  if (item.disabled) return
-                  item.onAction()
-                  closeMenu(true)
-                }}
-                onKeyDown={(event) => onItemKeyDown(event, index)}
-              >
-                {item.checked !== undefined && <span aria-hidden="true">{item.checked ? '✓ ' : '　'}</span>}{item.label}
-              </button>
-            </li>
-          ))}
+        <ul ref={menuRef} id={`${generatedId}-menu`} className={classNames('ui-menu__list', align === 'end' && 'ui-menu__list--end')} role="menu" aria-label={label} tabIndex={-1}>
+          {items.map((item, index) => {
+            if (!isAction(item)) {
+              return item.kind === 'separator'
+                ? <li key={item.id} role="separator" className="ui-menu__separator" />
+                : <li key={item.id} role="none" className="ui-menu__note">{item.label}</li>
+            }
+            return (
+              <li key={item.id} role="none">
+                <button
+                  ref={(element) => { itemRefs.current[index] = element }}
+                  type="button"
+                  className={classNames('ui-menu__item', item.destructive && 'ui-menu__item--destructive')}
+                  role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                  aria-checked={item.checked}
+                  aria-disabled={item.disabled || undefined}
+                  disabled={item.disabled}
+                  tabIndex={!item.disabled && index === activeIndex ? 0 : -1}
+                  onClick={() => {
+                    if (item.disabled) return
+                    item.onAction()
+                    closeMenu(true)
+                  }}
+                  onKeyDown={(event) => onItemKeyDown(event, index)}
+                >
+                  {item.checked !== undefined && <span aria-hidden="true">{item.checked ? '✓ ' : '　'}</span>}{item.label}
+                  {item.description !== undefined && <span className="ui-menu__description">{item.description}</span>}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

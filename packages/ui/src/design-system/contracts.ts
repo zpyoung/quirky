@@ -31,7 +31,7 @@ export type ListRowProps = {
   onClick?: () => void
 }
 export type SectionHeaderProps = Omit<HTMLAttributes<HTMLElement>, 'title'> & { title: ReactNode; titleTooltip?: string; actions?: ReactNode }
-export type TabItem = { id: string; label: string; count?: number; disabled?: boolean; panelId?: string }
+export type TabItem = { id: string; label: string; count?: number; disabled?: boolean; panelId?: string; /** Native hover text on the tab button. */ tooltip?: string }
 export type TabsProps = {
   label: string
   items: readonly TabItem[]
@@ -40,8 +40,15 @@ export type TabsProps = {
   /** `boxed` (default): bordered tabs. `underline`: flat tabs with an accent underline on the selected one, as in the center tab strip. */
   variant?: 'boxed' | 'underline'
 }
-export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean }
-export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuItem[] }
+/** `description` shows under the label; use it for why an item is disabled. */
+export type MenuItem = { id: string; label: string; onAction: () => void; disabled?: boolean; destructive?: boolean; checked?: boolean; description?: string }
+/** A rule between groups of items; it is not focusable. */
+export type MenuSeparator = { kind: 'separator'; id: string }
+/** A non-actionable line of text in the list; keyboard navigation skips it. */
+export type MenuNote = { kind: 'note'; id: string; label: string }
+export type MenuEntry = MenuItem | MenuSeparator | MenuNote
+/** `align="end"` opens the list from the trigger's right edge, for a menu at the end of a row. */
+export type MenuProps = { label: string; trigger?: ReactNode; items: readonly MenuEntry[]; align?: 'start' | 'end' }
 /** Nonmodal anchored dialog; outside pointer and Escape dismiss without trapping focus. */
 export type PopoverProps = { open: boolean; label: string; anchor: RefObject<HTMLElement | null>; boundary?: HTMLElement | null; onClose(): void; children: ReactNode }
 export type ToastProps = { title: string; description?: ReactNode; status?: UiStatus; action?: UiAction; onDismiss: () => void; durationMs?: number }

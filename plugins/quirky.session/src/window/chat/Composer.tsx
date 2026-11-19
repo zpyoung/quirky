@@ -6,6 +6,7 @@ import type { QuirkyCommandName } from './commands'
 import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
 import { absolutePathsOf, AgentChip, NO_PICKS, reasonOf, useAgentOptions, useTurnSettings, type Picks } from './controls'
 import { createChat } from './createChat'
+import { useElapsed, useTurnStart } from './elapsed'
 import { ComposerEditor } from './editor/ComposerEditor'
 import { ImageChip } from './ImageChip'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
@@ -61,19 +62,6 @@ const card = (attached: boolean, accent: boolean): CSSProperties => ({
   borderRadius: attached ? '0 0 var(--ui-radius-window) var(--ui-radius-window)' : 'var(--ui-radius-window)'
 })
 
-/** Seconds since `working` last turned true, as "12s" or "1m 05s"; ticks once a second while working. */
-function useElapsed(working: boolean): string {
-  const [seconds, setSeconds] = useState(0)
-  useEffect(() => {
-    if (!working) return
-    const started = Date.now()
-    setSeconds(0)
-    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
-    return () => clearInterval(timer)
-  }, [working])
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`
-}
-
 /** Whether the desktop shell can open a native file picker; false until it says so. */
 function useFilePicker(context: UiPluginContext): boolean {
   const [available, setAvailable] = useState(false)
@@ -110,6 +98,7 @@ export function Composer({
   session,
   capabilities,
   working,
+  workStartedAt,
   reportedMode,
   autoAvailable,
   previousMode,
@@ -119,6 +108,8 @@ export function Composer({
   session: Session
   capabilities: AgentCapabilities | null
   working: boolean
+  /** When the turn now running began; the header times it from the same moment. Defaults to when `working` turned true. */
+  workStartedAt?: number | null
   reportedMode?: PermissionModeName
   autoAvailable?: boolean
   previousMode?: PermissionModeName
@@ -147,7 +138,7 @@ export function Composer({
   const commands = useAgentCommands(context, session.id)
   const filePicker = useFilePicker(context)
   const search = useFileSearch(context, session.worktreeId, trigger?.kind === '@' ? trigger.query : null)
-  const elapsed = useElapsed(working)
+  const elapsed = useElapsed(useTurnStart(working, workStartedAt))
   const ended = session.status === 'exited'
   const agentLabel = capitalized(session.agent)
   const sendKey = (() => {

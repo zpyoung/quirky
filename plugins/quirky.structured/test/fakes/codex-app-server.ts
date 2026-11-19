@@ -288,6 +288,11 @@ function receive(message) {
         emitThreadNotifications(id)
         return
       }
+      case 'thread/fork': {
+        const id = 'forked-' + message.params.threadId
+        send({ id: message.id, result: { thread: { id, sessionId: id, path: '/rollouts/' + id + '.jsonl' } } })
+        return
+      }
       case 'thread/resume': {
         const id = message.params.threadId
         send({ id: message.id, result: { thread: { id, sessionId: id } } })

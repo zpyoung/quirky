@@ -1,9 +1,11 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
 import { Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
-import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
+import { showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
+import { ChatHeader } from './ChatHeader'
 import { Composer } from './Composer'
+import { newestUserAt } from './elapsed'
 import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
@@ -76,25 +78,6 @@ const plan = {
   minHeight: 0,
   minWidth: 0,
   borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
-} satisfies CSSProperties
-const headerEnd = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-8)', flexShrink: 0 } satisfies CSSProperties
-const header = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 'var(--ui-space-8)',
-  minHeight: 'var(--ui-row-single)',
-  paddingInline: 'var(--ui-space-8)'
-} satisfies CSSProperties
-const heading = {
-  margin: 0,
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  color: 'var(--ui-text)',
-  fontSize: 'var(--ui-font-label)',
-  fontWeight: 700
 } satisfies CSSProperties
 
 /** Whether `element` is scrolled to its end, give or take a few lines. */
@@ -206,8 +189,12 @@ export const CHAT_PAGE_SIZE = 1000
 
 type HistoryState = { more: boolean; loading: boolean; error: string | null }
 
-/** Where Load earlier messages continues: below `beforeSeq` in `record`, or its predecessor once `exhausted`. */
-type HistoryCursor = { record: Session; beforeSeq?: number; exhausted: boolean }
+/**
+ * Where Load earlier messages continues: below `beforeSeq` in `record`, or its predecessor once
+ * `exhausted`. `until` is the newest time (epoch ms) a message may carry to belong to this chat's
+ * history: a fork never shows what its source received after the fork was made.
+ */
+type HistoryCursor = { record: Session; beforeSeq?: number; exhausted: boolean; until?: number }
 
 const replyTooLarge = (error: unknown) => (error as { data?: { reason?: unknown } } | null)?.data?.reason === 'reply_too_large'
 
@@ -260,7 +247,6 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const anchor = useRef<{ element: Element; offset: number } | null>(null)
   const [behind, setBehind] = useState(false)
   const keepDistanceFromEnd = useRef<number | null>(null)
-  const showAllId = useId()
   const capabilities = useCapabilities(context, session.agent)
   const paneViews = usePaneViews(context, session.id)
   const turns = useMemo(
@@ -342,7 +328,13 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           }
           seen.current.add(next)
           try {
-            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }
+            const forkPoint = at.record.forked === true ? at.record.createdAt : undefined
+            const until = forkPoint === undefined ? at.until : Math.min(forkPoint, at.until ?? forkPoint)
+            cursor.current = {
+              record: (await context.call('quirky.session/get', { session: next })) as Session,
+              exhausted: false,
+              ...(until === undefined ? {} : { until })
+            }
           } catch {
             cursor.current = null
           }
@@ -355,11 +347,17 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           left
         )
         if (stale()) return
-        if (at.record.id === session.id) add(page)
-        else setEarlier((chats) => prependEarlier(chats, at.record, page))
+        const shown = at.until === undefined ? page : page.filter((message) => message.at <= at.until!)
+        if (at.record.id === session.id) add(shown)
+        else if (shown.length > 0) setEarlier((chats) => prependEarlier(chats, at.record, shown))
         const oldest = page[0]?.seq ?? at.beforeSeq ?? 1
-        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }
-        left -= page.length
+        cursor.current = {
+          record: at.record,
+          beforeSeq: oldest,
+          exhausted: page.length < limit || oldest <= 1,
+          ...(at.until === undefined ? {} : { until: at.until })
+        }
+        left -= shown.length
       }
     } catch (failure) {
       error = messageOf(failure)
@@ -511,10 +509,14 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
 
   return (
     <div style={layout}>
-      <header style={header}>
-        <h2 style={heading}>{session.title}</h2>
-        <div style={headerEnd}>
-          {newest && (
+      <ChatHeader
+        context={context}
+        session={session}
+        capabilities={capabilities}
+        messages={history}
+        showAll={showAll}
+        planChip={
+          newest && (
             <PlanChip
               newest={newest}
               open={panelOpen}
@@ -523,22 +525,9 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
                 setPanelOpen(!panelOpen)
               }}
             />
-          )}
-          <label className="ui-checkbox-label" htmlFor={showAllId}>
-            <input
-              id={showAllId}
-              type="checkbox"
-              checked={showAll}
-              onChange={(event) => {
-                const enabled = event.target.checked
-                rememberShowAllEvents(session, enabled)
-                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
-              }}
-            />
-            <span>Show all events</span>
-          </label>
-        </div>
-      </header>
+          )
+        }
+      />
       <div ref={bodyRef} style={body}>
         <div style={transcript}>
           <div ref={scrollRef} style={scroller} role="log" aria-live="polite" aria-label="Transcript" onScroll={(event) => onScrolled(event.currentTarget)}>
@@ -599,6 +588,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         session={session}
         capabilities={capabilities}
         working={working}
+        workStartedAt={newestUserAt(history)}
         reportedMode={mode?.mode}
         autoAvailable={autoAvailable}
         previousMode={modeBeforePlan}

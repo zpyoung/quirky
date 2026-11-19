@@ -1,10 +1,10 @@
 import { mkdtempSync, symlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { QuirkyClient, QuirkyEvent, RpcError, Session, StructuredMessage } from '@quirky/protocol'
+import type { QuirkyClient, QuirkyEvent, RpcError, Session, SessionProviderSession, StructuredMessage } from '@quirky/protocol'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions } from '../runner'
+import type { StructuredContext, StructuredForkSource, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions } from '../runner'
 import { FakeWorld } from './fakes/world'
 
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -33,7 +33,12 @@ export class ChatRunner implements StructuredRunner {
       this.context.setStatus(session.id, 'working')
     } else this.context.setStatus(session.id, 'running')
   }
+  /** When set, a send waits for it before reaching the agent; lets a test act while a turn is opening. */
+  sendGate: Promise<void> | null = null
+  sendsStarted = 0
   async send(sessionId: string, text: string, options?: StructuredSendOptions) {
+    this.sendsStarted += 1
+    if (this.sendGate) await this.sendGate
     if (this.sendError) throw this.sendError
     this.onSend?.()
     this.sent.push({ sessionId, text, ...(options === undefined ? {} : { options }) })
@@ -70,6 +75,17 @@ export class ChatRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'done')
   }
   async stop(_sessionId: string) {}
+  forks: StructuredForkSource[] = []
+  forkError: Error | null = null
+  forkedProvider: SessionProviderSession = { id: 'provider-forked', transcriptPath: null }
+  /** When set, a fork waits for it before returning; lets a test act while the provider copy is in flight. */
+  forkGate: Promise<void> | null = null
+  async fork(source: StructuredForkSource) {
+    this.forks.push(source)
+    if (this.forkGate) await this.forkGate
+    if (this.forkError) throw this.forkError
+    return this.forkedProvider
+  }
   finish(sessionId: string) {
     this.context.setStatus(sessionId, 'done')
   }

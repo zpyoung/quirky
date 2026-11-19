@@ -224,9 +224,11 @@ describe('session store migration from version 9', () => {
         isActive: () => true
       })
       closeStore = legacy.close
-      const legacyRecords = new SessionRecords(legacy.store)
-      legacyRecords.insert({ ...session, background: true }, 'repo')
-      legacyRecords.update(session.id, { badges })
+      legacy.store.run(
+        "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id, restorable, background, badges) VALUES (?, 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 2, 2, NULL, 'repo', 0, 1, ?)",
+        session.id,
+        JSON.stringify(badges)
+      )
       legacy.close()
       closeStore = undefined
 
@@ -292,6 +294,30 @@ describe('session store migration 7', () => {
     records.insert({ ...session, id: 's_c', createdAt: 3, name: 'other' }, 'repo')
     expect(records.byName('reviewer').map((s) => s.id)).toEqual(['s_a', 's_b'])
     expect(records.byName('nobody')).toEqual([])
+  })
+})
+
+describe('session title fields', () => {
+  test('a row written before the migration reads without titleCustom or forked', () => {
+    const store = memoryStore(13)
+    store.run(
+      "INSERT INTO sessions (id, kind, agent, worktree_id, cwd, title, status, created_at, last_activity_at, exit_code, repo_id) VALUES ('s_old', 'terminal', 'claude', 'wt', '/work', 'Claude', 'running', 1, 1, NULL, 'repo')"
+    )
+    migrateStore(store, 13)
+    const read = new SessionRecords(store).get('s_old')
+    expect(read?.titleCustom).toBeUndefined()
+    expect(read?.forked).toBeUndefined()
+  })
+
+  test('titleCustom and forked round-trip through insert and update', () => {
+    const records = new SessionRecords(memoryStore())
+    records.insert({ ...session, titleCustom: true, forked: true }, 'repo')
+    expect(records.get('s_new')).toMatchObject({ titleCustom: true, forked: true })
+
+    const updated = records.update('s_new', { title: 'Renamed', titleCustom: false })
+    expect(updated?.title).toBe('Renamed')
+    expect(updated?.titleCustom).toBeUndefined()
+    expect(updated?.forked).toBe(true)
   })
 })
 

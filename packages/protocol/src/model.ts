@@ -281,6 +281,10 @@ export type Session = {
   worktreeId: string
   cwd: string
   title: string
+  /** True when the user set the title; absent means false. */
+  titleCustom?: boolean
+  /** True when this session was forked from `resumedFrom` rather than resumed; absent means false. */
+  forked?: boolean
   /** Background work is not auto-adopted into terminal tabs; an explicit session view can still show it. */
   background?: boolean
   status: SessionStatus

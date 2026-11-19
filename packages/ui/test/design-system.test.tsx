@@ -311,6 +311,42 @@ describe('shared graphite components', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
+  test('menus render separators, notes and descriptions, and arrow keys skip the non-actions', async () => {
+    await render(<Menu label="Chat actions" align="end" items={[
+      { kind: 'note', id: 'figures', label: '184k tokens · Cache 3:42' },
+      { kind: 'separator', id: 'rule-top' },
+      { id: 'rename', label: 'Rename', onAction: () => {} },
+      { id: 'fork', label: 'Fork chat', disabled: true, description: 'Available when the turn ends', onAction: () => {} },
+      { kind: 'separator', id: 'rule' },
+      { id: 'info', label: 'Session info', onAction: () => {} },
+    ]} />)
+    await click(container.querySelector('button[aria-haspopup="menu"]')!)
+    const list = container.querySelector('[role="menu"]')!
+    expect(list.classList.contains('ui-menu__list--end')).toBe(true)
+    expect(list.querySelectorAll('[role="separator"]')).toHaveLength(2)
+    expect(list.textContent).toContain('184k tokens · Cache 3:42')
+    expect(list.querySelector('[role="menuitem"][disabled]')!.textContent).toContain('Available when the turn ends')
+    const items = [...list.querySelectorAll<HTMLElement>('button[role="menuitem"]')]
+    expect(document.activeElement).toBe(items[0])
+    await key(items[0]!, 'ArrowDown')
+    expect(document.activeElement).toBe(items[2])
+    await key(items[2]!, 'ArrowDown')
+    expect(document.activeElement).toBe(items[0])
+    await key(items[0]!, 'ArrowUp')
+    expect(document.activeElement).toBe(items[2])
+    await key(items[2]!, 'Home')
+    expect(document.activeElement).toBe(items[0])
+    await key(items[0]!, 'End')
+    expect(document.activeElement).toBe(items[2])
+  })
+
+  test('tabs expose an item tooltip as the tab button title', async () => {
+    await render(<Tabs label="Sessions" value="a" onChange={() => {}} items={[{ id: 'a', label: 'One', tooltip: '184k tokens' }, { id: 'b', label: 'Two' }]} />)
+    const tabs = [...container.querySelectorAll('[role="tab"]')]
+    expect(tabs[0]!.getAttribute('title')).toBe('184k tokens')
+    expect(tabs[1]!.hasAttribute('title')).toBe(false)
+  })
+
   test('menus keep keyboard activation on the focused action when items rerender', async () => {
     const actions: string[] = []
     const items = () => [

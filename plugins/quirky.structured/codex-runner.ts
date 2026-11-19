@@ -1,4 +1,4 @@
-import type { AgentCommand, AskEnvelope, Session } from '@quirky/protocol'
+import type { AgentCommand, AskEnvelope, Session, SessionProviderSession } from '@quirky/protocol'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import {
   CallTracker,
@@ -16,6 +16,7 @@ import {
 import { mentionsCommand, referencedCommands } from './slash-commands'
 import type {
   StructuredContext,
+  StructuredForkSource,
   StructuredLaunchOptions,
   StructuredRunner,
   StructuredSendOptions,
@@ -232,6 +233,8 @@ type Running = {
   appliedPermissionMode: string
   totalTokenUsage: TokenCounts | null
   turnUsageBaseline: TokenCounts | null
+  /** The thread total the last usage report already covered, so a total-only update reports just its new spend. */
+  reportedTotal: TokenCounts | null
   activeTurnId: string | null
   pendingApprovalCount: number
   pendingCompletion: PendingCompletion | null
@@ -372,6 +375,39 @@ class CodexRunner implements StructuredRunner {
       throw new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure })
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
+    }
+  }
+
+  /**
+   * Forks the source thread over a short-lived app-server of its own, so the source's live process keeps
+   * its thread. The new thread holds the source history and no turn runs on it.
+   */
+  async fork(source: StructuredForkSource): Promise<SessionProviderSession> {
+    const executable = await this.context.resolveCodexPath()
+    const failures: Error[] = []
+    const connection = new CodexConnection(
+      this.context.process,
+      executable,
+      source.cwd,
+      environmentWithPatch(this.deps.env ?? process.env, source.launchOptions.env),
+      {
+        notification: () => {},
+        serverRequest: () => {},
+        failure: (error) => failures.push(error)
+      }
+    )
+    try {
+      await connection.request('initialize', { clientInfo: CLIENT_INFO })
+      connection.notify('initialized', {})
+      const response = await connection.request('thread/fork', { threadId: source.providerSession.id, cwd: source.cwd, excludeTurns: true })
+      const thread = (response as { thread?: { path?: unknown } } | null)?.thread
+      return { id: this.threadIdFromResponse(response, 'thread/fork'), transcriptPath: typeof thread?.path === 'string' ? thread.path : null }
+    } catch (error) {
+      const stderrTail = connection.stderrTail
+      const failure = failures[0] ?? (error instanceof Error ? error : new Error(String(error)))
+      throw stderrTail ? new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure }) : failure
+    } finally {
+      await connection.close()
     }
   }
 
@@ -529,6 +565,7 @@ class CodexRunner implements StructuredRunner {
       permissionMode: DEFAULT_PERMISSION_MODE,
       appliedPermissionMode: DEFAULT_PERMISSION_MODE,
       totalTokenUsage: null,
+      reportedTotal: null,
       turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
       pendingApprovalCount: 0,
@@ -616,6 +653,7 @@ class CodexRunner implements StructuredRunner {
             expectedTurnId
           }
     if (run.totalTokenUsage !== null) run.turnUsageBaseline = { ...run.totalTokenUsage }
+    run.reportedTotal = null
     run.inputPending = true
     try {
       const response = await run.connection.request(method, params)
@@ -738,6 +776,19 @@ class CodexRunner implements StructuredRunner {
         if (total) run.totalTokenUsage = total
         const turnUsage = last ?? (total ? tokenUsageDelta(total, run.turnUsageBaseline) : null)
         run.turnUsage = turnContextUsage(usage, last, turnUsage) ?? run.turnUsage
+        const spent = last ?? (total ? tokenUsageDelta(total, run.reportedTotal ?? run.turnUsageBaseline) : null)
+        if (total) run.reportedTotal = total
+        if (spent) {
+          const cached = spent.cachedInputTokens ?? 0
+          this.context.reportUsage?.(run.sessionId, {
+            tokens: {
+              input: Math.max(0, (spent.inputTokens ?? 0) - cached),
+              output: (spent.outputTokens ?? 0) + (spent.reasoningOutputTokens ?? 0),
+              cacheRead: cached,
+              cacheWrite: 0
+            }
+          })
+        }
         this.context.appendMessage({
           sessionId: run.sessionId,
           role: 'system',
@@ -900,6 +951,7 @@ class CodexRunner implements StructuredRunner {
       item: turnEndItem('done', run.turnStartedAt === null ? undefined : Date.now() - run.turnStartedAt)
     })
     run.turnStartedAt = null
+    this.context.reportUsage?.(run.sessionId, { turnEnded: true })
     this.context.setStatus(run.sessionId, 'done')
     run.stream.reset()
     run.assistantDeltas.clear()
