@@ -1175,7 +1175,28 @@ export function activate(context: PluginContext): void {
     }
   }
 
-  const resume: MethodHandler = async (params, caller) => {
+  const plannedEnvironmentFor = async (agent: StructuredAgent, cwd: string, options: StructuredStartOptions): Promise<Record<string, string | null>> =>
+    plannedEnvironmentOf(
+      await context.call('quirky.agents/plan', {
+        agent,
+        cwd,
+        ...(options.model === undefined ? {} : { model: options.model }),
+        ...(options.effort === undefined ? {} : { options: { effort: options.effort } })
+      })
+    )
+
+  const conflictWithReason = (message: string, reason: string) => {
+    const error = context.error('conflict', message)
+    Object.assign(error, { data: { reason } })
+    return error
+  }
+
+  /**
+   * Reopens a stored structured conversation as a new session. A resume continues the old provider
+   * conversation; with `forking`, the runner first copies it into a new provider conversation and the
+   * new session continues that copy, flagged as a fork and without a prompt.
+   */
+  const reopen = async (params: Record<string, unknown>, caller: PluginCaller, forking = false): Promise<Session> => {
     const ownerPluginId = await ownerPluginFor(caller)
     const unsupported = Object.keys(params).find(
       (key) => key !== 'session' && key !== 'prompt' && key !== 'lifetime' && key !== 'lifetimeKey'
@@ -1191,9 +1212,9 @@ export function activate(context: PluginContext): void {
       throw context.error('conflict', `structured sessions cannot resume provider ${old.agent}`)
     }
     const agent = old.agent
-    const providerSession = old.providerSession
+    let providerSession = old.providerSession
     if (!providerSession || typeof providerSession.id !== 'string') {
-      throw context.error('conflict', `session ${old.id} has no provider session and cannot be resumed`)
+      throw context.error(forking ? 'invalid-params' : 'conflict', `session ${old.id} has no provider session and cannot be ${forking ? 'forked' : 'resumed'}`)
     }
     const problem = providerSessionIdProblem(providerSession.id)
     if (problem) throw context.error('invalid-params', problem)
@@ -1214,6 +1235,25 @@ export function activate(context: PluginContext): void {
     }
     const resumeModes = await openingModes(agent, undefined)
     ensureActive()
+    let accountPrepare = false
+    let userEnv: Record<string, string | null> = {}
+    let planned = false
+    if (forking) {
+      const source = providerSession
+      const forkRunner = runnerFor(agent)
+      accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
+      if (accountPrepare) userEnv = await plannedEnvironmentFor(agent, old.cwd, options)
+      planned = true
+      ensureActive()
+      try {
+        providerSession = await forkRunner.fork!({ providerSession: source, cwd: old.cwd, launchOptions: { ...options, env: userEnv } })
+      } catch (error) {
+        throw conflictWithReason(error instanceof Error ? error.message : String(error), 'fork-failed')
+      }
+      const forkedProblem = providerSessionIdProblem(providerSession.id)
+      if (forkedProblem) throw context.error('conflict', forkedProblem)
+      ensureActive()
+    }
     const key = `${agent}:${providerSession.id}`
     if (owners.has(key)) throw context.error('conflict', `the ${agent} conversation already has a connected owner`)
     const token: OwnerToken = { key, sessionId: null }
@@ -1221,23 +1261,15 @@ export function activate(context: PluginContext): void {
 
     let registered: Session
     let entry: LiveSession | null = null
-    let accountPrepare = false
-    let userEnv: Record<string, string | null> = {}
     try {
       ensureActive()
-      accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
-      if (accountPrepare) {
-        userEnv = plannedEnvironmentOf(
-          await context.call('quirky.agents/plan', {
-            agent,
-            cwd: old.cwd,
-            ...(options.model === undefined ? {} : { model: options.model }),
-            ...(options.effort === undefined ? {} : { options: { effort: options.effort } })
-          })
-        )
+      if (!planned) {
+        accountPrepare = accountPreparationAvailable(await context.call('plugin.contributions', { kind: 'method' }))
+        if (accountPrepare) userEnv = await plannedEnvironmentFor(agent, old.cwd, options)
       }
       ensureActive()
-      const title = await nextTitle(old.worktreeId, agent)
+      const keepsTitle = forking || old.titleCustom === true
+      const title = forking ? `${old.title} (fork)` : old.titleCustom === true ? old.title : await nextTitle(old.worktreeId, agent)
       ensureActive()
       registered = (await context.call('quirky.session/register', {
         worktree: old.worktreeId,
@@ -1246,6 +1278,8 @@ export function activate(context: PluginContext): void {
         agent,
         kind: 'structured',
         title,
+        ...(keepsTitle && old.titleCustom === true ? { titleCustom: true } : {}),
+        ...(forking ? { forked: true } : {}),
         ...(old.background === true ? { background: true } : {}),
         ...(old.launchSettings === null || old.launchSettings === undefined ? {} : { launchSettings: old.launchSettings })
       })) as Session
@@ -1330,10 +1364,12 @@ export function activate(context: PluginContext): void {
         ...(agent === 'claude' ? planStateOf(old.id, registered.id) : {}),
         env: environmentForLease(lease.env, environment)
       }
-      queue.moveSession(old.id, registered.id)
-      queueMoved = true
-      emitQueue(old.id)
-      emitQueue(registered.id)
+      if (!forking) {
+        queue.moveSession(old.id, registered.id)
+        queueMoved = true
+        emitQueue(old.id)
+        emitQueue(registered.id)
+      }
       startRunner(
         registered,
         agent,
@@ -1341,7 +1377,7 @@ export function activate(context: PluginContext): void {
         { ...resumeModes, ...launchOptions, providerSession: preparedProviderSession },
         token
       )
-      if (typeof params.prompt !== 'string' || params.prompt === '') {
+      if (!forking && (typeof params.prompt !== 'string' || params.prompt === '')) {
         // a promptless resume never settles a turn, so nothing else would send the moved queue
         void startTasks.get(registered.id)?.then(() => flushQueue(registered.id))
       }
@@ -1355,6 +1391,31 @@ export function activate(context: PluginContext): void {
     }
     if (ownerPluginId !== null) await reconcileOwnedSessions()
     return registered
+  }
+
+  const resume: MethodHandler = (params, caller) => reopen(params, caller)
+
+  /**
+   * Forks a chat into a new one that continues a copy of its conversation. Refuses while the source
+   * has a turn running, and for agents whose runner cannot fork. The source is never touched.
+   */
+  const fork: MethodHandler = async (params, caller) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured fork does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    const source = await requireStructured(params.session)
+    ensureActive()
+    if (!isStructuredAgent(source.agent)) throw context.error('invalid-params', `structured sessions cannot fork provider ${source.agent}`)
+    if (!source.providerSession || typeof source.providerSession.id !== 'string') {
+      throw context.error('invalid-params', `session ${source.id} has no provider session and cannot be forked`)
+    }
+    const status = live.get(source.id)?.status ?? source.status
+    if (status === 'working' || status === 'waiting') throw conflictWithReason('a turn is running; wait for it to finish before forking', 'turn-running')
+    const capability = capabilitiesFor(source.agent)?.fork
+    if (!capability?.ok || runnerFor(source.agent).fork === undefined) {
+      throw conflictWithReason(capability?.ok === false ? capability.reason : `${source.agent} can't fork from Quirky yet`, 'fork-unsupported')
+    }
+    return reopen(params, caller, true)
   }
 
   const messages: MethodHandler = async (params) => {
@@ -1973,6 +2034,7 @@ export function activate(context: PluginContext): void {
 
   context.provide('method:quirky.structured/create', create)
   context.provide('method:quirky.structured/resume', resume)
+  context.provide('method:quirky.structured/fork', fork)
   context.provide('method:quirky.structured/messages', messages)
   context.provide('method:quirky.structured/send', send)
   context.provide('method:quirky.structured/capabilities', capabilities)

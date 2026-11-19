@@ -3,8 +3,8 @@ import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
-import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session, UsageTotals } from '@quirky/protocol'
-import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
+import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session, SessionProviderSession, UsageTotals } from '@quirky/protocol'
+import type { StructuredContext, StructuredForkSource, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
 import {
   CallTracker,
   ProseStream,
@@ -77,6 +77,8 @@ export type ClaudeRunnerDeps = {
   query?: (params: ClaudeQueryParams) => ClaudeQuery
   /** Where Claude keeps plan files; defaults to `plans` under the session's Claude config directory. */
   plansDir?: string
+  /** Replaces the SDK's `forkSession`; tests inject a fake. */
+  forkSession?: (sessionId: string, options?: { dir?: string }) => Promise<{ sessionId: string }>
 }
 
 const DENIED = 'Denied from Quirky'
@@ -332,6 +334,16 @@ class ClaudeRunner implements StructuredRunner {
     private readonly context: StructuredContext,
     private readonly deps: ClaudeRunnerDeps
   ) {}
+
+  /**
+   * Copies the source transcript into a new Claude session through the SDK, leaving the source and any
+   * process running it alone. The SDK reports no transcript path, so the new session's stays unknown until init.
+   */
+  async fork(source: StructuredForkSource): Promise<SessionProviderSession> {
+    const forkSession = this.deps.forkSession ?? (await import('@anthropic-ai/claude-agent-sdk')).forkSession
+    const forked = await forkSession(source.providerSession.id, { dir: source.cwd })
+    return { id: forked.sessionId, transcriptPath: null }
+  }
 
   async start(session: Session, prompt: string | undefined, launchOptions: StructuredStartOptions = {}): Promise<void> {
     if (session.agent !== 'claude') throw new Error('structured sessions support claude only')

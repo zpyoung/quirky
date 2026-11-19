@@ -124,6 +124,19 @@ export interface StructuredRunner {
   planFeedback?(sessionId: string, text: string): boolean
   interrupt(sessionId: string): Promise<void>
   stop(sessionId: string): Promise<void>
+  /**
+   * Creates a new provider conversation holding the source's history, without starting a turn and without
+   * touching the source or its live process. Throws a message fit for the user when the agent refuses.
+   * Absent on runners whose agent cannot fork natively.
+   */
+  fork?(source: StructuredForkSource): Promise<SessionProviderSession>
+}
+
+/** What a runner needs to fork one conversation: its provider identity, folder and launch picks. */
+export type StructuredForkSource = {
+  providerSession: SessionProviderSession
+  cwd: string
+  launchOptions: StructuredLaunchOptions
 }
 
 export type StructuredRunnerFactory = (context: StructuredContext) => StructuredRunner

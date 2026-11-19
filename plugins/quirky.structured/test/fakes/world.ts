@@ -87,7 +87,9 @@ export class FakeWorld {
         restorable: false,
         launchSettings: params.launchSettings ?? null,
         providerSession: null,
-        resumedFrom: params.resumedFrom ?? null
+        resumedFrom: params.resumedFrom ?? null,
+        ...(params.titleCustom === true ? { titleCustom: true } : {}),
+        ...(params.forked === true ? { forked: true } : {})
       }
       this.sessions.set(session.id, session)
       return session

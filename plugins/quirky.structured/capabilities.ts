@@ -51,7 +51,7 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
     effort: OK,
     approveForSession: OK,
     resume: OK,
-    fork: { ok: false, reason: 'Fork is not available for this agent yet' }
+    fork: OK
   },
   codex: {
     agent: 'codex',
@@ -63,7 +63,7 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
     effort: OK,
     approveForSession: OK,
     resume: OK,
-    fork: { ok: false, reason: 'Fork is not available for this agent yet' }
+    fork: OK
   },
   pi: {
     agent: 'pi',
@@ -75,7 +75,7 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
     effort: OK,
     approveForSession: { ok: false, reason: 'pi has no session-wide approval' },
     resume: OK,
-    fork: { ok: false, reason: 'Fork is not available for this agent yet' }
+    fork: { ok: false, reason: "pi can't fork from Quirky yet" }
   },
   omp: {
     agent: 'omp',
@@ -87,7 +87,7 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
     effort: OK,
     approveForSession: { ok: false, reason: 'omp has no session-wide approval' },
     resume: OK,
-    fork: { ok: false, reason: 'Fork is not available for this agent yet' }
+    fork: { ok: false, reason: "omp can't fork from Quirky yet" }
   }
 }
 
