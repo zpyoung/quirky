@@ -770,10 +770,10 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Activity.tsx",
-        "quote": "{call.item.detail && ("
+        "quote": "more={call.item.detail ? <pre style={detail}>{call.item.detail}</pre> : undefined}"
       },
-      "anchor": "call.item.detail &&",
-      "reason": "Shows a tool call's Details disclosure only when the call reported detail."
+      "anchor": "call.item.detail ?",
+      "reason": "Passes a tool call's output to its row only when the call reported output."
     },
     {
       "site": {
@@ -1526,6 +1526,30 @@
       },
       "anchor": "older.loading ?",
       "reason": "Relabels the Load earlier messages button while its page is fetched; the transcript already shown stays, so this is a control label, not a loading state of the view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{lead !== undefined && <span style={lineBox}>{lead}</span>}"
+      },
+      "anchor": "lead !== undefined &&",
+      "reason": "Shows the leading status dot only when the caller passes one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{expandable ? ("
+      },
+      "anchor": "expandable ?",
+      "reason": "Makes a command line a disclosure button only when it is cut off or has output to show."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "{open && more}"
+      },
+      "anchor": "open &&",
+      "reason": "Shows a command's output only while its line is expanded."
     }
   ],
   "actions": [
@@ -3104,6 +3128,15 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/cards/Card.tsx",
+        "quote": "<button type=\"button\" style={toggleButton} aria-expanded={open} onClick={onToggle}>"
+      },
+      "anchor": "onClick",
+      "reason": "Forwards the click to the onToggle handler, which only expands or collapses one command line.",
+      "notAction": "forwarded"
     }
   ]
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { Button, EmptyState, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { AskCard } from './AskCard'
@@ -51,10 +51,35 @@ const ACTIONS_STYLE: CSSProperties = {
 }
 
 const RECORD_STYLE: CSSProperties = {
+  display: 'flex',
   margin: 0,
   padding: 'var(--ui-space-6) var(--ui-space-12)',
+  minWidth: 0
+}
+
+const RECORD_TOGGLE_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: 'var(--ui-space-6)',
   minWidth: 0,
-  overflowWrap: 'anywhere'
+  padding: 0,
+  border: 0,
+  background: 'none',
+  color: 'inherit',
+  font: 'inherit',
+  textAlign: 'start',
+  cursor: 'pointer'
+}
+
+const RECORD_CLIPPED_STYLE: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+const RECORD_WRAPPED_STYLE: CSSProperties = { minWidth: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
+const RECORD_CHEVRON_BOX_STYLE: CSSProperties = { display: 'flex', alignItems: 'center', flex: 'none', height: '1lh' }
+const RECORD_CHEVRON_STYLE: CSSProperties = {
+  width: 'var(--ui-space-6)',
+  height: 'var(--ui-space-6)',
+  borderInlineEnd: 'var(--ui-border-width) solid currentColor',
+  borderBlockEnd: 'var(--ui-border-width) solid currentColor',
+  color: 'var(--ui-muted)'
 }
 
 const DECISION_VALUES: readonly string[] = ['allow', 'always', 'deny']
@@ -96,6 +121,37 @@ function ordinaryRecord(ask: Ask): string {
   if (envelope.status === 'declined') return `Dismissed: ${title}`
   if (envelope.status === 'unavailable') return `Unavailable: ${envelope.reason}`
   return `Answered: ${envelope.summary || title}`
+}
+
+/** A resolved ask's record on one line with an ellipsis; when it is cut off, clicking it toggles the whole text wrapped in place. */
+function RecordLine({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const [clipped, setClipped] = useState(false)
+  const [textElement, setTextElement] = useState<HTMLSpanElement | null>(null)
+  useLayoutEffect(() => {
+    if (!textElement) return
+    const check = () => setClipped(textElement.scrollWidth > textElement.clientWidth)
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(check)
+    observer.observe(textElement)
+    return () => observer.disconnect()
+  }, [textElement, text])
+  const textSpan = (
+    <span ref={setTextElement} style={open ? RECORD_WRAPPED_STYLE : RECORD_CLIPPED_STYLE} title={open ? undefined : text}>
+      {text}
+    </span>
+  )
+  if (!open && !clipped) return textSpan
+  const onToggle = () => setOpen((shown) => !shown)
+  return (
+    <button type="button" style={RECORD_TOGGLE_STYLE} aria-expanded={open} onClick={onToggle}>
+      {textSpan}
+      <span style={RECORD_CHEVRON_BOX_STYLE}>
+        <span aria-hidden="true" style={{ ...RECORD_CHEVRON_STYLE, transform: open ? 'rotate(45deg)' : 'rotate(-45deg)' }} />
+      </span>
+    </button>
+  )
 }
 
 function ApprovalCard({ ask, approval, context, sessionApproveDisabled, onResolved }: {
@@ -240,7 +296,7 @@ export function CardView({ context, input, store }: { context: UiPluginContext; 
         role="status"
         style={RECORD_STYLE}
       >
-        {record}
+        <RecordLine text={record} />
       </p>
     )
   }
