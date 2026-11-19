@@ -126,7 +126,8 @@ Every new kind needs a `summary` and a valid `example` in `COMPONENTS`, so `cata
 - A refused spec is never a version.
 - CONTRACT:
   - `quirky.view/get {viewId, version?: number}` returns a `ViewRecord` whose `spec`, `version` and `updatedAt` are those of the requested version.
-  - `ViewRecord.updates` stays and equals `latestVersion - 1`, so existing readers keep working. `replaceSpec` is replaced by an append-version write that bumps both.
+  - `ViewRecord.updates` stays and equals `latestVersion - 1`, so existing readers keep working.
+  - `version`, `latestVersion` and `refused` are optional on the exported `ViewRecord`, so older fakes compile. The daemon always sets them, using an internal `StoredViewRecord` type where they are required. Renderer code must treat a missing `latestVersion` as `version`, and a missing `refused` as `null`. `replaceSpec` is replaced by an append-version write that bumps both.
   - `ViewRecord` also gains `latestVersion: number` and `refused: Refused | null`.
   - An unknown version is NotFound.
 - CONTRACT: the `quirky.view/changed` event is `{sessionId, viewId, version, kind: 'open' | 'update' | 'patch' | 'close' | 'move' | 'refused' | 'render-failed'}`. Adding fields is backward compatible, and existing subscribers ignore unknown fields.
@@ -152,7 +153,7 @@ Every new kind needs a `summary` and a valid `example` in `COMPONENTS`, so `cata
 `open` with no `placement` now stores `pane`. Inline placement is still accepted, and `move` is unchanged. This deliberately departs from `docs/quirk/specs/2026-11-16-agent-chat/logic.md` SC-13, so update that spec's Amendments log in the same change.
 
 ### C6. `quirky view get` CLI (SC-11 support)
-`quirky view get --id <viewId> [--version N]` prints the record's `{viewId, title, version, latestVersion, spec}` as a JSON line, so an agent can reload a visual a reference chip names.
+`quirky view get --id <viewId> [--at-version N]` (`--version` is reserved by the CLI host as a global switch) prints the record's `{viewId, title, version, latestVersion, spec}` as a JSON line, so an agent can reload a visual a reference chip names.
 
 ### C7. Card mount input (renderer ↔ chat UI; SC-7, SC-8, SC-16, SC-18)
 - SCHEMA: `view:quirky.view/render` input is `{ viewId: string, version?: number, surface?: 'inline' | 'panel' | 'thumbnail' | 'expanded' | 'window', drawing?: boolean, focused?: boolean }`.
