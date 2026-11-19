@@ -379,8 +379,20 @@ export function activate(context: PluginContext): void {
     return kept.length === 0 ? undefined : kept
   }
 
-  /** Sources a fork is copying right now; a send to one waits in its queue so no turn starts mid-copy. */
-  const forkingSources = new Set<string>()
+  /** Forks copying each source right now, counted per source; a send to one waits in its queue so no turn starts mid-copy. */
+  const forkingSources = new Map<string, number>()
+
+  /** Sends past admission whose turn has not opened yet, so a fork can tell a changing transcript from an idle one. */
+  const startingTurns = new Map<string, number>()
+
+  const markTurnStarting = (sessionId: string): (() => void) => {
+    startingTurns.set(sessionId, (startingTurns.get(sessionId) ?? 0) + 1)
+    return () => {
+      const left = (startingTurns.get(sessionId) ?? 1) - 1
+      if (left <= 0) startingTurns.delete(sessionId)
+      else startingTurns.set(sessionId, left)
+    }
+  }
 
   /** Sessions whose queue stays put after a failed queued send, until the user acts on the session. */
   const flushPaused = new Set<string>()
@@ -393,12 +405,13 @@ export function activate(context: PluginContext): void {
     enqueueSend(sessionId, async () => {
       const entry = live.get(sessionId)
       const idle = entry?.status === 'done' || (entry?.status === 'running' && !entry.hasSent)
-      if (!active || !entry || entry.stopping || !idle || flushPaused.has(sessionId)) return
+      if (!active || !entry || entry.stopping || !idle || flushPaused.has(sessionId) || forkingSources.has(sessionId)) return
       const next = queue.list(sessionId)[0]
       if (!next) return
       const taken = queue.take(sessionId, next.id)
       if (!taken) return
       emitQueue(sessionId)
+      const turnStarted = markTurnStarting(sessionId)
       try {
         const runner = runnerBySession.get(sessionId) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -424,6 +437,8 @@ export function activate(context: PluginContext): void {
           appendMessage({ sessionId, role: 'system', text, item: statusItem(text) })
         }
         context.log(`could not send queued message to ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        turnStarted()
       }
     }).catch((error: unknown) => {
       if (active) context.log(`could not flush the queue of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
@@ -1145,23 +1160,26 @@ export function activate(context: PluginContext): void {
   /**
    * The Claude totals a continued conversation already carries: those of the nearest session, starting
    * at `from` and walking back its `resumedFrom` chain, that journaled a result. A session that ended
-   * before completing a turn has none, so the walk reaches past it.
+   * before completing a turn has none, so the walk reaches past it. Crossing a fork link, the parent's
+   * totals are those at the fork point, since the original chat may have kept spending afterwards.
    */
   const usageBaselineOf = async (from: Session): Promise<StructuredStartOptions['usageBaseline']> => {
     const seen = new Set<string>()
+    let cutoff: number | null = null
     for (let current: Session | null = from; current !== null && !seen.has(current.id); ) {
       seen.add(current.id)
       let found: StructuredStartOptions['usageBaseline']
       for (let after = 0; ; ) {
         const page = journal.list(current.id, after, 500)
         for (const message of page) {
-          if (message.role === 'result') found = claudeResultTotals(message.data) ?? found
+          if (message.role === 'result' && (cutoff === null || message.at <= cutoff)) found = claudeResultTotals(message.data) ?? found
         }
         if (page.length < 500) break
         after = page[page.length - 1]!.seq
       }
       if (found !== undefined) return found
       if (typeof current.resumedFrom !== 'string' || current.resumedFrom === '') return undefined
+      if (current.forked === true) cutoff = current.createdAt
       try {
         current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
       } catch {
@@ -1441,18 +1459,23 @@ export function activate(context: PluginContext): void {
     if (!source.providerSession || typeof source.providerSession.id !== 'string') {
       throw context.error('invalid-params', `session ${source.id} has no provider session and cannot be forked`)
     }
-    const status = live.get(source.id)?.status ?? source.status
-    if (status === 'working' || status === 'waiting') throw conflictWithReason('a turn is running; wait for it to finish before forking', 'turn-running')
-    const capability = capabilitiesFor(source.agent)?.fork
-    if (!capability?.ok || runnerFor(source.agent).fork === undefined) {
-      throw conflictWithReason(capability?.ok === false ? capability.reason : `${source.agent} can't fork from Quirky yet`, 'fork-unsupported')
-    }
-    forkingSources.add(source.id)
+    forkingSources.set(source.id, (forkingSources.get(source.id) ?? 0) + 1)
     try {
+      const status = live.get(source.id)?.status ?? source.status
+      if (status === 'working' || status === 'waiting' || startingTurns.has(source.id)) {
+        throw conflictWithReason('a turn is running; wait for it to finish before forking', 'turn-running')
+      }
+      const capability = capabilitiesFor(source.agent)?.fork
+      if (!capability?.ok || runnerFor(source.agent).fork === undefined) {
+        throw conflictWithReason(capability?.ok === false ? capability.reason : `${source.agent} can't fork from Quirky yet`, 'fork-unsupported')
+      }
       return await reopen(params, caller, true)
     } finally {
-      forkingSources.delete(source.id)
-      void flushQueue(source.id)
+      const left = (forkingSources.get(source.id) ?? 1) - 1
+      if (left <= 0) {
+        forkingSources.delete(source.id)
+        void flushQueue(source.id)
+      } else forkingSources.set(source.id, left)
     }
   }
 
@@ -1565,16 +1588,21 @@ export function activate(context: PluginContext): void {
       return { ok: true, queuedId: queued.id }
     }
     if (entry) entry.hasSent = true
-    const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
-    const undo = await openTurnBaseline(session.id)
+    const turnStarted = markTurnStarting(session.id)
     try {
-      if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
-      flushPaused.delete(session.id)
-      if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
-      else await runner.send(session.id, text, { images: extras.images })
-    } catch (error) {
-      undo()
-      throw error
+      const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
+      const undo = await openTurnBaseline(session.id)
+      try {
+        if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
+        flushPaused.delete(session.id)
+        if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
+        else await runner.send(session.id, text, { images: extras.images })
+      } catch (error) {
+        undo()
+        throw error
+      }
+    } finally {
+      turnStarted()
     }
     if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
     return { ok: true }
@@ -1862,10 +1890,14 @@ export function activate(context: PluginContext): void {
       if (entry.status !== 'done') {
         throw Object.assign(context.error('conflict', 'structured session is busy'), { data: { reason: 'busy' } })
       }
+      if (forkingSources.has(session.id)) {
+        throw Object.assign(context.error('conflict', 'structured session is being forked'), { data: { reason: 'busy' } })
+      }
       const taken = queue.take(session.id, request.id!)
       if (taken === null) throw context.error('not-found', `no queued message ${request.id}`)
       flushPaused.delete(session.id)
       emitQueue(session.id)
+      const turnStarted = markTurnStarting(session.id)
       try {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -1885,6 +1917,8 @@ export function activate(context: PluginContext): void {
         queue.restore(session.id, taken)
         emitQueue(session.id)
         throw error
+      } finally {
+        turnStarted()
       }
       return { ok: true }
     })
@@ -1910,9 +1944,13 @@ export function activate(context: PluginContext): void {
       ensureActive()
       const entry = live.get(session.id)
       if (!entry || entry.stopping || entry.status === 'exited') throw context.error('conflict', 'structured session is not active')
+      if (forkingSources.has(session.id) && entry.status !== 'working' && entry.status !== 'waiting') {
+        throw Object.assign(context.error('conflict', 'structured session is being forked'), { data: { reason: 'busy' } })
+      }
       const taken = queue.take(session.id, request.id!)
       if (taken === null) throw context.error('not-found', `no queued message ${request.id}`)
       emitQueue(session.id)
+      const turnStarted = markTurnStarting(session.id)
       try {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
@@ -1933,6 +1971,8 @@ export function activate(context: PluginContext): void {
         queue.restore(session.id, taken)
         emitQueue(session.id)
         throw error
+      } finally {
+        turnStarted()
       }
       return { ok: true }
     })

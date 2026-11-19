@@ -410,6 +410,57 @@ describe('usage summary in the plugin', () => {
     expect(options.usageBaseline).toEqual({ input: 30, output: 4, cacheRead: 5, cacheWrite: 6 })
   })
 
+  describe('baseline across a fork link', () => {
+    const result = (total: number) => ({
+      type: 'result',
+      modelUsage: { m: { inputTokens: total, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } }
+    })
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 5))
+
+    async function forkedAfterSpend() {
+      const home = mkdtempSync('/tmp/qs-')
+      chat = await bootChat({ home })
+      chat.world.worktree.path = home
+      const source = await chat.create()
+      await waitFor(() => chat!.runner.started.length === 1)
+      const record = chat.world.sessions.get(source.id)!
+      record.providerSession = { id: 'provider-src', transcriptPath: null }
+      record.status = 'done'
+      chat.runner.context.setStatus(source.id, 'done')
+      const ctx = chat.runner.context
+      ctx.appendMessage({ sessionId: source.id, role: 'result', text: 'a', data: result(120_000) })
+      await pause()
+      const forked = (await chat.call('quirky.structured/fork', { session: source.id })) as Session
+      await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === forked.id))
+      chat.world.sessions.get(forked.id)!.providerSession = { id: 'provider-forked', transcriptPath: null }
+      await pause()
+      ctx.appendMessage({ sessionId: source.id, role: 'result', text: 'b', data: result(200_000) })
+      return { source, forked }
+    }
+
+    const baselineOf = (id: string) => chat!.runner.started.find((entry) => entry.sessionId === id)!.options.usageBaseline
+
+    test('a resumed fork with no turns carries the parent totals from the fork point, not its later spend', async () => {
+      const { forked } = await forkedAfterSpend()
+      await chat!.call('quirky.structured/stop', { session: forked.id })
+      const resumed = (await chat!.call('quirky.structured/resume', { session: forked.id })) as Session
+      await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === resumed.id))
+      expect(baselineOf(resumed.id)).toEqual({ input: 120_000, output: 0, cacheRead: 0, cacheWrite: 0 })
+    })
+
+    test('a later resume chain that passes through the fork keeps the fork-point totals', async () => {
+      const { forked } = await forkedAfterSpend()
+      await chat!.call('quirky.structured/stop', { session: forked.id })
+      const second = (await chat!.call('quirky.structured/resume', { session: forked.id })) as Session
+      await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === second.id))
+      chat!.world.sessions.get(second.id)!.providerSession = { id: 'provider-forked', transcriptPath: null }
+      await chat!.call('quirky.structured/stop', { session: second.id })
+      const third = (await chat!.call('quirky.structured/resume', { session: second.id })) as Session
+      await waitFor(() => chat!.runner.started.some((entry) => entry.sessionId === third.id))
+      expect(baselineOf(third.id)).toEqual({ input: 120_000, output: 0, cacheRead: 0, cacheWrite: 0 })
+    })
+  })
+
   test('a resume through a session with no completed turn keeps the earlier session\'s baseline', async () => {
     const home = mkdtempSync('/tmp/qs-')
     chat = await bootChat({ home })
