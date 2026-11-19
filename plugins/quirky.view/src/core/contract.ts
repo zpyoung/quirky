@@ -31,7 +31,7 @@ export const CATALOG_TYPES = [
 
 export type CatalogType = (typeof CATALOG_TYPES)[number]
 
-/** `id` is the stable key for pointing at a node and for highlighting what a version changed. */
+/** `id` is the stable key for pointing at a node. */
 export type ViewNode = { type: CatalogType; id?: string; props?: Record<string, unknown>; children?: ViewNode[] }
 
 export type ViewSpec = { title: string; root: ViewNode }

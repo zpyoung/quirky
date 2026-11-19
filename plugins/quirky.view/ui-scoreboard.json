@@ -736,16 +736,9 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/render/RenderNode.tsx",
-        "quote": "  const pointed = pointable ? <div data-point-key={pointKey('node', node.id!)} data-point-label={labelOf(node, props)}>{body}</div> : body"
+        "quote": "  return pointable ? <div data-point-key={pointKey('node', node.id!)} data-point-label={labelOf(node, props)}>{body}</div> : body"
       },
       "reason": "A node is wrapped only to make it pointable; the wrapper is decoration on content, not a read state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/render/RenderNode.tsx",
-        "quote": "  return changed.has(nodeKey(node, path)) ? <div data-view-changed style={CHANGED_OUTLINE}>{pointed}</div> : pointed"
-      },
-      "reason": "A node is wrapped only to outline what changed in this version; the wrapper is decoration on content, not a read state."
     },
     {
       "site": {

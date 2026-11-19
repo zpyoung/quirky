@@ -17,8 +17,6 @@ export type ViewRuntime = {
   surface: ViewSurface
   /** Whether this card is the focused or expanded one, which is the one that may hold the native browser view. */
   focused: boolean
-  /** Keys of the nodes that differ from the previous version, empty when there is nothing to compare. */
-  changed: ReadonlySet<string>
   /** Tells the card a diagram, image or html node of this version could not be drawn. */
   renderFailed(error: string): void
   /** Points at an element from somewhere a click cannot be read, such as inside a frame. */
@@ -26,8 +24,6 @@ export type ViewRuntime = {
   /** Runs a card action, such as showing a preview, through the view's control command so it can be scripted. */
   control(args: { action: 'show-preview' | 'reload-preview'; node: string }): void
 }
-
-const NONE: ReadonlySet<string> = new Set()
 
 const INERT: ViewRuntime = {
   send: async () => false,
@@ -38,7 +34,6 @@ const INERT: ViewRuntime = {
   version: 1,
   surface: 'inline',
   focused: false,
-  changed: NONE,
   renderFailed: () => {},
   point: () => {},
   control: () => {}
