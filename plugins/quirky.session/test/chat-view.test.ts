@@ -2126,6 +2126,27 @@ describe('the visual panel', () => {
     expect(separator()!.hasAttribute('data-lit')).toBe(false)
   })
 
+  test('the collapse button sits on the divider and shows only while the divider is hovered or focused', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    const button = byLabel('Collapse visual panel')!
+    const slot = button.parentElement!
+    expect(visualPanel()!.contains(button)).toBe(false)
+    expect(slot.parentElement!.contains(separator())).toBe(true)
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    expect(slot.style.pointerEvents).toBe('none')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })))
+    expect(slot.getAttribute('data-shown')).toBe('true')
+    expect(slot.style.pointerEvents).toBe('auto')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })))
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    // a keyboard user tabbing onto the hidden button must see it
+    await act(async () => void button.focus())
+    expect(slot.getAttribute('data-shown')).toBe('true')
+  })
+
   test('a drag cannot take the panel under 20% or over 80% of the chat', async () => {
     await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
     await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))

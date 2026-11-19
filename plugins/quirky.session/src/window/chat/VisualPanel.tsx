@@ -132,6 +132,20 @@ export function useBodyMetrics(ref: RefObject<HTMLElement | null>): { width: num
 
 const clampRatio = (ratio: number) => Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
 
+const dividerZone = { position: 'relative', display: 'flex', flex: '0 0 auto', alignSelf: 'stretch' } satisfies CSSProperties
+// the slot stays focusable while hidden, so tabbing to it shows it; pointer events stay off so the hidden button never eats a drag
+const collapseSlot = (shown: boolean): CSSProperties => ({
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  zIndex: 1,
+  borderRadius: 'var(--ui-radius-control)',
+  background: 'var(--ui-surface)',
+  opacity: shown ? 1 : 0,
+  pointerEvents: shown ? 'auto' : 'none',
+  transition: 'opacity 120ms ease-out'
+})
 const divider = {
   display: 'flex',
   justifyContent: 'center',
@@ -272,7 +286,9 @@ export function VisualPanel({
   const [dragging, setDragging] = useState(false)
   const [dividerHover, setDividerHover] = useState(false)
   const [dividerFocus, setDividerFocus] = useState(false)
+  const [collapseFocus, setCollapseFocus] = useState(false)
   const dividerLit = dragging || dividerHover || dividerFocus
+  const collapseShown = !dragging && (dividerHover || dividerFocus || collapseFocus)
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [pinned, setPinned] = useState<Record<string, number>>({})
@@ -450,31 +466,33 @@ export function VisualPanel({
 
   return (
     <>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize visual panel"
-        aria-valuemin={Math.round(MIN_RATIO * 100)}
-        aria-valuemax={Math.round(MAX_RATIO * 100)}
-        aria-valuenow={Math.round(ratio * 100)}
-        tabIndex={0}
-        data-lit={dividerLit ? 'true' : undefined}
-        style={divider}
-        onPointerDown={onStartDrag}
-        onPointerEnter={() => setDividerHover(true)}
-        onPointerLeave={() => setDividerHover(false)}
-        onFocus={(event) => setDividerFocus(focusVisible(event.currentTarget))}
-        onBlur={() => setDividerFocus(false)}
-        onKeyDown={onDividerKey}
-      >
-        <span style={dividerLine(dividerLit)} />
+      <div style={dividerZone} onPointerEnter={() => setDividerHover(true)} onPointerLeave={() => setDividerHover(false)}>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize visual panel"
+          aria-valuemin={Math.round(MIN_RATIO * 100)}
+          aria-valuemax={Math.round(MAX_RATIO * 100)}
+          aria-valuenow={Math.round(ratio * 100)}
+          tabIndex={0}
+          data-lit={dividerLit ? 'true' : undefined}
+          style={divider}
+          onPointerDown={onStartDrag}
+          onFocus={(event) => setDividerFocus(focusVisible(event.currentTarget))}
+          onBlur={() => setDividerFocus(false)}
+          onKeyDown={onDividerKey}
+        >
+          <span style={dividerLine(dividerLit)} />
+        </div>
+        <div style={collapseSlot(collapseShown)} data-shown={collapseShown ? 'true' : undefined}>
+          <IconButton label="Collapse visual panel" onClick={onCollapsePanel} onFocus={() => setCollapseFocus(true)} onBlur={() => setCollapseFocus(false)}>
+            <ControlIcon name="caret-right" />
+          </IconButton>
+        </div>
       </div>
       <aside style={panel(ratio)} aria-label="Visual panel">
         <header style={header}>
           <h3 style={heading}>Visuals</h3>
-          <IconButton label="Collapse visual panel" onClick={onCollapsePanel}>
-            <ControlIcon name="caret-right" />
-          </IconButton>
         </header>
         <div ref={body} style={scroller}>
           {nothing ? (

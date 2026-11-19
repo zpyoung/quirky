@@ -3500,6 +3500,24 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onFocus={() => setCollapseFocus(true)}"
+      },
+      "anchor": "onFocus",
+      "transient": "hover",
+      "reason": "Shows the collapse button while it has focus, so a keyboard user can see it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onBlur={() => setCollapseFocus(false)}"
+      },
+      "anchor": "onBlur",
+      "transient": "hover",
+      "reason": "Hides the collapse button again once focus leaves it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
         "quote": "onClick={() => onFocusCard(PLAN)}"
       },
       "anchor": "onClick",
