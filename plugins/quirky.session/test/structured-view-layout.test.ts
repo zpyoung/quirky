@@ -235,19 +235,31 @@ const PLAN_MESSAGES = [
 ]
 
 describe('the plan in the visual panel', () => {
-  test.skipIf(!executable)('a narrow chat starts with the visual panel collapsed to a rail, and opening it shows the plan first', async () => {
-    const { context, page } = await openComposer({ messages: PLAN_MESSAGES })
+  test.skipIf(!executable)('a narrow chat starts with the visual panel collapsed to a rail', async () => {
+    const { context, page } = await openComposer()
     try {
       const rail = page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]')
       await rail.waitFor()
-      expect(await page.getByRole('dialog', { name: 'Plan' }).count()).toBe(0)
       await rail.getByRole('button', { name: 'Show visual panel' }).click()
+      await page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])').waitFor()
+    } finally {
+      await context.close()
+    }
+  }, 60_000)
+
+  // a waiting plan needs an answer, so it opens the panel even in a narrow chat, as the plan sheet did
+  test.skipIf(!executable)('a waiting plan opens the panel in a narrow chat with the plan first, and collapse leaves a rail', async () => {
+    const { context, page } = await openComposer({ messages: PLAN_MESSAGES })
+    try {
       const panel = page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])')
       await panel.waitFor()
       await panel.locator('section[aria-label="Plan"]').getByText('Handle ExitPlanMode').waitFor()
+      expect(await page.getByRole('dialog', { name: 'Plan' }).count()).toBe(0)
       const box = (await panel.boundingBox())!
       expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width)
       expect(box.height).toBeGreaterThan(0)
+      await panel.getByRole('button', { name: 'Collapse visual panel' }).click()
+      await page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]').waitFor()
     } finally {
       await context.close()
     }
