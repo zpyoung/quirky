@@ -33,7 +33,12 @@ export class ChatRunner implements StructuredRunner {
       this.context.setStatus(session.id, 'working')
     } else this.context.setStatus(session.id, 'running')
   }
+  /** When set, a send waits for it before reaching the agent; lets a test act while a turn is opening. */
+  sendGate: Promise<void> | null = null
+  sendsStarted = 0
   async send(sessionId: string, text: string, options?: StructuredSendOptions) {
+    this.sendsStarted += 1
+    if (this.sendGate) await this.sendGate
     if (this.sendError) throw this.sendError
     this.onSend?.()
     this.sent.push({ sessionId, text, ...(options === undefined ? {} : { options }) })

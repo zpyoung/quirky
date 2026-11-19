@@ -186,6 +186,54 @@ describe('quirky.structured/fork', () => {
     expect(chat.runner.sent[0]).toMatchObject({ sessionId: source.id, text: 'mid-fork' })
   })
 
+  test('the send guard holds until the last of two concurrent forks of a source finishes', async () => {
+    const { source, chat } = await prepared()
+    const firstGate = Promise.withResolvers<void>()
+    const secondGate = Promise.withResolvers<void>()
+    chat.runner.forkGate = firstGate.promise
+    const first = chat.call('quirky.structured/fork', { session: source.id })
+    await waitFor(() => chat.runner.forks.length === 1)
+    chat.runner.forkGate = secondGate.promise
+    const second = chat.call('quirky.structured/fork', { session: source.id })
+    await waitFor(() => chat.runner.forks.length === 2)
+    await chat.call('quirky.structured/send', { session: source.id, text: 'mid-fork' })
+    firstGate.resolve()
+    await first
+    await Bun.sleep(20)
+    expect(chat.runner.sent).toEqual([])
+    secondGate.resolve()
+    await Promise.allSettled([second])
+    await waitFor(() => chat.runner.sent.length === 1)
+  })
+
+  test('sendQueued during a fork is refused and the message stays queued', async () => {
+    const { source, chat } = await prepared()
+    const gate = Promise.withResolvers<void>()
+    chat.runner.forkGate = gate.promise
+    const forking = chat.call('quirky.structured/fork', { session: source.id })
+    await waitFor(() => chat.runner.forks.length === 1)
+    const { queuedId } = await chat.call('quirky.structured/send', { session: source.id, text: 'held' })
+    const error = await chat.failure(chat.call('quirky.structured/sendQueued', { session: source.id, id: queuedId }))
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict })
+    expect(chat.runner.sent).toEqual([])
+    gate.resolve()
+    await forking
+    await waitFor(() => chat.runner.sent.length === 1)
+  })
+
+  test('a send already admitted when the fork begins makes the fork fail with turn-running', async () => {
+    const { source, chat } = await prepared()
+    const sendGate = Promise.withResolvers<void>()
+    chat.runner.sendGate = sendGate.promise
+    const sending = chat.call('quirky.structured/send', { session: source.id, text: 'go' })
+    await waitFor(() => chat.runner.sendsStarted > 0)
+    const error = await chat.failure(chat.call('quirky.structured/fork', { session: source.id }))
+    expect(error).toMatchObject({ code: RpcErrorCode.Conflict, data: { reason: 'turn-running' } })
+    expect(chat.runner.forks).toEqual([])
+    sendGate.resolve()
+    await sending
+  })
+
   for (const status of ['working', 'waiting'] as const) {
     test(`refuses a ${status} source with turn-running`, async () => {
       const { source, chat } = await prepared({ status })
