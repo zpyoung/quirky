@@ -536,6 +536,28 @@ describe('the chat view', () => {
     expect(buttonNamed('Load earlier messages')).toBeUndefined()
   })
 
+  test('a fork shows its source only up to the moment it was forked', async () => {
+    const own = longChat(1_000, [1_000])
+    const forkedAt = T0 + 5_500
+    const source = [
+      { ...user(1, 'before the fork'), sessionId: 'before' },
+      { ...user(5, 'also before the fork'), sessionId: 'before' },
+      { ...user(6, 'after the fork'), sessionId: 'before' }
+    ]
+    await mountChat({
+      session: { resumedFrom: 'before', forked: true, createdAt: forkedAt },
+      handlers: {
+        'quirky.structured/messages': (params) => params.session === 'before' ? pageOf(source, params) : pageOf(own, params),
+        'quirky.session/get': () => session({ id: 'before', kind: 'structured', agent: 'claude', status: 'exited', resumedFrom: null })
+      }
+    })
+    await click(buttonNamed('Load earlier messages'))
+    await settle()
+    expect(text()).toContain('before the fork')
+    expect(text()).toContain('also before the fork')
+    expect(text()).not.toContain('after the fork')
+  })
+
   test('a failed earlier page offers a retry and keeps what is shown', async () => {
     const all = longChat(1_500, [1, 1_500])
     let refuse = true

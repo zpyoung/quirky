@@ -9,7 +9,11 @@ export function formatElapsed(ms: number): string {
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`
 }
 
-/** The current time in ms, refreshed once a second while `active`; the one clock a screen shares between its timers. */
+/**
+ * The current time in ms, refreshed once a second while `active`; the one clock a screen shares
+ * between its timers. While inactive it reads the real time on each render, so a screen that resumes
+ * (after a reconnect, say) never shows a moment from before it paused.
+ */
 export function useClock(active: boolean): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -18,7 +22,7 @@ export function useClock(active: boolean): number {
     const timer = setInterval(() => setNow(Date.now()), TICK_MS)
     return () => clearInterval(timer)
   }, [active])
-  return now
+  return active ? now : Date.now()
 }
 
 /**

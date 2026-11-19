@@ -189,8 +189,12 @@ export const CHAT_PAGE_SIZE = 1000
 
 type HistoryState = { more: boolean; loading: boolean; error: string | null }
 
-/** Where Load earlier messages continues: below `beforeSeq` in `record`, or its predecessor once `exhausted`. */
-type HistoryCursor = { record: Session; beforeSeq?: number; exhausted: boolean }
+/**
+ * Where Load earlier messages continues: below `beforeSeq` in `record`, or its predecessor once
+ * `exhausted`. `until` is the newest time (epoch ms) a message may carry to belong to this chat's
+ * history: a fork never shows what its source received after the fork was made.
+ */
+type HistoryCursor = { record: Session; beforeSeq?: number; exhausted: boolean; until?: number }
 
 const replyTooLarge = (error: unknown) => (error as { data?: { reason?: unknown } } | null)?.data?.reason === 'reply_too_large'
 
@@ -324,7 +328,13 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           }
           seen.current.add(next)
           try {
-            cursor.current = { record: (await context.call('quirky.session/get', { session: next })) as Session, exhausted: false }
+            const forkPoint = at.record.forked === true ? at.record.createdAt : undefined
+            const until = forkPoint === undefined ? at.until : Math.min(forkPoint, at.until ?? forkPoint)
+            cursor.current = {
+              record: (await context.call('quirky.session/get', { session: next })) as Session,
+              exhausted: false,
+              ...(until === undefined ? {} : { until })
+            }
           } catch {
             cursor.current = null
           }
@@ -337,11 +347,17 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           left
         )
         if (stale()) return
-        if (at.record.id === session.id) add(page)
-        else setEarlier((chats) => prependEarlier(chats, at.record, page))
+        const shown = at.until === undefined ? page : page.filter((message) => message.at <= at.until!)
+        if (at.record.id === session.id) add(shown)
+        else if (shown.length > 0) setEarlier((chats) => prependEarlier(chats, at.record, shown))
         const oldest = page[0]?.seq ?? at.beforeSeq ?? 1
-        cursor.current = { record: at.record, beforeSeq: oldest, exhausted: page.length < limit || oldest <= 1 }
-        left -= page.length
+        cursor.current = {
+          record: at.record,
+          beforeSeq: oldest,
+          exhausted: page.length < limit || oldest <= 1,
+          ...(at.until === undefined ? {} : { until: at.until })
+        }
+        left -= shown.length
       }
     } catch (failure) {
       error = messageOf(failure)

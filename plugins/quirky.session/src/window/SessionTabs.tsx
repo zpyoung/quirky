@@ -77,7 +77,8 @@ function useConversationTotals(context: UiPluginContext, sessions: readonly Sess
       context
         .call('quirky.structured/usage', { session: id })
         .then((result) => {
-          const total = (result as UsageResult).conversation?.total ?? 0
+          const { conversation, turns } = result as UsageResult
+          const total = turns >= 1 ? (conversation?.total ?? 0) : 0
           if (cancelled) return
           setTotals((current) => {
             const { [id]: _previous, ...others } = current
@@ -92,9 +93,13 @@ function useConversationTotals(context: UiPluginContext, sessions: readonly Sess
       const changed = (event.data as { sessionId?: string } | undefined)?.sessionId
       if (changed !== undefined && ids.includes(changed)) load(changed)
     })
+    const unsubscribeConnection = context.onConnection((status) => {
+      if (status === 'connected') for (const id of ids) load(id)
+    })
     return () => {
       cancelled = true
       unsubscribe()
+      unsubscribeConnection()
     }
   }, [context, key])
   return totals

@@ -93,8 +93,11 @@ export type CacheState = { tiers: CacheTier[] }
 /** A chat session's running usage as the header shows it. */
 export type UsageSummary = { sessionId: string; own: UsageTotals; turns: number; cache: CacheState | null; updatedAt: number }
 
-/** The answer to a usage query: this chat's own totals, the whole forked-from conversation's, and its cache state; null where unknown. */
-export type UsageResult = { own: UsageTotals | null; conversation: UsageTotals | null; cache: CacheState | null }
+/**
+ * The answer to a usage query: this chat's own totals, the whole forked-from conversation's, the
+ * conversation's completed turn count (0 when none), and its cache state; null where unknown.
+ */
+export type UsageResult = { own: UsageTotals | null; conversation: UsageTotals | null; turns: number; cache: CacheState | null }
 
 /** What a runner reports to the usage tracker: token counts, a turn boundary, and cache-write/read activity for one call. */
 export type UsageReport = {

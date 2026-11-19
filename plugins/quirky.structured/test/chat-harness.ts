@@ -73,8 +73,11 @@ export class ChatRunner implements StructuredRunner {
   forks: StructuredForkSource[] = []
   forkError: Error | null = null
   forkedProvider: SessionProviderSession = { id: 'provider-forked', transcriptPath: null }
+  /** When set, a fork waits for it before returning; lets a test act while the provider copy is in flight. */
+  forkGate: Promise<void> | null = null
   async fork(source: StructuredForkSource) {
     this.forks.push(source)
+    if (this.forkGate) await this.forkGate
     if (this.forkError) throw this.forkError
     return this.forkedProvider
   }

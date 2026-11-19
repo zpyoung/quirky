@@ -379,6 +379,9 @@ export function activate(context: PluginContext): void {
     return kept.length === 0 ? undefined : kept
   }
 
+  /** Sources a fork is copying right now; a send to one waits in its queue so no turn starts mid-copy. */
+  const forkingSources = new Set<string>()
+
   /** Sessions whose queue stays put after a failed queued send, until the user acts on the session. */
   const flushPaused = new Set<string>()
 
@@ -1140,18 +1143,45 @@ export function activate(context: PluginContext): void {
   }
 
   /**
+   * The Claude totals a continued conversation already carries: those of the nearest session, starting
+   * at `from` and walking back its `resumedFrom` chain, that journaled a result. A session that ended
+   * before completing a turn has none, so the walk reaches past it.
+   */
+  const usageBaselineOf = async (from: Session): Promise<StructuredStartOptions['usageBaseline']> => {
+    const seen = new Set<string>()
+    for (let current: Session | null = from; current !== null && !seen.has(current.id); ) {
+      seen.add(current.id)
+      let found: StructuredStartOptions['usageBaseline']
+      for (let after = 0; ; ) {
+        const page = journal.list(current.id, after, 500)
+        for (const message of page) {
+          if (message.role === 'result') found = claudeResultTotals(message.data) ?? found
+        }
+        if (page.length < 500) break
+        after = page[page.length - 1]!.seq
+      }
+      if (found !== undefined) return found
+      if (typeof current.resumedFrom !== 'string' || current.resumedFrom === '') return undefined
+      try {
+        current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
+      } catch {
+        current = null
+      }
+    }
+    return undefined
+  }
+
+  /**
    * What a resumed Claude session carries over from the old journal: its last mode, the plan numbering
    * and the newest plan. The newest plan is journaled again on the new session (a waiting one as not
    * answered, since it can never be answered now) so the next resume still finds the numbering.
    */
   const planStateOf = (oldSessionId: string, newSessionId: string): StructuredStartOptions => {
     let mode: ModeItem['mode'] | undefined
-    let usageBaseline: StructuredStartOptions['usageBaseline']
     const plans = new Map<number, PlanItem>()
     for (let after = 0; ; ) {
       const page = journal.list(oldSessionId, after, 500)
       for (const message of page) {
-        if (message.role === 'result') usageBaseline = claudeResultTotals(message.data) ?? usageBaseline
         if (message.item?.kind === 'mode') mode = message.item.mode
         else if (message.item?.kind === 'plan') plans.set(message.item.version, message.item)
       }
@@ -1169,7 +1199,6 @@ export function activate(context: PluginContext): void {
       appendMessage({ sessionId: newSessionId, role: 'system', text: `Plan v${highest}: ${lastPlan.status}`, item: lastPlan })
     }
     return {
-      ...(usageBaseline === undefined ? {} : { usageBaseline }),
       ...(mode === undefined ? {} : { permissionMode: mode }),
       ...(newest === undefined ? {} : { planVersion: highest, lastPlanText: newest.text, ...(lastPlan === undefined ? {} : { lastPlan }) })
     }
@@ -1234,6 +1263,8 @@ export function activate(context: PluginContext): void {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
     const resumeModes = await openingModes(agent, undefined)
+    ensureActive()
+    const usageBaseline = agent === 'claude' ? await usageBaselineOf(old) : undefined
     ensureActive()
     let accountPrepare = false
     let userEnv: Record<string, string | null> = {}
@@ -1362,6 +1393,7 @@ export function activate(context: PluginContext): void {
       const launchOptions: StructuredStartOptions = {
         ...options,
         ...(agent === 'claude' ? planStateOf(old.id, registered.id) : {}),
+        ...(usageBaseline === undefined ? {} : { usageBaseline }),
         env: environmentForLease(lease.env, environment)
       }
       if (!forking) {
@@ -1415,7 +1447,13 @@ export function activate(context: PluginContext): void {
     if (!capability?.ok || runnerFor(source.agent).fork === undefined) {
       throw conflictWithReason(capability?.ok === false ? capability.reason : `${source.agent} can't fork from Quirky yet`, 'fork-unsupported')
     }
-    return reopen(params, caller, true)
+    forkingSources.add(source.id)
+    try {
+      return await reopen(params, caller, true)
+    } finally {
+      forkingSources.delete(source.id)
+      void flushQueue(source.id)
+    }
   }
 
   const messages: MethodHandler = async (params) => {
@@ -1520,7 +1558,7 @@ export function activate(context: PluginContext): void {
     }
     const replay = reserveReceipt()
     if (replay) return replay
-    if (extras.when === 'idle' && entry && (entry.status === 'working' || entry.status === 'waiting')) {
+    if (entry && (forkingSources.has(session.id) || (extras.when === 'idle' && (entry.status === 'working' || entry.status === 'waiting')))) {
       const queued = queue.add(session.id, { text, ...(extras.images === undefined ? {} : { images: extras.images }) }, Date.now())
       emitQueue(session.id)
       if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
@@ -1741,11 +1779,15 @@ export function activate(context: PluginContext): void {
     }
     const own = journal.usage(session.id)
     let conversation: UsageTotals | null = null
+    let turns = 0
     const seen = new Set<string>()
     for (let current: Session | null = session; current !== null && !seen.has(current.id); ) {
       seen.add(current.id)
       const summary = journal.usage(current.id)
-      if (summary) conversation = addTotals(conversation ?? emptyTotals(), summary.own)
+      if (summary) {
+        conversation = addTotals(conversation ?? emptyTotals(), summary.own)
+        turns += summary.turns
+      }
       if (current.forked === true || typeof current.resumedFrom !== 'string' || current.resumedFrom === '') break
       try {
         current = (await context.call('quirky.session/get', { session: current.resumedFrom })) as Session
@@ -1753,7 +1795,7 @@ export function activate(context: PluginContext): void {
         current = null
       }
     }
-    const result: UsageResult = { own: own?.own ?? null, conversation, cache: own?.cache ?? null }
+    const result: UsageResult = { own: own?.own ?? null, conversation, turns, cache: own?.cache ?? null }
     return result
   }
 
