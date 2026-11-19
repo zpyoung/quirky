@@ -9,6 +9,26 @@ const VIEW = 'view:quirky.session/structured'
 const message = (seq: number, role: string, body: string) => ({ sessionId: 'bg', seq, role, text: body, at: 0 })
 const bg = session({ id: 'bg', kind: 'structured', agent: 'claude', title: 'Claude (background)' })
 
+const showAllItem = () => [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((entry) => entry.textContent?.includes('Show all events'))
+
+/** Opens the header's More actions menu and returns the Show all events item. */
+async function openShowAll(view: HTMLElement) {
+  if (!showAllItem()) await act(async () => void view.querySelector<HTMLElement>('[aria-label="More actions"]')!.click())
+  return showAllItem()!
+}
+
+async function isShowingAll(view: HTMLElement) {
+  const checked = (await openShowAll(view)).getAttribute('aria-checked') === 'true'
+  await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+  if (showAllItem()) await act(async () => void view.querySelector<HTMLElement>('[aria-label="More actions"]')!.click())
+  return checked
+}
+
+async function toggleShowAll(view: HTMLElement) {
+  const item = await openShowAll(view)
+  await act(async () => item.click())
+}
+
 let activateModule: (context: FakeContext['context']) => void
 let fake: FakeContext
 let element: HTMLElement | null = null
@@ -172,19 +192,18 @@ describe('the structured session view', () => {
     const messagesFor = [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic')]
     start(current, { 'quirky.structured/messages': () => messagesFor })
     const view = await mount({ session: 'bg' })
-    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
 
-    await act(async () => checkbox.click())
+    await toggleShowAll(view)
     expect(fake.executed.at(-1)).toStrictEqual({
       id: 'command:quirky.session/show-all-events',
       args: { session: 'bg', enabled: true },
       options: { activateOwner: false }
     })
-    expect(checkbox.checked).toBe(true)
+    expect(await isShowingAll(view)).toBe(true)
     expect(view.textContent).toContain('hook_pre: diagnostic')
 
     await fake.command('show-all-events', { session: 'bg', enabled: false })
-    expect(checkbox.checked).toBe(false)
+    expect(await isShowingAll(view)).toBe(false)
     expect(view.textContent).not.toContain('hook_pre: diagnostic')
   })
 
@@ -194,11 +213,10 @@ describe('the structured session view', () => {
         [message(1, 'user', 'hi'), message(2, 'system', 'hook_pre: diagnostic')]
     })
     const view = await mount({ session: 'bg' })
-    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
 
     await expect(fake.command('show-all-events', { session: 'missing', enabled: true })).rejects.toThrow('no such session: missing')
 
-    expect(checkbox.checked).toBe(false)
+    expect(await isShowingAll(view)).toBe(false)
     expect(view.textContent).not.toContain('hook_pre: diagnostic')
   })
 
@@ -219,32 +237,30 @@ describe('the structured session view', () => {
     }
 
     const view = await mount({ session: 'bg' })
-    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
-    expect(checkbox.checked).toBe(false)
+    expect(await isShowingAll(view)).toBe(false)
     expect(view.textContent).not.toContain('hook_pre: diagnostic')
 
-    await act(async () => checkbox.click())
-    expect(checkbox.checked).toBe(true)
+    await toggleShowAll(view)
+    expect(await isShowingAll(view)).toBe(true)
     expect(view.textContent).toContain('hook_pre: diagnostic')
 
     const sameSession = await reopen(bg)
-    expect(sameSession.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true)
+    expect(await isShowingAll(sameSession)).toBe(true)
     expect(sameSession.textContent).toContain('hook_pre: diagnostic')
 
     const otherSession = await reopen(other)
-    expect(otherSession.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(await isShowingAll(otherSession)).toBe(false)
     expect(otherSession.textContent).not.toContain('hook_pre: diagnostic')
 
     const returned = await reopen(bg)
-    const returnedCheckbox = returned.querySelector<HTMLInputElement>('input[type="checkbox"]')!
-    expect(returnedCheckbox.checked).toBe(true)
+    expect(await isShowingAll(returned)).toBe(true)
     expect(returned.textContent).toContain('hook_pre: diagnostic')
-    await act(async () => returnedCheckbox.click())
-    expect(returnedCheckbox.checked).toBe(false)
+    await toggleShowAll(returned)
+    expect(await isShowingAll(returned)).toBe(false)
     expect(returned.textContent).not.toContain('hook_pre: diagnostic')
 
     const unticked = await reopen(bg)
-    expect(unticked.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(await isShowingAll(unticked)).toBe(false)
     expect(unticked.textContent).not.toContain('hook_pre: diagnostic')
   })
 
@@ -256,9 +272,8 @@ describe('the structured session view', () => {
     start(current, { 'quirky.structured/messages': (params) => messagesFor(params.session) })
 
     const view = await mount({ session: 'bg' })
-    const checkbox = view.querySelector<HTMLInputElement>('input[type="checkbox"]')!
-    await act(async () => checkbox.click())
-    expect(checkbox.checked).toBe(true)
+    await toggleShowAll(view)
+    expect(await isShowingAll(view)).toBe(true)
     expect(view.textContent).toContain('hook_pre: diagnostic')
 
     await act(async () => void (unmount as () => void)())
@@ -268,7 +283,7 @@ describe('the structured session view', () => {
 
     current.session = bg
     const remounted = await mount({ session: 'bg' })
-    expect(remounted.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false)
+    expect(await isShowingAll(remounted)).toBe(false)
     expect(remounted.textContent).not.toContain('hook_pre: diagnostic')
   })
 

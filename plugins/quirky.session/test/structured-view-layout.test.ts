@@ -276,36 +276,32 @@ describe('the plan panel layout', () => {
 })
 
 describe('the chat transcript header', () => {
-  test.skipIf(!executable)('keeps the event filter inline, inset, and clear of the transcript', async () => {
+  test.skipIf(!executable)('keeps the event filter in the overflow menu, inset, and clear of the transcript', async () => {
     const { context, page } = await openComposer()
     try {
-      const checkbox = page.getByRole('checkbox', { name: 'Show all events' })
-      const label = page.getByText('Show all events', { exact: true })
+      const trigger = page.getByRole('button', { name: 'More actions' })
       const title = page.getByRole('heading', { name: 'Claude', exact: true })
-      const checkboxBox = await checkbox.boundingBox()
-      const labelBox = await label.boundingBox()
+      const triggerBox = await trigger.boundingBox()
       const titleBox = await title.boundingBox()
       const headerBox = await page.locator('#structured-view header').boundingBox()
       const logBox = await page.getByRole('log').boundingBox()
-      if (!checkboxBox || !labelBox || !titleBox || !headerBox || !logBox) {
-        throw new Error('The transcript header, filter, or log is not visible')
+      if (!triggerBox || !titleBox || !headerBox || !logBox) {
+        throw new Error('The transcript header, menu trigger, or log is not visible')
       }
 
-      const checkboxCenter = checkboxBox.y + checkboxBox.height / 2
-      expect(Math.abs(checkboxCenter - (labelBox.y + labelBox.height / 2))).toBeLessThanOrEqual(1)
-      expect(Math.abs(checkboxCenter - (titleBox.y + titleBox.height / 2))).toBeLessThanOrEqual(1)
+      const triggerCenter = triggerBox.y + triggerBox.height / 2
+      expect(Math.abs(triggerCenter - (titleBox.y + titleBox.height / 2))).toBeLessThanOrEqual(1)
       const inset = await page.getByRole('log').evaluate((element) => parseFloat(getComputedStyle(element).paddingInlineEnd))
-      expect(Math.min(checkboxBox.x, labelBox.x) - headerBox.x).toBeGreaterThanOrEqual(inset)
-      expect(headerBox.x + headerBox.width - Math.max(checkboxBox.x + checkboxBox.width, labelBox.x + labelBox.width)).toBeGreaterThanOrEqual(inset)
+      expect(headerBox.x + headerBox.width - (triggerBox.x + triggerBox.width)).toBeGreaterThanOrEqual(inset)
       expect(titleBox.x - headerBox.x).toBeGreaterThanOrEqual(inset)
-      expect(checkboxBox.y + checkboxBox.height).toBeLessThanOrEqual(logBox.y)
-      expect(labelBox.y + labelBox.height).toBeLessThanOrEqual(logBox.y)
+      expect(triggerBox.y + triggerBox.height).toBeLessThanOrEqual(logBox.y)
 
-      await label.click()
-      expect(await checkbox.isChecked()).toBe(true)
-      await checkbox.focus()
-      await checkbox.press('Space')
-      expect(await checkbox.isChecked()).toBe(false)
+      await trigger.click()
+      const item = page.getByRole('menuitemcheckbox', { name: 'Show all events' })
+      expect(await item.getAttribute('aria-checked')).toBe('false')
+      await item.click()
+      await trigger.click()
+      expect(await page.getByRole('menuitemcheckbox', { name: 'Show all events' }).getAttribute('aria-checked')).toBe('true')
     } finally {
       await context.close()
     }
