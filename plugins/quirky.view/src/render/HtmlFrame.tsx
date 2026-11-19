@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { asNumber, asString, type Props } from './props'
 import { clampLabel, ELEMENT_KEY, keyPart, pointKey } from './point'
 import { useRuntime } from './runtime'
@@ -57,8 +57,12 @@ export const WRAPPER_CSP = [
   'media-src data: blob:'
 ].join('; ')
 
-/** Runs in the wrapper: passes a `quirky-point` message from the agent frame, and only that, on to the card. */
+/**
+ * Runs in the wrapper: passes a `quirky-point` message from the agent frame, and only that, on to
+ * the card, and tells the card when the agent frame loads a second time, which means it navigated.
+ */
 export const FRAME_RELAY = `(function () {
+  var loads = 0;
   window.addEventListener('message', function (event) {
     var inner = document.getElementById('agent');
     var data = event.data;
@@ -66,6 +70,12 @@ export const FRAME_RELAY = `(function () {
     if (typeof data !== 'object' || data === null || data.type !== 'quirky-point') return;
     parent.postMessage({ type: 'quirky-point', key: data.key, label: data.label }, '*');
   });
+  document.addEventListener('load', function (event) {
+    var inner = document.getElementById('agent');
+    if (!inner || event.target !== inner) return;
+    loads += 1;
+    if (loads > 1) parent.postMessage({ type: 'quirky-navigated' }, '*');
+  }, true);
 })();`
 
 const THEME_TOKENS = ['--ui-surface', '--ui-text', '--ui-muted', '--ui-accent', '--ui-border', '--ui-selected', '--ui-working', '--ui-needs-you', '--ui-failing', '--ui-font-body', '--ui-font-label', '--ui-font-mono']
@@ -107,6 +117,9 @@ export function pointFromMessage(data: unknown): { element: string; label: strin
   return { element, label: clampLabel(typeof label === 'string' && label !== '' ? label : key, 60) }
 }
 
+/** Whether a message is the wrapper saying the agent frame navigated away. */
+export const isNavigatedMessage = (data: unknown): boolean => typeof data === 'object' && data !== null && (data as { type?: unknown }).type === 'quirky-navigated'
+
 /**
  * Agent html in a frame with an opaque origin, no network and no way to reach Quirky: scripts run
  * only when the node is interactive, and a message counts only when it comes from this frame.
@@ -123,16 +136,23 @@ export function HtmlFrame({ props }: { props: Props }) {
   const [epoch, setEpoch] = useState(0)
   const srcdoc = useMemo(() => wrapperDocument(frameDocument(html), interactive), [html, interactive])
 
+  const reset = useCallback(() => {
+    loads.current = 0
+    setEpoch((value) => value + 1)
+    renderFailed('navigation is not allowed')
+  }, [renderFailed])
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const target = frame.current?.contentWindow
       if (!target || event.source !== target) return
+      if (isNavigatedMessage(event.data)) return reset()
       const found = pointFromMessage(event.data)
       if (found !== null) point(found.element, found.label)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [point])
+  }, [point, reset])
 
   useEffect(() => {
     loads.current = 0
@@ -140,10 +160,7 @@ export function HtmlFrame({ props }: { props: Props }) {
 
   const loaded = () => {
     loads.current += 1
-    if (loads.current <= 1) return
-    loads.current = 0
-    setEpoch((value) => value + 1)
-    renderFailed('navigation is not allowed')
+    if (loads.current > 1) reset()
   }
 
   return (

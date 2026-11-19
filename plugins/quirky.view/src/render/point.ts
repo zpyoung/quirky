@@ -79,14 +79,16 @@ function placeMarker(host: HTMLElement, image: HTMLElement, at: RegExpExecArray)
   marker.style.top = `${image.offsetTop + (Number(at[2]) / 100) * image.offsetHeight}px`
 }
 
-/** Rings the selected image region: the one last clicked, else the first image of the card. */
-function markRegion(root: HTMLElement, region: Element | null, selected: string | null): void {
+/** Rings the selected image region: the one last clicked, else the first image of the card. Returns the ringed image. */
+function markRegion(root: HTMLElement, region: Element | null, selected: string | null): HTMLElement | null {
   const at = selected === null ? null : REGION_KEY.exec(selected)
   const image = at === null ? null : region ?? root.querySelector(`[${POINT_REGION}]`)
   const host = image instanceof HTMLElement ? image.parentElement : null
   const stale = [...root.querySelectorAll(`[${MARKER}]`)].filter((marker) => marker.parentElement !== host)
   stale.forEach((marker) => marker.remove())
-  void (at !== null && image instanceof HTMLElement && host !== null && placeMarker(host, image, at))
+  if (at === null || !(image instanceof HTMLElement) || host === null) return null
+  placeMarker(host, image, at)
+  return image
 }
 
 /**
@@ -98,6 +100,18 @@ export function usePointStyles(host: RefObject<HTMLElement | null>, selected: st
   useEffect(() => {
     const root = host.current
     if (root === null) return
+    let watched: HTMLElement | null = null
+    const resizer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => ring())
+    // the ring is in pixels, so it is placed again whenever the image or the box it sits in changes size
+    const ring = (): HTMLElement | null => markRegion(root, region.current !== null && root.contains(region.current) ? region.current : null, selected)
+    const watch = (image: HTMLElement | null) => {
+      if (resizer === null || image === watched) return
+      resizer.disconnect()
+      watched = image
+      if (image === null) return
+      resizer.observe(image)
+      if (image.parentElement !== null) resizer.observe(image.parentElement)
+    }
     const apply = () => {
       for (const element of root.querySelectorAll<HTMLElement | SVGElement>(`[${POINT_KEY}]`)) {
         const on = element.getAttribute(POINT_KEY) === selected
@@ -110,13 +124,14 @@ export function usePointStyles(host: RefObject<HTMLElement | null>, selected: st
         }
         if (element.closest('[aria-hidden="true"],[role="img"]') === null) element.tabIndex = 0
       }
-      markRegion(root, region.current !== null && root.contains(region.current) ? region.current : null, selected)
+      watch(ring())
     }
     apply()
     const observer = new MutationObserver(apply)
     observer.observe(root, { childList: true, subtree: true })
     return () => {
       observer.disconnect()
+      resizer?.disconnect()
       root.querySelectorAll(`[${MARKER}]`).forEach((marker) => marker.remove())
     }
   }, [host, selected, region])

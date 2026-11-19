@@ -1504,6 +1504,52 @@ describe('pointing', () => {
     expect(element.querySelectorAll('[data-point-marker]')).toHaveLength(1)
   })
 
+  test('the ring follows the image when it changes size', async () => {
+    const observers: Array<{ callback: () => void; targets: Element[] }> = []
+    const original = globalThis.ResizeObserver
+    globalThis.ResizeObserver = class {
+      readonly entry = { callback: () => {}, targets: [] as Element[] }
+      constructor(callback: () => void) {
+        this.entry.callback = callback
+        observers.push(this.entry)
+      }
+      observe(target: Element) {
+        this.entry.targets.push(target)
+      }
+      disconnect() {
+        this.entry.targets = []
+      }
+      unobserve() {}
+    } as never
+    try {
+      const spec: ViewSpec = { title: 'Shot', root: { type: 'image', props: { path: 'a.png', alt: 'A' } } }
+      const fake = start([record(spec)], { 'quirky.session/markdownAssets': () => ({ images: { 'a.png': 'http://localhost/a.png' } }) })
+      fake.commands[POINT] = () => {}
+      const { element } = await mountSurface(fake)
+      const image = element.querySelector('img')!
+      const size = { left: 10, top: 20, width: 200, height: 100 }
+      Object.defineProperties(image, {
+        offsetLeft: { get: () => size.left },
+        offsetTop: { get: () => size.top },
+        offsetWidth: { get: () => size.width },
+        offsetHeight: { get: () => size.height }
+      })
+      image.getBoundingClientRect = () => ({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) })
+      await act(async () => void image.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 110, clientY: 45 })))
+      await settle()
+      const ring = element.querySelector<HTMLElement>('[data-point-marker]')!
+      expect([ring.style.left, ring.style.top]).toEqual(['110px', '45px'])
+
+      const live = observers.filter((observer) => observer.targets.includes(image))
+      expect(live).toHaveLength(1)
+      Object.assign(size, { width: 400, height: 200 })
+      await act(async () => void live[0]!.callback())
+      expect([ring.style.left, ring.style.top]).toEqual(['210px', '70px'])
+    } finally {
+      globalThis.ResizeObserver = original
+    }
+  })
+
   test('a key press on a focused pointable element points like a click', async () => {
     const { fake, target } = await pointAtFixture('[data-point-key="file:0"]')
     expect(pointCalls(fake)).toHaveLength(1)
@@ -1786,7 +1832,7 @@ describe('the sandboxed html frame', () => {
     const posted: unknown[] = []
     new Function('window', 'document', 'parent', FRAME_RELAY)(
       { addEventListener: (_type: string, listener: (event: unknown) => void) => void listeners.push(listener) },
-      { getElementById: (id: string) => (id === 'agent' ? { contentWindow: agent } : null) },
+      { getElementById: (id: string) => (id === 'agent' ? { contentWindow: agent } : null), addEventListener: () => {} },
       { postMessage: (data: unknown, target: string) => void posted.push([data, target]) }
     )
     const deliver = (source: unknown, data: unknown) => listeners[0]!({ source, data })
@@ -1798,6 +1844,60 @@ describe('the sandboxed html frame', () => {
     expect(posted).toEqual([])
     deliver(agent, { type: 'quirky-point', key: 'save', label: 'Save', extra: 'dropped' })
     expect(posted).toEqual([[{ type: 'quirky-point', key: 'save', label: 'Save' }, '*']])
+  })
+
+  test('the wrapper watches the agent frame and tells the card when it loads a second time', async () => {
+    const fake = start([record(proto(true))])
+    const { element } = await mountSurface(fake)
+    expect(innerOf(element.querySelector('iframe')!).wrapper).toContain('quirky-navigated')
+
+    const { FRAME_RELAY } = await import('../src/render/HtmlFrame')
+    const agent = { name: 'agent' }
+    const loadListeners: Array<{ listener: (event: unknown) => void; capture: unknown }> = []
+    const posted: unknown[] = []
+    new Function('window', 'document', 'parent', FRAME_RELAY)(
+      { addEventListener: () => {} },
+      {
+        getElementById: (id: string) => (id === 'agent' ? agent : null),
+        addEventListener: (type: string, listener: (event: unknown) => void, capture: unknown) => void (type === 'load' && loadListeners.push({ listener, capture }))
+      },
+      { postMessage: (data: unknown, target: string) => void posted.push([data, target]) }
+    )
+    expect(loadListeners).toHaveLength(1)
+    expect(loadListeners[0]!.capture).toBe(true)
+    const load = (target: unknown) => loadListeners[0]!.listener({ target })
+    load(agent)
+    expect(posted).toEqual([])
+    load({ name: 'another element' })
+    expect(posted).toEqual([])
+    load(agent)
+    expect(posted).toEqual([[{ type: 'quirky-navigated' }, '*']])
+  })
+
+  test('a navigated message from the outer frame resets the frame and reports render-failed once, and one from anywhere else is ignored', async () => {
+    const fake = start([record(proto(true))])
+    const { element } = await mountSurface(fake)
+    const before = element.querySelector('iframe')!
+    const send = async (source: unknown, data: unknown = { type: 'quirky-navigated' }) => {
+      await act(async () => void window.dispatchEvent(new MessageEvent('message', { data, source: source as never })))
+      await settle()
+    }
+
+    await send(window)
+    await send(null)
+    await send({ name: 'inner agent frame' })
+    await send(before.contentWindow, { type: 'something-else' })
+    await send(before.contentWindow, 'quirky-navigated')
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(0)
+    expect(element.querySelector('iframe')).toBe(before)
+
+    await send(before.contentWindow)
+    expect(fake.callsTo('quirky.view/render-failed').map((call) => call.params)).toEqual([{ viewId: 'view_1', version: 1, error: 'navigation is not allowed' }])
+    const after = element.querySelector('iframe')!
+    expect(after).not.toBe(before)
+    expect(after.getAttribute('srcdoc')).toBe(before.getAttribute('srcdoc'))
+    await send(before.contentWindow)
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(1)
   })
 
   test('a point relayed through the wrapper reaches chat-point, and one that skips the wrapper does not', async () => {
