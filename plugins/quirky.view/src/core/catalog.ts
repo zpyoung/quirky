@@ -3,27 +3,44 @@
  * is stored, and the guide text `quirky view --help` prints. Specs are data; nothing here renders.
  */
 
+import { loadsImages } from '../../../../packages/ui/src/markdown/blocks/mermaid-safety'
 import { CATALOG_TYPES, FORMAT_PATTERNS, textAnswerError } from './contract'
 import type {
   CatalogType,
+  PatchOp,
+  Refused,
+  RefusedAttempt,
+  StoredViewRecord,
   ViewAction,
+  ViewChangeKind,
+  ViewChangedEvent,
+  ViewMountInput,
   ViewNode,
   ViewPlacement,
   ViewRecord,
   ViewSpec,
   ViewSpecValidationResult,
+  ViewSurface,
   ViewValidationError
 } from './contract'
 
 export { CATALOG_TYPES, FORMAT_PATTERNS, textAnswerError }
 export type {
   CatalogType,
+  PatchOp,
+  Refused,
+  RefusedAttempt,
+  StoredViewRecord,
   ViewAction,
+  ViewChangeKind,
+  ViewChangedEvent,
+  ViewMountInput,
   ViewNode,
   ViewPlacement,
   ViewRecord,
   ViewSpec,
   ViewSpecValidationResult,
+  ViewSurface,
   ViewValidationError
 }
 
@@ -37,6 +54,19 @@ const MAX_TABLE_COLUMNS = 20
 const MAX_LIST_ITEMS = 200
 const MAX_COLUMNS = 4
 const MAX_OPTIONS = 12
+const MAX_ID_LENGTH = 40
+const MAX_DIAGRAM_SOURCE = 20 * 1024
+const MAX_HTML_LENGTH = 128 * 1024
+const MAX_CODE_LENGTH = 64 * 1024
+const MIN_HTML_HEIGHT = 120
+const MAX_HTML_HEIGHT = 1200
+const MAX_MATRIX_COLUMNS = 12
+const MIN_SKETCH_SIDE = 40
+const MAX_SKETCH_SIDE = 4000
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] as const
+const LOCAL_PREVIEW_HOSTS = ['localhost', '127.0.0.1'] as const
+const FILE_STATUSES = ['added', 'modified', 'deleted', 'renamed', 'touched'] as const
+const SKETCH_SHAPES = ['box', 'ellipse', 'line', 'arrow', 'text'] as const
 
 /** The shape of an action name: a button's `action` and a field's `id`. */
 export const ACTION_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/
@@ -48,15 +78,17 @@ const STEP_STATES = ['done', 'active', 'pending', 'failed'] as const
 const BUTTON_VARIANTS = ['primary', 'ghost'] as const
 const FIELD_TYPES = ['select', 'multiselect', 'text', 'number', 'confirm'] as const
 const RESERVED_IDS = new Set(['__proto__', 'constructor', 'prototype'])
+const ID_HINT = `lowercase letters, digits and dashes, 1 to ${MAX_ID_LENGTH} characters`
 
-type Check = { errors: ViewValidationError[]; fieldIds: Set<string>; nodes: number; nodeLimitHit: boolean }
+type Check = { errors: ViewValidationError[]; fieldIds: Set<string>; ids: Set<string>; nodes: number; nodeLimitHit: boolean }
 
 type Field =
-  | { kind: 'string'; required?: boolean; max?: number; markdown?: boolean; pattern?: RegExp; hint?: string }
+  | { kind: 'string'; required?: boolean; max?: number; markdown?: boolean; pattern?: RegExp; hint?: string; ident?: boolean }
   | { kind: 'enum'; values: readonly string[]; required?: boolean }
-  | { kind: 'number'; required?: boolean }
+  | { kind: 'number'; required?: boolean; min?: number; max?: number }
+  | { kind: 'boolean'; required?: boolean }
   | { kind: 'text-or-number'; required?: boolean }
-  | { kind: 'strings'; min: number; max: number }
+  | { kind: 'strings'; min: number; max: number; optional?: boolean }
   | { kind: 'list'; of: Shape; min: number; max: number; what: string }
   | { kind: 'matrix'; max: number }
   | { kind: 'question' }
@@ -366,17 +398,20 @@ export function nearestTypes(name: string, limit = 3): CatalogType[] {
 }
 
 function isRequired(field: Field): boolean {
-  return field.kind === 'list' || field.kind === 'strings' || field.kind === 'matrix' || field.kind === 'question' || field.required === true
+  if (field.kind === 'strings') return field.optional !== true
+  return field.kind === 'list' || field.kind === 'matrix' || field.kind === 'question' || field.required === true
 }
 
 function describeField(field: Field): string {
   switch (field.kind) {
     case 'string':
-      return 'string'
+      return field.ident ? 'string (an id)' : 'string'
     case 'enum':
       return field.values.join('|')
     case 'number':
-      return 'number'
+      return field.min !== undefined && field.max !== undefined ? `number (${field.min} to ${field.max})` : 'number'
+    case 'boolean':
+      return 'boolean'
     case 'text-or-number':
       return 'string|number'
     case 'strings':
@@ -397,6 +432,10 @@ function describeShape(shape: Shape): string {
     })
     .join(', ')
 }
+
+const ID_FIELD: Field = { kind: 'string', ident: true, pattern: ACTION_NAME_PATTERN, hint: ID_HINT }
+const CAPTION_FIELD: Field = { kind: 'string', max: 200 }
+const TONE_FIELD: Field = { kind: 'enum', values: TONES }
 
 const ITEM_STATE_SHAPE = (states: readonly string[], text: string): Shape => ({
   [text]: { kind: 'string', required: true },
@@ -429,7 +468,7 @@ export const COMPONENTS: Record<CatalogType, Component> = {
     example: { type: 'section', props: { title: 'Details' }, children: [{ type: 'markdown', props: { text: 'Notes' } }] }
   },
   markdown: {
-    summary: 'Formatted text. Links must be absolute http(s) URLs and ask the user before opening; images and raw HTML are dropped.',
+    summary: 'Formatted text. Links must be absolute http(s) URLs and ask the user before opening; images and raw HTML are dropped. Math written as $x^2$ or $$x^2$$ is typeset.',
     shape: { text: { kind: 'string', required: true, markdown: true } },
     example: { type: 'markdown', props: { text: 'See the [docs](https://example.com/docs) for **details**.' } }
   },
@@ -527,6 +566,146 @@ export const COMPONENTS: Record<CatalogType, Component> = {
       }
     }
   }
+,
+  diagram: {
+    summary:
+      'A Mermaid diagram (flowchart, sequence, class, state and the rest), drawn by Quirky. Node labels are plain text, and a source that could load an image or other remote content (img: shapes, <img>, url()) is refused. Quirky does not parse the source here: a diagram that fails to draw is reported back to you as a message, so fix it with `quirky view update` or `patch`.',
+    shape: { source: { kind: 'string', required: true, max: MAX_DIAGRAM_SOURCE }, caption: CAPTION_FIELD },
+    example: { type: 'diagram', props: { source: 'flowchart LR\n  client[Client app] --> daemon[Daemon]', caption: 'Request path' } }
+  },
+  image: {
+    summary: 'A picture from the worktree. `path` is relative to the worktree root, never starts with / or contains .., and ends in png, jpg, jpeg, gif, webp or svg. `alt` describes it.',
+    shape: { path: { kind: 'string', required: true, max: 400 }, alt: { kind: 'string', required: true, max: 200 }, caption: CAPTION_FIELD },
+    example: { type: 'image', props: { path: 'docs/shots/login.png', alt: 'The login screen', caption: 'Before the change' } }
+  },
+  html: {
+    summary: `A small page or prototype in a sandboxed frame with no network. It may carry inline CSS and, when \`interactive\` is true, inline scripts. Nothing may load from http:, https: or // (src, href, action, srcset, poster or CSS url()); inline images as data: URLs. An element with a data-point attribute can be pointed at; add data-point-label for its name. height is in pixels (${MIN_HTML_HEIGHT} to ${MAX_HTML_HEIGHT}).`,
+    shape: {
+      html: { kind: 'string', required: true, max: MAX_HTML_LENGTH },
+      interactive: { kind: 'boolean', required: true },
+      height: { kind: 'number', min: MIN_HTML_HEIGHT, max: MAX_HTML_HEIGHT }
+    },
+    example: { type: 'html', props: { html: '<button data-point="save" data-point-label="Save">Save</button>', interactive: true, height: 160 } }
+  },
+  'live-preview': {
+    summary: 'A running local app shown in a browser view. `url` must be http:// on localhost, 127.0.0.1 or a *.quirky.localhost host.',
+    shape: { url: { kind: 'string', required: true, max: 2048 }, caption: CAPTION_FIELD },
+    example: { type: 'live-preview', props: { url: 'http://localhost:5173/', caption: 'The dev server' } }
+  },
+  timeline: {
+    summary: 'Items on a time axis, at most 100. `start` and `end` are plain labels or dates; items keep the order given.',
+    shape: {
+      items: {
+        kind: 'list',
+        of: { id: ID_FIELD, label: { kind: 'string', required: true, max: 120 }, start: { kind: 'string', required: true, max: 40 }, end: { kind: 'string', max: 40 }, tone: TONE_FIELD },
+        min: 1,
+        max: 100,
+        what: 'items'
+      }
+    },
+    example: { type: 'timeline', props: { items: [{ id: 'design', label: 'Design', start: '2026-11-02', end: '2026-11-06', tone: 'good' }, { label: 'Launch', start: '2026-11-23' }] } }
+  },
+  board: {
+    summary: 'Columns of cards, like a kanban board: at most 8 columns of at most 50 cards.',
+    shape: {
+      columns: {
+        kind: 'list',
+        of: {
+          title: { kind: 'string', required: true, max: 80 },
+          cards: {
+            kind: 'list',
+            of: { id: ID_FIELD, title: { kind: 'string', required: true, max: 120 }, detail: { kind: 'string', max: 400 }, tone: TONE_FIELD },
+            min: 0,
+            max: 50,
+            what: 'cards'
+          }
+        },
+        min: 1,
+        max: 8,
+        what: 'columns'
+      }
+    },
+    example: { type: 'board', props: { columns: [{ title: 'To do', cards: [{ id: 'docs', title: 'Write docs' }] }, { title: 'Done', cards: [] }] } }
+  },
+  matrix: {
+    summary: `A grid of short cells: rows by named columns, at most ${MAX_MATRIX_COLUMNS} columns and 50 rows. Every row has one cell per column. \`highlight\` lists column names whose cell in that row stands out.`,
+    shape: {
+      columns: { kind: 'strings', min: 1, max: MAX_MATRIX_COLUMNS },
+      rows: {
+        kind: 'list',
+        of: { label: { kind: 'string', required: true, max: 120 }, cells: { kind: 'strings', min: 1, max: MAX_MATRIX_COLUMNS }, highlight: { kind: 'strings', min: 0, max: MAX_MATRIX_COLUMNS, optional: true } },
+        min: 1,
+        max: 50,
+        what: 'rows'
+      }
+    },
+    example: { type: 'matrix', props: { columns: ['Claude', 'Codex'], rows: [{ label: 'Patch', cells: ['yes', 'no'], highlight: ['Codex'] }] } }
+  },
+  'annotated-code': {
+    summary: 'Code with notes attached to lines. `lines` is a 1-based line "4" or a range "3-7" inside the code; at most 50 notes.',
+    shape: {
+      language: { kind: 'string', required: true, max: 40 },
+      code: { kind: 'string', required: true, max: MAX_CODE_LENGTH },
+      notes: { kind: 'list', of: { lines: { kind: 'string', required: true, max: 20 }, note: { kind: 'string', required: true, max: 400 } }, min: 0, max: 50, what: 'notes' }
+    },
+    example: { type: 'annotated-code', props: { language: 'ts', code: 'const a = 1\nconst b = a + 1\n', notes: [{ lines: '2', note: 'Uses a.' }] } }
+  },
+  'file-map': {
+    summary: 'Paths with what happened to each, at most 300. status is added, modified, deleted, renamed or touched.',
+    shape: {
+      entries: {
+        kind: 'list',
+        of: { path: { kind: 'string', required: true, max: 400 }, status: { kind: 'enum', values: FILE_STATUSES, required: true }, note: { kind: 'string', max: 200 } },
+        min: 1,
+        max: 300,
+        what: 'entries'
+      }
+    },
+    example: { type: 'file-map', props: { entries: [{ path: 'src/a.ts', status: 'modified', note: 'new check' }, { path: 'src/b.ts', status: 'added' }] } }
+  },
+  plot: {
+    summary: 'An x/y plot of up to 8 series, each with 2 to 500 numeric points.',
+    shape: {
+      xLabel: { kind: 'string', max: 80 },
+      yLabel: { kind: 'string', max: 80 },
+      series: {
+        kind: 'list',
+        of: { label: { kind: 'string', required: true, max: 80 }, points: { kind: 'list', of: { x: { kind: 'number', required: true }, y: { kind: 'number', required: true } }, min: 2, max: MAX_CHART_POINTS, what: 'points' } },
+        min: 1,
+        max: 8,
+        what: 'series'
+      }
+    },
+    example: { type: 'plot', props: { xLabel: 'Request', yLabel: 'ms', series: [{ label: 'p50', points: [{ x: 1, y: 12 }, { x: 2, y: 14 }] }] } }
+  },
+  sketch: {
+    summary: `A rough hand-drawn diagram on a width by height canvas (${MIN_SKETCH_SIDE} to ${MAX_SKETCH_SIDE}), at most 200 shapes. box and ellipse use x, y, w and h; line and arrow run from x, y to x2, y2; text puts its label at x, y.`,
+    shape: {
+      width: { kind: 'number', required: true, min: MIN_SKETCH_SIDE, max: MAX_SKETCH_SIDE },
+      height: { kind: 'number', required: true, min: MIN_SKETCH_SIDE, max: MAX_SKETCH_SIDE },
+      shapes: {
+        kind: 'list',
+        of: {
+          id: ID_FIELD,
+          kind: { kind: 'enum', values: SKETCH_SHAPES, required: true },
+          x: { kind: 'number', required: true },
+          y: { kind: 'number', required: true },
+          w: { kind: 'number' },
+          h: { kind: 'number' },
+          x2: { kind: 'number' },
+          y2: { kind: 'number' },
+          label: { kind: 'string', max: 200 }
+        },
+        min: 1,
+        max: 200,
+        what: 'shapes'
+      }
+    },
+    example: {
+      type: 'sketch',
+      props: { width: 200, height: 100, shapes: [{ id: 'frame', kind: 'box', x: 10, y: 10, w: 80, h: 40, label: 'Daemon' }, { kind: 'arrow', x: 90, y: 30, x2: 150, y2: 30 }] }
+    }
+  }
 }
 
 function addError(check: Check, path: string, message: string): void {
@@ -548,6 +727,10 @@ function readString(raw: unknown, field: Extract<Field, { kind: 'string' }>, pat
   if (field.max !== undefined && raw.length > field.max) addError(check, path, `must be at most ${field.max} characters`)
   if (field.pattern && !field.pattern.test(raw)) addError(check, path, `must be ${field.hint ?? `in the form ${field.pattern}`}`)
   if (field.markdown) checkMarkdown(raw, path, check.errors)
+  if (field.ident && ACTION_NAME_PATTERN.test(raw)) {
+    if (check.ids.has(raw)) addError(check, path, `duplicate id '${raw}'`)
+    check.ids.add(raw)
+  }
   return raw
 }
 
@@ -576,8 +759,14 @@ function readField(value: unknown, field: Field, path: string, check: Check): un
       addError(check, path, `must be one of ${field.values.join(' | ')}`)
       return undefined
     case 'number':
-      if (isFiniteNumber(value)) return value
-      addError(check, path, 'must be a finite number')
+      if (!isFiniteNumber(value)) return void addError(check, path, 'must be a finite number')
+      if ((field.min !== undefined && value < field.min) || (field.max !== undefined && value > field.max)) {
+        addError(check, path, `must be between ${field.min ?? '-Infinity'} and ${field.max ?? 'Infinity'}`)
+      }
+      return value
+    case 'boolean':
+      if (typeof value === 'boolean') return value
+      addError(check, path, 'must be a boolean')
       return undefined
     case 'text-or-number':
       if (isFiniteNumber(value) || typeof value === 'string') return value
@@ -774,19 +963,134 @@ function readNumberQuestion(raw: Record<string, unknown>, out: Record<string, un
   else out.default = value
 }
 
-function checkTableWidth(props: Record<string, unknown>, path: string, check: Check): void {
-  const { columns, rows } = props
-  if (!Array.isArray(columns) || !Array.isArray(rows)) return
-  rows.forEach((row, index) => {
-    if (Array.isArray(row) && row.length !== columns.length) {
-      addError(check, `${path}[${index}]`, `row has ${row.length} cells; the table has ${columns.length} columns`)
+type NodeCheck = (props: Record<string, unknown>, path: string, check: Check) => void
+
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i
+const IMAGE_EXTENSION = new RegExp(`\\.(${IMAGE_EXTENSIONS.join('|')})$`, 'i')
+const REMOTE_URL = /^(?:https?:|\/\/)/i
+const URL_ATTRIBUTE = /\b(?:src|href|action|srcset|poster|formaction|data|xlink:href|ping)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))/gi
+const NAMED_ENTITIES: Record<string, string> = { colon: ':', sol: '/', tab: '', newline: '' }
+
+function decodeEntities(text: string): string {
+  const fromCode = (code: number): string => (Number.isInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '')
+  return text
+    .replace(/&#x([0-9a-f]{1,6});?/gi, (_match, hex: string) => fromCode(Number.parseInt(hex, 16)))
+    .replace(/&#(\d{1,7});?/g, (_match, digits: string) => fromCode(Number(digits)))
+    .replace(/&(colon|sol|tab|newline);/gi, (_match, name: string) => NAMED_ENTITIES[name.toLowerCase()])
+}
+
+function isRemoteAttribute(name: string, value: string): boolean {
+  const decoded = decodeEntities(value)
+  // srcset lists several urls; every other attribute holds one, and browsers ignore control characters and spaces inside its scheme
+  if (name.toLowerCase() === 'srcset') return decoded.split(/[\s,]+/).some((candidate) => REMOTE_URL.test(candidate))
+  return REMOTE_URL.test(decoded.replace(/[\u0000- ]+/g, ''))
+}
+
+/** True for a CSS `url(` or `@import` that points at http:, https: or //; scans without regex backtracking. */
+function loadsRemoteCss(text: string): boolean {
+  const lower = text.toLowerCase()
+  const startsRemote = (from: number): boolean => {
+    let at = from
+    while (at < lower.length && /[\s"']/.test(lower[at])) at++
+    return lower.startsWith('http:', at) || lower.startsWith('https:', at) || lower.startsWith('//', at)
+  }
+  for (let at = lower.indexOf('url'); at >= 0; at = lower.indexOf('url', at + 3)) {
+    let open = at + 3
+    while (open < lower.length && /\s/.test(lower[open])) open++
+    if (lower[open] === '(' && startsRemote(open + 1)) return true
+  }
+  for (let at = lower.indexOf('@import'); at >= 0; at = lower.indexOf('@import', at + 7)) {
+    if (startsRemote(at + 7)) return true
+  }
+  return false
+}
+
+function loadsRemoteHtml(html: string): boolean {
+  for (const match of html.matchAll(URL_ATTRIBUTE)) {
+    const name = match[0].slice(0, match[0].indexOf('=')).trim()
+    if (isRemoteAttribute(name, match[1] ?? match[2] ?? match[3] ?? '')) return true
+  }
+  return loadsRemoteCss(decodeEntities(html))
+}
+
+function isLocalPreviewUrl(value: string): boolean {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' || url.username !== '' || url.password !== '') return false
+  const suffix = '.quirky.localhost'
+  return (LOCAL_PREVIEW_HOSTS as readonly string[]).includes(url.hostname) || (url.hostname.endsWith(suffix) && url.hostname.length > suffix.length)
+}
+
+const NODE_CHECKS: Partial<Record<CatalogType, NodeCheck>> = {
+  table(props, path, check) {
+    const { columns, rows } = props
+    if (!Array.isArray(columns) || !Array.isArray(rows)) return
+    rows.forEach((row, index) => {
+      if (Array.isArray(row) && row.length !== columns.length) {
+        addError(check, `${path}.props.rows[${index}]`, `row has ${row.length} cells; the table has ${columns.length} columns`)
+      }
+    })
+  },
+  diagram(props, path, check) {
+    if (typeof props.source === 'string' && loadsImages(props.source)) {
+      addError(check, `${path}.props.source`, 'diagram source must not load images or remote content (img: shapes, <img>, url() and similar are refused)')
     }
-  })
+  },
+  image(props, path, check) {
+    const value = props.path
+    if (typeof value !== 'string') return
+    const at = `${path}.props.path`
+    if (value.startsWith('/') || value.startsWith('\\') || SCHEME.test(value)) addError(check, at, 'image path must be relative to the worktree')
+    else if (value.split(/[\\/]/).includes('..')) addError(check, at, "image path must not contain '..' segments")
+    else if (!IMAGE_EXTENSION.test(value)) addError(check, at, `image path must end in ${IMAGE_EXTENSIONS.slice(0, -1).join(', ')} or ${IMAGE_EXTENSIONS.at(-1)}`)
+  },
+  html(props, path, check) {
+    if (typeof props.html === 'string' && loadsRemoteHtml(props.html)) {
+      addError(check, `${path}.props.html`, 'remote content is not allowed in html; inline it as data:')
+    }
+  },
+  'live-preview'(props, path, check) {
+    if (typeof props.url === 'string' && !isLocalPreviewUrl(props.url)) {
+      addError(check, `${path}.props.url`, 'url must be http:// on localhost, 127.0.0.1 or *.quirky.localhost')
+    }
+  },
+  matrix(props, path, check) {
+    const { columns, rows } = props
+    if (!Array.isArray(columns) || !Array.isArray(rows)) return
+    rows.forEach((row: Record<string, unknown>, index) => {
+      const cells = row.cells
+      if (Array.isArray(cells) && cells.length !== columns.length) {
+        addError(check, `${path}.props.rows[${index}].cells`, `row has ${cells.length} cells; the matrix has ${columns.length} columns`)
+      }
+      if (!Array.isArray(row.highlight)) return
+      row.highlight.forEach((name, at) => {
+        if (typeof name === 'string' && !columns.includes(name)) addError(check, `${path}.props.rows[${index}].highlight[${at}]`, `'${shorten(name)}' is not a column name`)
+      })
+    })
+  },
+  'annotated-code'(props, path, check) {
+    const { code, notes } = props
+    if (typeof code !== 'string' || !Array.isArray(notes)) return
+    const total = code.split('\n').length - (code.endsWith('\n') ? 1 : 0)
+    notes.forEach((note: Record<string, unknown>, index) => {
+      if (typeof note.lines !== 'string') return
+      const at = `${path}.props.notes[${index}].lines`
+      const match = /^(\d{1,6})(?:-(\d{1,6}))?$/.exec(note.lines)
+      if (!match) return addError(check, at, 'lines must be a line number like "4" or a range like "3-7"')
+      const first = Number(match[1])
+      const last = match[2] === undefined ? first : Number(match[2])
+      if (first < 1 || last < first || last > total) addError(check, at, `lines must fall within the code's ${total} lines`)
+    })
+  }
 }
 
 function readNode(raw: unknown, path: string, depth: number, check: Check): ViewNode | undefined {
   if (!isPlainObject(raw)) return void addError(check, path, 'node must be an object')
-  checkKeys(raw, ['type', 'props', 'children'], path, check)
+  checkKeys(raw, ['type', 'id', 'props', 'children'], path, check)
   const type = raw.type
   if (typeof type !== 'string') return void addError(check, `${path}.type`, 'type is required and must be a string')
   if (!Object.hasOwn(COMPONENTS, type)) {
@@ -812,12 +1116,15 @@ function readNode(raw: unknown, path: string, depth: number, check: Check): View
   }
   const component = COMPONENTS[type as CatalogType]
   const node: ViewNode = { type: type as CatalogType }
+  if (raw.id !== undefined && typeof readString(raw.id, ID_FIELD as Extract<Field, { kind: 'string' }>, `${path}.id`, check) === 'string' && ACTION_NAME_PATTERN.test(raw.id as string)) {
+    node.id = raw.id as string
+  }
 
   const rawProps = raw.props
   if (rawProps !== undefined && !isPlainObject(rawProps)) addError(check, `${path}.props`, 'props must be an object')
   const props = readShape(isPlainObject(rawProps) ? rawProps : {}, component.shape, `${path}.props`, check)
   if (Object.keys(props).length > 0) node.props = props
-  if (type === 'table') checkTableWidth(props, `${path}.props.rows`, check)
+  NODE_CHECKS[type as CatalogType]?.(props, path, check)
 
   const rawChildren = raw.children
   if (rawChildren === undefined) return node
@@ -860,7 +1167,7 @@ export function validateViewSpec(raw: unknown): ViewSpecValidationResult {
     if (size > MAX_SPEC_BYTES) {
       return { ok: false, errors: [{ path: '', message: `view spec is ${size} bytes; at most ${MAX_SPEC_BYTES} bytes allowed` }] }
     }
-    const check: Check = { errors: [], fieldIds: new Set(), nodes: 0, nodeLimitHit: false }
+    const check: Check = { errors: [], fieldIds: new Set(), ids: new Set(), nodes: 0, nodeLimitHit: false }
     checkKeys(raw, ['title', 'root'], '', check)
     let title = ''
     if (typeof raw.title !== 'string' || raw.title.trim() === '') addError(check, 'title', 'title is required and must be a non-empty string')
@@ -883,8 +1190,9 @@ export function formatViewErrors(errors: readonly ViewValidationError[]): string
 export function catalogGuide(): string {
   const lines = [
     'View spec',
-    '  {"title": string, "root": node}; a node is {"type": <component>, "props": {...}, "children": [node, ...]}.',
-    '  Props are strings, except numbers in charts and fields and booleans in fields. There are no style, class, event or URL props.',
+    '  {"title": string, "root": node}; a node is {"type": <component>, "id"?: string, "props": {...}, "children": [node, ...]}.',
+    `  An id is ${ID_HINT}, and unique in the spec, timeline items, board cards and sketch shapes included. A user points at an element by its id and a new version highlights what changed by it, so keep ids the same when you update.`,
+    '  Props are strings, except numbers in charts, plots, sketches and fields and booleans in fields and html. There are no style, class, event or URL props.',
     `  Limits: at most ${MAX_NODES} nodes, ${MAX_DEPTH} levels deep, ${MAX_SPEC_BYTES / 1024} KiB encoded, ${MAX_TABLE_ROWS} table rows, ${MAX_CHART_POINTS} chart points.`,
     '  An invalid spec is refused whole: nothing renders and the errors print as `path: message; ...` with exit code 2.',
     '',

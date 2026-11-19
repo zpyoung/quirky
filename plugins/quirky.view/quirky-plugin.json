@@ -12,7 +12,7 @@
     "method": [
       {
         "id": "open",
-        "description": "Checks and stores a view for the caller's live session and returns its ID. A refused spec emits `rejected` and fails with invalid-params. Placement defaults to inline.",
+        "description": "Checks and stores a view for the caller's live session as version 1 and returns its ID. A refused spec emits `rejected` and fails with invalid-params. Placement defaults to pane.",
         "params": {
           "type": "object",
           "properties": {
@@ -45,7 +45,7 @@
       },
       {
         "id": "update",
-        "description": "Replaces the content of the caller's open view in place. Placement is kept, and a user's move holds.",
+        "description": "Makes the spec the next version of the caller's open view. Placement is kept, and a user's move holds. A refused spec is not a version: the view keeps its last good one and is marked refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -70,6 +70,40 @@
           },
           "required": [
             "ok"
+          ]
+        }
+      },
+      {
+        "id": "patch",
+        "description": "Applies RFC 6902 add, replace and remove ops (JSON Pointer paths, at most 200 ops) to the latest spec of the caller's open view as the next version. All or nothing: a bad op or an invalid result fails with invalid-params as `path: message` and stores nothing.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "ops": {
+              "description": "The ops, as an array of {op, path, value?} or as JSON text."
+            }
+          },
+          "required": [
+            "viewId",
+            "ops"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "version": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "viewId",
+            "version"
           ]
         }
       },
@@ -192,6 +226,16 @@
               },
               "closed": {
                 "type": "boolean"
+              },
+              "version": {
+                "type": "integer",
+                "description": "The version `spec` belongs to."
+              },
+              "latestVersion": {
+                "type": "integer"
+              },
+              "refused": {
+                "description": "The newest refusal as {attempt, version, errors, source, at}, or null."
               }
             },
             "required": [
@@ -211,13 +255,17 @@
       },
       {
         "id": "get",
-        "description": "One view.",
+        "description": "One view as of its latest version, or of `version` when given; an unknown version is not found.",
         "readOnly": true,
         "params": {
           "type": "object",
           "properties": {
             "viewId": {
               "type": "string"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "required": [
@@ -262,6 +310,16 @@
             },
             "closed": {
               "type": "boolean"
+            },
+            "version": {
+              "type": "integer",
+              "description": "The version `spec` belongs to."
+            },
+            "latestVersion": {
+              "type": "integer"
+            },
+            "refused": {
+              "description": "The newest refusal as {attempt, version, errors, source, at}, or null."
             }
           },
           "required": [
@@ -338,6 +396,16 @@
             },
             "closed": {
               "type": "boolean"
+            },
+            "version": {
+              "type": "integer",
+              "description": "The version `spec` belongs to."
+            },
+            "latestVersion": {
+              "type": "integer"
+            },
+            "refused": {
+              "description": "The newest refusal as {attempt, version, errors, source, at}, or null."
             }
           },
           "required": [
@@ -352,6 +420,44 @@
             "updatedAt",
             "closed"
           ]
+        }
+      },
+      {
+        "id": "render-failed",
+        "description": "The window could not draw a version. Marks the latest version of an open view refused and, when its session is live, tells the agent once per (viewId, version). A report for any other version is ignored. Window only.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "error": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "viewId",
+            "version",
+            "error"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "duplicate": {
+              "type": "boolean"
+            },
+            "ignored": {
+              "type": "boolean"
+            }
+          }
         }
       },
       {
@@ -402,7 +508,7 @@
     "event": [
       {
         "id": "changed",
-        "description": "A view was opened, updated, closed or moved.",
+        "description": "A view was opened, updated, patched, closed or moved, or a refusal or render failure was recorded on it. `version` is its latest version after the change.",
         "data": {
           "type": "object",
           "properties": {
@@ -411,17 +517,34 @@
             },
             "viewId": {
               "type": "string"
+            },
+            "version": {
+              "type": "integer"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "open",
+                "update",
+                "patch",
+                "close",
+                "move",
+                "refused",
+                "render-failed"
+              ]
             }
           },
           "required": [
             "sessionId",
-            "viewId"
+            "viewId",
+            "version",
+            "kind"
           ]
         }
       },
       {
         "id": "rejected",
-        "description": "An open or update was refused. The refused spec is not stored; `source` is its text, capped at 64 KiB.",
+        "description": "An open, update or patch was refused. The refused spec is not stored; `source` is its text, capped at 64 KiB.",
         "data": {
           "type": "object",
           "properties": {
@@ -470,7 +593,7 @@
           },
           "placement": {
             "type": "string",
-            "description": "where the view opens; defaults to inline",
+            "description": "where the view opens; defaults to pane",
             "enum": [
               "inline",
               "pane"
@@ -499,6 +622,45 @@
         },
         "methods": [
           "quirky.view/update"
+        ]
+      },
+      {
+        "id": "view-patch",
+        "words": "patch",
+        "summary": "change a view with RFC 6902 ops (add, replace, remove) as its next version; a bad op or invalid result exits 2 with the errors",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to patch",
+            "required": true
+          },
+          "ops": {
+            "type": "string",
+            "description": "ops as a JSON array, or @path to a file",
+            "required": true
+          }
+        },
+        "methods": [
+          "quirky.view/patch"
+        ]
+      },
+      {
+        "id": "view-get",
+        "words": "get",
+        "summary": "print a view's spec as JSON, at its latest version or at --at-version",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to read",
+            "required": true
+          },
+          "at-version": {
+            "type": "integer",
+            "description": "the version to read; defaults to the latest"
+          }
+        },
+        "methods": [
+          "quirky.view/get"
         ]
       },
       {

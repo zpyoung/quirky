@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import bundleSize from './fixtures/bundle-size.json'
+import authFlowV1 from './fixtures/auth-flow-v1.json'
+import authFlowV2 from './fixtures/auth-flow-v2.json'
+import visualKinds from './fixtures/visual-kinds.json'
 import {
   CATALOG_TYPES,
   COMPONENTS,
@@ -345,5 +348,284 @@ describe('guide', () => {
     }
     expect(guide).toContain('props: label: string, value: string, delta?: string, tone?: neutral|good|warn|bad')
     expect(guide).toContain('at most 500 nodes, 12 levels deep, 256 KiB encoded, 500 table rows, 500 chart points')
+  })
+})
+
+describe('visual kinds', () => {
+  const NEW_KINDS = ['diagram', 'image', 'html', 'live-preview', 'timeline', 'board', 'matrix', 'annotated-code', 'file-map', 'plot', 'sketch'] as const
+  const kind = (type: string, props: Record<string, unknown>, extra: Record<string, unknown> = {}) => spec({ type, props, ...extra })
+  const diagram = (source: string) => kind('diagram', { source })
+  const image = (path: string) => kind('image', { path, alt: 'a picture' })
+  const html = (body: string) => kind('html', { html: body, interactive: false })
+  const preview = (url: string) => kind('live-preview', { url })
+
+  test('the catalog lists every new kind', () => {
+    for (const type of NEW_KINDS) expect(CATALOG_TYPES).toContain(type)
+  })
+
+  test('one spec with every new kind is valid and comes back unchanged', () => {
+    expect(validateViewSpec(visualKinds)).toEqual({ ok: true, spec: visualKinds as never })
+    const used = new Set<string>()
+    const walk = (node: { type: string; children?: unknown[] }) => {
+      used.add(node.type)
+      for (const child of node.children ?? []) walk(child as never)
+    }
+    walk(visualKinds.root)
+    for (const type of NEW_KINDS) expect(used.has(type)).toBe(true)
+  })
+
+  test('the guide documents every new kind with a summary, its props and the id format', () => {
+    const guide = catalogGuide()
+    for (const type of NEW_KINDS) {
+      expect(guide).toContain(`  ${type}: ${COMPONENTS[type].summary}`)
+      expect(COMPONENTS[type].summary.length).toBeGreaterThan(10)
+    }
+    expect(guide).toContain('lowercase letters, digits and dashes, 1 to 40 characters')
+    expect(guide).toContain('unique')
+  })
+
+  test('the fixtures for the version tests are valid', () => {
+    for (const fixture of [authFlowV1, authFlowV2]) expect(validateViewSpec(fixture)).toEqual({ ok: true, spec: fixture as never })
+  })
+
+  describe('node ids', () => {
+    test('an id is kept on the node and must follow the action pattern', () => {
+      const ok = spec({ type: 'stack', id: 'top-1' })
+      expect(validateViewSpec(ok)).toEqual({ ok: true, spec: ok })
+      for (const id of ['Top', '-x', 'a_b', '', 'a'.repeat(41), 3]) {
+        expect(errorsOf(spec({ type: 'stack', id }))[0].path).toBe('root.id')
+      }
+      expect(errorsOf(spec({ type: 'stack', id: 'Top' }))[0].message).toContain('lowercase letters, digits and dashes, 1 to 40 characters')
+    })
+
+    test('a duplicate node id is refused at the second node', () => {
+      const twice = spec({ type: 'stack', children: [{ type: 'stack', id: 'same' }, { type: 'stack', children: [{ type: 'stack', id: 'same' }] }] })
+      expect(errorsOf(twice)).toEqual([{ path: 'root.children[1].children[0].id', message: "duplicate id 'same'" }])
+    })
+
+    test('board card ids, sketch shape ids and timeline item ids share the same rule', () => {
+      const board = kind('board', { columns: [{ title: 'A', cards: [{ id: 'x', title: 'one' }] }, { title: 'B', cards: [{ id: 'x', title: 'two' }] }] })
+      expect(errorsOf(board)).toEqual([{ path: 'root.props.columns[1].cards[0].id', message: "duplicate id 'x'" }])
+      const sketch = kind('sketch', { width: 100, height: 100, shapes: [{ id: 'a', kind: 'box', x: 0, y: 0 }, { id: 'a', kind: 'box', x: 1, y: 1 }] })
+      expect(errorsOf(sketch)).toEqual([{ path: 'root.props.shapes[1].id', message: "duplicate id 'a'" }])
+      const timeline = kind('timeline', { items: [{ id: 'a', label: 'A', start: '1' }, { id: 'a', label: 'B', start: '2' }] })
+      expect(errorsOf(timeline)).toEqual([{ path: 'root.props.items[1].id', message: "duplicate id 'a'" }])
+      const across = spec({ type: 'stack', id: 'a', children: [{ type: 'board', props: { columns: [{ title: 'A', cards: [{ id: 'a', title: 't' }] }] } }] })
+      expect(errorsOf(across)[0].message).toBe("duplicate id 'a'")
+    })
+
+    test('a card id that breaks the pattern is refused', () => {
+      const board = kind('board', { columns: [{ title: 'A', cards: [{ id: 'Not Ok', title: 'one' }] }] })
+      expect(errorsOf(board)[0].path).toBe('root.props.columns[0].cards[0].id')
+    })
+  })
+
+  describe('diagram', () => {
+    test('plain mermaid is accepted', () => {
+      expect(validateViewSpec(diagram('graph TD\n  A-->B')).ok).toBe(true)
+    })
+
+    test.each([
+      ['an img: node shape', 'flowchart LR\n  A@{ img: "https://x.test/a.png", label: "a" }'],
+      ['image markup in a label', 'graph TD\n  A["<img src=x>"]'],
+      ['a css url', 'graph TD\n  A\n  style A fill:url(https://x.test/a)']
+    ])('source that loads images is refused: %s', (_name, source) => {
+      expect(errorsOf(diagram(source))).toEqual([{ path: 'root.props.source', message: expect.stringContaining('must not load images') }])
+    })
+
+    test('source is bounded to 20 KiB', () => {
+      expect(errorsOf(diagram('A'.repeat(20 * 1024 + 1)))[0].path).toBe('root.props.source')
+    })
+  })
+
+  describe('image', () => {
+    test.each([['a.png'], ['docs/shots/login.PNG'], ['x/y.jpg'], ['x.jpeg'], ['x.gif'], ['x.webp'], ['x.svg']])('%s is accepted', (path) => {
+      expect(validateViewSpec(image(path)).ok).toBe(true)
+    })
+
+    test.each([
+      ['/etc/passwd.png', 'image path must be relative to the worktree'],
+      ['//host/x.png', 'image path must be relative to the worktree'],
+      ['https://x.test/a.png', 'image path must be relative to the worktree'],
+      ['C:\\x.png', 'image path must be relative to the worktree'],
+      ['../x.png', "image path must not contain '..' segments"],
+      ['a/../../x.png', "image path must not contain '..' segments"],
+      ['a\\..\\x.png', "image path must not contain '..' segments"],
+      ['a/b.txt', 'image path must end in png, jpg, jpeg, gif, webp or svg'],
+      ['png', 'image path must end in png, jpg, jpeg, gif, webp or svg']
+    ])('%s is refused', (path, message) => {
+      expect(errorsOf(image(path))).toEqual([{ path: 'root.props.path', message }])
+    })
+
+    test('alt is required', () => {
+      expect(errorsOf(kind('image', { path: 'a.png' }))).toEqual([{ path: 'root.props.alt', message: 'is required' }])
+    })
+  })
+
+  describe('html', () => {
+    const REMOTE = 'remote content is not allowed in html; inline it as data:'
+
+    test('inline markup, scripts and data: urls are accepted', () => {
+      const body = '<style>a{background:url(data:image/png;base64,AAAA)}</style><img src="data:image/png;base64,AAAA"><script>document.title = "x"</script><a href="#top">top</a>'
+      expect(validateViewSpec(html(body)).ok).toBe(true)
+    })
+
+    test.each([
+      ['img src', '<img src="https://x.test/a.png">'],
+      ['img src single quoted', "<img src='http://x.test/a.png'>"],
+      ['img src unquoted', '<img src=https://x.test/a.png>'],
+      ['protocol relative src', '<script src="//cdn.test/x.js"></script>'],
+      ['href', '<a href="https://x.test">x</a>'],
+      ['link href', '<link rel="stylesheet" href="http://x.test/a.css">'],
+      ['form action', '<form action="https://x.test/post"></form>'],
+      ['srcset', '<img srcset="data:image/png;base64,AAAA 1x, https://x.test/a.png 2x">'],
+      ['poster', '<video poster="https://x.test/a.png"></video>'],
+      ['style url', '<div style="background:url(https://x.test/a.png)"></div>'],
+      ['style block url with quotes', '<style>div{background:url( "//x.test/a.png" )}</style>'],
+      ['uppercase attribute', '<IMG SRC="HTTPS://x.test/a.png">'],
+      ['entity encoded scheme', '<img src="&#104;ttps://x.test/a.png">'],
+      ['css import', '<style>@import "https://x.test/a.css";</style>']
+    ])('remote content is refused: %s', (_name, body) => {
+      expect(errorsOf(html(body))).toEqual([{ path: 'root.props.html', message: REMOTE }])
+    })
+
+    test('interactive is required and height is bounded', () => {
+      expect(errorsOf(kind('html', { html: '<p>x</p>' }))).toEqual([{ path: 'root.props.interactive', message: 'is required' }])
+      expect(errorsOf(kind('html', { html: 'x', interactive: 'yes' }))[0].message).toBe('must be a boolean')
+      for (const height of [119, 1201]) expect(errorsOf(kind('html', { html: 'x', interactive: true, height }))[0].path).toBe('root.props.height')
+      for (const height of [120, 1200]) expect(validateViewSpec(kind('html', { html: 'x', interactive: true, height })).ok).toBe(true)
+    })
+
+    test('html is bounded to 128 KiB', () => {
+      const big = kind('html', { html: 'x'.repeat(128 * 1024 + 1), interactive: false })
+      expect(errorsOf(big)[0]).toEqual({ path: 'root.props.html', message: 'must be at most 131072 characters' })
+    })
+
+    test('scanning a long attribute-free page is fast', () => {
+      const started = performance.now()
+      expect(validateViewSpec(html('<p src href action poster '.repeat(4000))).ok).toBe(true)
+      expect(performance.now() - started).toBeLessThan(500)
+    })
+  })
+
+  describe('live-preview', () => {
+    test.each([['http://localhost:3000/'], ['http://127.0.0.1:5173'], ['http://app.quirky.localhost/x?y=1'], ['http://localhost']])('%s is accepted', (url) => {
+      expect(validateViewSpec(preview(url)).ok).toBe(true)
+    })
+
+    test.each([
+      ['https://localhost:3000'],
+      ['http://example.com'],
+      ['http://localhost.evil.com'],
+      ['http://127.0.0.1.evil.com'],
+      ['http://evil.com/localhost'],
+      ['http://localhost@evil.com'],
+      ['http://user:pw@localhost'],
+      ['http://quirky.localhost.evil.com'],
+      ['http://[::1]:3000'],
+      ['http://0.0.0.0'],
+      ['ftp://localhost'],
+      ['localhost:3000'],
+      ['javascript:alert(1)']
+    ])('%s is refused', (url) => {
+      expect(errorsOf(preview(url))).toEqual([{ path: 'root.props.url', message: 'url must be http:// on localhost, 127.0.0.1 or *.quirky.localhost' }])
+    })
+  })
+
+  describe('timeline, board, file-map, plot and sketch', () => {
+    test('item counts are bounded', () => {
+      const items = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `l${i}`, start: `${i}` }))
+      expect(validateViewSpec(kind('timeline', { items: items(100) })).ok).toBe(true)
+      expect(errorsOf(kind('timeline', { items: items(101) }))[0].path).toBe('root.props.items')
+      expect(errorsOf(kind('timeline', { items: [] }))[0].path).toBe('root.props.items')
+      const column = (cards: number) => ({ title: 'c', cards: Array.from({ length: cards }, (_, i) => ({ title: `t${i}` })) })
+      expect(validateViewSpec(kind('board', { columns: [column(50)] })).ok).toBe(true)
+      expect(errorsOf(kind('board', { columns: [column(51)] }))[0].path).toBe('root.props.columns[0].cards')
+      expect(errorsOf(kind('board', { columns: Array.from({ length: 9 }, () => column(0)) }))[0].path).toBe('root.props.columns')
+    })
+
+    test('tones and file-map statuses are checked', () => {
+      expect(errorsOf(kind('timeline', { items: [{ label: 'a', start: '1', tone: 'loud' }] }))[0].path).toBe('root.props.items[0].tone')
+      expect(errorsOf(kind('file-map', { entries: [{ path: 'a.ts', status: 'moved' }] }))[0].path).toBe('root.props.entries[0].status')
+      expect(validateViewSpec(kind('file-map', { entries: [{ path: 'a.ts', status: 'renamed' }, { path: 'b.ts', status: 'touched' }] })).ok).toBe(true)
+    })
+
+    test('plot needs two points a series and finite numbers', () => {
+      const series = (points: unknown[]) => kind('plot', { series: [{ label: 's', points }] })
+      expect(errorsOf(series([{ x: 1, y: 1 }]))[0].path).toBe('root.props.series[0].points')
+      expect(errorsOf(series([{ x: 1, y: 1 }, { x: 'a', y: 2 }]))[0].path).toBe('root.props.series[0].points[1].x')
+      expect(validateViewSpec(series(Array.from({ length: 500 }, (_, i) => ({ x: i, y: i })))).ok).toBe(true)
+      expect(errorsOf(series(Array.from({ length: 501 }, (_, i) => ({ x: i, y: i }))))[0].path).toBe('root.props.series[0].points')
+    })
+
+    test('sketch shapes need a known kind and finite coordinates', () => {
+      const sketch = (shapes: unknown[]) => kind('sketch', { width: 100, height: 100, shapes })
+      expect(errorsOf(sketch([{ kind: 'star', x: 0, y: 0 }]))[0].path).toBe('root.props.shapes[0].kind')
+      expect(errorsOf(sketch([{ kind: 'box', x: Infinity, y: 0 }]))[0].path).toBe('root.props.shapes[0].x')
+      expect(errorsOf(sketch([]))[0].path).toBe('root.props.shapes')
+    })
+  })
+
+  describe('matrix', () => {
+    const matrix = (rows: unknown[], columns: string[] = ['a', 'b']) => kind('matrix', { columns, rows })
+
+    test('a row needs one cell per column', () => {
+      expect(errorsOf(matrix([{ label: 'r', cells: ['1'] }]))).toEqual([{ path: 'root.props.rows[0].cells', message: 'row has 1 cells; the matrix has 2 columns' }])
+      expect(validateViewSpec(matrix([{ label: 'r', cells: ['1', '2'] }])).ok).toBe(true)
+    })
+
+    test('highlight entries must be column names', () => {
+      expect(errorsOf(matrix([{ label: 'r', cells: ['1', '2'], highlight: ['a', 'z'] }]))).toEqual([
+        { path: 'root.props.rows[0].highlight[1]', message: "'z' is not a column name" }
+      ])
+      expect(validateViewSpec(matrix([{ label: 'r', cells: ['1', '2'], highlight: ['b'] }])).ok).toBe(true)
+    })
+
+    test('columns and rows are bounded', () => {
+      expect(errorsOf(matrix([{ label: 'r', cells: [] }], Array.from({ length: 13 }, (_, i) => `c${i}`)))[0].path).toBe('root.props.columns')
+      expect(errorsOf(matrix(Array.from({ length: 51 }, () => ({ label: 'r', cells: ['1', '2'] }))))[0].path).toBe('root.props.rows')
+    })
+  })
+
+  describe('annotated-code', () => {
+    const code = 'one\ntwo\nthree\n'
+    const annotated = (lines: unknown, source = code) => kind('annotated-code', { language: 'ts', code: source, notes: [{ lines, note: 'n' }] })
+
+    test.each([['1'], ['3'], ['1-3'], ['2-2']])('lines %s fall inside a three line file', (lines) => {
+      expect(validateViewSpec(annotated(lines)).ok).toBe(true)
+    })
+
+    test.each([['4'], ['0'], ['2-4'], ['3-1']])('lines %s are refused as out of range', (lines) => {
+      expect(errorsOf(annotated(lines))).toEqual([{ path: 'root.props.notes[0].lines', message: "lines must fall within the code's 3 lines" }])
+    })
+
+    test.each([['a'], ['1-'], ['-3'], ['1,2']])('lines %p are refused as malformed', (lines) => {
+      expect(errorsOf(annotated(lines))[0]).toEqual({ path: 'root.props.notes[0].lines', message: 'lines must be a line number like "4" or a range like "3-7"' })
+    })
+
+    test('a code block with no trailing newline counts its last line', () => {
+      expect(validateViewSpec(annotated('2', 'one\ntwo')).ok).toBe(true)
+      expect(errorsOf(annotated('3', 'one\ntwo'))[0].message).toBe("lines must fall within the code's 2 lines")
+    })
+
+    test('code is bounded to 64 KiB and notes to 50', () => {
+      expect(errorsOf(kind('annotated-code', { language: 'ts', code: 'x'.repeat(64 * 1024 + 1), notes: [] }))[0].path).toBe('root.props.code')
+      const notes = Array.from({ length: 51 }, () => ({ lines: '1', note: 'n' }))
+      expect(errorsOf(kind('annotated-code', { language: 'ts', code: 'x', notes }))[0].path).toBe('root.props.notes')
+    })
+  })
+
+  test('a refused spec reports every problem at once, still pure', () => {
+    const errors = errorsOf(
+      spec({
+        type: 'stack',
+        children: [
+          { type: 'diagram', props: { source: 'graph TD\n A["<img src=x>"]' } },
+          { type: 'image', props: { path: '../x.png', alt: 'x' } },
+          { type: 'live-preview', props: { url: 'http://example.com' } }
+        ]
+      })
+    )
+    expect(errors.map((error) => error.path)).toEqual(['root.children[0].props.source', 'root.children[1].props.path', 'root.children[2].props.url'])
   })
 })

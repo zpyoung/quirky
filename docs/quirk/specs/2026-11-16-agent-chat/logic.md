@@ -3,7 +3,8 @@
 ## Status & amendments
 Status: Approved 2026-11-16 in the brainstorm companion. SC-5 (Restart on an agent that can't resume) is still open. Tech spec: authored (tier gate fired: crosses subsystems), see tech.md.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-11-19, visual panel in native chat: SC-13's default changes. A view opened with no placement now lands in the pane instead of inline; an agent can still ask for `inline`, and the Move control is unchanged. See [the visual panel spec](../2026-11-19-chat-visual-panel/logic.md) (SC-17).
 
 ## Purpose
 Run Claude Code, Codex, pi and omp sessions from one chat view in the Quirky desktop app, with tool output, questions and agent reports shown as real UI instead of raw text. It replaces the raw structured transcript (`plugins/quirky.session/src/window/StructuredView.tsx`) inside the session tab.

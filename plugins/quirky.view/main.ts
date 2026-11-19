@@ -1,5 +1,5 @@
 import type { PluginCaller, PluginContext, PluginErrorKind } from '@quirky/protocol'
-import { viewsMigration, ViewStore } from './src/core/store'
+import { viewsMigration, viewVersionsMigration, ViewStore } from './src/core/store'
 import { MAX_WAIT_MS, ViewService } from './src/core/views'
 
 const NO_SESSION = 'quirky view works only inside a Quirky agent session'
@@ -35,7 +35,7 @@ let service: ViewService | undefined
 /** Provides the view methods and emits `changed` and `rejected` for the session journal and the window. */
 export function activate(context: PluginContext): void {
   const error = (kind: PluginErrorKind) => (message: string) => context.error(kind, message)
-  const views = new ViewService(new ViewStore(context.openStore([viewsMigration])), {
+  const views = new ViewService(new ViewStore(context.openStore([viewsMigration, viewVersionsMigration])), {
     emit(event, data) {
       try {
         context.emit(event, data)
@@ -82,6 +82,11 @@ export function activate(context: PluginContext): void {
     views.update(sessionId, required(params, 'viewId'), specOf(params))
     return { ok: true }
   })
+  context.provide('method:quirky.view/patch', (params: Record<string, unknown>, caller: PluginCaller) => {
+    const sessionId = agentSession(caller)
+    if (params.ops === undefined) throw context.error('invalid-params', 'ops is required')
+    return views.patch(sessionId, required(params, 'viewId'), params.ops)
+  })
   context.provide('method:quirky.view/close', (params: Record<string, unknown>, caller: PluginCaller) => {
     const sessionId = agentSession(caller)
     views.close(sessionId, required(params, 'viewId'))
@@ -107,13 +112,22 @@ export function activate(context: PluginContext): void {
     return views.list(sessionId)
   })
   context.provide('method:quirky.view/get', (params: Record<string, unknown>, caller: PluginCaller) => {
-    const record = views.get(required(params, 'viewId'))
-    readable(caller, record.sessionId)
-    return record
+    const viewId = required(params, 'viewId')
+    const version = params.version
+    if (version !== undefined && (typeof version !== 'number' || !Number.isInteger(version) || version < 1)) {
+      throw context.error('invalid-params', 'version must be a positive integer')
+    }
+    const latest = views.get(viewId)
+    readable(caller, latest.sessionId)
+    return version === undefined ? latest : views.get(viewId, version)
   })
   context.provide('method:quirky.view/move', (params: Record<string, unknown>, caller: PluginCaller) => {
     windowOnly(caller, 'move')
     return views.move(required(params, 'viewId'), params.placement)
+  })
+  context.provide('method:quirky.view/render-failed', (params: Record<string, unknown>, caller: PluginCaller) => {
+    windowOnly(caller, 'render-failed')
+    return views.renderFailed(required(params, 'viewId'), params.version, params.error)
   })
   context.provide('method:quirky.view/action', (params: Record<string, unknown>, caller: PluginCaller) => {
     windowOnly(caller, 'action')
