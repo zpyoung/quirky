@@ -3,7 +3,10 @@ import { act, createElement, type ReactNode } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
 import bundleSize from './fixtures/bundle-size.json'
-import { CATALOG_TYPES, COMPONENTS, type ViewSpec } from '../src/core/catalog'
+import authFlowV1 from './fixtures/auth-flow-v1.json'
+import authFlowV2 from './fixtures/auth-flow-v2.json'
+import visualKinds from './fixtures/visual-kinds.json'
+import { CATALOG_TYPES, COMPONENTS, type Refused, type ViewRecord, type ViewSpec } from '../src/core/catalog'
 import { fakeContext, mountView, record, settle, type FakeContext } from './ui-fake'
 import { createViewUiController } from '../src/control'
 import type { createRoot as CreateRoot } from 'react-dom/client'
@@ -133,9 +136,7 @@ describe('the view card', () => {
     expect(buttonLabelled(element, 'Move to pane')).toBeTruthy()
   })
 
-  // the renderer task draws the visual kinds and removes this filter
-  const NEW_KINDS: readonly string[] = ['diagram', 'image', 'html', 'live-preview', 'timeline', 'board', 'matrix', 'annotated-code', 'file-map', 'plot', 'sketch']
-  test.each(CATALOG_TYPES.filter((type) => !NEW_KINDS.includes(type)).map((type) => [type]))('renders a %s', async (type) => {
+  test.each(CATALOG_TYPES.map((type) => [type]))('renders a %s', async (type) => {
     const fake = start([record({ title: `A ${type}`, root: COMPONENTS[type].example })])
     const { element } = await mountCard(fake)
     expect(element.querySelector(`[data-view-node="${type}"]`)).not.toBeNull()
@@ -1240,6 +1241,694 @@ describe('visible view read states', () => {
     })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+  })
+})
+
+const POINT = 'command:quirky.session/chat-point'
+const EXPAND = 'command:quirky.session/chat-expand-visual'
+
+type Served = { fake: FakeContext; state: { latest: number; refused: Refused | null }; specs: ViewSpec[] }
+
+/** A view with `specs` as versions 1..n; `get` honours `version`, and the state can move on or mark the newest version refused. */
+function startVersions(specs: ViewSpec[], extra: Record<string, (params: Record<string, unknown>) => unknown> = {}): Served {
+  const state = { latest: specs.length, refused: null as Refused | null }
+  const fake = start([], {
+    'quirky.view/get': (params) => {
+      const version = typeof params.version === 'number' ? params.version : state.latest
+      const spec = specs[version - 1]
+      if (!spec || version > state.latest) throw new RpcError(RpcErrorCode.NotFound, 'unknown version')
+      return record(spec, { viewId: params.viewId as string, version, latestVersion: state.latest, updates: state.latest - 1, refused: state.refused })
+    },
+    'desktop.capabilities': () => ({ auxiliaryWindows: true }),
+    'quirky.view/render-failed': () => ({ ok: true }),
+    ...extra
+  })
+  return { fake, state, specs }
+}
+
+async function mountSurface(fake: FakeContext, input: Record<string, unknown> = {}) {
+  const view = await mountView(fake, RENDER, { viewId: 'view_1', surface: 'panel', ...input })
+  mounted.push(view)
+  return { ...view, press: async (target: Element) => { await view.click(target); await settle() } }
+}
+
+const pointCalls = (fake: FakeContext) => routedArgs(fake, POINT) as Record<string, unknown>[]
+const buttonByLabel = (root: Element, label: string) => root.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+const authFlow = [authFlowV1, authFlowV2] as ViewSpec[]
+
+describe('every visual kind', () => {
+  test('the fixture with all the new kinds draws each of them, with math through the markdown node', async () => {
+    const fake = start([record(visualKinds as ViewSpec)])
+    const { element } = await mountSurface(fake)
+    for (const kind of ['diagram', 'image', 'html', 'live-preview', 'timeline', 'board', 'matrix', 'annotated-code', 'file-map', 'plot', 'sketch']) {
+      expect(element.querySelector(`[data-view-node="${kind}"]`), kind).not.toBeNull()
+    }
+    expect(element.querySelector('.katex')).not.toBeNull()
+  })
+
+  test('a timeline, board, matrix, file map, plot and sketch show their content', async () => {
+    const fake = start([record(visualKinds as ViewSpec)])
+    const { element } = await mountSurface(fake)
+    const timeline = element.querySelector('[data-view-node="timeline"]')!
+    expect([...timeline.querySelectorAll('[data-point-key]')].map((row) => row.getAttribute('data-point-key'))).toEqual(['item:design', 'item:build', 'item:2'])
+    expect(text(element.querySelector('[data-view-node="board"]')!)).toContain('Write docs')
+    expect(text(element.querySelector('[data-view-node="board"]')!)).toContain('README and guide')
+    const matrix = element.querySelector('[data-view-node="matrix"]')!
+    expect([...matrix.querySelectorAll('thead th')].map((cell) => cell.textContent)).toEqual(['Claude', 'Codex', 'pi'])
+    expect(matrix.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(text(element.querySelector('[data-view-node="file-map"]')!)).toContain('plugins/quirky.view/src/core/catalog.ts')
+    expect(element.querySelectorAll('[data-view-node="plot"] svg polyline')).toHaveLength(2)
+    expect(element.querySelectorAll('[data-view-node="sketch"] svg path').length).toBeGreaterThan(3)
+  })
+
+  test('annotated code numbers its lines and shows each note after its last line', async () => {
+    const fake = start([record(visualKinds as ViewSpec)])
+    const { element } = await mountSurface(fake)
+    const code = element.querySelector('[data-view-node="annotated-code"]')!
+    expect(code.querySelectorAll('[data-point-key^="line:"]')).toHaveLength(4)
+    expect(text(code)).toContain('Skip while the token is fresh.')
+    expect(text(code)).toContain('Renew inside the five minute window.')
+  })
+
+  test('an image of the session resolves through the markdown assets', async () => {
+    const spec: ViewSpec = { title: 'Shot', root: { type: 'image', props: { path: 'docs/shots/login.png', alt: 'The login screen', caption: 'Before' } } }
+    const fake = start([record(spec)], {
+      'quirky.session/markdownAssets': (params) => ({ images: Object.fromEntries((params.images as string[]).map((path) => [path, `http://localhost/file/${path}`])) }),
+      'quirky.view/render-failed': () => ({ ok: true })
+    })
+    const { element } = await mountSurface(fake)
+    expect(fake.callsTo('quirky.session/markdownAssets').map((call) => call.params)).toEqual([{ session: 's1', images: ['docs/shots/login.png'] }])
+    expect(element.querySelector('img')!.getAttribute('src')).toBe('http://localhost/file/docs/shots/login.png')
+    expect(element.querySelector('img')!.getAttribute('alt')).toBe('The login screen')
+    expect(text(element)).toContain('Before')
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(0)
+  })
+
+  test('an image that is not in the worktree says so and is reported once for its version', async () => {
+    const spec: ViewSpec = { title: 'Shot', root: { type: 'image', props: { path: 'docs/none.png', alt: 'Nothing' } } }
+    const fake = start([record(spec, { viewId: 'view_noimg' })], {
+      'quirky.session/markdownAssets': () => ({ images: { 'docs/none.png': null } }),
+      'quirky.view/render-failed': () => ({ ok: true })
+    })
+    const { element } = await mountSurface(fake, { viewId: 'view_noimg' })
+    expect(element.querySelector('img')).toBeNull()
+    expect(text(element)).toContain('docs/none.png is not an image in this worktree')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_noimg' } })
+    await settle()
+    expect(fake.callsTo('quirky.view/render-failed').map((call) => call.params)).toEqual([
+      { viewId: 'view_noimg', version: 1, error: 'docs/none.png is not an image in this worktree' }
+    ])
+  })
+
+  test('a diagram is drawn through the markdown mermaid fence and keeps the caption', async () => {
+    const spec: ViewSpec = { title: 'Flow', root: { type: 'diagram', props: { source: 'flowchart LR\n  a --> b', caption: 'A path' } } }
+    const fake = start([record(spec)])
+    const { element } = await mountSurface(fake)
+    expect(text(element)).toContain('A path')
+    expect(element.querySelector('[data-view-node="diagram"] [data-qmd-data="mermaid"], [data-view-node="diagram"] [data-qmd-error], [data-view-node="diagram"] pre')).not.toBeNull()
+  })
+
+  test('a diagram that loads remote images is refused by the shared safety path and reported once per version', async () => {
+    const spec: ViewSpec = { title: 'Flow', root: { type: 'diagram', props: { source: 'flowchart LR\n  a[<img src="https://example.test/x.png">]' } } }
+    const fake = start([record(spec, { viewId: 'view_remote' })], { 'quirky.view/render-failed': () => ({ ok: true }) })
+    const { element } = await mountSurface(fake, { viewId: 'view_remote' })
+    await settle()
+    expect(text(element)).toContain("Couldn't draw this diagram: it loads remote images")
+    expect(fake.callsTo('quirky.view/render-failed').map((call) => call.params)).toEqual([{ viewId: 'view_remote', version: 1, error: 'it loads remote images' }])
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_remote' } })
+    await settle()
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(1)
+  })
+
+  test('a drawn diagram node is pointable by its mermaid id', async () => {
+    const spec: ViewSpec = { title: 'Flow', root: { type: 'diagram', props: { source: 'flowchart LR\n  a --> b' } } }
+    const fake = start([record(spec)])
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake)
+    const host = element.querySelector('[data-view-node="diagram"] > div')!
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    group.setAttribute('class', 'node default')
+    group.setAttribute('data-id', 'Daemon')
+    group.setAttribute('id', 'flowchart-Daemon-3')
+    group.textContent = 'The daemon'
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.appendChild(group)
+    await act(async () => void host.appendChild(svg))
+    await settle()
+
+    expect(group.getAttribute('data-point-key')).toBe('dg:daemon')
+    await press(group)
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'dg:daemon', label: 'The daemon' }])
+  })
+
+  test('the diagram helpers read the failure note and the node id mermaid gives', async () => {
+    const { failureReason, fenceFor, nodeId } = await import('../src/render/Diagram')
+    expect(failureReason("Couldn't draw this diagram: line 4: unexpected \"-->>\". Showing the source.")).toBe('line 4: unexpected "-->>"')
+    expect(failureReason('something else')).toBe('something else')
+    expect(fenceFor('a --> b')).toBe('```')
+    expect(fenceFor('x\n````\ny')).toBe('`````')
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('id', 'qmd-mermaid-_r_1_')
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    group.setAttribute('id', 'qmd-mermaid-_r_1_-flowchart-client-app-7')
+    svg.appendChild(group)
+    expect(nodeId(group)).toBe('client-app')
+    group.setAttribute('id', 'flowchart-client-7')
+    svg.removeAttribute('id')
+    expect(nodeId(group)).toBe('client')
+    group.setAttribute('data-id', 'Daemon')
+    expect(nodeId(group)).toBe('Daemon')
+    expect(nodeId(document.createElementNS('http://www.w3.org/2000/svg', 'g'))).toBeUndefined()
+  })
+})
+
+describe('pointing', () => {
+  async function pointAtFixture(selector: string) {
+    const fake = start([record(visualKinds as ViewSpec)])
+    fake.commands[POINT] = () => {}
+    const view = await mountSurface(fake)
+    const target = view.element.querySelector(selector)
+    if (!target) throw new Error(`nothing matches ${selector}`)
+    await view.press(target)
+    return { fake, view, target }
+  }
+
+  test.each([
+    ['a timeline item', '[data-point-key="item:build"]', 'item:build', 'Build'],
+    ['a timeline item without an id, by position', '[data-point-key="item:2"]', 'item:2', 'Launch'],
+    ['a board card', '[data-point-key="item:card-docs"]', 'item:card-docs', 'Write docs'],
+    ['a matrix cell', '[data-point-key="cell:visual-guidance:codex"]', 'cell:visual-guidance:codex', 'Visual guidance › Codex'],
+    ['a file map entry', '[data-point-key="file:1"]', 'file:1', 'plugins/quirky.view/src/core/patch.ts'],
+    ['an annotated code line', '[data-point-key="line:2"]', 'line:2', 'line 2'],
+    ['a sketch shape', '[data-point-key="item:frame"]', 'item:frame', 'Window']
+  ])('%s points with its key and label', async (_name, selector, element, label) => {
+    const { fake } = await pointAtFixture(selector)
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element, label }])
+  })
+
+  test('a node with an id is pointable as node:<id> and the click outlines it', async () => {
+    const spec: ViewSpec = { title: 'Notes', root: { type: 'stack', id: 'root', children: [{ type: 'callout', id: 'warning', props: { tone: 'warn', text: 'Mind the gap' } }] } }
+    const fake = start([record(spec)])
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake)
+    expect(element.querySelector('[data-point-key="node:root"]')).toBeNull()
+    const callout = element.querySelector<HTMLElement>('[data-point-key="node:warning"]')!
+    expect(callout.style.outlineColor).toBe('')
+    await press(callout.firstElementChild!)
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'node:warning', label: 'callout' }])
+    expect(callout.style.outlineColor).toBe('var(--ui-accent)')
+  })
+
+  test('table rows and chart bars and points point at the row, the category and the value', async () => {
+    const spec: ViewSpec = {
+      title: 'Data',
+      root: {
+        type: 'stack',
+        children: [
+          { type: 'table', props: { columns: ['Route', 'Size'], rows: [['/home', '12'], ['/settings', '96']] } },
+          { type: 'bar-chart', props: { unit: 'KB', series: [{ label: '/settings', value: 96 }] } },
+          { type: 'line-chart', props: { unit: 'ms', points: [{ x: 'Mon', y: 3 }, { x: 'Tue', y: 5 }] } }
+        ]
+      }
+    }
+    const fake = start([record(spec)])
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake)
+    await press(element.querySelectorAll('tbody tr')[1]!.firstElementChild!)
+    await press(element.querySelector('[data-point-key="pt:settings"]')!)
+    await press(element.querySelector('[data-point-key="pt:tue"]')!)
+    expect(pointCalls(fake).map((call) => [call.element, call.label])).toEqual([
+      ['row:1', '/settings'],
+      ['pt:settings', '/settings 96 KB'],
+      ['pt:tue', 'Tue 5 ms']
+    ])
+  })
+
+  test('a click on a button inside a pointable node keeps its own action and does not point', async () => {
+    const spec: ViewSpec = { title: 'Ask', root: { type: 'section', id: 'choices', props: { title: 'Choices' }, children: [{ type: 'button', props: { label: 'Go', action: 'go' } }] } }
+    const fake = start([record(spec)])
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake)
+    await press(buttonLabelled(element, 'Go'))
+    expect(pointCalls(fake)).toEqual([])
+    expect(routedArgs(fake, ACTION)).toEqual([{ viewId: 'view_1', name: 'go', source: 'button' }])
+  })
+
+  test('a click on an image points at the region as percentages of the picture', async () => {
+    const spec: ViewSpec = { title: 'Shot', root: { type: 'image', props: { path: 'a.png', alt: 'A' } } }
+    const fake = start([record(spec)], { 'quirky.session/markdownAssets': () => ({ images: { 'a.png': 'http://localhost/a.png' } }) })
+    fake.commands[POINT] = () => {}
+    const { element } = await mountSurface(fake)
+    const image = element.querySelector('img')!
+    image.getBoundingClientRect = () => ({ left: 10, top: 20, width: 200, height: 100, right: 210, bottom: 120, x: 10, y: 20, toJSON: () => ({}) })
+    await act(async () => void image.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 110, clientY: 45 })))
+    await settle()
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'region:50-25', label: 'region near 50%,25%' }])
+  })
+
+  test('a key press on a focused pointable element points like a click', async () => {
+    const { fake, target } = await pointAtFixture('[data-point-key="file:0"]')
+    expect(pointCalls(fake)).toHaveLength(1)
+    await act(async () => void target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    await settle()
+    expect(pointCalls(fake)).toHaveLength(2)
+    await act(async () => void target.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })))
+    await settle()
+    expect(pointCalls(fake)).toHaveLength(2)
+  })
+
+  test('the point carries the version the person is looking at', async () => {
+    const { fake } = startVersions(authFlow)
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake)
+    await press(buttonByLabel(element, 'Older version')!)
+    await press(element.querySelectorAll('tbody tr')[0]!.firstElementChild!)
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'row:0', label: 'Authority' }])
+  })
+
+  test('without the chat command a click only warns and does not fail', async () => {
+    const fake = start([record(visualKinds as ViewSpec)])
+    const warn = console.warn
+    const warnings: string[] = []
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(' '))
+    try {
+      const { element, press } = await mountSurface(fake)
+      await press(element.querySelector('[data-point-key="file:0"]')!)
+    } finally {
+      console.warn = warn
+    }
+    expect(warnings.some((message) => message.includes(POINT))).toBe(true)
+    expect(fake.toasts).toEqual([])
+  })
+
+  test('a point from the control command is checked like one from a click', async () => {
+    const fake = start([record(visualKinds as ViewSpec)])
+    fake.commands[POINT] = () => {}
+    await mountSurface(fake)
+    const instance = await instanceFor(fake, RENDER)
+    await expect(fake.runCommand(CONTROL, { instance, action: 'point', viewId: 'view_1', element: 'Not A Key', label: 'x' })).rejects.toThrow('Invalid view element.')
+    await expect(fake.runCommand(CONTROL, { instance, action: 'point', viewId: 'view_1', element: 'row:1', label: 'x'.repeat(121) })).rejects.toThrow('Invalid view element label.')
+    await expect(fake.runCommand(CONTROL, { instance, action: 'point', viewId: 'view_2', element: 'row:1', label: 'x' })).rejects.toThrow('View is not the active card.')
+    await fake.runCommand(CONTROL, { instance, action: 'point', viewId: 'view_1', element: 'row:1', label: 'Second row' })
+    expect(pointCalls(fake)).toEqual([{ session: 's1', viewId: 'view_1', version: 1, element: 'row:1', label: 'Second row' }])
+  })
+})
+
+describe('versions and the change highlight', () => {
+  test('the stepper walks back and forth, and the highlight is only on the newest version', async () => {
+    const { fake } = startVersions(authFlow)
+    const { element, press } = await mountSurface(fake)
+    expect(text(element)).toContain('v2 of 2')
+    expect(element.querySelector('[data-view-changed-note]')!.textContent).toBe('changed in v2')
+    const outlined = [...element.querySelectorAll<HTMLElement>('[data-view-changed]')]
+    expect(outlined.map((node) => node.firstElementChild!.getAttribute('data-point-key'))).toEqual(['node:auth-diagram', 'node:token-table'])
+    expect(outlined[0]!.style.outlineColor).toBe('var(--ui-working)')
+    expect(buttonByLabel(element, 'Newer version')!.disabled).toBe(true)
+
+    await press(buttonByLabel(element, 'Older version')!)
+    expect(text(element)).toContain('v1 of 2')
+    expect(element.querySelector('[data-view-changed]')).toBeNull()
+    expect(element.querySelector('[data-view-changed-note]')).toBeNull()
+    expect(element.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(buttonByLabel(element, 'Older version')!.disabled).toBe(true)
+    expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
+
+    await press(buttonByLabel(element, 'Newer version')!)
+    expect(text(element)).toContain('v2 of 2')
+    expect(element.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(element.querySelector('[data-view-changed-note]')).not.toBeNull()
+  })
+
+  test('a card pinned to a version stays there while a newer one arrives, and an unpinned card follows', async () => {
+    const { fake, state, specs } = startVersions([...authFlow])
+    const pinned = await mountSurface(fake, { version: 1 })
+    expect(text(pinned.element)).toContain('v1 of 2')
+    expect(pinned.element.querySelector('[data-view-changed]')).toBeNull()
+    const following = await mountSurface(fake)
+    expect(text(following.element)).toContain('v2 of 2')
+
+    specs.push({ title: 'Auth flow', root: { type: 'markdown', props: { text: 'a third version' } } })
+    state.latest = 3
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect(text(pinned.element)).toContain('v1 of 3')
+    expect(text(following.element)).toContain('v3 of 3')
+    expect(text(following.element)).toContain('a third version')
+    expect(following.element.querySelector('[data-view-changed-note]')!.textContent).toBe('changed in v3')
+  })
+
+  test('the highlight matches nodes by id, else by position, and a container changes only with its own props', async () => {
+    const before: ViewSpec = { title: 'T', root: { type: 'stack', children: [{ type: 'callout', props: { text: 'same' } }, { type: 'callout', props: { text: 'old' } }, { type: 'callout', id: 'moved', props: { text: 'kept' } }] } }
+    const after: ViewSpec = { title: 'T', root: { type: 'stack', children: [{ type: 'callout', props: { text: 'same' } }, { type: 'callout', props: { text: 'new' } }, { type: 'callout', id: 'moved', props: { text: 'kept' } }, { type: 'callout', props: { text: 'added' } }] } }
+    const { fake } = startVersions([before, after])
+    const { element } = await mountSurface(fake)
+    expect([...element.querySelectorAll('[data-view-changed]')].map((node) => node.textContent)).toEqual(['new', 'added'])
+  })
+
+  test('a record without version fields counts its updates as versions', async () => {
+    const fake = start([record(bundleSize as ViewSpec, { updates: 2 })])
+    const { element } = await mountSurface(fake)
+    expect(text(element)).toContain('v3 of 3')
+  })
+})
+
+describe('a version that did not render', () => {
+  const refused: Refused = { attempt: 'update', version: null, errors: ['line 4: unexpected "-->>"'], source: 'flowchart TD\n  a -->> b', at: 1 }
+  const badge = (root: Element) => [...root.querySelectorAll('button')].find((button) => button.textContent?.includes("didn't render"))
+
+  test('a refused update keeps the last good version and a badge opens the error and the source', async () => {
+    const { fake, state, specs } = startVersions([...authFlow])
+    state.refused = refused
+    const { element, press } = await mountSurface(fake)
+    expect(text(element)).toContain('v2 of 2')
+    expect(badge(element)!.textContent).toContain("v3 didn't render")
+    expect(element.querySelector('[data-view-refused]')).toBeNull()
+    await press(badge(element)!)
+    const box = element.querySelector('[data-view-refused]')!
+    expect(text(box)).toContain('line 4: unexpected "-->>"')
+    expect(box.querySelector('pre')!.textContent).toBe('flowchart TD\n  a -->> b')
+    expect(text(box)).toContain('showing v2, the last version that rendered')
+    await press(badge(element)!)
+    expect(element.querySelector('[data-view-refused]')).toBeNull()
+
+    specs.push(authFlowV2 as ViewSpec)
+    state.refused = null
+    state.latest = 3
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect(badge(element)).toBeUndefined()
+    expect(text(element)).toContain('v3 of 3')
+  })
+
+  test('a version the window could not draw falls back to the one before it, under the same badge', async () => {
+    const broken: ViewSpec = { title: 'Auth flow', root: { type: 'markdown', props: { text: 'the broken one' } } }
+    const { fake, state } = startVersions([...authFlow, broken])
+    state.refused = { attempt: 'render', version: 3, errors: ['a node failed'], source: '', at: 1 }
+    const { element } = await mountSurface(fake)
+    expect(text(element)).toContain('v2 of 3')
+    expect(text(element)).toContain("v3 didn't render")
+    expect(text(element)).not.toContain('the broken one')
+    expect(element.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(0)
+  })
+
+  test('a frame that navigates is put back and reported once', async () => {
+    const spec: ViewSpec = { title: 'Proto', root: { type: 'html', props: { html: '<a href="https://example.test">out</a>', interactive: true } } }
+    const { fake } = startVersions([spec])
+    const { element } = await mountSurface(fake, { viewId: 'view_nav' })
+    await settle()
+    const before = element.querySelector('iframe')!
+    await act(async () => void before.dispatchEvent(new Event('load')))
+    await settle()
+    expect(fake.callsTo('quirky.view/render-failed').map((call) => call.params)).toEqual([{ viewId: 'view_nav', version: 1, error: 'navigation is not allowed' }])
+    const after = element.querySelector('iframe')!
+    expect(after).not.toBe(before)
+    expect(after.getAttribute('srcdoc')).toBe(before.getAttribute('srcdoc'))
+
+    await act(async () => void after.dispatchEvent(new Event('load')))
+    await settle()
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(1)
+  })
+
+  test('a version that is not the newest is never reported', async () => {
+    const spec: ViewSpec = { title: 'Proto', root: { type: 'html', props: { html: '<p>x</p>', interactive: true } } }
+    const { fake } = startVersions([spec, spec])
+    const { element } = await mountSurface(fake, { viewId: 'view_old', version: 1 })
+    await settle()
+    await act(async () => void element.querySelector('iframe')!.dispatchEvent(new Event('load')))
+    await settle()
+    expect(fake.callsTo('quirky.view/render-failed')).toHaveLength(0)
+  })
+})
+
+describe('the sandboxed html frame', () => {
+  const proto = (interactive: boolean): ViewSpec => ({ title: 'Settings', root: { type: 'html', id: 'proto', props: { html: '<button data-point="save" data-point-label="Save">Save</button><script>window.x = 1</script>', interactive, height: 300 } } })
+
+  test('an interactive frame allows scripts only, never the same origin, and starts with the CSP meta', async () => {
+    const fake = start([record(proto(true))])
+    const { element } = await mountSurface(fake)
+    const frame = element.querySelector('iframe')!
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(frame.style.height).toBe('300px')
+    const srcdoc = frame.getAttribute('srcdoc')!
+    expect(srcdoc.startsWith('<meta http-equiv="Content-Security-Policy" content="')).toBe(true)
+    expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('<button'))
+    expect(srcdoc.indexOf('Content-Security-Policy')).toBeLessThan(srcdoc.indexOf('<script>'))
+    expect(srcdoc).toContain("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; base-uri 'none'")
+    expect(srcdoc).toContain('quirky-point')
+    for (const grant of ['allow-same-origin', 'allow-forms', 'allow-popups', 'allow-top-navigation']) expect(frame.getAttribute('sandbox')).not.toContain(grant)
+  })
+
+  test('a static html node gets an empty sandbox and no sandbox tag', async () => {
+    const fake = start([record(proto(false))])
+    const { element } = await mountSurface(fake)
+    expect(element.querySelector('iframe')!.getAttribute('sandbox')).toBe('')
+    expect(text(element)).not.toContain('sandboxed · no network')
+  })
+
+  test('an interactive html node carries the sandboxed, no network tag', async () => {
+    const fake = start([record(proto(true))])
+    const { element } = await mountSurface(fake)
+    expect(text(element)).toContain('sandboxed · no network')
+  })
+
+  test('a point message from the frame itself points, and one from anywhere else is ignored', async () => {
+    const fake = start([record(proto(true))])
+    fake.commands[POINT] = () => {}
+    const { element } = await mountSurface(fake)
+    const frame = element.querySelector('iframe')!
+    const send = async (source: unknown, data: unknown) => {
+      await act(async () => void window.dispatchEvent(new MessageEvent('message', { data, source: source as never })))
+      await settle()
+    }
+
+    await send(window, { type: 'quirky-point', key: 'save', label: 'Save' })
+    await send(null, { type: 'quirky-point', key: 'save', label: 'Save' })
+    await send(frame.contentWindow, { type: 'something-else', key: 'save' })
+    await send(frame.contentWindow, 'quirky-point')
+    expect(pointCalls(fake)).toEqual([])
+
+    await send(frame.contentWindow, { type: 'quirky-point', key: 'save', label: 'Save' })
+    await send(frame.contentWindow, { type: 'quirky-point', key: 'Not A Key!', label: '' })
+    expect(pointCalls(fake)).toEqual([
+      { session: 's1', viewId: 'view_1', version: 1, element: 'pt:save', label: 'Save' },
+      { session: 's1', viewId: 'view_1', version: 1, element: 'pt:not-a-key', label: 'Not A Key!' }
+    ])
+  })
+
+  test('the frame document puts the policy first and the agent html last', async () => {
+    const { frameDocument } = await import('../src/render/HtmlFrame')
+    const page = frameDocument('<p>hello</p>', ':root{}')
+    expect(page.startsWith('<meta http-equiv="Content-Security-Policy"')).toBe(true)
+    expect(page.endsWith('<p>hello</p>')).toBe(true)
+    expect(page.indexOf('<script>')).toBeLessThan(page.indexOf('<p>hello</p>'))
+  })
+})
+
+describe('card chrome by surface', () => {
+  const onlyTable: ViewSpec = { title: 'Table', root: { type: 'table', props: { columns: ['A'], rows: [['one']] } } }
+
+  test('an inline card shows the title, who drew it, the stepper, expand, pop out and move', async () => {
+    const { fake } = startVersions(authFlow)
+    const { element } = await mountSurface(fake, { surface: 'inline' })
+    expect(element.querySelector('h3')!.textContent).toBe('Auth flow')
+    expect(text(element)).toContain('by omp')
+    expect(text(element)).toContain('v2 of 2')
+    expect(buttonByLabel(element, 'Expand')).not.toBeNull()
+    expect(buttonByLabel(element, 'Pop out')).not.toBeNull()
+    expect(buttonLabelled(element, 'Move to pane')).toBeTruthy()
+  })
+
+  test('a thumbnail draws an inert copy with no chrome and nothing to point at', async () => {
+    const fake = start([record(onlyTable)])
+    fake.commands[POINT] = () => {}
+    const { element, press } = await mountSurface(fake, { surface: 'thumbnail' })
+    expect(element.querySelector('header')).toBeNull()
+    expect(element.querySelector('button')).toBeNull()
+    expect(element.querySelector('h3')).toBeNull()
+    expect(element.querySelector('article')!.hasAttribute('inert')).toBe(true)
+    expect(element.querySelector('td')!.textContent).toBe('one')
+    await press(element.querySelector('tbody tr')!)
+    expect(pointCalls(fake)).toEqual([])
+  })
+
+  test('the expanded surface offers pop out but not expand, and a pop-out window offers neither', async () => {
+    const { fake } = startVersions(authFlow)
+    const expanded = await mountSurface(fake, { surface: 'expanded' })
+    expect(buttonByLabel(expanded.element, 'Expand')).toBeNull()
+    expect(buttonByLabel(expanded.element, 'Pop out')).not.toBeNull()
+    const windowed = await mountSurface(fake, { surface: 'window' })
+    expect(buttonByLabel(windowed.element, 'Expand')).toBeNull()
+    expect(buttonByLabel(windowed.element, 'Pop out')).toBeNull()
+    expect(buttonLabelled(windowed.element, 'Move to pane')).toBeUndefined()
+  })
+
+  test('a pop-out window steps through versions itself, because commands run in its owner', async () => {
+    const { fake } = startVersions(authFlow)
+    const { element, press } = await mountSurface(fake, { surface: 'window' })
+    await press(buttonByLabel(element, 'Older version')!)
+    expect(text(element)).toContain('v1 of 2')
+    expect(fake.routedTo(CONTROL)).toEqual([])
+  })
+
+  test('pop out is hidden when the window cannot open auxiliary windows or does not say', async () => {
+    const { fake } = startVersions(authFlow, { 'desktop.capabilities': () => ({ auxiliaryWindows: false }) })
+    const { element } = await mountSurface(fake)
+    expect(buttonByLabel(element, 'Pop out')).toBeNull()
+    expect(buttonByLabel(element, 'Expand')).not.toBeNull()
+
+    const bare = await mountSurface(start([record(bundleSize as ViewSpec)]))
+    expect(buttonByLabel(bare.element, 'Pop out')).toBeNull()
+  })
+
+  test('pop out opens the render view in a window that follows the newest version', async () => {
+    const { fake } = startVersions(authFlow, { 'desktop.window.open': () => ({ windowId: 'w1' }) })
+    const { element, press } = await mountSurface(fake)
+    await press(buttonByLabel(element, 'Pop out')!)
+    expect(fake.callsTo('desktop.window.open').map((call) => call.params)).toEqual([
+      { view: 'view:quirky.view/render', input: { viewId: 'view_1', surface: 'window' }, title: 'Auth flow' }
+    ])
+  })
+
+  test('expand asks the chat to expand the visual, following the newest version unless the person stepped back', async () => {
+    const { fake } = startVersions(authFlow)
+    fake.commands[EXPAND] = () => {}
+    const { element, press } = await mountSurface(fake)
+    await press(buttonByLabel(element, 'Expand')!)
+    await press(buttonByLabel(element, 'Older version')!)
+    await press(buttonByLabel(element, 'Expand')!)
+    expect(routedArgs(fake, EXPAND)).toEqual([{ session: 's1', viewId: 'view_1' }, { session: 's1', viewId: 'view_1', version: 1 }])
+  })
+
+  test('a card whose agent is still drawing says so and shows a pending frame', async () => {
+    const { fake } = startVersions([authFlowV1 as ViewSpec])
+    const { element } = await mountSurface(fake, { drawing: true })
+    expect(element.querySelector('[data-view-drawing]')!.textContent).toBe('drawing Auth flow')
+    expect(element.querySelector<HTMLElement>('article')!.style.borderStyle).toBe('dashed')
+    const idle = await mountSurface(fake)
+    expect(idle.element.querySelector('[data-view-drawing]')).toBeNull()
+    expect(idle.element.querySelector<HTMLElement>('article')!.style.borderStyle).toBe('solid')
+  })
+
+  test('a pane visual draws on the panel surface, and an inline mount of it is a one-line record', async () => {
+    const fake = start([record(markdownSpec('PANEL CONTENT'), { placement: 'pane' })])
+    const panel = await mountSurface(fake)
+    expect(text(panel.element)).toContain('PANEL CONTENT')
+    const inline = await mountSurface(fake, { surface: 'inline' })
+    expect(text(inline.element)).not.toContain('PANEL CONTENT')
+    expect(text(inline.element)).toContain('Notes is in the Views pane')
+  })
+
+  test('the mount input keeps only what the card understands', async () => {
+    const { parseRenderInput } = await import('../src/render/ViewCard')
+    expect(parseRenderInput({ viewId: 'v', version: 2, surface: 'expanded', drawing: true, focused: false })).toEqual({ viewId: 'v', version: 2, surface: 'expanded', drawing: true, focused: false })
+    expect(parseRenderInput({ viewId: 'v', version: 0, surface: 'sideways', drawing: 'yes', extra: 1 })).toEqual({ viewId: 'v' })
+    expect(parseRenderInput({ viewId: '' })).toBeNull()
+    expect(parseRenderInput(null)).toBeNull()
+  })
+})
+
+describe('live preview', () => {
+  type Mounted = { options: { id: string; url: string; partition: string; zoom: number }; disposed: boolean; requests: unknown[] }
+  const previewSpec = (...urls: string[]): ViewSpec => ({ title: 'Preview', root: { type: 'stack', children: urls.map((url) => ({ type: 'live-preview' as const, props: { url } })) } })
+
+  function nativeBrowser(fake: FakeContext) {
+    const mountedViews: Mounted[] = []
+    fake.environment.nativeBrowser = {
+      available: true,
+      mount: ((_element: HTMLElement, options: Mounted['options']) => {
+        const entry: Mounted = { options, disposed: false, requests: [] }
+        mountedViews.push(entry)
+        return { request: async (request: unknown) => void entry.requests.push(request), evaluate: async () => null, dispose: () => void (entry.disposed = true) }
+      }) as never
+    }
+    return mountedViews
+  }
+
+  test('one preview holds the native browser view, and the others show a placeholder with a Show button that moves it', async () => {
+    const fake = start([record(previewSpec('http://localhost:5173/', 'http://localhost:5174/'))])
+    const views = nativeBrowser(fake)
+    const { element, press } = await mountSurface(fake)
+    expect(views).toHaveLength(1)
+    expect(views[0]!.options).toMatchObject({ url: 'http://localhost:5173/', partition: 'persist:quirky-browser-default', zoom: 0 })
+    expect([...element.querySelectorAll('button')].filter((button) => button.textContent === 'Show')).toHaveLength(1)
+    expect(text(element)).toContain('http://localhost:5174/')
+
+    await press(buttonLabelled(element, 'Show'))
+    expect(views).toHaveLength(2)
+    expect(views[0]!.disposed).toBe(true)
+    expect(views[1]!.options.url).toBe('http://localhost:5174/')
+    expect(views[1]!.disposed).toBe(false)
+    expect([...element.querySelectorAll('button')].filter((button) => button.textContent === 'Show')).toHaveLength(1)
+  })
+
+  test('the expanded preview takes the native view even when another one holds it', async () => {
+    const holder = start([record(previewSpec('http://localhost:5173/'), { viewId: 'view_a' })])
+    const views = nativeBrowser(holder)
+    await mountSurface(holder, { viewId: 'view_a' })
+    expect(views).toHaveLength(1)
+    const other = start([record(previewSpec('http://localhost:5175/'), { viewId: 'view_b' })])
+    other.environment.nativeBrowser = holder.environment.nativeBrowser
+    await mountSurface(other, { viewId: 'view_b', surface: 'expanded' })
+    expect(views).toHaveLength(2)
+    expect(views[0]!.disposed).toBe(true)
+    expect(views[1]!.options.url).toBe('http://localhost:5175/')
+  })
+
+  test('reload asks the native view to reload', async () => {
+    const fake = start([record(previewSpec('http://localhost:5173/'))])
+    const views = nativeBrowser(fake)
+    const { element, press } = await mountSurface(fake)
+    await press(buttonByLabel(element, 'Reload preview')!)
+    expect(views[0]!.requests).toEqual([{ action: 'reload' }])
+  })
+
+  test('without a native browser the card shows the URL and offers the browser pane', async () => {
+    const fake = start([record(previewSpec('http://localhost:5173/'))])
+    fake.commands['command:quirky.browser/new-tab'] = () => {}
+    const { element, press } = await mountSurface(fake)
+    expect(text(element)).toContain('http://localhost:5173/')
+    await press(buttonLabelled(element, 'Open in browser pane'))
+    expect(routedArgs(fake, 'command:quirky.browser/new-tab')).toEqual([{ url: 'http://localhost:5173/' }])
+  })
+
+  test('a thumbnail never mounts the native browser', async () => {
+    const fake = start([record(previewSpec('http://localhost:5173/'))])
+    const views = nativeBrowser(fake)
+    await mountSurface(fake, { surface: 'thumbnail' })
+    expect(views).toHaveLength(0)
+  })
+
+  test('a failure to mount tells the person instead of leaving a blank box', async () => {
+    const fake = start([record(previewSpec('http://localhost:5173/'))])
+    fake.environment.nativeBrowser = { available: true, mount: (() => { throw new Error('unsupported native browser URL') }) as never }
+    const { element } = await mountSurface(fake)
+    expect(element.querySelector('[role="alert"]')!.textContent).toBe('Could not show the page: unsupported native browser URL')
+  })
+})
+
+describe('the control command for card actions', () => {
+  test('rejects card actions for a stale mount, the wrong card or bad arguments', async () => {
+    const { fake } = startVersions(authFlow)
+    await mountSurface(fake)
+    const instance = await instanceFor(fake, RENDER)
+    await expect(fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1', version: 0 })).rejects.toThrow('Invalid view version.')
+    await expect(fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1' })).rejects.toThrow('Invalid view version.')
+    await expect(fake.runCommand(CONTROL, { instance, action: 'expand', viewId: 'view_1', extra: true })).rejects.toThrow('Invalid view control arguments.')
+    await expect(fake.runCommand(CONTROL, { instance: 'gone', action: 'expand', viewId: 'view_1' })).rejects.toThrow('View UI instance is no longer mounted.')
+    await expect(fake.runCommand(CONTROL, { instance, action: 'show-preview', viewId: 'view_1', node: '' })).rejects.toThrow('Invalid live preview.')
+    await fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1', version: 1 })
+    expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
+  })
+
+  test('a pane has no stepper, and a card command it cannot run is refused', async () => {
+    const fake = start([record(bundleSize as ViewSpec, { placement: 'pane', updates: 1, latestVersion: 2, version: 2 })])
+    const view = await mountView(fake, PANE, { session: 's1' })
+    mounted.push(view)
+    expect(view.element.querySelector('[data-view-stepper]')).toBeNull()
+    const instance = await instanceFor(fake, PANE)
+    await expect(fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1', version: 1 })).rejects.toThrow('View action is not available for this mount.')
   })
 })
 

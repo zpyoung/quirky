@@ -13,7 +13,7 @@ export function activate(context: UiPluginContext): void {
     if (!input) return undefined
     const root = createRoot(element)
     const instance = controller.mount({ surface: RENDER_VIEW_ID, viewId: input.viewId, report: props.report })
-    root.render(<ViewCardView context={context} instance={instance} viewId={input.viewId} />)
+    root.render(<ViewCardView context={context} instance={instance} viewId={input.viewId} version={input.version} surface={input.surface} drawing={input.drawing} focused={input.focused} />)
     return () => {
       try {
         root.unmount()

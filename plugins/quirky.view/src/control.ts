@@ -1,5 +1,6 @@
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ViewPlacement } from './core/contract'
+import { ELEMENT_KEY } from './render/point'
 
 export const MOVE_COMMAND_ID = 'command:quirky.view/move'
 export const ACTION_COMMAND_ID = 'command:quirky.view/action'
@@ -22,6 +23,10 @@ export type ViewControl =
   | { instance: string; action: 'select-tab' | 'dismiss-tab'; viewId: string }
   | { instance: string; action: 'link-preview'; viewId: string; href: string }
   | { instance: string; action: 'link-cancel' | 'link-confirm'; viewId: string }
+  | { instance: string; action: 'show-version'; viewId: string; version: number }
+  | { instance: string; action: 'expand' | 'pop-out' | 'toggle-refused'; viewId: string }
+  | { instance: string; action: 'point'; viewId: string; element: string; label: string }
+  | { instance: string; action: 'show-preview' | 'reload-preview'; viewId: string; node: string }
 
 type ViewHandlers = {
   refresh?: () => void | Promise<void>
@@ -29,6 +34,13 @@ type ViewHandlers = {
   dismissTab?: (viewId: string) => void | Promise<void>
   previewLink?: (href: string) => void
   cancelLink?: () => void
+  showVersion?: (version: number) => void | Promise<void>
+  expand?: () => void | Promise<void>
+  popOut?: () => void | Promise<void>
+  toggleRefused?: () => void
+  point?: (element: string, label: string) => void | Promise<void>
+  showPreview?: (node: string) => void | Promise<void>
+  reloadPreview?: (node: string) => void | Promise<void>
 }
 
 type ViewUiPatch = Partial<Pick<ViewUiState, 'activeViewId' | 'phase' | 'tabs' | 'pendingLink'>>
@@ -47,6 +59,8 @@ export type ViewUiInstance = {
   update(patch: ViewUiPatch): void
   setHandlers(handlers: ViewHandlers): void
   clearHandlers(...names: (keyof ViewHandlers)[]): void
+  /** Runs a control command on this mount directly, for a pop-out window whose `executeCommand` would run in its owner instead. */
+  run(command: unknown): Promise<unknown>
   dispose(): void
 }
 
@@ -54,6 +68,7 @@ const STALE_INSTANCE = 'View UI instance is no longer mounted.'
 const NOT_OPEN_TAB = 'View is not an open pane tab.'
 const NO_PENDING_LINK = 'No link is awaiting confirmation.'
 const INVALID_CONTROL = 'Invalid view control arguments.'
+const MAX_POINT_LABEL = 120
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -127,6 +142,28 @@ function controlArgs(value: unknown): ViewControl {
     exactKeys(args, ['instance', 'action', 'viewId'], 'view control arguments')
     return { instance, action, viewId }
   }
+  if (action === 'expand' || action === 'pop-out' || action === 'toggle-refused') {
+    exactKeys(args, ['instance', 'action', 'viewId'], 'view control arguments')
+    return { instance, action, viewId }
+  }
+  if (action === 'show-version') {
+    exactKeys(args, ['instance', 'action', 'viewId', 'version'], 'view control arguments')
+    const { version } = args
+    if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) throw new Error('Invalid view version.')
+    return { instance, action, viewId, version }
+  }
+  if (action === 'point') {
+    exactKeys(args, ['instance', 'action', 'viewId', 'element', 'label'], 'view control arguments')
+    const element = requiredArgument(args, 'element', 'view element')
+    if (!ELEMENT_KEY.test(element)) throw new Error('Invalid view element.')
+    const label = requiredArgument(args, 'label', 'view element label')
+    if (label.length > MAX_POINT_LABEL) throw new Error('Invalid view element label.')
+    return { instance, action, viewId, element, label }
+  }
+  if (action === 'show-preview' || action === 'reload-preview') {
+    exactKeys(args, ['instance', 'action', 'viewId', 'node'], 'view control arguments')
+    return { instance, action, viewId, node: requiredArgument(args, 'node', 'live preview') }
+  }
   throw new Error(INVALID_CONTROL)
 }
 
@@ -140,6 +177,41 @@ function validateLink(href: string): string {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Invalid link URL.')
   return href
+}
+
+function need<T>(handler: T | undefined): T {
+  if (handler === undefined) throw new Error('View action is not available for this mount.')
+  return handler
+}
+
+/** The call a card command makes on the mounted card, or undefined when the command is not one of the card's. */
+function cardCommand(handlers: ViewHandlers, command: ViewControl): (() => void | Promise<void>) | undefined {
+  switch (command.action) {
+    case 'show-version': {
+      const handler = need(handlers.showVersion)
+      return () => handler(command.version)
+    }
+    case 'expand':
+      return need(handlers.expand)
+    case 'pop-out':
+      return need(handlers.popOut)
+    case 'toggle-refused':
+      return need(handlers.toggleRefused)
+    case 'point': {
+      const handler = need(handlers.point)
+      return () => handler(command.element, command.label)
+    }
+    case 'show-preview': {
+      const handler = need(handlers.showPreview)
+      return () => handler(command.node)
+    }
+    case 'reload-preview': {
+      const handler = need(handlers.reloadPreview)
+      return () => handler(command.node)
+    }
+    default:
+      return undefined
+  }
 }
 
 function snapshot(state: ViewUiState): ViewUiState {
@@ -192,6 +264,7 @@ export function createViewUiController(context: UiPluginContext): { mount(option
         for (const name of names) delete next[name]
         entry.handlers = next
       },
+      run: (command) => controlCommand(command),
       dispose() {
         if (mounts.get(id) === entry) mounts.delete(id)
       }
@@ -228,6 +301,11 @@ export function createViewUiController(context: UiPluginContext): { mount(option
     }
 
     if (entry.state.activeViewId !== command.viewId) throw new Error('View is not the active card.')
+    const card = cardCommand(entry.handlers, command)
+    if (card) {
+      await card()
+      return { ok: true }
+    }
     if (command.action === 'link-preview') {
       const href = validateLink(command.href)
       if (!entry.handlers.previewLink) throw new Error('View link preview is not available for this mount.')
