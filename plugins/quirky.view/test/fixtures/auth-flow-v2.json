@@ -1,0 +1,27 @@
+{
+  "title": "Auth flow",
+  "root": {
+    "type": "stack",
+    "children": [
+      {
+        "type": "diagram",
+        "id": "auth-diagram",
+        "props": {
+          "source": "flowchart TD\n  client[Client app] --> daemon[Daemon]\n  daemon --> runner[Agent runner]\n  daemon --> refresh[Token refresh]",
+          "caption": "How a session proves who it is"
+        }
+      },
+      {
+        "type": "table",
+        "id": "token-table",
+        "props": {
+          "columns": ["Check", "Rule", "Where"],
+          "rows": [
+            ["Authority", "the session lease is live", "main.ts:291"],
+            ["Refresh", "expiry under 5 min", "lease.ts"]
+          ]
+        }
+      }
+    ]
+  }
+}

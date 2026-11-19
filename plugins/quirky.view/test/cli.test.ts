@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CliContext } from '@quirky/protocol'
+import authFlowV1 from './fixtures/auth-flow-v1.json'
+import authFlowV2 from './fixtures/auth-flow-v2.json'
 import bundleSize from './fixtures/bundle-size.json'
 import manifest from '../quirky-plugin.json'
 import { commands, help, helpText, waitForAction } from '../cli'
@@ -82,7 +84,7 @@ describe('quirky view open', () => {
     await run(cli, 'view-open', { spec: `@${specFile(bundleSize)}` })
     const [printed] = cli.lines as [{ viewId: string }]
     expect(printed.viewId).toMatch(/^view_/)
-    expect(await h.call('get', { viewId: printed.viewId }, windowCaller)).toMatchObject({ title: 'Bundle size by route', placement: 'inline', sessionId: 's1' })
+    expect(await h.call('get', { viewId: printed.viewId }, windowCaller)).toMatchObject({ title: 'Bundle size by route', placement: 'pane', sessionId: 's1' })
   })
 
   test('takes inline JSON and --placement', async () => {
@@ -119,7 +121,14 @@ describe('quirky view open', () => {
     expect(cli.calls).toEqual([])
   })
 
-  test.each([['view-open', { spec: '{}' }], ['view-update', { id: 'view_x', spec: '{}' }], ['view-close', { id: 'view_x' }], ['view-wait', { id: 'view_x' }]] as const)(
+  test.each([
+    ['view-open', { spec: '{}' }],
+    ['view-update', { id: 'view_x', spec: '{}' }],
+    ['view-patch', { id: 'view_x', ops: '[]' }],
+    ['view-get', { id: 'view_x' }],
+    ['view-close', { id: 'view_x' }],
+    ['view-wait', { id: 'view_x' }]
+  ] as const)(
     '%s exits 1 outside an agent session without calling the daemon',
     async (command, flags) => {
       for (const env of [{}, { QUIRKY_SESSION_ID: 's1' }, { QUIRKY_SESSION_TOKEN: 'token' }]) {
@@ -167,6 +176,92 @@ describe('quirky view update and close', () => {
     const error = await failure(run(cli, 'view-close', { id: 'view_missing' }))
     expect(error.message).toContain('not found')
     expect(error).not.toHaveProperty('exit', 2)
+  })
+})
+
+describe('quirky view patch', () => {
+  const ops = [
+    { op: 'replace', path: '/root/children/0/props/source', value: authFlowV2.root.children[0].props!.source },
+    { op: 'add', path: '/root/children/1/props/rows/-', value: ['Refresh', 'expiry under 5 min', 'lease.ts'] }
+  ]
+
+  async function opened() {
+    const { h, cli } = setup()
+    await run(cli, 'view-open', { spec: JSON.stringify(authFlowV1) })
+    const [{ viewId }] = cli.lines as [{ viewId: string }]
+    return { h, cli, viewId }
+  }
+
+  test('applies inline ops or @file ops and prints the view and its new version', async () => {
+    const { h, cli, viewId } = await opened()
+    await run(cli, 'view-patch', { id: viewId, ops: JSON.stringify([ops[0]]) })
+    await run(cli, 'view-patch', { id: viewId, ops: `@${specFile([ops[1]])}` })
+    expect(cli.lines.slice(1)).toEqual([{ viewId, version: 2 }, { viewId, version: 3 }])
+    expect((await h.call('get', { viewId }, windowCaller)).spec).toEqual(authFlowV2)
+  })
+
+  test('a bad op exits 2 with path: message and stores nothing', async () => {
+    const { h, cli, viewId } = await opened()
+    const error = await failure(run(cli, 'view-patch', { id: viewId, ops: JSON.stringify([{ op: 'remove', path: '/root/children/9' }]) }))
+    expect(error).toMatchObject({ exit: 2, message: 'ops[0].path: /root/children/9 does not exist' })
+    expect(cli.lines).toHaveLength(1)
+    expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ version: 1, spec: authFlowV1 })
+  })
+
+  test('ops that leave an invalid spec exit 2 with the spec error', async () => {
+    const { cli, viewId } = await opened()
+    const error = await failure(run(cli, 'view-patch', { id: viewId, ops: JSON.stringify([{ op: 'replace', path: '/root/children/1/props/rows', value: [['only one cell']] }]) }))
+    expect(error).toMatchObject({ exit: 2, message: 'root.children[1].props.rows[0]: row has 1 cells; the table has 3 columns' })
+  })
+
+  test('text that is not JSON exits 2, and an unreadable @file exits 2 without calling the daemon', async () => {
+    const { cli, viewId } = await opened()
+    expect(await failure(run(cli, 'view-patch', { id: viewId, ops: '[oops' }))).toMatchObject({ exit: 2 })
+    const before = cli.calls.length
+    const error = await failure(run(cli, 'view-patch', { id: viewId, ops: '@/no/such/ops.json' }))
+    expect(error).toMatchObject({ exit: 2 })
+    expect(error.message).toStartWith('--ops: cannot read /no/such/ops.json')
+    expect(cli.calls).toHaveLength(before)
+  })
+
+  test('an unknown view is a runtime error, not a usage error', async () => {
+    const { cli } = setup()
+    const error = await failure(run(cli, 'view-patch', { id: 'view_missing', ops: '[]' }))
+    expect(error.message).toContain('not found')
+    expect(error).not.toHaveProperty('exit', 2)
+  })
+})
+
+describe('quirky view get', () => {
+  async function twoVersions() {
+    const { h, cli } = setup()
+    await run(cli, 'view-open', { spec: JSON.stringify(authFlowV1) })
+    const [{ viewId }] = cli.lines as [{ viewId: string }]
+    await run(cli, 'view-update', { id: viewId, spec: JSON.stringify(authFlowV2) })
+    cli.lines.length = 0
+    return { h, cli, viewId }
+  }
+
+  test('prints the latest version as one JSON line with the fields an agent needs to reload it', async () => {
+    const { cli, viewId } = await twoVersions()
+    await run(cli, 'view-get', { id: viewId })
+    expect(cli.lines).toEqual([{ viewId, title: 'Auth flow', version: 2, latestVersion: 2, spec: authFlowV2 }])
+  })
+
+  test('--at-version prints that version and still names the latest', async () => {
+    const { cli, viewId } = await twoVersions()
+    await run(cli, 'view-get', { id: viewId, 'at-version': 1 })
+    expect(cli.lines).toEqual([{ viewId, title: 'Auth flow', version: 1, latestVersion: 2, spec: authFlowV1 }])
+    expect(cli.calls.at(-1)).toEqual({ method: 'quirky.view/get', params: { viewId, version: 1 } })
+  })
+
+  test('an unknown version or view is a runtime error, and --at-version must be at least 1', async () => {
+    const { cli, viewId } = await twoVersions()
+    const missing = await failure(run(cli, 'view-get', { id: viewId, 'at-version': 9 }))
+    expect(missing.message).toContain('no version 9')
+    expect(missing).not.toHaveProperty('exit', 2)
+    expect((await failure(run(cli, 'view-get', { id: 'view_missing' }))).message).toContain('not found')
+    expect(await failure(run(cli, 'view-get', { id: viewId, 'at-version': 0 }))).toMatchObject({ exit: 2 })
   })
 })
 
@@ -244,7 +339,7 @@ describe('quirky view wait', () => {
 describe('quirky view --help', () => {
   test('the help text has the usage and the whole catalog with an example for every component', () => {
     const text = helpText()
-    for (const line of ['quirky view open --spec @file.json [--placement inline|pane]', 'quirky view update --id <viewId> --spec @file.json', 'quirky view close --id <viewId>', 'quirky view wait --id <viewId> [--timeout-ms N]', 'quirky view --help']) {
+    for (const line of ['quirky view open --spec @file.json [--placement inline|pane]', 'quirky view update --id <viewId> --spec @file.json', 'quirky view patch --id <viewId> --ops <json|@file>', 'quirky view get --id <viewId> [--at-version N]', 'quirky view close --id <viewId>', 'quirky view wait --id <viewId> [--timeout-ms N]', 'quirky view --help']) {
       expect(text).toContain(line)
     }
     for (const type of CATALOG_TYPES) {
@@ -265,11 +360,13 @@ describe('quirky view --help', () => {
 describe('the manifest', () => {
   const declared = manifest.contributes['cli-command']
 
-  test('declares the five commands the CLI module implements', () => {
+  test('declares the seven commands the CLI module implements', () => {
     expect(declared.map((command) => [command.id, command.words])).toEqual([
       ['view', ''],
       ['view-open', 'open'],
       ['view-update', 'update'],
+      ['view-patch', 'patch'],
+      ['view-get', 'get'],
       ['view-close', 'close'],
       ['view-wait', 'wait']
     ])
@@ -280,8 +377,25 @@ describe('the manifest', () => {
     const flagsOf = (id: string) => Object.keys(declared.find((command) => command.id === id)!.flags)
     expect(flagsOf('view-open')).toEqual(['spec', 'placement'])
     expect(flagsOf('view-update')).toEqual(['id', 'spec'])
+    expect(flagsOf('view-patch')).toEqual(['id', 'ops'])
+    expect(flagsOf('view-get')).toEqual(['id', 'at-version'])
     expect(flagsOf('view-close')).toEqual(['id'])
     expect(flagsOf('view-wait')).toEqual(['id', 'timeout-ms'])
+  })
+})
+
+describe('the manifest and the module agree on the new methods', () => {
+  test('every declared method is one the CLI commands list, and patch and get exist', () => {
+    const methods = manifest.contributes.method.map((method) => method.id)
+    for (const id of ['patch', 'render-failed', 'get']) expect(methods).toContain(id)
+    for (const command of manifest.contributes['cli-command']) {
+      for (const method of command.methods) expect(methods).toContain(method.slice('quirky.view/'.length))
+    }
+  })
+
+  test('render-failed is not offered to the CLI, because only the window reports it', () => {
+    const exposed = manifest.contributes['cli-command'].flatMap((command) => command.methods)
+    expect(exposed).not.toContain('quirky.view/render-failed')
   })
 })
 

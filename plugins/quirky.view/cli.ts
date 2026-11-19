@@ -8,7 +8,9 @@ const MAX_CONSECUTIVE_CONNECTION_FAILURES = 10
 
 const USAGE = `usage:
   quirky view open --spec @file.json [--placement inline|pane]   prints {"viewId": ...}
-  quirky view update --id <viewId> --spec @file.json
+  quirky view update --id <viewId> --spec @file.json             makes the spec the next version
+  quirky view patch --id <viewId> --ops <json|@file>             prints {"viewId": ..., "version": N}
+  quirky view get --id <viewId> [--at-version N]                 prints {"viewId","title","version","latestVersion","spec"}
   quirky view close --id <viewId>
   quirky view wait --id <viewId> [--timeout-ms N]                prints {"action": ...} or {"status":"timeout"}
   quirky view --help
@@ -16,7 +18,15 @@ const USAGE = `usage:
 Draw a view from a fixed catalog of components. The spec is checked before anything renders; a
 refused spec prints its errors and exits 2, so fix it and run the command again. A button or field in
 the view sends an action: it is the result of a pending \`quirky view wait\`, or else it arrives as a
-follow-up message.`
+follow-up message.
+
+Every open, update and patch is a version the user can step back to. A refused one is not a version,
+and the last good one stays on screen. Change a small part with \`patch\`: --ops is a JSON array of
+{"op": "add"|"replace"|"remove", "path": "/root/children/0/props/text", "value": ...} using JSON Pointer
+paths ("-" appends to an array, "~1" stands for "/" and "~0" for "~"), at most 200 ops, applied all or
+nothing. When a message points at a view and version, \`get\` loads it (--at-version N for an older one),
+so you can patch from what the user saw. If the window cannot draw a version, you get a message saying
+so: fix it with update or patch.`
 
 /** The usage and the component catalog: everything an agent needs to draw a view. */
 export function helpText(): string {
@@ -103,6 +113,28 @@ export const commands: CliModule['commands'] = {
     const spec = await readSpecArgument(String(args.flags.spec), ctx)
     await call(ctx, 'quirky.view/update', { viewId: idFlag(args), spec })
     ctx.out.jsonLine({ viewId: idFlag(args) })
+  },
+
+  /** Applies RFC 6902 ops to the view's latest spec; a refusal is a usage error, so it exits 2. */
+  async 'view-patch'(args, ctx) {
+    requireSession(ctx)
+    const ops = await readSpecArgument(String(args.flags.ops), ctx, '--ops')
+    const { version } = (await call(ctx, 'quirky.view/patch', { viewId: idFlag(args), ops })) as { version: number }
+    ctx.out.jsonLine({ viewId: idFlag(args), version })
+  },
+
+  /** Prints a view at its latest version, or at `--at-version`, for an agent reloading a visual it was pointed at. */
+  async 'view-get'(args, ctx) {
+    requireSession(ctx)
+    const version = positiveFlag(args, ctx, 'at-version')
+    const record = (await call(ctx, 'quirky.view/get', { viewId: idFlag(args), ...(version === undefined ? {} : { version }) })) as {
+      viewId: string
+      title: string
+      version: number
+      latestVersion: number
+      spec: unknown
+    }
+    ctx.out.jsonLine({ viewId: record.viewId, title: record.title, version: record.version, latestVersion: record.latestVersion, spec: record.spec })
   },
 
   async 'view-close'(args, ctx) {
