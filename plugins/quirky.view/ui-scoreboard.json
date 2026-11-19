@@ -1190,7 +1190,7 @@
         "via": [
           {
             "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-            "quote": "pointFromClick = (event: MouseEvent) => {\n    const found = pointAt(event.target, event)\n    if (found !== null) control({ action: 'point', element: found.element, label: found.label })\n  }"
+            "quote": "pointFromClick = (event: MouseEvent) => {\n    clickedRegion.current = event.target instanceof Element ? event.target.closest('[data-point-region]') : null\n    const found = pointAt(event.target, event)\n    if (found !== null) control({ action: 'point', element: found.element, label: found.label })\n  }"
           },
           {
             "file": "plugins/quirky.view/src/render/ViewCard.tsx",
