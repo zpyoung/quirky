@@ -59,7 +59,7 @@ describe('open', () => {
       latestVersion: 1,
       refused: null
     })
-    expect(h.events).toEqual([{ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'open' } }])
+    expect(h.events).toEqual([{ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'open', placement: 'pane' } }])
   })
 
   test('inline placement is still accepted, and an agent that names no placement gets the pane', async () => {
@@ -172,7 +172,7 @@ describe('move', () => {
     expect(moved).toMatchObject({ placement: 'inline', movedByUser: true, updates: 0 })
     await h.call('update', { viewId, spec: spec('Updated') })
     expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ placement: 'inline', movedByUser: true, updates: 1, title: 'Updated' })
-    expect(h.events[1]).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'move' } })
+    expect(h.events[1]).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'move', placement: 'inline' } })
   })
 
   test('an update with no move keeps the placement the agent chose', async () => {
@@ -500,6 +500,13 @@ describe('as a built-in plugin', () => {
     expect(await window.callAny('quirky.view/list', { session: 's1' })).toEqual([])
     expect((await rejection(cli.callAny('quirky.view/move', { viewId: 'view_x', placement: 'pane' }))).code).toBe(RpcErrorCode.Conflict)
   })
+
+  test('a window connection passes the move guard through the daemon', async () => {
+    const h = await daemon()
+    const window = await h.connect('ui')
+    // not-found, not conflict: the window got past windowOnly and the lookup ran
+    expect((await rejection(window.callAny('quirky.view/move', { viewId: 'view_x', placement: 'pane' }))).code).toBe(RpcErrorCode.NotFound)
+  })
 })
 
 describe('versions', () => {
@@ -589,7 +596,7 @@ describe('refused state', () => {
       at: expect.any(Number)
     })
     expect(h.events.map((event) => [event.event, event.data.kind])).toEqual([['changed', 'open'], ['changed', 'refused'], ['rejected', undefined]])
-    expect(h.events[1].data).toEqual({ sessionId: 's1', viewId, version: 1, kind: 'refused' })
+    expect(h.events[1].data).toEqual({ sessionId: 's1', viewId, version: 1, kind: 'refused', placement: 'pane' })
   })
 
   test('the next good version clears it, from update and from patch', async () => {
@@ -646,7 +653,7 @@ describe('patch', () => {
     expect(await h.call('patch', { viewId, ops })).toEqual({ viewId, version: 2 })
     expect((await h.call('get', { viewId }, windowCaller)).spec).toEqual(authFlowV2)
     expect((await h.call('get', { viewId, version: 1 }, windowCaller)).spec).toEqual(authFlowV1)
-    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 2, kind: 'patch' } })
+    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 2, kind: 'patch', placement: 'pane' } })
   })
 
   test('ops may be given as JSON text', async () => {
@@ -768,7 +775,7 @@ describe('render-failed', () => {
       source: JSON.stringify(authFlowV1, null, 2),
       at: expect.any(Number)
     })
-    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'render-failed' } })
+    expect(h.events.at(-1)).toEqual({ event: 'changed', data: { sessionId: 's1', viewId, version: 1, kind: 'render-failed', placement: 'pane' } })
   })
 
   test('a second report for the same view and version is a no-op', async () => {

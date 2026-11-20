@@ -251,7 +251,8 @@ function cardInput(viewId: string, surface: 'panel' | 'thumbnail', options: { ve
  * agent placed in the pane. A panel wide enough for two cards lays them out in a grid; a narrower one
  * shows the focused card with a filmstrip above it. The newest visual drawn takes focus, a card is
  * `drawing` while the session works on it, and the panel starts collapsed in a narrow chat. Collapsed it
- * is a rail counting what was drawn since. Dragging the divider sets the width, which is remembered
+ * is a rail counting what was drawn since. A visual the user moves into the panel opens the panel and
+ * takes focus. Dragging the divider sets the width, which is remembered
  * across chats through `quirky.session/setUiPref`. `focus` asks the panel to show one visual at one
  * version, as when a message chip is clicked.
  */
@@ -342,12 +343,18 @@ export function VisualPanel({
     () =>
       context.subscribe((event) => {
         if (event.type !== 'quirky.view/changed') return
-        const data = event.data as { sessionId?: string; viewId?: unknown; kind?: unknown } | undefined
+        const data = event.data as { sessionId?: string; viewId?: unknown; kind?: unknown; placement?: unknown } | undefined
         if (data?.sessionId !== undefined && data.sessionId !== session.id) return
         if (typeof data?.viewId !== 'string') return
         const kind = typeof data.kind === 'string' ? data.kind : 'update'
-        if (!DRAWING_KINDS.has(kind)) return
         const viewId = data.viewId
+        if (kind === 'move') {
+          if (data.placement !== 'pane') return
+          setUserCollapsed(false)
+          setFocusedId(viewId)
+          return
+        }
+        if (!DRAWING_KINDS.has(kind)) return
         setFocusedId(viewId)
         setPinned((current) => {
           if (!(viewId in current)) return current
