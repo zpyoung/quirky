@@ -508,7 +508,7 @@
     "event": [
       {
         "id": "changed",
-        "description": "A view was opened, updated, patched, closed or moved, or a refusal or render failure was recorded on it. `version` is its latest version after the change.",
+        "description": "A view was opened, updated, patched, closed or moved, or a refusal or render failure was recorded on it. `version` is its latest version and `placement` where it is after the change.",
         "data": {
           "type": "object",
           "properties": {
@@ -532,13 +532,21 @@
                 "refused",
                 "render-failed"
               ]
+            },
+            "placement": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "pane"
+              ]
             }
           },
           "required": [
             "sessionId",
             "viewId",
             "version",
-            "kind"
+            "kind",
+            "placement"
           ]
         }
       },

@@ -2093,6 +2093,37 @@ describe('the visual panel', () => {
     expect(rail()!.textContent).not.toContain('new')
   })
 
+  test('a visual moved into the panel opens a collapsed panel and takes focus', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs', { placement: 'inline' })]
+    await mountPanel({ width: 700, records })
+    expect(rail()).not.toBeNull()
+    records[1] = rec('v2', 'Costs')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v2', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(rail()).toBeNull()
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+  })
+
+  test('the moved visual takes focus in an open panel even when it is not the newest', async () => {
+    const records = [rec('v1', 'Auth flow', { placement: 'inline' }), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records })
+    records[0] = rec('v1', 'Auth flow')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(panelCards().map((card) => [card.getAttribute('aria-label'), card.getAttribute('data-focused')])).toEqual([['Auth flow', 'true'], ['Costs', null]])
+  })
+
+  test('moving a visual out of the panel, or a move in another chat, leaves a collapsed panel alone', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records })
+    await click(byLabel('Collapse visual panel'))
+    records[1] = rec('v2', 'Costs', { placement: 'inline' })
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v2', version: 1, kind: 'move', placement: 'inline' } })
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'other', viewId: 'v9', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(rail()).not.toBeNull()
+  })
+
   test('the width ratio loads from the saved preference', async () => {
     await mountPanel({ width: 1800, handlers: { 'quirky.session/uiPref': () => ({ value: 0.6 }) } })
     expect(fake.callsTo('quirky.session/uiPref')[0]!.params).toEqual({ key: 'chat.visual-panel.width-ratio' })

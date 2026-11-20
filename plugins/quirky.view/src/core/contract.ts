@@ -70,8 +70,8 @@ export type StoredViewRecord = ViewRecord & { version: number; latestVersion: nu
 
 export type ViewChangeKind = 'open' | 'update' | 'patch' | 'close' | 'move' | 'refused' | 'render-failed'
 
-/** The `quirky.view/changed` event; `version` is the view's latest version after the change. */
-export type ViewChangedEvent = { sessionId: string; viewId: string; version: number; kind: ViewChangeKind }
+/** The `quirky.view/changed` event; `version` and `placement` are the view's after the change. */
+export type ViewChangedEvent = { sessionId: string; viewId: string; version: number; kind: ViewChangeKind; placement: ViewPlacement }
 
 /** An RFC 6902 operation, limited to add, replace and remove. Paths are JSON Pointers into the spec. */
 export type PatchOp = { op: 'add' | 'replace' | 'remove'; path: string; value?: unknown }

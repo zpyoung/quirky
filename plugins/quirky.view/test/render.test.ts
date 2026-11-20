@@ -637,6 +637,29 @@ describe('moving a view', () => {
     expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
   })
 
+  test('Move to pane turns the inline card into the Move inline record, and Move inline brings the content back', async () => {
+    const records = [record(markdownSpec('MOVABLE CONTENT'))]
+    const fake = start(records, {
+      'quirky.view/move': (params) => (records[0] = { ...records[0]!, placement: params.placement as 'inline' | 'pane', movedByUser: true })
+    })
+    const moved = (placement: string) => fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1', version: 1, kind: 'move', placement } })
+    const { element, click } = await mountCard(fake)
+
+    await click(buttonLabelled(element, 'Move to pane'))
+    await moved('pane')
+    expect(text(element)).toContain('Notes is in the Views pane')
+    expect(text(element)).not.toContain('MOVABLE CONTENT')
+
+    await click(buttonLabelled(element, 'Move inline'))
+    await moved('inline')
+    expect(text(element)).toContain('MOVABLE CONTENT')
+    expect(buttonLabelled(element, 'Move to pane')).toBeDefined()
+    expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([
+      { viewId: 'view_1', placement: 'pane' },
+      { viewId: 'view_1', placement: 'inline' }
+    ])
+  })
+
   test('a card whose view is in the pane offers Move inline', async () => {
     const fake = start([record(bundleSize as ViewSpec, { placement: 'pane' })])
     const { element, click } = await mountCard(fake)
