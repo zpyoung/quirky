@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'
 import { RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
-import type { ViewMountInput, ViewNode, ViewPlacement, ViewRecord, ViewSpec, ViewSurface } from '../core/contract'
-import { changedKeys } from './changes'
+import type { ViewMountInput, ViewNode, ViewPlacement, ViewRecord, ViewSurface } from '../core/contract'
 import { errorText } from './errors'
 import { clampLabel, pointAt, usePointStyles } from './point'
 import { claimPreview, reloadPreview } from './previews'
@@ -113,8 +112,6 @@ const REFUSED_BOX: CSSProperties = { ...COLUMN, gap: 'var(--ui-space-6)', paddin
 
 const SOURCE: CSSProperties = { ...MONO, margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
 
-const CHANGED_NOTE: CSSProperties = { ...MUTED, color: 'var(--ui-working)' }
-
 /** Where each surface puts the card body: windows and the expanded view fill their space, a thumbnail shows a shrunken inert copy. */
 const BODY: Record<ViewSurface, CSSProperties> = {
   inline: COLUMN,
@@ -123,8 +120,6 @@ const BODY: Record<ViewSurface, CSSProperties> = {
   window: { ...COLUMN, flex: 1, overflow: 'auto' },
   thumbnail: { ...COLUMN, pointerEvents: 'none', transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', maxHeight: '200%', overflow: 'hidden' }
 }
-
-const NO_CHANGES: ReadonlySet<string> = new Set()
 
 type Props = {
   context: UiPluginContext
@@ -141,7 +136,6 @@ type Props = {
   drawing?: boolean
   focused?: boolean
   /** The spec of the version before this one, when this one is the newest; its differences are outlined. */
-  previous?: ViewSpec | null
   /** False once the person stepped to a version, which the chat UI keeps when it expands the card. */
   following?: boolean
   /** Shows the version stepper; the stepping itself is the mount's `showVersion` handler. */
@@ -155,7 +149,7 @@ type Props = {
  * fields send actions to the agent, and a markdown link asks before it opens. A click on a
  * pointable part of the content asks the chat to attach a reference to it.
  */
-export function ViewCard({ context, instance, record, link, agent, framed = true, inPane = false, surface = 'inline', drawing = false, focused = false, previous = null, following = true, stepper = false, renderFailed: reportRenderFailed }: Props) {
+export function ViewCard({ context, instance, record, link, agent, framed = true, inPane = false, surface = 'inline', drawing = false, focused = false, following = true, stepper = false, renderFailed: reportRenderFailed }: Props) {
   const { viewId } = record
   const { shown, latest } = versionsOf(record)
   const refused = record.refused ?? null
@@ -172,7 +166,6 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
     setSelected(null)
   }, [viewId, shown])
 
-  const changed = useMemo(() => (previous === null ? NO_CHANGES : changedKeys(previous.root, record.spec.root)), [previous, record.spec])
 
   const control = (args: { action: string; [key: string]: unknown }): void => {
     const request = { instance: instance.id, viewId, ...args }
@@ -243,12 +236,11 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
       version: shown,
       surface,
       focused,
-      changed,
       renderFailed: thumbnail || reportRenderFailed === undefined ? () => {} : reportRenderFailed,
       point: thumbnail ? () => {} : point,
       control
     }
-  }, [context, instance, viewId, record.sessionId, shown, surface, focused, changed, thumbnail, reportRenderFailed, point])
+  }, [context, instance, viewId, record.sessionId, shown, surface, focused, thumbnail, reportRenderFailed, point])
 
   const target: ViewPlacement = record.placement === 'pane' ? 'inline' : 'pane'
   const move = async () => {
@@ -368,7 +360,6 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
         </div>
       ))}
       {content}
-      {when(changed.size > 0, () => <span data-view-changed-note style={CHANGED_NOTE}>{`changed in v${shown}`}</span>)}
       <Dialog
         open={link !== null}
         title="Open this link?"
@@ -398,7 +389,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
   const [phase, setPhase] = useState<'loading' | 'ready' | 'failed' | 'missing'>('loading')
   const [failure, setFailure] = useState<string | null>(null)
   const [link, setLink] = useState<string | null>(null)
-  const [previous, setPrevious] = useState<ViewSpec | null>(null)
   const [pinned, setPinned] = useState<number | null>(requested ?? null)
   const pinnedRef = useRef<number | null>(requested ?? null)
   const failedRef = useRef(new Set<number>())
@@ -420,7 +410,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
     try {
       let next = ((await context.call('quirky.view/get', { viewId, ...(pinnedRef.current === null ? {} : { version: pinnedRef.current }) })) as ViewRecord | null | undefined) ?? null
       if (!alive.current || request !== requestId.current) return
-      let before: ViewSpec | null = null
       if (next !== null) {
         const { shown, latest } = versionsOf(next)
         const failedHere = pinnedRef.current === null && next.refused?.attempt === 'render' && next.refused.version === shown && shown > 1
@@ -434,9 +423,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
             if (!alive.current || request !== requestId.current) return
           }
           next = good === null ? next : { ...good, version: goodVersion, latestVersion: latest, refused: next.refused }
-        } else if (shown === latest && shown > 1) {
-          before = (await readVersion(shown - 1))?.spec ?? null
-          if (!alive.current || request !== requestId.current) return
         }
       }
       const earlier = recordRef.current
@@ -444,7 +430,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
         JSON.stringify(earlier?.spec) !== JSON.stringify(next?.spec)) instance.update({ pendingLink: null })
       recordRef.current = next
       setRecord(next)
-      setPrevious(before)
       setFailure(null)
       const nextPhase = next ? 'ready' : 'missing'
       setPhase(nextPhase)
@@ -506,7 +491,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
     pinnedRef.current = requested ?? null
     setPinned(requested ?? null)
     setRecord(null)
-    setPrevious(null)
     setPhase('loading')
     setFailure(null)
     setLink(null)
@@ -557,7 +541,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
           surface={surface}
           drawing={drawing}
           focused={focused}
-          previous={previous}
           following={pinned === null}
           stepper={steppable}
           renderFailed={renderFailed}

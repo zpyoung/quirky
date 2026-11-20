@@ -12,7 +12,7 @@ import { appendTab, emptyWorkspace, makeTab } from '../src/layout/ops'
 import { sequentialIds, groupsInOrder, paneLeaves } from '../src/layout/tree'
 import { isTerminalTab } from '../src/layout/types'
 import type { FloatingState, Group, PaneLeaf, Tab, TerminalTab, Workspace } from '../src/layout/types'
-import { sessionCreates } from './fakes/quirky.session/main'
+import { sessionCreates, sessionDrafts } from './fakes/quirky.session/main'
 import { call, createSession, restartDaemon, startPluginHarness, TERMINAL_PLUGINS, type PluginSet } from './support'
 
 const WT = 'wt_main'
@@ -23,6 +23,7 @@ let events: QuirkyEvent[]
 
 beforeEach(async () => {
   sessionCreates().length = 0
+  sessionDrafts().clear()
   h = await startPluginHarness(TERMINAL_PLUGINS)
   client = await h.connect('cli')
   events = (await h.connectWithEvents('ui')).events
@@ -335,6 +336,90 @@ describe('structured sessions started outside the UI', () => {
     } finally {
       await restarted.stop()
     }
+  })
+})
+
+describe('resumeSession', () => {
+  const registerChat = (params: Record<string, unknown> = {}) =>
+    call<Session>(client, 'quirky.session/register', { worktree: `id:${WT}`, agent: 'claude', kind: 'structured', title: 'Claude', ...params })
+  const holds = (ws: Workspace, sessionId: string) => tabsOf(ws).flatMap(panesOf).filter((pane) => pane.session === sessionId).length
+  const shown = (sessionId: string) =>
+    waitForAsync(async () => {
+      const current = await layoutOf()
+      return holds(current, sessionId) === 1 ? current : null
+    })
+  /** Starts a shell elsewhere and waits for its tab, so every reconciliation queued before it has run. */
+  const settle = async () => (await shown((await createSession(client, { worktree: `id:${WT}`, agent: 'shell' })).id))
+  const end = (sessionId: string) => call<Session>(client, 'quirky.session/setStatus', { session: sessionId, status: 'exited' })
+
+  test('an ended chat resumes in its own pane, keeping the tab, its metadata and focus, and never gets a second tab', async () => {
+    await api('workspace', { workspace: WT, ensure: true })
+    const chat = await registerChat()
+    let ws = await shown(chat.id)
+    const tab = tabNamed(ws, 'Claude')
+    const pane = panesOf(tab)[0]!
+    await api('renameTab', { tab: tab.id, title: 'My chat' })
+    await api('setTabColor', { tab: tab.id, color: 'blue' })
+    await api('pinTab', { tab: tab.id, pinned: true })
+    ws = (await api('activateTab', { tab: tabsOf(ws)[0]!.id })).workspace
+    await end(chat.id)
+    const draft = { text: 'carry me', images: [], pastes: [], picks: {} }
+
+    const result = await api('resumeSession', { session: chat.id, draft })
+    expect(result.session.resumedFrom).toBe(chat.id)
+    expect(result.pane).toBe(pane.id)
+    ws = result.workspace as Workspace
+    const after = tabsOf(ws).find((candidate) => candidate.id === tab.id)!
+    expect(panesOf(after).map((leaf) => [leaf.id, leaf.session])).toEqual([[pane.id, result.session.id]])
+    expect(after).toMatchObject({ customTitle: 'My chat', color: 'blue', pinned: true })
+    expect(groupsOf(ws)[0]!.activeTab).toBe(tab.id)
+    expect(sessionDrafts().get(result.session.id)).toEqual(draft)
+    // the old record stays so the resumed chat can page back through its turns
+    expect((await sessionList()).some((s) => s.id === chat.id)).toBe(true)
+
+    const settled = await settle()
+    expect(holds(settled, result.session.id)).toBe(1)
+    expect(holds(settled, chat.id)).toBe(0)
+    expect(titles(settled)).toEqual(['My chat', 'Terminal 1', 'Terminal 2'])
+  })
+
+  test('an ended terminal agent resumes in its pane and its old session is closed', async () => {
+    const { lone, extra, tab } = await (async () => {
+      const ws = (await api('splitPane', { pane: panesOf(lastTab(await newTab()))[0]!.id, direction: 'right' })).workspace as Workspace
+      const [lone, extra] = panesOf(lastTab(ws))
+      return { lone: lone!, extra: extra!, tab: lastTab(ws) }
+    })()
+    h.pty.exit(extra.session, 3)
+    await waitForAsync(async () => panesOf(lastTab(await layoutOf()))[1]!.exit)
+    const before = tabsOf(await layoutOf()).length
+
+    const result = await api('resumeSession', { session: extra.session })
+    expect(result.pane).toBe(extra.id)
+    const leaves = panesOf(tabsOf(result.workspace).find((candidate) => candidate.id === tab.id)!)
+    expect(leaves.map((leaf) => leaf.session)).toEqual([lone.session, result.session.id])
+    expect(leaves[1]).toMatchObject({ id: extra.id, exit: null })
+    expect((await sessionList()).map((s) => s.id)).not.toContain(extra.session)
+
+    const settled = await settle()
+    expect(holds(settled, result.session.id)).toBe(1)
+    expect(tabsOf(settled).length).toBe(before + 1)
+  })
+
+  test('a session no pane shows, or one still running, resumes without touching the layout', async () => {
+    const hidden = await registerChat({ background: true })
+    await end(hidden.id)
+    const revision = (await layoutOf()).revision
+    const fromNowhere = await api('resumeSession', { session: hidden.id })
+    expect([fromNowhere.pane, fromNowhere.workspace]).toEqual([null, null])
+
+    const live = await registerChat({ title: 'Live' })
+    await shown(live.id)
+    const running = await api('resumeSession', { session: live.id })
+    expect([running.pane, running.workspace]).toEqual([null, null])
+    const settled = await settle()
+    expect(settled.revision).toBeGreaterThan(revision)
+    expect(holds(settled, live.id)).toBe(1)
+    expect(holds(settled, running.session.id)).toBe(1)
   })
 })
 

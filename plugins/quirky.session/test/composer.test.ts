@@ -9,7 +9,6 @@ import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 type Props = {
   capabilities?: AgentCapabilities | null
   working?: boolean
-  workStartedAt?: number | null
   agent?: string
   status?: 'starting' | 'running' | 'exited'
   settings?: Record<string, unknown>
@@ -127,7 +126,6 @@ const render = (props: Props) =>
         session: chat,
         capabilities,
         working: props.working ?? false,
-        workStartedAt: props.workStartedAt,
         reportedMode: props.reportedMode,
         autoAvailable: props.autoAvailable,
         previousMode: props.previousMode,
@@ -324,11 +322,11 @@ describe('sending (SC-1, SC-3)', () => {
 })
 
 describe('screens: working (SC-11, SC-12)', () => {
-  test('running: accent border, queue placeholder, pulsing dot with elapsed time and a round Stop that interrupts only', async () => {
+  test('running: accent border, queue placeholder, no elapsed timer and a round Stop that interrupts only', async () => {
     await mount({}, { working: true })
     expect(placeholder()).toBe('Queue a follow-up… (Enter queues · Cmd+Enter steers)')
-    expect(host!.querySelector('[role="timer"]')!.textContent).toMatch(/^Working \d+s$/)
-    expect(host!.querySelector('.ui-status-dot--working')).not.toBeNull()
+    expect(host!.querySelector('[role="timer"]')).toBeNull()
+    expect(host!.textContent).not.toContain('Working')
     const card = host!.querySelector<HTMLElement>('.cm-editor')!.closest<HTMLElement>('[style*="border"]')!
     expect(card.getAttribute('style')).toContain('var(--ui-accent)')
     const stop = buttonNamed('Stop')!
@@ -339,9 +337,21 @@ describe('screens: working (SC-11, SC-12)', () => {
     expect(fake.callsTo('quirky.structured/stop')).toEqual([])
   })
 
-  test('the elapsed time counts from the start the header passes', async () => {
-    await mount({}, { working: true, workStartedAt: Date.now() - 72_000 })
-    expect(host!.querySelector('[role="timer"]')!.textContent).toBe('Working 1m 12s')
+  test('Stop and Send sit in their own non-wrapping cluster after a wrapping chip group', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { working: true, capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES }, reportedMode: 'bypassPermissions' })
+    await typeText('x')
+    const toolbar = host!.querySelector<HTMLElement>('[data-composer-toolbar]')!
+    const actions = host!.querySelector<HTMLElement>('[data-composer-actions]')!
+    expect(toolbar.style.flexWrap).toBe('nowrap')
+    expect(toolbar.lastElementChild).toBe(actions)
+    expect(actions.style.flex).toBe('0 0 auto')
+    expect([...actions.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Stop', 'Send'])
+    const chips = toolbar.firstElementChild as HTMLElement
+    expect(chips).not.toBe(actions)
+    expect(chips.style.flexWrap).toBe('wrap')
+    expect(chips.style.minWidth).toBe('0')
+    expect(chips.textContent).toContain('Bypass permissions')
+    expect(buttonNamed('Attach images', chips)).toBeDefined()
   })
 
   test('Esc in the editor stops the turn, and a Send arrow joins Stop once text is typed', async () => {
@@ -1276,14 +1286,34 @@ describe('screens: ended (SC-17)', () => {
     expect(fake.callsTo('quirky.structured/dequeue')[0]!.params).toEqual({ session: 's1', id: 'q1' })
   })
 
-  test('Resume calls resume and opens the returned session; New chat starts a chat with the same agent', async () => {
+  test('Resume swaps the resumed session into the same tab, carrying the draft, and opens nothing new', async () => {
+    const draft = { ...EMPTY_DRAFT, text: 'half written' }
     await mount(
-      { 'quirky.structured/resume': () => session({ id: 'back', kind: 'structured', agent: 'claude' }), 'quirky.structured/create': () => session({ id: 'fresh', kind: 'structured', agent: 'claude' }) },
+      {
+        'quirky.session/draft': () => draft,
+        'quirky.terminal/resumeSession': () => ({ session: session({ id: 'back', kind: 'structured', agent: 'claude' }), pane: 'pane-1', workspace: {} })
+      },
+      { status: 'exited' }
+    )
+    const opened = fake.opened.length
+    await click(buttonNamed('Resume'))
+    await settle()
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 's1', draft })
+    expect(fake.callsTo('quirky.structured/resume')).toEqual([])
+    expect(fake.opened.length).toBe(opened)
+  })
+
+  test('Resume of a chat no tab shows opens the returned session; New chat starts a chat with the same agent', async () => {
+    await mount(
+      {
+        'quirky.terminal/resumeSession': () => ({ session: session({ id: 'back', kind: 'structured', agent: 'claude' }), pane: null, workspace: null }),
+        'quirky.structured/create': () => session({ id: 'fresh', kind: 'structured', agent: 'claude' })
+      },
       { status: 'exited' }
     )
     await click(buttonNamed('Resume'))
     await settle()
-    expect(fake.callsTo('quirky.structured/resume')[0]!.params).toEqual({ session: 's1' })
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 's1' })
     expect(fake.opened.at(-1)!.input).toEqual({ worktree: 'wt-main', session: 'back' })
     await click(buttonNamed('New chat'))
     await settle()

@@ -1581,6 +1581,47 @@
         }
       },
       {
+        "id": "resumeSession",
+        "description": "Resumes an ended agent session; when a pane shows it, the resumed session replaces it in that pane, which gets focus. Otherwise the layout is left to reconciliation.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session to resume."
+            },
+            "draft": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "A composer draft to save on the resumed session before its pane switches."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "object",
+              "description": "The resumed session."
+            },
+            "pane": {
+              "description": "The pane now showing the resumed session, or null when no pane showed the old one."
+            },
+            "workspace": {
+              "description": "The whole workspace after the change, or null when the layout did not change."
+            }
+          },
+          "required": [
+            "session",
+            "pane",
+            "workspace"
+          ]
+        }
+      },
+      {
         "id": "restartPane",
         "description": "Replaces the ended session of a pane with a fresh shell in the same directory.",
         "params": {

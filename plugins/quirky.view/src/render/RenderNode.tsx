@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import type { CatalogType, ViewNode } from '../core/contract'
-import { nodeKey } from './changes'
 import { Callout, Code, DataTable, FileDiff, KeyValue, Stat, StatusList, Steps } from './data'
 import { BarChart, LineChart } from './charts'
 import { Field, ViewButton } from './controls'
@@ -12,13 +11,10 @@ import { LivePreview } from './LivePreview'
 import { Markdown } from './Markdown'
 import { clampLabel, pointKey } from './point'
 import { asString, type Props } from './props'
-import { useRuntime } from './runtime'
 import { AnnotatedCode, Board, FileMap, Matrix, Plot, Sketch, Timeline } from './visuals'
 
 /** Nodes that are layout or controls: a click on them is not a request to talk about the node. */
 const NOT_POINTABLE: readonly CatalogType[] = ['stack', 'columns', 'button', 'field']
-
-const CHANGED_OUTLINE = { outlineWidth: 'var(--ui-focus-width)', outlineStyle: 'solid', outlineColor: 'var(--ui-working)', outlineOffset: 'var(--ui-space-2)', borderRadius: 'var(--ui-radius-control)' } as const
 
 /** What a node is called when it is pointed at: its title or label prop, else its kind. */
 function labelOf(node: ViewNode, props: Props): string {
@@ -89,14 +85,12 @@ function drawNode(node: ViewNode, props: Props, children: ReactNode[], path: str
 
 /**
  * Draws one catalog node and its children as React elements; a node of an unknown type draws nothing.
- * A node the agent gave an id can be pointed at, and a node that differs from the previous version is outlined.
+ * A node the agent gave an id can be pointed at.
  */
 export function RenderNode({ node, path = '0' }: { node: ViewNode; path?: string }) {
-  const { changed } = useRuntime()
   const props = node.props ?? {}
   const children = (node.children ?? []).map((child, index) => <RenderNode key={index} node={child} path={`${path}.${index}`} />)
   const body = drawNode(node, props, children, path)
   const pointable = node.id !== undefined && !NOT_POINTABLE.includes(node.type)
-  const pointed = pointable ? <div data-point-key={pointKey('node', node.id!)} data-point-label={labelOf(node, props)}>{body}</div> : body
-  return changed.has(nodeKey(node, path)) ? <div data-view-changed style={CHANGED_OUTLINE}>{pointed}</div> : pointed
+  return pointable ? <div data-point-key={pointKey('node', node.id!)} data-point-label={labelOf(node, props)}>{body}</div> : body
 }
