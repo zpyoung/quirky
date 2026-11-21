@@ -16,12 +16,13 @@ async function until(check: () => boolean) {
 
 let messages: StructuredMessage[]
 let statuses: SessionStatus[]
-let asks: { spec: AskSpec; sessionId: string; silent: boolean; askId: string; resolve: (envelope: AskEnvelope) => void }[]
+let asks: { spec: AskSpec; sessionId: string; silent: boolean; from?: string; askId: string; resolve: (envelope: AskEnvelope) => void }[]
 let cancelled: string[]
 let plansDir: string
 let queries: FakeQuery[]
 let providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[]
 let runner: StructuredRunner
+let summariesSetting: 'ai' | 'latest-tool' | undefined
 let session: Session
 
 function makeContext(): StructuredContext {
@@ -46,7 +47,7 @@ function makeContext(): StructuredContext {
     createAsk(spec, sessionId, options) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
       const askId = `ask_${asks.length + 1}`
-      asks.push({ spec, sessionId, silent: options?.silent === true, askId, resolve })
+      asks.push({ spec, sessionId, silent: options?.silent === true, ...(options?.from === undefined ? {} : { from: options.from }), askId, resolve })
       options?.onAsk?.(askId)
       return promise
     },
@@ -57,6 +58,7 @@ function makeContext(): StructuredContext {
         transcriptPath: providerSession.transcriptPath
       })
     },
+    ...(summariesSetting === undefined ? {} : { agentSummaries: () => summariesSetting ?? 'ai' }),
     resolveClaudePath: async () => '/usr/local/bin/claude',
     resolveCodexPath: async () => '/not-used/codex',
     resolvePiPath: async () => '/not-used/pi'
@@ -85,6 +87,7 @@ const assistantText = (text: string) => ({
 })
 
 beforeEach(() => {
+  summariesSetting = undefined
   messages = []
   statuses = []
   asks = []
@@ -1637,5 +1640,164 @@ describe('commands', () => {
     await until(() => commandQueries[0]!.written.length === 2)
     expect(commandQueries[0]!.written.map((message) => message.message.content)).toEqual(['/graphify one', 'two'])
     await withCommands.stop(session.id)
+  })
+})
+
+describe('subagents', () => {
+  const emit = async (query: FakeQuery, ...events: any[]) => {
+    for (const event of events) query.emit(event)
+    await tick()
+  }
+  const items = () => messages.map((m) => m.item) as any[]
+  const agentItems = (id?: string) => items().filter((item) => item.kind === 'agent' && (id === undefined || item.id === id))
+  const spawn = (id: string, parent: string | null = null, input: Record<string, unknown> = { subagent_type: 'Explore', description: 'look' }) => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Agent', input }] },
+    parent_tool_use_id: parent
+  })
+  const started = (taskId: string, spawnId: string, extra: Record<string, unknown> = {}) => ({
+    type: 'system',
+    subtype: 'task_started',
+    task_id: taskId,
+    tool_use_id: spawnId,
+    task_type: 'local_agent',
+    description: 'd',
+    ...extra
+  })
+  const canUseAs = (query: FakeQuery, agentID: string | undefined) =>
+    (query.params.options!.canUseTool as any)('Bash', { command: 'ls' }, { signal: new AbortController().signal, toolUseID: 'tu', ...(agentID === undefined ? {} : { agentID }) })
+
+  test('forwards subagent text and asks for AI progress summaries by default', async () => {
+    const query = await begin()
+    expect(query.params.options).toMatchObject({ forwardSubagentText: true, agentProgressSummaries: true })
+  })
+
+  test('the latest-tool setting turns progress summaries off and journals none', async () => {
+    summariesSetting = 'latest-tool'
+    runner = createClaudeRunner(makeContext(), { plansDir, query: (params) => (queries.push(new FakeQuery(params)), queries.at(-1)!) })
+    const query = await begin()
+    expect(query.params.options).toMatchObject({ forwardSubagentText: true, agentProgressSummaries: false })
+    await emit(query, spawn('a1'), started('t1', 'a1'), { type: 'system', subtype: 'task_progress', task_id: 't1', usage: { total_tokens: 7 }, summary: 'AI line' })
+    expect(agentItems('a1').at(-1)).toMatchObject({ tokens: 7 })
+    expect(agentItems('a1').some((item) => item.summary !== undefined)).toBe(false)
+  })
+
+  test('a deny-all session gets neither subagent option', async () => {
+    await runner.start(session, 'hello', { toolPolicy: 'deny-all' })
+    expect(queries[0].params.options).not.toHaveProperty('forwardSubagentText')
+    expect(queries[0].params.options).not.toHaveProperty('agentProgressSummaries')
+  })
+
+  test('streams each agent under its own key so a subagent never resets the main prose', async () => {
+    const query = await begin()
+    const delta = (text: string, parent: string | null) => ({ type: 'stream_event', parent_tool_use_id: parent, event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } })
+    await emit(query, spawn('a1'), delta('main ', null), delta('sub ', 'a1'))
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await emit(query, delta('more', null), delta('more', 'a1'))
+    const streamed = items().filter((item) => item.kind === 'prose' && item.streaming)
+    expect(streamed.map((item) => [item.text, item.agent])).toEqual([['main more', undefined], ['sub more', 'a1']])
+    await emit(query, { ...assistantText('sub final'), parent_tool_use_id: 'a1' }, delta('next ', null))
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    await emit(query, delta('x', null))
+    expect(items().filter((item) => item.kind === 'prose' && item.streaming).at(-1)).toMatchObject({ text: 'main more' + 'next x' })
+  })
+
+  test('subagent messages never settle or end the parent turn, and a background agent survives the parent result', async () => {
+    const query = await begin()
+    await emit(
+      query,
+      spawn('a1'),
+      started('t1', 'a1', { is_backgrounded: true }),
+      { type: 'assistant', parent_tool_use_id: 'a1', message: { content: [{ type: 'tool_use', id: 'r1', name: 'Bash', input: { command: 'sleep 9' } }] } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'm1', name: 'Bash', input: { command: 'ls' } }] } },
+      { type: 'result', subtype: 'success', result: 'ok' }
+    )
+    const calls = items().filter((item) => item.kind === 'activity')
+    expect(calls.filter((item) => item.callId === 'r1').map((item) => item.state)).toEqual(['running'])
+    expect(calls.filter((item) => item.callId === 'm1').map((item) => item.state)).toEqual(['running', 'done'])
+    expect(agentItems('a1').at(-1).state).toBe('working')
+    expect(statuses.at(-1)).toBe('done')
+  })
+
+  test('task events stop producing status lines for agents but local_bash keeps its line', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'), { type: 'system', subtype: 'task_started', task_id: 'b1', task_type: 'local_bash' })
+    const statusTexts = items().filter((item) => item.kind === 'status').map((item) => item.text)
+    expect(statusTexts.filter((text) => text.startsWith('system: task_'))).toEqual(['system: task_started'])
+  })
+
+  test('stopAgent stops the agent and its live descendants deepest first, journals them stopped, and keeps the turn open', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'), spawn('a2', 'a1'), started('t2', 'a2'), spawn('a3', 'a2'), started('t3', 'a3'), spawn('b1'), started('tb', 'b1'))
+    await runner.stopAgent!('s_1', 'a1')
+    expect(query.stoppedTasks).toEqual(['t3', 't2', 't1'])
+    expect(agentItems().slice(-3).map((item) => [item.id, item.state])).toEqual([['a3', 'stopped'], ['a2', 'stopped'], ['a1', 'stopped']])
+    expect(agentItems('b1').at(-1).state).toBe('working')
+    expect(items().some((item) => item.kind === 'turn-end')).toBe(false)
+    const before = messages.length
+    await runner.stopAgent!('s_1', 'a1')
+    await runner.stopAgent!('s_1', 'nobody')
+    expect(messages.length).toBe(before)
+    expect(query.stoppedTasks).toHaveLength(3)
+  })
+
+  test('interrupt stops every live agent, background ones included, before ending the turn', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1', { is_backgrounded: true }), spawn('b1'), started('tb', 'b1'))
+    await runner.interrupt('s_1')
+    expect(query.stoppedTasks.sort()).toEqual(['t1', 'tb'])
+    const kinds = items().map((item) => item.kind + (item.state ? `:${item.state}` : ''))
+    expect(kinds.lastIndexOf('agent:stopped')).toBeLessThan(kinds.indexOf('turn-end:stopped'))
+    expect(query.interrupted).toBe(1)
+  })
+
+  test('run end journals live agents as stopped and cut off', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'), { type: 'assistant', parent_tool_use_id: 'a1', message: { content: [{ type: 'tool_use', id: 'r1', name: 'Bash', input: { command: 'x' } }] } })
+    query.end()
+    await until(() => statuses.at(-1) === 'exited')
+    expect(agentItems('a1').at(-1)).toMatchObject({ state: 'stopped', cutOff: true })
+    expect(items().filter((item) => item.callId === 'r1').at(-1)).toMatchObject({ state: 'failed', agent: 'a1' })
+  })
+
+  test('stop journals live agents as cut off', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'))
+    await runner.stop('s_1')
+    expect(agentItems('a1').at(-1)).toMatchObject({ state: 'stopped', cutOff: true })
+  })
+
+  test('canUseTool from a subagent labels the ask and flips needs-you then back to working', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'))
+    const pending = canUseAs(query, 't1')
+    await until(() => asks.length === 1)
+    expect(asks[0].from).toBe('a1')
+    expect(asks[0].spec.title).toBe('Explore asks')
+    expect(agentItems('a1').at(-1).state).toBe('needs-you')
+    asks[0].resolve(envelope('answered', 'allow'))
+    await pending
+    expect(agentItems('a1').at(-1).state).toBe('working')
+  })
+
+  test('canUseTool maps the AgentOutput agentId too, and a main-agent ask stays unlabeled', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'), {
+      type: 'user',
+      parent_tool_use_id: null,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'a1', content: 'launched' }] },
+      tool_use_result: { status: 'async_launched', agentId: 'ag9', description: 'd' }
+    })
+    const viaAgentId = canUseAs(query, 'ag9')
+    await until(() => asks.length === 1)
+    expect(asks[0].from).toBe('a1')
+    asks[0].resolve(envelope('answered', 'allow'))
+    await viaAgentId
+    const main = canUseAs(query, undefined)
+    await until(() => asks.length === 2)
+    expect(asks[1].from).toBeUndefined()
+    expect(asks[1].spec.title).toBeUndefined()
+    asks[1].resolve(envelope('answered', 'allow'))
+    await main
   })
 })

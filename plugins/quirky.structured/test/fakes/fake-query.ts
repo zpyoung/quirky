@@ -8,6 +8,8 @@ export class FakeQuery implements ClaudeQuery {
   /** Makes `interrupt` never settle, like an agent that ignores it. */
   hangInterrupt = false
   closed = 0
+  /** The task ids `stopTask` was asked to stop, in call order. */
+  stoppedTasks: string[] = []
   permissionModes: string[] = []
   models: (string | undefined)[] = []
   flagSettings: Record<string, unknown>[] = []
@@ -43,6 +45,10 @@ export class FakeQuery implements ClaudeQuery {
     this.failure = error
     this.waiting?.reject(error)
     this.waiting = null
+  }
+
+  async stopTask(taskId: string) {
+    this.stoppedTasks.push(taskId)
   }
 
   async interrupt() {

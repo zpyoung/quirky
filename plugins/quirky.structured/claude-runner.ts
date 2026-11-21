@@ -3,10 +3,11 @@ import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { extname, join } from 'node:path'
-import type { AgentCommand, AskEnvelope, PermissionModeName, PlanItem, Session, SessionProviderSession, UsageTotals } from '@quirky/protocol'
+import type { AgentCommand, AgentKey, AskEnvelope, PermissionModeName, PlanItem, Session, SessionProviderSession, UsageTotals } from '@quirky/protocol'
 import type { StructuredContext, StructuredForkSource, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner, TurnUsage } from './runner'
 import {
   CallTracker,
+  ClaudeAgents,
   ProseStream,
   claudeEntries,
   claudeResultTotals,
@@ -19,6 +20,7 @@ import {
   userItem,
   type ItemEntry
 } from './items'
+import { AgentRegistry } from './agents'
 import { MAX_IMAGE_BYTES } from './queue'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 import { planDecision, planSpec, planText } from './plan'
@@ -26,6 +28,9 @@ import { hoistCommand } from './slash-commands'
 
 const TOOLS_DISABLED = 'tools are disabled for this session'
 const denyEveryTool: CanUseTool = async () => ({ behavior: 'deny', message: TOOLS_DISABLED })
+
+/** The key a Claude message's prose streams under: its subagent's spawn id, or '' for the main agent. */
+const agentKeyOf = (msg: any): string => (typeof msg?.parent_tool_use_id === 'string' ? msg.parent_tool_use_id : '')
 
 function nonNegativeCount(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
@@ -63,6 +68,7 @@ export type ClaudeQuery = AsyncIterable<any> & {
   close(): void
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
+  stopTask(taskId: string): Promise<void>
   applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
   initializationResult?(): Promise<{ models?: { value: string; supportsAutoMode?: boolean }[] }>
   supportedModels?(): Promise<ModelInfo[]>
@@ -213,6 +219,7 @@ type Running = {
   /** An interrupt was issued and its non-success result has not been swallowed yet. */
   interrupted: boolean
   calls: CallTracker
+  agents: ClaudeAgents
   stream: ProseStream
   turnStartedAt: number | null
   /** Prompts sent whose result has not arrived yet; a result closes one turn, not all of them. */
@@ -388,6 +395,7 @@ class ClaudeRunner implements StructuredRunner {
     }
     this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
     const denyAll = launchOptions.toolPolicy === 'deny-all'
+    const summaries = this.context.agentSummaries?.() ?? 'ai'
     const mode = !denyAll && isModeName(launchOptions.permissionMode) ? launchOptions.permissionMode : 'default'
     const run: Running = {
       denyAll,
@@ -398,6 +406,7 @@ class ClaudeRunner implements StructuredRunner {
       ended: false,
       interrupted: false,
       calls: new CallTracker(),
+      agents: new ClaudeAgents(new AgentRegistry(), summaries),
       stream: new ProseStream(),
       turnStartedAt: hasPrompt ? Date.now() : null,
       openTurns: hasPrompt ? 1 : 0,
@@ -441,7 +450,7 @@ class ClaudeRunner implements StructuredRunner {
             ? { systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: launchOptions.appendInstructions } }
             : {}),
           canUseTool: denyAll ? denyEveryTool : this.canUseTool(session.id),
-          ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : {}),
+          ...(denyAll ? { tools: [], mcpServers: {}, strictMcpConfig: true } : { forwardSubagentText: true, agentProgressSummaries: summaries === 'ai' }),
           env: environmentOf({ ...launchOptions.env, CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1' }),
           ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
           ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort as Options['effort'] } : {})
@@ -589,7 +598,9 @@ class ClaudeRunner implements StructuredRunner {
 
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
-    if (!run || run.stopped || run.ended || run.turnStartedAt === null) return
+    if (!run || run.stopped || run.ended) return
+    for (const agent of run.agents.registry.live()) await this.stopAgent(sessionId, agent)
+    if (run.turnStartedAt === null) return
     run.planCancels++
     this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
@@ -607,6 +618,31 @@ class ClaudeRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'done')
   }
 
+  /**
+   * Stops one subagent and every live descendant, deepest first, journaling each as stopped. Never ends
+   * the turn; an unknown or finished agent is left alone.
+   */
+  async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended) return
+    const { registry } = run.agents
+    if (!registry.isLive(agent)) return
+    for (const id of [...registry.descendants(agent), agent]) {
+      const nativeId = registry.get(id)?.nativeId
+      if (nativeId !== undefined) await run.query.stopTask(nativeId).catch(() => {})
+      const entry = registry.end(id, 'stopped')
+      if (entry) this.append(sessionId, entry)
+    }
+  }
+
+  /** Journals every agent still live when its run ends as stopped and cut off. */
+  private cutOffAgents(sessionId: string, run: Running): void {
+    const cut = run.agents.registry.cutOff()
+    if (cut.length === 0) return
+    for (const entry of closingEntries(run.calls, 'stopped')) this.append(sessionId, entry)
+    for (const entry of cut) this.append(sessionId, entry)
+  }
+
   async stop(sessionId: string): Promise<void> {
     const startup = this.starting.get(sessionId)
     if (startup) startup.stopped = true
@@ -617,6 +653,7 @@ class ClaudeRunner implements StructuredRunner {
     this.running.delete(sessionId)
     this.settlePlan(run, { kind: 'stopped' })
     this.closeTurn(sessionId, run, 'stopped')
+    this.cutOffAgents(sessionId, run)
     run.input.end()
     await Promise.race([
       run.query.interrupt().catch(() => {}),
@@ -628,7 +665,7 @@ class ClaudeRunner implements StructuredRunner {
 
   private canUseTool(sessionId: string): CanUseTool {
     let pending = 0
-    return async (toolName, input) => {
+    return async (toolName, input, options) => {
       const run = this.running.get(sessionId)
       if (toolName === 'EnterPlanMode' && run) {
         this.recordMode(sessionId, run, 'plan')
@@ -636,7 +673,15 @@ class ClaudeRunner implements StructuredRunner {
       }
       pending++
       this.context.setStatus(sessionId, 'waiting')
+      const owner = run?.agents.ownerOf(options?.agentID)
+      const labels = run !== undefined && owner !== undefined ? run.agents.registry.askOptions(owner) : undefined
+      const asking = (on: boolean): void => {
+        const entry = owner === undefined ? null : run?.agents.registry.setAsking(owner, on)
+        if (entry) this.append(sessionId, entry)
+      }
+      asking(true)
       const settle = (): void => {
+        asking(false)
         pending--
         if (pending === 0 && this.running.get(sessionId)?.turnStartedAt != null) this.context.setStatus(sessionId, 'working')
       }
@@ -652,17 +697,15 @@ class ClaudeRunner implements StructuredRunner {
         if (toolName === 'AskUserQuestion') {
           const plan = nativeQuestionPlan(input, 'claude')
           try {
-            envelope = await this.context.createAsk(plan.spec, sessionId, { nativeQuestion: true })
+            envelope = await this.context.createAsk(labels ? { ...plan.spec, title: labels.title } : plan.spec, sessionId, { nativeQuestion: true, ...(labels ? { from: labels.from } : {}) })
           } catch {
             // Question-only unavailability is returned as explicit non-answer text, never permission.
           }
           const answers = Object.fromEntries(Object.entries(nativeQuestionAnswers(plan, envelope)).map(([question, values]) => [question, values.join(', ')]))
           return { behavior: 'allow', updatedInput: { ...input, answers } }
         }
-        envelope = await this.context.createAsk(
-          approvalSpec(`Allow ${toolName}? ${summarizeInput(input)}`.trim()),
-          sessionId
-        )
+        const spec = approvalSpec(`Allow ${toolName}? ${summarizeInput(input)}`.trim())
+        envelope = await this.context.createAsk(labels ? { ...spec, title: labels.title } : spec, sessionId, labels ? { from: labels.from } : undefined)
       } catch {
         envelope = null
       } finally {
@@ -910,6 +953,7 @@ class ClaudeRunner implements StructuredRunner {
     this.running.delete(sessionId)
     const wasWorking = run.turnStartedAt !== null
     this.closeTurn(sessionId, run, 'failed')
+    this.cutOffAgents(sessionId, run)
     if (failure) {
       this.context.appendMessage({
         sessionId,
@@ -1014,8 +1058,13 @@ class ClaudeRunner implements StructuredRunner {
     if (msg?.type === 'system' && msg.subtype === 'session_state_changed') return
     const delta = claudeTextDelta(msg)
     if (delta !== null) {
-      const item = run?.stream.push('assistant', delta, Date.now())
-      if (item && item.kind === 'prose') this.context.appendMessage({ sessionId, role: 'system', text: item.text, data: { streaming: true }, item })
+      const resolved = run?.agents.registry.resolve(msg.parent_tool_use_id)
+      for (const entry of resolved?.entries ?? []) this.append(sessionId, entry)
+      const item = run?.stream.push(agentKeyOf(msg), delta, Date.now())
+      if (item && item.kind === 'prose') {
+        const tagged = resolved?.agent === undefined ? item : { ...item, agent: resolved.agent }
+        this.context.appendMessage({ sessionId, role: 'system', text: tagged.text, data: { streaming: true }, item: tagged })
+      }
       return
     }
     if (msg?.type === 'system' && msg.subtype === 'init') {
@@ -1066,15 +1115,15 @@ class ClaudeRunner implements StructuredRunner {
       if (msg.subtype !== 'success') return
     }
     if (msg?.type === 'user' && run?.interrupted) return
-    if (msg?.type === 'assistant') run?.stream.reset()
+    if (msg?.type === 'assistant') run?.stream.reset(agentKeyOf(msg))
     const failed = msg?.type === 'result' && (msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error')))
     if (msg?.type === 'result' && run) {
-      for (const entry of closingEntries(run.calls, failed ? 'failed' : 'done')) this.append(sessionId, entry)
+      for (const entry of closingEntries(run.calls, failed ? 'failed' : 'done', (agent) => agent !== undefined && run.agents.registry.isLive(agent))) this.append(sessionId, entry)
       run.openTurns = Math.max(0, run.openTurns - 1)
       run.turnStartedAt = run.openTurns > 0 ? Date.now() : null
     }
     const usage = msg?.type === 'result' ? resultUsage(msg) : null
-    for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) {
+    for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker(), run?.agents)) {
       this.append(sessionId, usage !== null && entry.role === 'result' ? { ...entry, data: { ...(entry.data as object), contextUsage: usage } } : entry)
     }
     if (run && msg?.type === 'system' && (msg.subtype === 'init' || msg.subtype === 'status')) {
@@ -1087,6 +1136,7 @@ class ClaudeRunner implements StructuredRunner {
         run.input.end()
         run.query.close()
         this.running.delete(sessionId)
+        this.cutOffAgents(sessionId, run)
       }
       this.context.setStatus(sessionId, 'exited')
     } else {
