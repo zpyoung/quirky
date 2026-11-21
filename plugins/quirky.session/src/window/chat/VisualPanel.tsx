@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
-import type { Session, UiPluginContext, VisualLevel } from '@quirky/protocol'
+import type { AgentCapabilities, AgentKey, Session, UiPluginContext, VisualLevel } from '@quirky/protocol'
 import { Badge, ControlIcon, EmptyState, IconButton } from '@quirky/ui'
+import { AgentsCard } from './AgentsCard'
+import { listedAgents, type AgentView } from './agents'
 import { visualLevelLabel } from './controls'
 import { Embedded } from './Embedded'
 import { PlanPanel } from './PlanPanel'
@@ -44,6 +46,10 @@ const GAP_UNITS = 12
 const DRAWING_KINDS = new Set(['open', 'update', 'patch'])
 
 const PLAN = 'plan'
+const AGENTS = 'agents'
+
+/** What the panel needs to show the Agents card: the chat's agents, the one to select, and a counter that bumps on each request to focus the card. */
+export type AgentsFocus = { views: Map<AgentKey, AgentView>; selected: AgentKey | null; nonce: number }
 
 const readRecords = (loaded: unknown): VisualRecord[] =>
   (Array.isArray(loaded) ? (loaded as Partial<VisualRecord>[]) : []).flatMap((record) =>
@@ -204,6 +210,7 @@ const card = (focused: boolean): CSSProperties => ({
   border: `var(--ui-border-width) solid ${focused ? 'var(--ui-accent)' : 'var(--ui-border)'}`,
   borderRadius: 'var(--ui-radius-window)'
 })
+const agentsBody = { padding: 'var(--ui-space-8)' } satisfies CSSProperties
 const empty = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--ui-space-8)', padding: 'var(--ui-space-16)' } satisfies CSSProperties
 const level = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 
@@ -225,7 +232,8 @@ function cardInput(viewId: string, surface: 'panel' | 'thumbnail', options: { ve
  * `drawing` while the session works on it, and the panel starts collapsed in a narrow chat. Collapsed it
  * is a rail counting what was drawn since. Dragging the divider sets the width, which is remembered
  * across chats through `quirky.session/setUiPref`. `focus` asks the panel to show one visual at one
- * version, as when a message chip is clicked.
+ * version, as when a message chip is clicked. Once the chat has an agent, `agents` adds the Agents card
+ * after the plan, and a new `agents.nonce` opens the panel on it with `agents.selected` chosen.
  */
 export function VisualPanel({
   context,
@@ -238,7 +246,10 @@ export function VisualPanel({
   bodyRef,
   bodyWidth,
   unit,
-  focus
+  focus,
+  agents = null,
+  capabilities = null,
+  now = 0
 }: {
   context: UiPluginContext
   session: Session
@@ -253,6 +264,11 @@ export function VisualPanel({
   /** One length unit in pixels. */
   unit: number
   focus: { viewId: string; version: number | null; nonce: number } | null
+  /** The chat's agents, or null until it has one. */
+  agents?: AgentsFocus | null
+  capabilities?: AgentCapabilities | null
+  /** The time agents' elapsed figures count to. */
+  now?: number
 }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO)
   const [dragging, setDragging] = useState(false)
@@ -261,6 +277,7 @@ export function VisualPanel({
   const [pinned, setPinned] = useState<Record<string, number>>({})
   const [drawing, setDrawing] = useState<ReadonlySet<string>>(new Set())
   const [fresh, setFresh] = useState(0)
+  const [agentSelected, setAgentSelected] = useState<AgentKey | null>(null)
   const ratioRef = useRef(ratio)
   const dragged = useRef(false)
   const workingRef = useRef(working)
@@ -289,6 +306,7 @@ export function VisualPanel({
     setPinned({})
     setDrawing(new Set())
     setFresh(0)
+    setAgentSelected(null)
   }, [session.id])
 
   useEffect(() => {
@@ -343,6 +361,13 @@ export function VisualPanel({
   }, [planVersion])
 
   useEffect(() => {
+    if (agents === null || agents.nonce === 0) return
+    setUserCollapsed(false)
+    setFocusedId(AGENTS)
+    setAgentSelected(agents.selected)
+  }, [agents?.nonce])
+
+  useEffect(() => {
     if (focus === null) return
     setUserCollapsed(false)
     setFocusedId(focus.viewId)
@@ -352,10 +377,13 @@ export function VisualPanel({
     })
   }, [focus?.nonce])
 
+  const agentCount = agents === null ? 0 : listedAgents(agents.views).length
+  const hasAgents = agents !== null && agentCount > 0
   const focusedKey =
     focusedId === PLAN && plan !== null ? PLAN
+    : focusedId === AGENTS && hasAgents ? AGENTS
     : focusedId !== null && visible.some((view) => view.viewId === focusedId) ? focusedId
-    : (visible.at(-1)?.viewId ?? (plan !== null ? PLAN : null))
+    : (visible.at(-1)?.viewId ?? (plan !== null ? PLAN : hasAgents ? AGENTS : null))
 
   useEffect(() => {
     if (!wide || focusedKey === null) return
@@ -396,6 +424,7 @@ export function VisualPanel({
   const onShowPanel = () => setUserCollapsed(false)
   const onCollapsePanel = () => setUserCollapsed(true)
   const onFocusCard = (key: string) => setFocusedId(key)
+  const onSelectAgent = (id: AgentKey) => setAgentSelected(id)
 
   if (collapsed) {
     return (
@@ -414,6 +443,13 @@ export function VisualPanel({
       <PlanPanel context={context} session={session} version={plan.version} isNewest={plan.isNewest} onClose={onClosePlan} />
     </section>
   )
+  const agentsCard = hasAgents && agents && (
+    <section aria-label="Agents" data-focused={focusedKey === AGENTS || undefined} style={card(focusedKey === AGENTS)}>
+      <div style={agentsBody}>
+        <AgentsCard context={context} session={session} capabilities={capabilities} agents={agents.views} selected={agentSelected} now={now} onSelect={onSelectAgent} />
+      </div>
+    </section>
+  )
   const visualCard = (view: VisualRecord) => {
     const focused = focusedKey === view.viewId
     return (
@@ -428,7 +464,7 @@ export function VisualPanel({
     )
   }
 
-  const nothing = plan === null && visible.length === 0
+  const nothing = plan === null && visible.length === 0 && !hasAgents
   const focusedView = focusedKey === null || focusedKey === PLAN ? undefined : recordOf(focusedKey)
 
   return (
@@ -461,6 +497,7 @@ export function VisualPanel({
           ) : wide ? (
             <div style={grid}>
               {planCard && <div style={planCell}>{planCard}</div>}
+              {agentsCard && <div style={planCell}>{agentsCard}</div>}
               {visible.map(visualCard)}
             </div>
           ) : (
@@ -469,6 +506,11 @@ export function VisualPanel({
                 {plan && (
                   <button type="button" role="tab" aria-selected={focusedKey === PLAN} style={tile(focusedKey === PLAN)} onClick={() => onFocusCard(PLAN)}>
                     <span style={tileName}>{`Plan v${plan.version.version}`}</span>
+                  </button>
+                )}
+                {hasAgents && (
+                  <button type="button" role="tab" aria-selected={focusedKey === AGENTS} style={tile(focusedKey === AGENTS)} onClick={() => onFocusCard(AGENTS)}>
+                    <span style={tileName}>{`Agents ${agentCount}`}</span>
                   </button>
                 )}
                 {visible.map((view) => (
@@ -480,7 +522,7 @@ export function VisualPanel({
                   </button>
                 ))}
               </div>
-              {focusedKey === PLAN ? planCard : focusedView ? visualCard(focusedView) : null}
+              {focusedKey === PLAN ? planCard : focusedKey === AGENTS ? agentsCard : focusedView ? visualCard(focusedView) : null}
             </div>
           )}
         </div>

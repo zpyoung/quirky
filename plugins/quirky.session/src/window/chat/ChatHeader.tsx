@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import type { AgentCapabilities, CacheTier, Session, StructuredMessage, UiPluginContext, UsageResult, UsageTotals } from '@quirky/protocol'
+import type { AgentCapabilities, AgentKey, CacheTier, Session, StructuredMessage, UiPluginContext, UsageResult, UsageTotals } from '@quirky/protocol'
 import { Badge, InlineError, Menu, StatusDot, TextField, type MenuEntry, type UiStatus } from '@quirky/ui'
 import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, WORKTREE_VIEW_ID } from '../model'
+import { dockSummary, type AgentView } from './agents'
 import { chatLayoutEntries, DEFAULT_CHAT_LAYOUT, type ChatLayout } from './chatLayout'
 import { formatElapsed, newestUserAt, useClock, useTurnStart } from './elapsed'
 
@@ -56,15 +57,52 @@ export function compactTokens(count: number): string {
   return `${trimmed(count / 1_000_000)}M`
 }
 
-/** "Input 12.4k · Output 9.8k · Cache read 141.2k · Cache write 20.6k · Total 184k". */
-export function tokenBreakdown(totals: UsageTotals): string {
+/**
+ * "Input 12.4k · Output 9.8k · Cache read 141.2k · Cache write 20.6k · Total 184k". With
+ * `subagentTokens` above zero, "Main" and "Subagents" lines split the total, the subagents' share
+ * being already inside it.
+ */
+export function tokenBreakdown(totals: UsageTotals, subagentTokens = 0): string {
   return [
     `Input ${compactTokens(totals.input)}`,
     `Output ${compactTokens(totals.output)}`,
     `Cache read ${compactTokens(totals.cacheRead)}`,
     `Cache write ${compactTokens(totals.cacheWrite)}`,
-    `Total ${compactTokens(totals.total)}`
+    `Total ${compactTokens(totals.total)}`,
+    ...(subagentTokens > 0 ? [`Main ${compactTokens(Math.max(0, totals.total - subagentTokens))}`, `Subagents ${compactTokens(subagentTokens)}`] : [])
   ].join(' · ')
+}
+
+const SUMMARIES_ID = 'setting:quirky.structured/agent-summaries'
+type SummaryMode = 'ai' | 'latest-tool'
+const SUMMARY_LABELS: Record<SummaryMode, string> = { ai: 'AI-written', 'latest-tool': 'Latest tool call' }
+const asSummaryMode = (value: unknown): SummaryMode => (value === 'latest-tool' ? 'latest-tool' : 'ai')
+
+function readSummaryMode(context: UiPluginContext): SummaryMode {
+  try {
+    return asSummaryMode(context.getSetting(SUMMARIES_ID))
+  } catch {
+    return 'ai'
+  }
+}
+
+/** Stores how agent status lines are written; the header follows through the `setting.changed` broadcast. */
+function setSummaryMode(context: UiPluginContext, mode: SummaryMode): void {
+  void context.call('setting.set', { id: SUMMARIES_ID, value: mode }).catch((error: unknown) => {
+    context.toast('Setting failed', messageOf(error), { kind: 'error' })
+  })
+}
+
+/** How agent status lines are written, following `setting.changed` so a change from Settings applies without a reload. */
+function useSummaryMode(context: UiPluginContext): SummaryMode {
+  const [mode, setMode] = useState(() => readSummaryMode(context))
+  useEffect(() => {
+    setMode(readSummaryMode(context))
+    return context.subscribe((event) => {
+      if (event.type === 'setting.changed' && event.id === SUMMARIES_ID) setMode(asSummaryMode(event.value))
+    })
+  }, [context])
+  return mode
 }
 
 const clock = (leftMs: number) => {
@@ -200,6 +238,7 @@ export function ChatHeader({
   messages,
   showAll,
   layout = DEFAULT_CHAT_LAYOUT,
+  agents,
   planChip
 }: {
   context: UiPluginContext
@@ -209,6 +248,8 @@ export function ChatHeader({
   messages: readonly StructuredMessage[]
   showAll: boolean
   layout?: ChatLayout
+  /** The chat's subagents; top-level ones still running turn "Ready" into "Ready · N agents running". */
+  agents?: Map<AgentKey, AgentView>
   planChip?: ReactNode
 }) {
   const { usage, settled } = useUsage(context, session.id)
@@ -234,6 +275,7 @@ export function ChatHeader({
   }, [exited, messages])
 
   const turns = usage?.turns ?? 0
+  const agentsRunning = agents === undefined ? 0 : (dockSummary(agents)?.running ?? 0)
   const ready = !exited && turns === 0
   const status: Status = offline
     ? { ui: 'needs-you', label: 'Reconnecting…', announced: 'Reconnecting…' }
@@ -245,6 +287,8 @@ export function ChatHeader({
         ? { ui: 'working', label: `Working · ${formatElapsed(shownNow - (startedAt ?? shownNow))}`, announced: 'Working' }
         : waiting
           ? { ui: 'needs-you', label: 'Waiting on you', announced: 'Waiting on you' }
+          : agentsRunning > 0
+            ? { ui: 'idle', label: `Ready · ${agentsRunning} ${agentsRunning === 1 ? 'agent' : 'agents'} running`, announced: `Ready, ${agentsRunning} ${agentsRunning === 1 ? 'agent' : 'agents'} running` }
           : ready
             ? { ui: 'idle', label: 'Ready', announced: 'Ready' }
             : { ui: 'done', label: 'Done', announced: 'Done' }
@@ -350,6 +394,7 @@ export function ChatHeader({
       : capabilities !== null && !capabilities.fork.ok
         ? capabilities.fork.reason
         : undefined
+  const summaryMode = useSummaryMode(context)
   const droppedText = dropped.join(' · ')
   const items = useMemo<MenuEntry[]>(
     () => [
@@ -368,9 +413,17 @@ export function ChatHeader({
         }
       },
       { kind: 'separator', id: 'layout-rule' },
-      ...chatLayoutEntries(context, layout)
+      ...chatLayoutEntries(context, layout),
+      { kind: 'separator', id: 'summaries-rule' },
+      { kind: 'note', id: 'summaries-note', label: 'Agent status summaries' },
+      ...(['ai', 'latest-tool'] as const).map((mode) => ({
+        id: `summaries-${mode}`,
+        label: SUMMARY_LABELS[mode],
+        checked: summaryMode === mode,
+        onAction: () => setSummaryMode(context, mode)
+      }))
     ],
-    [droppedText, offline, forkReason, showAll, layout, context, session, title]
+    [droppedText, offline, forkReason, showAll, layout, summaryMode, context, session, title]
   )
 
   return (
@@ -411,7 +464,7 @@ export function ChatHeader({
             {shown.label && <span>{status.label}</span>}
           </span>
           {shown.tokens && tokensText !== null && conversation !== null && (
-            <span style={{ ...figure, ...(offline ? frozen : {}) }} title={tokenBreakdown(conversation)}>
+            <span style={{ ...figure, ...(offline ? frozen : {}) }} title={tokenBreakdown(conversation, usage?.subagentTokens)}>
               {tokensText}
             </span>
           )}

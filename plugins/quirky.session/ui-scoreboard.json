@@ -678,6 +678,38 @@
           "quote": "context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })"
         }
       }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "context.toast('Could not stop the agent', messageOf(error), { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+          "quote": "context.toast('Could not stop the agent', messageOf(error), { kind: 'error' })"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "context.toast('Setting failed', messageOf(error), { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.toast('Setting failed', messageOf(error), { kind: 'error' })"
+        }
+      }
     }
   ],
   "notState": [
@@ -1650,7 +1682,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "{focusedKey === PLAN ? planCard : focusedView ? visualCard(focusedView) : null}"
+        "quote": "{focusedKey === PLAN ? planCard : focusedKey === AGENTS ? agentsCard : focusedView ? visualCard(focusedView) : null}"
       },
       "anchor": "focusedKey === PLAN ?",
       "reason": "Shows the focused card under the filmstrip; layout only."
@@ -1742,6 +1774,334 @@
       },
       "anchor": "cache.kind === 'cold' ?",
       "reason": "Chooses between the cold chip and the countdown text; the cache clock selects content, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "if (summary === null)"
+      },
+      "anchor": "if (summary === null)",
+      "reason": "Hides the dock when no agent is running; that is agent state, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "nested > 0 &&"
+      },
+      "anchor": "nested > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "needsYou > 0 &&"
+      },
+      "anchor": "needsYou > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "quiet > 0 &&"
+      },
+      "anchor": "quiet > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "failed > 0 &&"
+      },
+      "anchor": "failed > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "if (agent.state === 'needs-you')"
+      },
+      "anchor": "if (agent.state === 'needs-you')",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "if (agent.state === 'quiet')"
+      },
+      "anchor": "if (agent.state === 'quiet')",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "if (agent.state === 'failed')"
+      },
+      "anchor": "if (agent.state === 'failed')",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "failed</span>"
+      },
+      "anchor": "failed",
+      "reason": "Labels an agent that failed; that is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "if (agent.state === 'stopped')"
+      },
+      "anchor": "if (agent.state === 'stopped')",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.cutOff ? 'stopped · cut off' : 'stopped'}</span>"
+      },
+      "anchor": "agent.cutOff ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "childNeedsYou(agent, agents) &&"
+      },
+      "anchor": "childNeedsYou(agent, agents) &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "live && hover &&"
+      },
+      "anchor": "live && hover &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "running.length > 0 &&"
+      },
+      "anchor": "running.length > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "done.length > DONE_OPEN_UP_TO ?"
+      },
+      "anchor": "done.length > DONE_OPEN_UP_TO ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "done.length > 0 &&"
+      },
+      "anchor": "done.length > 0 &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "!collapsed &&"
+      },
+      "anchor": "!collapsed &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "current &&"
+      },
+      "anchor": "current &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "parent &&"
+      },
+      "anchor": "parent &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "          {live && ("
+      },
+      "anchor": "live &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.prompt ??"
+      },
+      "anchor": "agent.prompt ??",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "!hasProse && agent.report !== undefined && !live &&"
+      },
+      "anchor": "!hasProse && agent.report !== undefined && !live &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.state === 'failed' && agent.error !== undefined &&"
+      },
+      "anchor": "agent.state === 'failed' && agent.error !== undefined &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.state === 'stopped' &&"
+      },
+      "anchor": "agent.state === 'stopped' &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.cutOff ? 'Stopped · cut off when Quirky quit' : 'Stopped by you'}</div>}"
+      },
+      "anchor": "agent.cutOff ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "}\n      {live &&"
+      },
+      "anchor": "live &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "agent.steps === 'none' &&"
+      },
+      "anchor": "agent.steps === 'none' &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (agent?.refused !== undefined && phase === 'spawn')"
+      },
+      "anchor": "if (agent?.refused !== undefined && phase === 'spawn')",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "label !== null ?"
+      },
+      "anchor": "label !== null ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "failedReturn ?"
+      },
+      "anchor": "failedReturn ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "failed</span> : agent?.state === 'stopped' ? ' stopped' : ' returned'}"
+      },
+      "anchor": "failed",
+      "reason": "Labels an agent that failed; that is transcript content, not a failed read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "phase === 'spawn' ? `Spawned ${ids.length} agents` : `${ids.length} agents returned`}"
+      },
+      "anchor": "phase === 'spawn' ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "counts !== '' &&"
+      },
+      "anchor": "counts !== '' &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "open ?"
+      },
+      "anchor": "open ?",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "open &&"
+      },
+      "anchor": "open &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'agent-marker':"
+      },
+      "anchor": "case 'agent-marker':",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "case 'agent-fold':"
+      },
+      "anchor": "case 'agent-fold':",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "if (from === undefined || !onOpenAgent)"
+      },
+      "anchor": "if (from === undefined || !onOpenAgent)",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "hasAgents && agents &&"
+      },
+      "anchor": "hasAgents && agents &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "agentsCard &&"
+      },
+      "anchor": "agentsCard &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "hasAgents && ("
+      },
+      "anchor": "hasAgents &&",
+      "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
     }
   ],
   "actions": [
@@ -3774,6 +4134,281 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentDock.tsx",
+        "quote": "onClick"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpenAgent, which only opens the Agents card in the visual panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onMouseEnter"
+      },
+      "anchor": "onMouseEnter",
+      "transient": "hover",
+      "reason": "Shows Stop on the agent row while the pointer is over it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onMouseLeave"
+      },
+      "anchor": "onMouseLeave",
+      "transient": "hover",
+      "reason": "Hides Stop on the agent row when the pointer leaves it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onFocus"
+      },
+      "anchor": "onFocus",
+      "transient": "hover",
+      "reason": "Shows Stop on the agent row while keyboard focus is inside it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onBlur"
+      },
+      "anchor": "onBlur",
+      "transient": "hover",
+      "reason": "Hides Stop on the agent row when focus leaves it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onClick={() => onSelect(agent.id)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onSelect, which only selects the agent whose transcript shows."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "        <button type=\"button\" style={{ ...smallButton, ...rowStop }} aria-label={`Stop ${agent.name}`} disabled={stopReason !== undefined} title={stopReason} onClick={() => onStop(agent.id)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onStop, which stops that one agent; the stop itself is routed from the card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "d} now={now} stopReason={stopReason} onSelect"
+      },
+      "anchor": "onSelect",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to the row without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "t} now={now} stopReason={stopReason} onSelect"
+      },
+      "anchor": "onSelect",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to the row without changing its meaning."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "            <button type=\"button\" style={smallButton} disabled={stopReason !== undefined} title={stopReason} onClick={() => onStop(agent.id)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onStop, which stops that one agent; the stop itself is routed from the card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "  onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "} onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onClick={() => onOpenAgent?.(id)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpenAgent, which only opens the Agents card on that agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "{phase} onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": ".phase} onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "e} agents={agents} onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onClick={() => onOpenAgent(from)}>{`Open ${agents.get(from)?.name ?? 'agent'}`}</button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpenAgent, which only opens the Agents card on that agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "l} agents={agents} onOpenAgent"
+      },
+      "anchor": "onOpenAgent",
+      "notAction": "forwarded",
+      "reason": "Forwards the handler to its owner, which only opens the Agents card on an agent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClick={() => onFocusCard(AGENTS)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onFocusCard, which only shows the Agents card as the focused card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "      <Row agent={agent} agents={agents} depth={depth} selected={current?.id === agent.id} now={now} stopReason={stopReason} onSelect={onSelect} onStop={stop} />"
+      },
+      "anchor": "onStop",
+      "route": {
+        "target": "quirky.structured/stopAgent",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+          "quote": "context.call('quirky.structured/stopAgent', { session: sessionId, agent })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+            "quote": "const stop = (id: AgentKey) => stopAgent(context, session.id, id)"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+            "quote": "function stopAgent(context: UiPluginContext, sessionId: string, agent: AgentKey): void {\n  context.call('quirky.structured/stopAgent', { session: sessionId, agent }).catch((error: unknown) => {\n    context.toast('Could not stop the agent', messageOf(error), { kind: 'error' })\n  })\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onStop={stop} />}"
+      },
+      "anchor": "onStop",
+      "route": {
+        "target": "quirky.structured/stopAgent",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+          "quote": "context.call('quirky.structured/stopAgent', { session: sessionId, agent })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+            "quote": "const stop = (id: AgentKey) => stopAgent(context, session.id, id)"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+            "quote": "function stopAgent(context: UiPluginContext, sessionId: string, agent: AgentKey): void {\n  context.call('quirky.structured/stopAgent', { session: sessionId, agent }).catch((error: unknown) => {\n    context.toast('Could not stop the agent', messageOf(error), { kind: 'error' })\n  })\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+        "quote": "onAction: () => setSummaryMode(context, mode)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+          "quote": "context.call('setting.set', { id: SUMMARIES_ID, value: mode })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/ChatHeader.tsx",
+            "quote": "function setSummaryMode(context: UiPluginContext, mode: SummaryMode): void {\n  void context.call('setting.set', { id: SUMMARIES_ID, value: mode }).catch((error: unknown) => {\n    context.toast('Setting failed', messageOf(error), { kind: 'error' })\n  })\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onSelect="
+      },
+      "anchor": "onSelect",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onSelectAgent, which only selects the agent whose transcript shows."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
+        "quote": "onClick={onToggleDone}>{`Done · ${done.length} ${collapsed ? '▸' : '▾'}`}</button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onToggleDone, which only expands or collapses the Done group."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Turn.tsx",
+        "quote": "onClick={onToggleFold}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onToggleFold, which only expands or collapses the folded markers."
     }
   ]
 }

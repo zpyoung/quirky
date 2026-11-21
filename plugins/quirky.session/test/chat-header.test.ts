@@ -2,8 +2,9 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setSystem
 import { act, createElement, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcError, RpcErrorCode, type AgentCapabilities, type CacheTier, type Session, type StructuredMessage, type UsageResult } from '@quirky/protocol'
-import { cacheDisplay, ChatHeader, compactTokens } from '../src/window/chat/ChatHeader'
+import { RpcError, RpcErrorCode, type AgentCapabilities, type AgentKey, type CacheTier, type Session, type StructuredMessage, type UsageResult } from '@quirky/protocol'
+import { deriveAgents, type AgentView } from '../src/window/chat/agents'
+import { cacheDisplay, ChatHeader, compactTokens, tokenBreakdown } from '../src/window/chat/ChatHeader'
 import type { WorktreeSessions } from '../src/window/model'
 import { SessionTabs } from '../src/window/SessionTabs'
 import { fakeContext, session, WORKTREE, type FakeContext } from './ui-fake'
@@ -81,8 +82,10 @@ type Mount = {
   showAll?: boolean
   planChip?: ReactNode
   handlers?: Record<string, Handler>
+  settings?: Record<string, unknown>
+  agents?: Map<AgentKey, AgentView>
 }
-let props: Required<Pick<Mount, 'capabilities' | 'messages' | 'showAll'>> & { session: Session; planChip?: ReactNode }
+let props: Required<Pick<Mount, 'capabilities' | 'messages' | 'showAll'>> & { session: Session; planChip?: ReactNode; agents?: Map<AgentKey, AgentView> }
 
 const render = () =>
   act(async () => {
@@ -93,13 +96,14 @@ async function mount(options: Mount = {}) {
   fake = fakeContext({
     'quirky.structured/usage': () => (typeof usage === 'function' ? usage() : usage),
     ...options.handlers
-  })
+  }, options.settings)
   props = {
     session: session({ id: 'chat', kind: 'structured', agent: 'claude', status: 'done', title: 'Fix flaky worktree window test', ...options.session }),
     capabilities: options.capabilities === undefined ? CLAUDE : options.capabilities,
     messages: options.messages ?? [],
     showAll: options.showAll ?? false,
-    planChip: options.planChip
+    planChip: options.planChip,
+    ...(options.agents === undefined ? {} : { agents: options.agents })
   }
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -371,6 +375,94 @@ describe('Ended, crashed, offline, failed', () => {
   })
 })
 
+const T = 1_800_000_000_000
+const agentAt = (seq: number, id: string, over: Record<string, unknown> = {}): StructuredMessage => ({
+  sessionId: 'chat',
+  seq,
+  role: 'assistant',
+  text: '',
+  at: T - 1000,
+  item: { kind: 'agent', id, name: id, task: 'task', state: 'working', startedAt: T - 5000, steps: 'full', ...over } as StructuredMessage['item']
+})
+const agentsOf = (...messages: StructuredMessage[]) => deriveAgents(messages, T)
+
+describe('Agents in the header', () => {
+  test('with agents still running a finished turn reads Ready · N agents running, replacing Done', async () => {
+    usage = usageOf(null)
+    await mount({ agents: agentsOf(agentAt(1, 'a'), agentAt(2, 'b', { background: true })) })
+    expect(text()).toContain('Ready · 2 agents running')
+    expect(text()).not.toContain('Done')
+    expect(dot().classList.contains('ui-status-dot--idle')).toBe(true)
+  })
+
+  test('one agent reads in the singular, and a brand new chat says it too', async () => {
+    usage = usageOf(null, null)
+    await mount({ agents: agentsOf(agentAt(1, 'a')) })
+    expect(text()).toContain('Ready · 1 agent running')
+    expect(text()).not.toContain('agents')
+  })
+
+  test('only top-level live agents count; ended, refused and nested ones do not', async () => {
+    usage = usageOf(null)
+    await mount({
+      agents: agentsOf(
+        agentAt(1, 'a'),
+        agentAt(2, 'nested', { agent: 'a' }),
+        agentAt(3, 'finished', { state: 'done' }),
+        agentAt(4, 'refused', { state: 'failed', refused: 'limit' })
+      )
+    })
+    expect(text()).toContain('Ready · 1 agent running')
+  })
+
+  test('with none running the label is Done again', async () => {
+    usage = usageOf(null)
+    await mount({ agents: agentsOf(agentAt(1, 'a', { state: 'done' })) })
+    expect(text()).toContain('Done')
+    expect(text()).not.toContain('running')
+  })
+
+  test('while the turn works or waits, the status keeps its own label', async () => {
+    usage = usageOf(null)
+    await mount({ session: { status: 'working' }, agents: agentsOf(agentAt(1, 'a')) })
+    expect(text()).toContain('Working')
+    expect(text()).not.toContain('agent running')
+    await withSession({ status: 'waiting' })
+    expect(text()).toContain('Waiting on you')
+  })
+
+  test('the token tooltip splits main from subagents when subagents used tokens', async () => {
+    usage = { ...usageOf(null, { ...TOTALS, total: 59_400 }), subagentTokens: 28_000 }
+    await mount()
+    expect(figureByText('59.4k tokens')!.getAttribute('title')).toContain('Total 59.4k · Main 31.4k · Subagents 28k')
+  })
+
+  test('the split is left out without subagent tokens, and Main never goes negative', () => {
+    expect(tokenBreakdown(TOTALS)).toBe('Input 12.4k · Output 9.8k · Cache read 141.2k · Cache write 20.6k · Total 184k')
+    expect(tokenBreakdown(TOTALS, 0)).not.toContain('Subagents')
+    expect(tokenBreakdown({ ...TOTALS, total: 1000 }, 5000)).toContain('Main 0 · Subagents 5k')
+  })
+
+  test('the menu offers AI-written and Latest tool call, checked from the setting, and a pick writes it', async () => {
+    usage = usageOf(null)
+    await mount({ settings: { 'setting:quirky.structured/agent-summaries': 'latest-tool' }, handlers: { 'setting.set': () => ({}) } })
+    await openMenu()
+    expect(menuItem('AI-written').getAttribute('aria-checked')).toBe('false')
+    expect(menuItem('Latest tool call').getAttribute('aria-checked')).toBe('true')
+    await click(menuItem('AI-written'))
+    expect(fake.callsTo('setting.set').at(-1)!.params).toEqual({ id: 'setting:quirky.structured/agent-summaries', value: 'ai' })
+  })
+
+  test('the check follows a setting change and defaults to AI-written', async () => {
+    usage = usageOf(null)
+    await mount()
+    await openMenu()
+    expect(menuItem('AI-written').getAttribute('aria-checked')).toBe('true')
+    await fake.emit({ type: 'setting.changed', id: 'setting:quirky.structured/agent-summaries', value: 'latest-tool' })
+    expect(menuItem('Latest tool call').getAttribute('aria-checked')).toBe('true')
+  })
+})
+
 describe('Overflow menu', () => {
   test('default: Rename, Fork chat, Session info, Show all events as a checked item, then the chat width and alignment', async () => {
     usage = usageOf(null)
@@ -380,10 +472,11 @@ describe('Overflow menu', () => {
     expect([...menu.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent?.trim())).toEqual([
       'Rename', 'Fork chat', 'Session info', '✓ Show all events',
       'Narrow', '✓ Comfortable', 'Wide', 'Full width',
-      'Left', '✓ Center', 'Right'
+      'Left', '✓ Center', 'Right',
+      '✓ AI-written', 'Latest tool call'
     ])
-    expect([...menu.querySelectorAll('.ui-menu__note')].map((note) => note.textContent)).toEqual(['Width', 'Alignment'])
-    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(2)
+    expect([...menu.querySelectorAll('.ui-menu__note')].map((note) => note.textContent)).toEqual(['Width', 'Alignment', 'Agent status summaries'])
+    expect(menu.querySelectorAll('[role="separator"]')).toHaveLength(3)
     expect(menuItem('Show all events').getAttribute('role')).toBe('menuitemcheckbox')
     expect(menuItem('Show all events').getAttribute('aria-checked')).toBe('true')
   })

@@ -1,7 +1,8 @@
 import { useState, type CSSProperties } from 'react'
-import type { AgentCapabilities, Session, UiPluginContext } from '@quirky/protocol'
-import { IconButton } from '@quirky/ui'
+import type { AgentCapabilities, AgentKey, Session, UiPluginContext } from '@quirky/protocol'
+import { IconButton, StatusDot, type UiStatus } from '@quirky/ui'
 import { MessageRow } from '../MessageRow'
+import { foldCounts, isLive, outcomeLine, type AgentView } from './agents'
 import { Activity } from './Activity'
 import { FileChange } from './cards/FileChange'
 import { Steps } from './cards/Steps'
@@ -11,7 +12,7 @@ import { Embedded } from './Embedded'
 import { ErrorRow } from './ErrorRow'
 import { planRowText } from './plan'
 import { Prose, renderUserMarkdown } from './Prose'
-import { formatDuration, type Block, type Turn as TurnData } from './turns'
+import { formatDuration, type Block, type MarkerPhase, type Turn as TurnData } from './turns'
 import { VisualChip } from './VisualChip'
 import type { ViewIndex } from './VisualPanel'
 
@@ -59,6 +60,28 @@ const planRow = {
   cursor: 'pointer'
 } satisfies CSSProperties
 const planRowLive = { ...planRow, color: 'var(--ui-text)', border: 'var(--ui-border-width) solid var(--ui-accent)' } satisfies CSSProperties
+
+const markerRow = { ...planRow, gap: 'var(--ui-space-6)', minWidth: 0, border: 'var(--ui-border-width) solid var(--ui-transparent)' } satisfies CSSProperties
+const markerText = { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } satisfies CSSProperties
+const markerName = { color: 'var(--ui-text)', fontWeight: 600 } satisfies CSSProperties
+const markerOpen = {
+  flex: 'none',
+  padding: '0 var(--ui-space-6)',
+  color: 'var(--ui-muted)',
+  border: 'var(--ui-border-width) solid var(--ui-border)',
+  borderRadius: 'var(--ui-radius-window)',
+  fontSize: 'var(--ui-font-label)'
+} satisfies CSSProperties
+const foldList = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'var(--ui-space-2)',
+  marginInlineStart: 'var(--ui-space-8)',
+  paddingInlineStart: 'var(--ui-space-8)',
+  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
+} satisfies CSSProperties
+const askRow = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', alignItems: 'flex-start' } satisfies CSSProperties
+const askOpen = { ...markerOpen, background: 'var(--ui-transparent)', font: 'inherit', fontSize: 'var(--ui-font-label)', cursor: 'pointer' } satisfies CSSProperties
 
 const proseBox = { position: 'relative', minWidth: 0 } satisfies CSSProperties
 const visualizeButton = { position: 'absolute', insetBlockStart: 0, insetInlineEnd: 0 } satisfies CSSProperties
@@ -118,13 +141,97 @@ function VisualizableProse({ context, session, block, actions }: { context: UiPl
   )
 }
 
-function BlockView({
+/** A React key unique within a turn: a first snapshot that already ended gives a spawn and a return marker the same seq. */
+export const blockKey = (block: Block): string => (block.kind === 'agent-marker' || block.kind === 'agent-fold' ? `${block.seq}-${block.phase}` : String(block.seq))
+
+const NO_AGENTS: ReadonlyMap<AgentKey, AgentView> = new Map()
+
+/** The dot status of an agent: working, needs you, failed, or finished. */
+export function agentStatus(agent: AgentView | undefined): UiStatus {
+  if (!agent) return 'idle'
+  if (agent.state === 'needs-you' || agent.state === 'quiet') return 'needs-you'
+  if (agent.state === 'working') return 'working'
+  if (agent.state === 'failed') return 'failing'
+  return agent.state === 'done' ? 'done' : 'idle'
+}
+
+/** One spawn or return marker: a quiet row that opens the agent in the Agents card. */
+function AgentMarker({ agent, id, phase, onOpenAgent }: { agent: AgentView | undefined; id: AgentKey; phase: MarkerPhase; onOpenAgent?: (agent: AgentKey | null) => void }) {
+  const name = agent?.name ?? 'Agent'
+  if (agent?.refused !== undefined && phase === 'spawn') {
+    return (
+      <div style={{ ...markerRow, color: 'var(--ui-failing)' }} data-marker="refused">
+        <span style={markerText}>{`${name} was not started · ${agent.refused}`}</span>
+      </div>
+    )
+  }
+  const failedReturn = phase === 'return' && agent?.state === 'failed'
+  const label = phase === 'spawn' ? 'Spawned' : null
+  return (
+    <button type="button" style={markerRow} data-marker={phase} data-agent={id} onClick={() => onOpenAgent?.(id)}>
+      <StatusDot status={phase === 'spawn' && !(agent && isLive(agent)) ? 'done' : agentStatus(agent)} />
+      <span style={markerText}>
+        {label !== null ? (
+          <>
+            {`${label} `}
+            <span style={markerName}>{name}</span>
+            {`${agent?.background ? ' in background' : ''} · ${agent?.task ?? ''}`}
+          </>
+        ) : (
+          <>
+            <span style={markerName}>{name}</span>
+            {failedReturn ? <span style={{ color: 'var(--ui-failing)' }}> failed</span> : agent?.state === 'stopped' ? ' stopped' : ' returned'}
+            {` · ${agent ? outcomeLine(agent) : ''}`}
+          </>
+        )}
+      </span>
+      <span style={markerOpen}>Open</span>
+    </button>
+  )
+}
+
+/** Four or more markers of one phase as one counts line that expands to the markers themselves. */
+function AgentFold({ ids, phase, agents, onOpenAgent }: { ids: AgentKey[]; phase: MarkerPhase; agents: ReadonlyMap<AgentKey, AgentView>; onOpenAgent?: (agent: AgentKey | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const onToggleFold = () => setOpen(!open)
+  const all = agents as Map<AgentKey, AgentView>
+  const counts = foldCounts(all, ids)
+  const needs = ids.some((id) => agents.get(id)?.state === 'needs-you' || agents.get(id)?.state === 'quiet')
+  const running = ids.some((id) => agents.get(id) !== undefined && isLive(agents.get(id)!))
+  return (
+    <>
+      <button type="button" style={markerRow} aria-expanded={open} data-marker={`${phase}-fold`} onClick={onToggleFold}>
+        <StatusDot status={phase === 'spawn' && needs ? 'needs-you' : phase === 'spawn' && running ? 'working' : 'done'} />
+        <span style={markerText}>
+          {phase === 'spawn' ? `Spawned ${ids.length} agents` : `${ids.length} agents returned`}
+          {counts !== '' && ` · ${counts}`}
+        </span>
+        <span aria-hidden="true">{open ? '\u25be' : '\u25b8'}</span>
+      </button>
+      {open && (
+        <div style={foldList}>
+          {ids.map((id) => (
+            <AgentMarker key={id} id={id} agent={agents.get(id)} phase={phase} onOpenAgent={onOpenAgent} />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * One piece of a turn as drawn in the chat or in an agent's transcript. `agents` names the agents
+ * the markers and asks point at, and `onOpenAgent` opens one in the Agents card.
+ */
+export function BlockView({
   context,
   session,
   capabilities,
   block,
   onShowPlan,
-  visual
+  visual,
+  agents = NO_AGENTS,
+  onOpenAgent
 }: {
   context: UiPluginContext
   session: Session
@@ -132,6 +239,8 @@ function BlockView({
   block: Block
   onShowPlan?: (version: number) => void
   visual?: VisualActions
+  agents?: ReadonlyMap<AgentKey, AgentView>
+  onOpenAgent?: (agent: AgentKey | null) => void
 }) {
   switch (block.kind) {
     case 'prose':
@@ -151,15 +260,27 @@ function BlockView({
           {planRowText(block.item)}
         </button>
       )
+    case 'agent-marker':
+      return <AgentMarker id={block.agent} agent={agents.get(block.agent)} phase={block.phase} onOpenAgent={onOpenAgent} />
+    case 'agent-fold':
+      return <AgentFold ids={block.agents} phase={block.phase} agents={agents} onOpenAgent={onOpenAgent} />
     case 'ask': {
       const disabled = sessionApproveDisabled(capabilities)
-      return (
+      const from = block.item.from
+      const embedded = (
         <Embedded
           context={context}
           viewId={ASK_VIEW}
           input={{ askId: block.item.askId, ...(disabled === undefined ? {} : { sessionApproveDisabled: disabled }) }}
           fallback="This question is waiting in the Questions panel."
         />
+      )
+      if (from === undefined || !onOpenAgent) return embedded
+      return (
+        <div style={askRow}>
+          {embedded}
+          <button type="button" style={askOpen} onClick={() => onOpenAgent(from)}>{`Open ${agents.get(from)?.name ?? 'agent'}`}</button>
+        </div>
       )
     }
     case 'view': {
@@ -204,7 +325,9 @@ export function TurnView({
   data,
   index,
   onOpenPlan,
-  visual
+  visual,
+  agents,
+  onOpenAgent
 }: {
   context: UiPluginContext
   session: Session
@@ -214,6 +337,10 @@ export function TurnView({
   /** Opens the plan panel on a version; the plan rows are inert without it. */
   onOpenPlan?: (version: number) => void
   visual?: VisualActions
+  /** The chat's subagents, for the markers and ask links; without it markers still draw, unnamed. */
+  agents?: ReadonlyMap<AgentKey, AgentView>
+  /** Opens an agent in the Agents card, or the first running one for null; the Open controls are inert without it. */
+  onOpenAgent?: (agent: AgentKey | null) => void
 }) {
   const duration = data.end?.durationMs === undefined ? '' : formatDuration(data.end.durationMs)
   return (
@@ -236,7 +363,7 @@ export function TurnView({
         </div>
       )}
       {data.blocks.map((block) => (
-        <BlockView key={block.seq} context={context} session={session} capabilities={capabilities} block={block} onShowPlan={onOpenPlan} visual={visual} />
+        <BlockView key={blockKey(block)} context={context} session={session} capabilities={capabilities} block={block} onShowPlan={onOpenPlan} visual={visual} agents={agents} onOpenAgent={onOpenAgent} />
       ))}
       {data.end?.state === 'stopped' && <div style={quiet}>{duration ? `Stopped after ${duration}` : 'Stopped'}</div>}
       {data.end?.state === 'failed' && <div style={failed}>{duration ? `Turn failed after ${duration}` : 'Turn failed'}</div>}
