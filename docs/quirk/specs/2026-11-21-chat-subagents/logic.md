@@ -2,9 +2,10 @@
 
 ## Status & amendments
 
-**Status:** Approved 2026-11-21 in native chat visuals.
+**Status:** Approved 2026-11-21 in native chat visuals. Tech spec: authored (complexity gate fired: crosses subsystems), see tech.md.
 
-**Amendments:** none yet.
+**Amendments:**
+- 2026-11-21, tech spec feasibility: AI-written current-action lines come from the agent itself, so they're available only where the agent offers one: Claude Code's SDK progress summary and omp's intent line. Codex and pi rows always show the latest tool call. Quirky adds no model call of its own. The user chose this over building a Quirky summarizer. It changes the data flow (step 3), SC-9, and the Decisions Locked line about summaries.
 
 ## Purpose
 
@@ -41,7 +42,7 @@ A **subagent** (just "agent" in this spec) is an agent the session's agent start
 
    Quirky journals a spawn item with the name, task, model and parent.
 2. Every event from inside that agent is tagged with the agent's stable id and journaled in the same session journal as everything else. There is no second store.
-3. State changes update the agent's state: it started, it asks, it went quiet, it ended. About every 30 seconds a small model rewrites the agent's current-action line from its recent events. A setting falls back to showing the latest tool call instead.
+3. State changes update the agent's state: it started, it asks, it went quiet, it ended. Where the agent offers one (Claude Code, omp), its AI-written summary becomes the current-action line, refreshed about every 30 seconds. Elsewhere, or when the setting asks for it, the line shows the latest tool call.
 4. The dock, the markers, the Agents card and the header totals are all computed from journaled items. A reopened chat therefore rebuilds them exactly.
 
 ## Key decisions
@@ -54,7 +55,7 @@ A **subagent** (just "agent" in this spec) is an agent the session's agent start
 - **One Agents card in the panel, not a tab per agent.** It scales to Claude's default of 20 concurrent agents without flooding the strip the visuals share.
 - **Asks surface in the main turn, labeled with the agent.** Claude and Codex both do this. Cursor showed what goes wrong without it: a permission prompt inside an expanded card loses its Allow button.
 - **Read-only transcripts.** Copilot and Codex do the same. Follow-ups go to the main agent, which avoids messages that never reach the agent's transcript.
-- **AI-written current action, with an off switch.** It reads better than a raw tool call. The setting exists because summary cost is a known complaint.
+- **AI-written current action where the agent offers it, with an off switch.** It reads better than a raw tool call. The setting exists because summary cost is a known complaint. Quirky adds no model call of its own (see Amendments).
 - **Research traps become rules.** Each rule below caused a published bug in another product:
   - Streaming text is kept per agent, because parent and child text crossed wires in t3code.
   - A finishing agent never settles the chat, because a child's completion marked the whole chat ready in bridge-harness.
@@ -140,7 +141,7 @@ A **subagent** (just "agent" in this spec) is an agent the session's agent start
 9. **SC-9 Current-action line**
    - **Given** an agent working through several tool calls
    - **When** (a) the summary setting is AI-written, the default, or (b) it is set to the latest tool call
-   - **Then** (a) the row reads like "Tracing where tokens refresh" and is refreshed about every 30 seconds. (b) It reads like "Grep "refresh(" src/" and updates on every tool call.
+   - **Then** (a) for Claude Code and omp, the row reads like "Tracing where tokens refresh" and is refreshed about every 30 seconds. For Codex and pi, it reads like (b). (b) It reads like "Grep "refresh(" src/" and updates on every tool call.
 
 10. **SC-10 Tokens**
     - **Given** a chat where the main agent used 31.4k* tokens and three agents used 28.0k* together
@@ -243,7 +244,7 @@ The signed-off mock is `mock/mock.html` (v2), and the inventory is `mock/screens
 - Dock: count, plus anything that needs you, is quiet or failed.
 - Tokens: in the selected agent's header, and rolled into the chat header total.
 - The transcript renders like the main chat.
-- The current action is AI-written, about every 30 seconds.
+- The current action is AI-written, about every 30 seconds, where the agent offers it (amended 2026-11-21).
 
 **Drilling in and control**
 - Clicking the dock opens the Agents card. Markers and ask links open it with that agent selected.
