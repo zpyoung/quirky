@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-**Status:** Draft, awaiting review.
+**Status:** Approved 2026-11-21 in native chat visuals.
 
 **Amendments:** none yet.
 
