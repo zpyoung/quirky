@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
+import { AgentRegistry } from '../agents'
 import {
   CallTracker,
+  ClaudeAgents,
   ProseStream,
   claudeEntries,
   claudeTextDelta,
@@ -296,5 +298,161 @@ describe('helpers', () => {
     stream.reset('m')
     expect(stream.push('m', 'x', 1501)).toBeNull()
     expect(stream.push('other', 'y', 1501)).toBeNull()
+  })
+})
+
+describe('claudeEntries subagents', () => {
+  const spawn = (id = 'a1', input: Record<string, unknown> = { subagent_type: 'Explore', description: 'look around', prompt: 'find it', run_in_background: false }, parent: string | null = null, name = 'Agent') => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
+    parent_tool_use_id: parent
+  })
+  const task = (subtype: string, fields: Record<string, unknown>) => ({ type: 'system', subtype, ...fields })
+  const agentResult = (id: string, structured: unknown, text = 'report text', is_error = false, parent: string | null = null) => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text, ...(is_error ? { is_error } : {}) }] },
+    parent_tool_use_id: parent,
+    tool_use_result: structured
+  })
+  const setup = (summaries: 'ai' | 'latest-tool' = 'ai') => {
+    const registry = new AgentRegistry()
+    return { registry, calls: new CallTracker(), agents: new ClaudeAgents(registry, summaries) }
+  }
+  const run = (s: ReturnType<typeof setup>, ...msgs: any[]) => msgs.flatMap((msg) => claudeEntries(msg, s.calls, s.agents)).map((entry) => entry.item as any)
+
+  test('an Agent tool_use is an agent item and no activity', () => {
+    const s = setup()
+    const items = run(s, spawn())
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'agent', id: 'a1', name: 'Explore', task: 'look around', prompt: 'find it', background: false, state: 'working', steps: 'full' })
+    expect(items[0].agent).toBeUndefined()
+    expect(s.calls.size).toBe(0)
+  })
+
+  test('Task is spawned too, named from name when there is no subagent_type, and falls back to agent', () => {
+    const s = setup()
+    expect(run(s, spawn('a1', { name: 'worker', description: 'd' }, null, 'Task'))[0]).toMatchObject({ kind: 'agent', name: 'worker' })
+    expect(run(s, spawn('a2', {}))[0]).toMatchObject({ name: 'agent', task: '' })
+  })
+
+  test('without a registry an Agent tool call stays an activity as before', () => {
+    expect(claudeEntries(spawn(), new CallTracker())[0]!.item.kind).toBe('activity')
+  })
+
+  test('entries from a subagent are tagged and a nested spawn carries its parent', () => {
+    const s = setup()
+    run(s, spawn())
+    const items = run(
+      s,
+      assistant({ type: 'text', text: 'hi' }),
+      { ...assistant(toolUse('r1', 'Read', { file_path: '/x' })), parent_tool_use_id: 'a1' },
+      { ...toolResult('r1', 'ok'), parent_tool_use_id: 'a1' },
+      spawn('a2', { subagent_type: 'deep' }, 'a1')
+    )
+    expect(items[0].agent).toBeUndefined()
+    expect(items.slice(1, 3).map((item) => [item.kind, item.state, item.agent])).toEqual([
+      ['activity', 'running', 'a1'],
+      ['activity', 'done', 'a1']
+    ])
+    expect(items[3]).toMatchObject({ kind: 'agent', id: 'a2', agent: 'a1' })
+  })
+
+  test('a message from an unknown parent is tagged unattributed, with its spawn entry first and once', () => {
+    const s = setup()
+    const first = run(s, { ...assistant({ type: 'text', text: 'lost' }), parent_tool_use_id: 'ghost' })
+    expect(first).toHaveLength(2)
+    expect(first[0]).toMatchObject({ kind: 'agent', id: 'unattributed', name: 'Unattributed' })
+    expect(first[1]).toMatchObject({ kind: 'prose', agent: 'unattributed' })
+    const second = run(s, { ...assistant({ type: 'text', text: 'again' }), parent_tool_use_id: 'ghost' })
+    expect(second).toHaveLength(1)
+    expect(second[0].agent).toBe('unattributed')
+  })
+
+  test('task events for a local_agent update the spawn and produce no status line', () => {
+    const s = setup()
+    run(s, spawn())
+    const items = run(
+      s,
+      task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent', description: 'd', is_backgrounded: true }),
+      task('task_progress', { task_id: 't1', tool_use_id: 'a1', description: 'd', usage: { total_tokens: 42, tool_uses: 1, duration_ms: 1 }, summary: 'Reading files' }),
+      task('task_notification', { task_id: 't1', tool_use_id: 'a1', status: 'completed', summary: 'all done', usage: { total_tokens: 99, tool_uses: 2, duration_ms: 3 } })
+    )
+    expect(items.every((item) => item.kind === 'agent')).toBe(true)
+    expect(items[0]).toMatchObject({ nativeId: 't1', background: true, state: 'working' })
+    expect(items[1]).toMatchObject({ tokens: 42, summary: 'Reading files', state: 'working' })
+    expect(items[2]).toMatchObject({ state: 'done', report: 'all done', tokens: 99 })
+    expect(items[2].endedAt).toBeNumber()
+  })
+
+  test('task_progress sets no summary when the setting is latest-tool', () => {
+    const s = setup('latest-tool')
+    run(s, spawn(), task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent' }))
+    const [progress] = run(s, task('task_progress', { task_id: 't1', usage: { total_tokens: 5 }, summary: 'AI line' }))
+    expect(progress.tokens).toBe(5)
+    expect(progress.summary).toBeUndefined()
+  })
+
+  test('failed and stopped notifications end the agent', () => {
+    const s = setup()
+    run(s, spawn('a1'), spawn('a2'), task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent' }), task('task_started', { task_id: 't2', tool_use_id: 'a2', task_type: 'local_agent' }))
+    expect(run(s, task('task_notification', { task_id: 't1', status: 'failed', summary: 'boom' }))[0]).toMatchObject({ state: 'failed', error: 'boom' })
+    expect(run(s, task('task_notification', { task_id: 't2', status: 'stopped', summary: 's' }))[0]).toMatchObject({ state: 'stopped' })
+  })
+
+  test('a task_started for a known spawn is an agent even without a local_agent task type', () => {
+    const s = setup()
+    run(s, spawn())
+    expect(run(s, task('task_started', { task_id: 't1', tool_use_id: 'a1' }))[0]).toMatchObject({ kind: 'agent', nativeId: 't1' })
+  })
+
+  test('other task types keep their status line', () => {
+    const s = setup()
+    const items = run(s, task('task_started', { task_id: 'b1', task_type: 'local_bash', description: 'sleep' }), task('task_notification', { task_id: 'b1', status: 'completed', summary: 'x' }))
+    expect(items).toEqual([
+      { kind: 'status', text: 'system: task_started' },
+      { kind: 'status', text: 'system: task_notification' }
+    ])
+  })
+
+  test('a completed Agent result ends the agent with the first text and totalTokens', () => {
+    const s = setup()
+    run(s, spawn(), task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent' }))
+    const items = run(s, agentResult('a1', { status: 'completed', agentId: 'ag1', content: [{ type: 'text', text: 'the report' }, { type: 'text', text: 'second' }], totalTokens: 1234 }, 'the report\nagentId: ag1'))
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({ kind: 'agent', state: 'done', report: 'the report', tokens: 1234 })
+    expect(s.agents.ownerOf('ag1')).toBe('a1')
+  })
+
+  test('an async_launched result keeps the agent working and background', () => {
+    const s = setup()
+    run(s, spawn(), task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent', is_backgrounded: false }))
+    const [item] = run(s, agentResult('a1', { status: 'async_launched', agentId: 'ag1', description: 'd' }, 'launched'))
+    expect(item).toMatchObject({ state: 'working', background: true })
+    expect(item.endedAt).toBeUndefined()
+  })
+
+  test('an error result after task_started fails the agent with the text', () => {
+    const s = setup()
+    run(s, spawn(), task('task_started', { task_id: 't1', tool_use_id: 'a1', task_type: 'local_agent' }))
+    const [item] = run(s, agentResult('a1', undefined, 'it broke', true))
+    expect(item).toMatchObject({ state: 'failed', error: 'it broke' })
+    expect(item.refused).toBeUndefined()
+  })
+
+  test('an error result with no task_started is a refused spawn and gets no later entries', () => {
+    const s = setup()
+    run(s, spawn())
+    const [item] = run(s, agentResult('a1', undefined, 'not allowed', true))
+    expect(item).toMatchObject({ state: 'failed', refused: 'not allowed' })
+    expect(run(s, task('task_notification', { task_id: 'tx', tool_use_id: 'a1', status: 'completed', summary: 'x' }))).toEqual([])
+  })
+
+  test('a result for a call the agent owns keeps its tag so the parent turn can leave it open', () => {
+    const s = setup()
+    run(s, spawn(), { ...assistant(toolUse('r1', 'Bash', { command: 'sleep 9' })), parent_tool_use_id: 'a1' }, assistant(toolUse('m1', 'Bash', { command: 'ls' })))
+    const closing = closingEntries(s.calls, 'done', (agent) => agent !== undefined && s.registry.isLive(agent)).map((entry) => (entry.item as any).callId)
+    expect(closing).toEqual(['m1'])
+    expect(s.calls.size).toBe(1)
+    expect(closingEntries(s.calls, 'stopped').map((entry) => [(entry.item as any).callId, entry.item.agent])).toEqual([['r1', 'a1']])
   })
 })
