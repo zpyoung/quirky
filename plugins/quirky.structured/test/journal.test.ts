@@ -56,3 +56,44 @@ test('a chat item is stored beside the message and comes back from list', () => 
   expect(withItem).toEqual(stored)
   expect(without).not.toHaveProperty('item')
 })
+
+const agent = (id: string, state: 'working' | 'needs-you' | 'done' | 'stopped', extra: Record<string, unknown> = {}) =>
+  ({ kind: 'agent' as const, id, name: id, task: `task ${id}`, state, startedAt: 1, steps: 'full' as const, ...extra })
+
+test('liveAgents returns the latest working or needs-you snapshot per session and agent', () => {
+  journal.append({ sessionId: 's1', role: 'tool', text: 'a', item: agent('a', 'working'), at: 1 })
+  journal.append({ sessionId: 's1', role: 'tool', text: 'a', item: { ...agent('a', 'needs-you', { tokens: 4 }), agent: 'parent' }, at: 2 })
+  journal.append({ sessionId: 's1', role: 'tool', text: 'b', item: agent('b', 'working'), at: 3 })
+  journal.append({ sessionId: 's1', role: 'tool', text: 'b', item: agent('b', 'done', { endedAt: 5 }), at: 4 })
+  journal.append({ sessionId: 's1', role: 'assistant', text: 'prose', item: { kind: 'prose', text: 'x' }, at: 5 })
+  journal.append({ sessionId: 's1', role: 'system', text: 'legacy', at: 6 })
+  journal.append({ sessionId: 's2', role: 'tool', text: 'a', item: agent('a', 'working'), at: 7 })
+
+  const live = journal.liveAgents()
+  expect(live.map((row) => [row.sessionId, row.item.id, row.item.state])).toEqual([
+    ['s1', 'a', 'needs-you'],
+    ['s2', 'a', 'working']
+  ])
+  expect(live[0]!.item).toMatchObject({ tokens: 4, agent: 'parent' })
+})
+
+test('liveAgents is empty when every agent ended or none exist', () => {
+  expect(journal.liveAgents()).toEqual([])
+  journal.append({ sessionId: 's', role: 'tool', text: 'a', item: agent('a', 'working'), at: 1 })
+  journal.append({ sessionId: 's', role: 'tool', text: 'a', item: agent('a', 'stopped', { cutOff: true }), at: 2 })
+  expect(journal.liveAgents()).toEqual([])
+})
+
+test('agentItems returns the latest snapshot of each agent in one session only', () => {
+  journal.append({ sessionId: 's', role: 'tool', text: 'a', item: agent('a', 'working', { tokens: 1 }), at: 1 })
+  journal.append({ sessionId: 's', role: 'tool', text: 'b', item: agent('b', 'working'), at: 2 })
+  journal.append({ sessionId: 's', role: 'tool', text: 'a', item: agent('a', 'done', { tokens: 9 }), at: 3 })
+  journal.append({ sessionId: 'other', role: 'tool', text: 'c', item: agent('c', 'working', { tokens: 100 }), at: 4 })
+
+  const items = journal.agentItems('s')
+  expect(items.map((item) => [item.id, item.state, item.tokens])).toEqual([
+    ['b', 'working', undefined],
+    ['a', 'done', 9]
+  ])
+  expect(journal.agentItems('none')).toEqual([])
+})
