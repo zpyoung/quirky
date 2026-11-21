@@ -185,3 +185,32 @@ test('update with an undefined value clears the field', () => {
   registry.update('a', { summary: 'x' })
   expect('summary' in agentOf(registry.update('a', { summary: undefined }))).toBe(false)
 })
+
+test('descendants reaches live agents beneath an ended intermediate, deepest first', () => {
+  const registry = new AgentRegistry()
+  spawn(registry, 'root')
+  spawn(registry, 'child', 'root')
+  spawn(registry, 'grand', 'child')
+  spawn(registry, 'great', 'grand')
+  registry.end('child', 'done')
+  expect(registry.descendants('root')).toEqual(['great', 'grand'])
+})
+
+test('a self-parent spawn is top-level and descendants does not throw', () => {
+  const registry = new AgentRegistry()
+  const entry = spawn(registry, 'self', 'self')
+  expect(entry.item.agent).toBeUndefined()
+  expect(registry.parentOf('self')).toBeUndefined()
+  expect(registry.descendants('self')).toEqual([])
+})
+
+test('a spawn whose parent chain contains the new id is refused as a parent', () => {
+  const registry = new AgentRegistry()
+  spawn(registry, 'a')
+  spawn(registry, 'b', 'a')
+  const entry = spawn(registry, 'a', 'b')
+  expect(entry.item.agent).toBeUndefined()
+  expect(registry.parentOf('a')).toBeUndefined()
+  expect(registry.descendants('a')).toEqual(['b'])
+  expect(registry.descendants('b')).toEqual([])
+})
