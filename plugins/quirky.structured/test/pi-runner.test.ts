@@ -30,9 +30,13 @@ function makeSetup(variant: PiVariant, replies?: Record<string, () => Reply>) {
   const resolved: PiVariant[] = []
   const cancelledAsks: string[] = []
   const reported: AgentCommand[][] = []
+  const usage: Parameters<NonNullable<StructuredContext['reportUsage']>>[1][] = []
+  const summaries = { mode: 'ai' as 'ai' | 'latest-tool' }
   const context: StructuredContext = {
     process: noSpawn,
     reportCommands: (_id, commands) => void reported.push(commands),
+    reportUsage: (_id, report) => void usage.push(report),
+    agentSummaries: () => summaries.mode,
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -87,7 +91,7 @@ function makeSetup(variant: PiVariant, replies?: Record<string, () => Reply>) {
   const settle = (transport: FakePiTransport) =>
     variant === 'pi' ? transport.emit({ type: 'agent_settled' }) : transport.emit({ type: 'agent_end', messages: [], isTerminal: true, yielded: true })
   const answered = (askId: string, answers: AskEnvelope['answers']): AskEnvelope => ({ status: 'answered', askId, answers, skipped: [], summary: '' })
-  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, reported, context, session, fake, runner, items, ofKind, settle, answered }
+  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, reported, usage, summaries, context, session, fake, runner, items, ofKind, settle, answered }
 }
 
 type Setup = ReturnType<typeof makeSetup>
@@ -836,5 +840,226 @@ describe('pi and omp commands', () => {
     expect(transport.commands('prompt')).toMatchObject([{ message: 'please /compact now' }])
     transport.emit({ type: 'available_commands_update', commands: [{ name: 'skill:new', source: 'skill' }] })
     expect(setup.reported.at(-1)).toEqual([{ name: 'skill:new', kind: 'skill' }])
+  })
+})
+
+type SubSetup = Setup
+
+const lifecycle = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  type: 'subagent_lifecycle',
+  payload: { id, agent: 'explore', agentSource: 'bundled', description: `task ${id}`, status, index: 0, ...extra }
+})
+const inner = (id: string, event: Record<string, unknown>) => ({ type: 'subagent_event', payload: { id, event } })
+
+describe('omp subagents', () => {
+  let setup: SubSetup
+  const begin = async (options: Parameters<Setup['runner']['start']>[2] = {}) => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, 'go', options)
+    return setup.fake.last()
+  }
+  const agents = () => setup.ofKind('agent')
+  const lastOf = (id: string) => agents().filter((item) => item.id === id).at(-1)
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+  })
+
+  test('the subscription is sent outside deny-all and never inside it', async () => {
+    const transport = await begin()
+    expect(transport.commands('set_subagent_subscription')).toMatchObject([{ level: 'events' }])
+    await setup.runner.stop(setup.session.id)
+    const denied = await begin({ toolPolicy: 'deny-all' })
+    expect(denied.commands('set_subagent_subscription')).toEqual([])
+  })
+
+  test('pi never sends the subscription', async () => {
+    const pi = makeSetup('pi')
+    await pi.runner.start(pi.session, 'go')
+    expect(pi.fake.last().commands('set_subagent_subscription')).toEqual([])
+    await pi.runner.stop(pi.session.id)
+  })
+
+  test('lifecycle spawns, ends and tags agents; the task call itself is no activity', async () => {
+    const transport = await begin()
+    transport.emit(
+      { type: 'agent_start' },
+      { type: 'tool_execution_start', toolCallId: 'task1', toolName: 'task', args: { tasks: [] } },
+      lifecycle('a1', 'started', { parentToolCallId: 'task1', detached: true }),
+      lifecycle('a1', 'completed', { parentToolCallId: 'task1' }),
+      { type: 'tool_execution_end', toolCallId: 'task1', toolName: 'task', result: { content: [] } }
+    )
+    expect(setup.ofKind('activity')).toEqual([])
+    expect(agents().map((item) => item.state)).toEqual(['working', 'done'])
+    expect(agents()[0]).toMatchObject({ id: 'a1', nativeId: 'a1', name: 'explore', task: 'task a1', prompt: 'task a1', background: true, steps: 'full' })
+    expect(setup.items().filter((item) => item.kind === 'agent').every((item) => item.agent === undefined)).toBe(true)
+  })
+
+  test('failed and aborted map to failed and stopped', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started'), lifecycle('a1', 'failed'), lifecycle('a2', 'started'), lifecycle('a2', 'aborted'))
+    expect(lastOf('a1')?.state).toBe('failed')
+    expect(lastOf('a2')?.state).toBe('stopped')
+  })
+
+  test('progress sets tokens and the AI summary, and no summary under latest-tool', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started'))
+    transport.emit({ type: 'subagent_progress', payload: { index: 0, agent: 'explore', task: 't', progress: { id: 'a1', tokens: 120, lastIntent: 'reading files' } } })
+    expect(lastOf('a1')).toMatchObject({ tokens: 120, summary: 'reading files' })
+    setup.summaries.mode = 'latest-tool'
+    transport.emit({ type: 'subagent_progress', payload: { index: 0, agent: 'explore', task: 't', progress: { id: 'a1', tokens: 150, lastIntent: 'writing' } } })
+    expect(lastOf('a1')?.tokens).toBe(150)
+    expect(lastOf('a1')?.summary).toBeUndefined()
+  })
+
+  test('subagent events journal tagged prose and tool calls and never touch the parent turn', async () => {
+    const transport = await begin()
+    transport.emit(
+      { type: 'agent_start' },
+      lifecycle('a1', 'started'),
+      inner('a1', { type: 'agent_start' }),
+      inner('a1', { type: 'tool_execution_start', toolCallId: 'k1', toolName: 'bash', args: { command: 'ls' } }),
+      inner('a1', { type: 'tool_execution_end', toolCallId: 'k1', toolName: 'bash', result: { content: [{ type: 'text', text: 'ok' }] } }),
+      inner('a1', { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'found it' }], usage: { input: 5, output: 5 } } }),
+      inner('a1', { type: 'agent_end', isTerminal: true, yielded: true }),
+      inner('a1', { type: 'agent_settled' })
+    )
+    expect(setup.ofKind('activity').map((item) => [item.state, item.agent])).toEqual([['running', 'a1'], ['done', 'a1']])
+    expect(setup.ofKind('prose')).toEqual([{ kind: 'prose', text: 'found it', agent: 'a1' }])
+    expect(setup.ofKind('turn-end')).toEqual([])
+    expect(setup.usage).toEqual([])
+    expect(setup.statuses.at(-1)).toBe('working')
+  })
+
+  test('streaming prose is keyed per agent', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started'), lifecycle('a2', 'started'))
+    const delta = (id: string, d: string) => inner(id, { type: 'message_update', messageId: 'm1', assistantMessageEvent: { type: 'text_delta', delta: d } })
+    transport.emit(delta('a1', 'one '), delta('a2', 'two '))
+    await Bun.sleep(300)
+    transport.emit(delta('a1', 'more'), delta('a2', 'more'))
+    const streamed = setup.ofKind('prose').filter((item) => item.streaming)
+    expect(streamed.map((item) => [item.agent, item.text])).toEqual([['a1', 'one more'], ['a2', 'two more']])
+  })
+
+  test('a nested task call inside a subagent makes a nested agent, and an unknown parent goes to unattributed', async () => {
+    const transport = await begin()
+    transport.emit(
+      { type: 'tool_execution_start', toolCallId: 'task1', toolName: 'task', args: {} },
+      lifecycle('a1', 'started', { parentToolCallId: 'task1' }),
+      inner('a1', { type: 'tool_execution_start', toolCallId: 'task2', toolName: 'task', args: {} }),
+      lifecycle('a2', 'started', { parentToolCallId: 'task2' }),
+      lifecycle('a3', 'started', { parentToolCallId: 'nope' })
+    )
+    expect(setup.ofKind('activity')).toEqual([])
+    const tagOf = (id: string) => setup.ofKind('agent').find((item) => item.id === id) && setup.items().find((item) => item.kind === 'agent' && item.id === id)?.agent
+    expect(tagOf('a1')).toBeUndefined()
+    expect(tagOf('a2')).toBe('a1')
+    expect(tagOf('a3')).toBe('unattributed')
+    expect(agents().filter((item) => item.id === 'unattributed')).toHaveLength(1)
+  })
+
+  test('an event for an unknown agent is journaled under unattributed', async () => {
+    const transport = await begin()
+    transport.emit(inner('ghost', { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] } }))
+    expect(lastOf('unattributed')).toMatchObject({ state: 'working' })
+    expect(setup.ofKind('prose')).toEqual([{ kind: 'prose', text: 'hi', agent: 'unattributed' }])
+  })
+
+  test('stopAgent cancels the agent and its descendants deepest first and journals them stopped', async () => {
+    const transport = await begin()
+    transport.emit(
+      { type: 'tool_execution_start', toolCallId: 'task1', toolName: 'task', args: {} },
+      lifecycle('a1', 'started', { parentToolCallId: 'task1' }),
+      inner('a1', { type: 'tool_execution_start', toolCallId: 'task2', toolName: 'task', args: {} }),
+      lifecycle('a2', 'started', { parentToolCallId: 'task2' })
+    )
+    await setup.runner.stopAgent?.(setup.session.id, 'a1')
+    expect(transport.commands('cancel_subagent').map((frame) => frame.subagentId)).toEqual(['a2', 'a1'])
+    expect(lastOf('a1')?.state).toBe('stopped')
+    expect(lastOf('a2')?.state).toBe('stopped')
+    expect(setup.ofKind('turn-end')).toEqual([])
+    await setup.runner.stopAgent?.(setup.session.id, 'a1')
+    expect(transport.commands('cancel_subagent')).toHaveLength(2)
+  })
+
+  test('interrupt cancels every live agent before aborting', async () => {
+    const transport = await begin()
+    transport.emit({ type: 'agent_start' }, lifecycle('a1', 'started', { detached: true }))
+    await setup.runner.interrupt(setup.session.id)
+    const order = transport.written.map((frame) => frame.type).filter((type) => type === 'cancel_subagent' || type === 'abort')
+    expect(order).toEqual(['cancel_subagent', 'abort'])
+    expect(lastOf('a1')?.state).toBe('stopped')
+  })
+
+  test('a detached agent and its open calls survive the parent agent_end', async () => {
+    const transport = await begin()
+    transport.emit(
+      { type: 'agent_start' },
+      lifecycle('a1', 'started', { detached: true }),
+      inner('a1', { type: 'tool_execution_start', toolCallId: 'k1', toolName: 'bash', args: { command: 'sleep 9' } })
+    )
+    setup.settle(transport)
+    expect(setup.ofKind('turn-end')).toHaveLength(1)
+    expect(lastOf('a1')?.state).toBe('working')
+    expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running'])
+  })
+
+  test('an agent that ends reports its final tokens as input once', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started'))
+    transport.emit({ type: 'subagent_progress', payload: { index: 0, agent: 'explore', task: 't', progress: { id: 'a1', tokens: 700 } } })
+    transport.emit(lifecycle('a1', 'completed'), lifecycle('a1', 'completed'))
+    expect(setup.usage).toEqual([{ tokens: { input: 700, output: 0, cacheRead: 0, cacheWrite: 0 } }])
+  })
+
+  test('run end journals live agents as cut off and stops their open calls', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started', { detached: true }), inner('a1', { type: 'tool_execution_start', toolCallId: 'k1', toolName: 'bash', args: { command: 'ls' } }))
+    await setup.runner.stop(setup.session.id)
+    expect(lastOf('a1')).toMatchObject({ state: 'stopped', cutOff: true })
+    expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running', 'stopped'])
+  })
+
+  test('deny-all ignores subagent frames and still refuses tools', async () => {
+    const transport = await begin({ toolPolicy: 'deny-all' })
+    transport.emit(lifecycle('a1', 'started'))
+    expect(agents()).toEqual([])
+  })
+})
+
+describe('pi subagent tool', () => {
+  let setup: Setup
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+  })
+
+  test('a subagent tool call is an agent with no steps, ended by the result', async () => {
+    setup = makeSetup('pi')
+    await setup.runner.start(setup.session, 'go')
+    const transport = setup.fake.last()
+    transport.emit(
+      { type: 'agent_start' },
+      { type: 'tool_execution_start', toolCallId: 'p1', toolName: 'subagent', args: { agent: 'scout', task: 'find x' } },
+      { type: 'tool_execution_end', toolCallId: 'p1', toolName: 'subagent', result: { content: [{ type: 'text', text: 'x is here' }] } },
+      { type: 'tool_execution_start', toolCallId: 'p2', toolName: 'subagent', args: { foo: 'bar' } },
+      { type: 'tool_execution_end', toolCallId: 'p2', toolName: 'subagent', isError: true, result: { content: [{ type: 'text', text: 'boom' }] } }
+    )
+    expect(setup.ofKind('activity')).toEqual([])
+    const agents = setup.ofKind('agent')
+    expect(agents[0]).toMatchObject({ id: 'p1', name: 'scout', task: 'find x', prompt: 'find x', steps: 'none', state: 'working' })
+    expect(agents[1]).toMatchObject({ id: 'p1', state: 'done', report: 'x is here' })
+    expect(agents[2]).toMatchObject({ id: 'p2', name: 'subagent', state: 'working' })
+    expect(agents[3]).toMatchObject({ id: 'p2', state: 'failed', error: 'boom' })
+    expect(agents.every((item) => item.tokens === undefined)).toBe(true)
+    expect(setup.usage).toEqual([])
+  })
+
+  test('stopAgent is a no-op', async () => {
+    setup = makeSetup('pi')
+    await setup.runner.start(setup.session, 'go')
+    setup.fake.last().emit({ type: 'tool_execution_start', toolCallId: 'p1', toolName: 'subagent', args: { task: 't' } })
+    await setup.runner.stopAgent?.(setup.session.id, 'p1')
+    expect(setup.ofKind('agent').at(-1)?.state).toBe('working')
   })
 })
