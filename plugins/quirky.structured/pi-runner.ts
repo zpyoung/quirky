@@ -1,7 +1,8 @@
 import { constants, existsSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
-import type { AgentCommand, AskEnvelope, AskSpec, Session } from '@quirky/protocol'
+import type { AgentCommand, AgentKey, AskEnvelope, AskSpec, Session } from '@quirky/protocol'
+import { AgentRegistry } from './agents'
 import { capabilitiesFor } from './capabilities'
 import {
   CallTracker,
@@ -12,6 +13,7 @@ import {
   piEntries,
   statusItem,
   stderrLines,
+  summarizeInput,
   turnEndItem,
   userItem,
   type ItemEntry
@@ -112,6 +114,11 @@ type Running = {
   turnStartedAt: number | null
   calls: CallTracker
   stream: ProseStream
+  agents: AgentRegistry
+  /** Each subagent's own open tool calls, so the parent turn ending never settles them. */
+  agentCalls: Map<AgentKey, CallTracker>
+  /** Who issued each omp `task` call: an agent key, or undefined for main. */
+  taskOwners: Map<string, AgentKey | undefined>
   pendingDialogs: number
   dialogCancels: Map<string, () => void>
   exit?: PiExit
@@ -131,6 +138,14 @@ const record = (value: unknown): Record<string, unknown> | null =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+function toolResultText(result: unknown): string {
+  const content = record(result)?.content
+  if (!Array.isArray(content)) return ''
+  return content.map((part) => text(record(part)?.text)).filter(Boolean).join('\n')
+}
+
+const AGENT_END_STATES = { completed: 'done', failed: 'failed', aborted: 'stopped' } as const
 
 function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
   const env = { ...base }
@@ -243,6 +258,8 @@ class PiRunner implements StructuredRunner {
         this.requireLive(run)
         if (this.variant === 'omp' && !run.denyAll) await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
         if (startup.stopped) return
+        if (this.variant === 'omp' && !run.denyAll) await run.rpc.request('set_subagent_subscription', { level: 'events' }).catch(() => undefined)
+        if (startup.stopped) return
         this.requireLive(run)
         await this.loadCommands(run)
         if (startup.stopped) return
@@ -354,6 +371,7 @@ class PiRunner implements StructuredRunner {
       if (resumed !== old.providerSessionId) throw new Error(`${this.variant} resumed session ${resumed}, expected ${old.providerSessionId}`)
       this.requireLive(next)
       if (this.variant === 'omp') await next.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+      if (this.variant === 'omp') await next.rpc.request('set_subagent_subscription', { level: 'events' }).catch(() => undefined)
       this.requireLive(next)
       next.providerSessionId = resumed
       next.sessionFile = text(state?.sessionFile) || old.sessionFile
@@ -367,6 +385,7 @@ class PiRunner implements StructuredRunner {
     next.commands = old.commands
     this.running.set(old.sessionId, next)
     old.stopped = true
+    this.finishRun(old)
     await old.rpc.close()
     return next
   }
@@ -401,7 +420,9 @@ class PiRunner implements StructuredRunner {
 
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
-    if (!run || run.stopped || run.ended || !run.ready || !run.working) return
+    if (!run || run.stopped || run.ended || !run.ready) return
+    await this.stopAgents(run, run.agents.live())
+    if (!run.working) return
     this.closeTurn(run, 'stopped')
     run.idleStatus = 'done'
     try {
@@ -426,6 +447,7 @@ class PiRunner implements StructuredRunner {
     this.clearAbort(run)
     this.running.delete(sessionId)
     this.closeTurn(run, 'stopped')
+    this.finishRun(run)
     try {
       await run.rpc.request('abort', {}, ABORT_TIMEOUT_MS)
     } catch {
@@ -453,6 +475,9 @@ class PiRunner implements StructuredRunner {
       turnStartedAt: null,
       calls: new CallTracker(),
       stream: new ProseStream(),
+      agents: new AgentRegistry(),
+      agentCalls: new Map(),
+      taskOwners: new Map(),
       pendingDialogs: 0,
       dialogCancels: new Map(),
       deniedReasons: [],
@@ -688,7 +713,24 @@ class PiRunner implements StructuredRunner {
           this.endForTool(run, `${this.variant} ran ${toolName} in a session that must have no tools`)
           return
         }
+        if (this.variant === 'omp' && text(frame.toolName) === 'task') {
+          if (frame.type === 'tool_execution_start') run.taskOwners.set(text(frame.toolCallId), undefined)
+          return
+        }
+        if (this.variant === 'pi' && (text(frame.toolName) === 'subagent' || run.agents.has(text(frame.toolCallId)))) {
+          this.piSubagent(run, frame)
+          return
+        }
         for (const entry of piEntries(frame, run.calls)) this.append(run, entry)
+        return
+      case 'subagent_lifecycle':
+        if (this.variant === 'omp' && !run.denyAll) this.onSubagentLifecycle(run, record(frame.payload))
+        return
+      case 'subagent_progress':
+        if (this.variant === 'omp' && !run.denyAll) this.onSubagentProgress(run, record(frame.payload))
+        return
+      case 'subagent_event':
+        if (this.variant === 'omp' && !run.denyAll) this.onSubagentEvent(run, record(frame.payload))
         return
       case 'agent_settled':
         this.finishTurn(run, run.failedTurn ? 'failed' : 'done')
@@ -725,6 +767,196 @@ class PiRunner implements StructuredRunner {
     }
   }
 
+  /** Journals entries produced by `agent`, tagged with it; main's entries pass through untagged. */
+  private appendFor(run: Running, agent: AgentKey | undefined, entries: ItemEntry[]): void {
+    for (const entry of entries) this.append(run, run.agents.tag(entry, agent))
+  }
+
+  private callsOf(run: Running, agent: AgentKey): CallTracker {
+    let calls = run.agentCalls.get(agent)
+    if (!calls) {
+      calls = new CallTracker()
+      run.agentCalls.set(agent, calls)
+    }
+    return calls
+  }
+
+  /** Settles the agent's still-open calls to match how it ended, so its transcript never shows a call running forever. */
+  private settleAgentCalls(run: Running, agent: AgentKey, state: 'done' | 'failed' | 'stopped'): void {
+    const calls = run.agentCalls.get(agent)
+    if (calls) this.appendFor(run, agent, closingEntries(calls, state))
+  }
+
+  private reportAgentTokens(run: Running, entry: ItemEntry | null): void {
+    if (this.variant !== 'omp' || entry === null || entry.item.kind !== 'agent') return
+    const tokens = entry.item.tokens
+    if (tokens !== undefined && tokens > 0) this.context.reportUsage?.(run.sessionId, { tokens: { input: tokens, output: 0, cacheRead: 0, cacheWrite: 0 } })
+  }
+
+  /** Ends a live agent, journaling its settled calls first and reporting its final tokens once. A finished or unknown agent is left alone. */
+  private endAgent(run: Running, agent: AgentKey, state: 'done' | 'failed' | 'stopped', extra: Parameters<AgentRegistry['end']>[2] = {}): void {
+    if (!run.agents.isLive(agent)) return
+    this.settleAgentCalls(run, agent, state)
+    const entry = run.agents.end(agent, state, extra)
+    if (entry === null) return
+    this.append(run, entry)
+    this.reportAgentTokens(run, entry)
+  }
+
+  /** Ends the run's agents that outlived the process or session: open calls stopped, live agents journaled as cut off. */
+  private finishRun(run: Running): void {
+    for (const agent of run.agents.live()) this.settleAgentCalls(run, agent, 'stopped')
+    for (const entry of run.agents.cutOff()) {
+      this.append(run, entry)
+      this.reportAgentTokens(run, entry)
+    }
+  }
+
+  /**
+   * Stops the given agents and every live descendant, deepest first, and journals each as stopped.
+   * omp is asked to cancel each one; pi has no way to, so its agents are only journaled as stopped.
+   */
+  private async stopAgents(run: Running, agents: AgentKey[]): Promise<void> {
+    const order = new Set<AgentKey>()
+    for (const agent of agents) {
+      for (const child of run.agents.descendants(agent)) order.add(child)
+    }
+    for (const agent of agents) order.add(agent)
+    for (const agent of order) {
+      if (!run.agents.isLive(agent)) continue
+      if (this.variant === 'omp' && !run.denyAll) {
+        const subagentId = run.agents.get(agent)?.nativeId ?? agent
+        await run.rpc.request('cancel_subagent', { subagentId }, ABORT_TIMEOUT_MS).catch(() => undefined)
+      }
+      this.endAgent(run, agent, 'stopped')
+    }
+  }
+
+  /** Stops one subagent and its live descendants without ending the turn. Only omp can cancel a single agent. */
+  async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (this.variant !== 'omp' || !run || run.stopped || run.ended || !run.ready) return
+    await this.stopAgents(run, [agent])
+  }
+
+  /** pi's extension `subagent` tool call is an agent with no steps: it starts on the call and ends with the result text. */
+  private piSubagent(run: Running, frame: PiFrame): void {
+    const id = text(frame.toolCallId)
+    if (frame.type === 'tool_execution_start') {
+      const args = record(frame.args) ?? {}
+      const prompt = text(args.task)
+      this.append(
+        run,
+        run.agents.spawn({
+          id,
+          name: text(args.agent) || 'subagent',
+          task: prompt || summarizeInput(args),
+          ...(prompt === '' ? {} : { prompt }),
+          steps: 'none'
+        })
+      )
+      return
+    }
+    const report = toolResultText(frame.result)
+    this.endAgent(run, id, frame.isError === true ? 'failed' : 'done', {
+      ...(report === '' ? {} : frame.isError === true ? { error: report } : { report })
+    })
+  }
+
+  /** The agent that owns a tool call, or unattributed when no call with that id was seen. */
+  private ownerOf(run: Running, toolCallId: string): { agent?: AgentKey; entries: ItemEntry[] } {
+    if (run.taskOwners.has(toolCallId)) return { agent: run.taskOwners.get(toolCallId), entries: [] }
+    return run.agents.resolve(toolCallId)
+  }
+
+  private onSubagentLifecycle(run: Running, payload: Record<string, unknown> | null): void {
+    const id = text(payload?.id)
+    if (payload === null || id === '') return
+    if (!run.agents.has(id)) {
+      const parentCall = text(payload.parentToolCallId)
+      const owner = parentCall === '' ? { entries: [] as ItemEntry[] } : this.ownerOf(run, parentCall)
+      for (const entry of owner.entries) this.append(run, entry)
+      const description = text(payload.description)
+      this.append(
+        run,
+        run.agents.spawn({
+          id,
+          nativeId: id,
+          name: text(payload.agent) || 'subagent',
+          task: description || 'subagent',
+          ...(description === '' ? {} : { prompt: description }),
+          ...(owner.agent === undefined ? {} : { parent: owner.agent }),
+          background: payload.detached === true,
+          steps: 'full'
+        })
+      )
+    }
+    const ended = AGENT_END_STATES[text(payload.status) as keyof typeof AGENT_END_STATES]
+    if (ended !== undefined) this.endAgent(run, id, ended)
+  }
+
+  private onSubagentProgress(run: Running, payload: Record<string, unknown> | null): void {
+    const progress = record(payload?.progress)
+    const id = text(progress?.id)
+    const current = id === '' ? undefined : run.agents.get(id)
+    if (payload === null || progress === null || !current) return
+    const tokens = typeof progress.tokens === 'number' && Number.isFinite(progress.tokens) ? progress.tokens : current.tokens
+    const intent = text(progress.lastIntent)
+    const summary = (this.context.agentSummaries?.() ?? 'ai') === 'ai' && intent !== '' ? intent : undefined
+    const task = text(payload.assignment) || text(payload.task)
+    const patch: Parameters<AgentRegistry['update']>[1] = { tokens, summary }
+    if (current.prompt === undefined && task !== '') patch.prompt = task
+    if (current.task === 'subagent' && task !== '') patch.task = oneLine(task, 200)
+    if (tokens === current.tokens && summary === current.summary && patch.prompt === undefined && patch.task === undefined) return
+    const entry = run.agents.update(id, patch)
+    if (entry !== null) this.append(run, entry)
+  }
+
+  /** Dispatches a subagent's own session event like a top-level frame, tagged with that agent and never touching the parent turn. */
+  private onSubagentEvent(run: Running, payload: Record<string, unknown> | null): void {
+    const id = text(payload?.id)
+    const event = record(payload?.event)
+    if (payload === null || id === '' || event === null) return
+    const known = run.agents.resolve(id)
+    for (const entry of known.entries) this.append(run, entry)
+    const agent = known.agent
+    if (agent === undefined) return
+    switch (event.type) {
+      case 'message_update': {
+        const delta = record(event.assistantMessageEvent)
+        if (delta?.type !== 'text_delta' || typeof delta.delta !== 'string') return
+        const item = run.stream.push(`${agent}:${text(event.messageId) || 'assistant'}`, delta.delta, Date.now())
+        if (item && item.kind === 'prose') {
+          this.append(run, run.agents.tag({ role: 'system', text: item.text, data: { streaming: true }, item }, agent))
+        }
+        return
+      }
+      case 'message_end': {
+        const message = record(event.message)
+        if (message?.role !== 'assistant') return
+        run.stream.reset(`${agent}:${text(event.messageId) || 'assistant'}`)
+        const content = Array.isArray(message.content) ? message.content : []
+        const body = content.map((part) => (record(part)?.type === 'text' ? text(record(part)?.text) : '')).join('')
+        if (body !== '') this.appendFor(run, agent, [{ role: 'assistant', text: body, data: event, item: { kind: 'prose', text: body } }])
+        if (message.stopReason === 'error') {
+          const reason = text(message.errorMessage) || `${this.variant} subagent stopped with an error`
+          this.appendFor(run, agent, [{ role: 'system', text: reason, data: event, item: statusItem(oneLine(reason)) }])
+        }
+        return
+      }
+      case 'tool_execution_start':
+      case 'tool_execution_end':
+        if (text(event.toolName) === 'task') {
+          if (event.type === 'tool_execution_start') run.taskOwners.set(text(event.toolCallId), agent)
+          return
+        }
+        this.appendFor(run, agent, piEntries(event, this.callsOf(run, agent)))
+        return
+      default:
+        return
+    }
+  }
+
   private status(run: Running, message: string, data: unknown): void {
     this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: message, data, item: statusItem(message) })
   }
@@ -737,6 +969,7 @@ class PiRunner implements StructuredRunner {
     this.running.delete(run.sessionId)
     const wasWorking = run.working
     this.closeTurn(run, 'failed')
+    this.finishRun(run)
     const tail = exit.stderrTail.length > 0 ? exit.stderrTail : stderrLines(describeExit(exit))
     if (exit.protocolError !== undefined || exit.code !== 0 || wasWorking || exit.stderrTail.length > 0) {
       this.context.appendMessage({
