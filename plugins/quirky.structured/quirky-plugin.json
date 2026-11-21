@@ -209,6 +209,17 @@
         }
       },
       {
+        "id": "stopAgent",
+        "description": "Stops one subagent of a running structured session and every live agent below it, leaving the turn and the rest of the agents running. Fails when the agent's runner cannot stop a single subagent or the session is not running.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" }, "agent": { "type": "string" } },
+          "required": ["session", "agent"],
+          "additionalProperties": false
+        },
+        "result": { "type": "object", "properties": {}, "additionalProperties": false }
+      },
+      {
         "id": "stopOwned",
         "description": "Plugin callers only: stops live connections created by this exact plugin under a resource key, including a create whose reply was lost. Session history is retained.",
         "params": {
@@ -294,9 +305,11 @@
             "effort": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "approveForSession": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
             "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
-            "fork": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
+            "fork": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "subagents": { "type": "string", "enum": ["full", "states", "none"] },
+            "stopAgent": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
           },
-          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume", "fork"]
+          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume", "fork", "subagents", "stopAgent"]
         }
       },
       {
@@ -411,13 +424,18 @@
             },
             "cache": {
               "description": "{tiers: [{ttlMs: 300000 | 3600000, anchorAt}]} prompt-cache lifetimes, or null"
+            },
+            "subagentTokens": {
+              "type": "number",
+              "description": "Tokens the chat's subagents used, already included in conversation.total; 0 when none"
             }
           },
           "required": [
             "own",
             "conversation",
             "turns",
-            "cache"
+            "cache",
+            "subagentTokens"
           ]
         }
       },
@@ -544,6 +562,14 @@
         "description": "How liberally agents draw visuals in a chat that has not set its own level: off, balanced or visual-first.",
         "default": "visual-first",
         "values": ["off", "balanced", "visual-first"]
+      },
+      {
+        "id": "agent-summaries",
+        "type": "enum",
+        "title": "Agent status summaries",
+        "description": "AI-written where the agent offers it, or the latest tool call.",
+        "default": "ai",
+        "values": ["ai", "latest-tool"]
       }
     ],
     "event": [

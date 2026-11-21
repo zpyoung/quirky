@@ -8,7 +8,10 @@ export type CallState = 'running' | 'done' | 'failed' | 'stopped'
  * A call that starts and finishes appends two items with the same `callId`; the UI keeps the last.
  * A normalizer that cannot classify an event returns `{ kind: 'status' }` instead of throwing.
  */
-export type ChatItem =
+export type ChatItem = ChatItemBase & { agent?: AgentKey }
+
+/** The agent-less item members; `ChatItem` adds the optional `agent` tag to each. */
+type ChatItemBase =
   | { kind: 'user'; text: string; images?: string[]; queuedId?: string }
   | { kind: 'prose'; text: string; streaming?: boolean }
   | { kind: 'activity'; callId: string; tool: string; summary: string; state: CallState; detail?: string }
@@ -24,7 +27,7 @@ export type ChatItem =
       tail?: string
     }
   | { kind: 'steps'; callId: string; steps: { text: string; state: 'pending' | 'active' | 'done' }[] }
-  | { kind: 'ask'; askId: string; variant: 'approval' | 'question' }
+  | { kind: 'ask'; askId: string; variant: 'approval' | 'question'; from?: AgentKey }
   | { kind: 'view'; viewId: string; version?: number }
   | { kind: 'view-error'; title: string; errors: string[]; source: string }
   | { kind: 'changes'; worktree: string; fromTree: string; toTree: string; files: number }
@@ -45,6 +48,35 @@ export type ChatItem =
     }
   | { kind: 'mode'; mode: 'default' | 'acceptEdits' | 'plan' | 'auto' | 'dontAsk' | 'bypassPermissions'; autoAvailable?: boolean }
   | { kind: 'visual-level'; level: VisualLevel }
+  | {
+      kind: 'agent'
+      id: AgentKey
+      name: string
+      task: string
+      prompt?: string
+      model?: string
+      background?: boolean
+      state: AgentState
+      cutOff?: boolean
+      refused?: string
+      startedAt: number
+      endedAt?: number
+      tokens?: number
+      summary?: string
+      report?: string
+      error?: string
+      steps: 'full' | 'none'
+      nativeId?: string
+    }
+
+/** A subagent's stable id: Claude's Agent tool_use id, Codex's child thread id, omp's subagent id, or pi's subagent tool call id. */
+export type AgentKey = string
+
+/** Where a subagent is in its life; `needs-you` means it is waiting on an ask. */
+export type AgentState = 'working' | 'needs-you' | 'done' | 'failed' | 'stopped'
+
+/** The latest snapshot of one subagent; each journaled `agent` item is a full snapshot and the newest wins. */
+export type AgentItem = Extract<ChatItem, { kind: 'agent' }>
 
 /** How liberally the agent draws visuals in a chat; the composer dial sets it per chat. */
 export type VisualLevel = 'off' | 'balanced' | 'visual-first'
@@ -83,6 +115,10 @@ export type AgentCapabilities = {
   approveForSession: Capability
   resume: Capability
   fork: Capability
+  /** How much of a subagent's work the runner reports; set at runtime by `capabilitiesFor` for every agent. */
+  subagents?: 'full' | 'states' | 'none'
+  /** Whether one subagent can be stopped alone. */
+  stopAgent?: Capability
 }
 
 /** Token counts for one scope of a chat's usage; `total` is the sum of the other four. */
@@ -101,7 +137,14 @@ export type UsageSummary = { sessionId: string; own: UsageTotals; turns: number;
  * The answer to a usage query: this chat's own totals, the whole forked-from conversation's, the
  * conversation's completed turn count (0 when none), and its cache state; null where unknown.
  */
-export type UsageResult = { own: UsageTotals | null; conversation: UsageTotals | null; turns: number; cache: CacheState | null }
+export type UsageResult = {
+  own: UsageTotals | null
+  conversation: UsageTotals | null
+  turns: number
+  cache: CacheState | null
+  /** Subagent tokens across the chat, already included in `conversation.total`; a missing value means 0. */
+  subagentTokens?: number
+}
 
 /** What a runner reports to the usage tracker: token counts, a turn boundary, and cache-write/read activity for one call. */
 export type UsageReport = {

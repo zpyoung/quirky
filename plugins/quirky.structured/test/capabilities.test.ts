@@ -46,6 +46,13 @@ describe('capabilities values', () => {
     expect(capabilitiesFor('pi')!.permissionModes).toEqual({ ok: false, reason: 'pi has no permission modes; it runs tools without asking unless an extension asks' })
   })
 
+  test('each agent declares its subagent support and whether one subagent can be stopped', () => {
+    for (const agent of ['claude', 'codex', 'omp']) {
+      expect(capabilitiesFor(agent)).toMatchObject({ subagents: 'full', stopAgent: { ok: true } })
+    }
+    expect(capabilitiesFor('pi')).toMatchObject({ subagents: 'states', stopAgent: { ok: false, reason: "pi can't stop one subagent" } })
+  })
+
   test('every dangerous mode and label names an offered mode', () => {
     for (const agent of ['claude', 'codex', 'pi', 'omp']) {
       const modes = capabilitiesFor(agent)!.permissionModes

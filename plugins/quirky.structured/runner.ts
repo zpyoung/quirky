@@ -1,5 +1,6 @@
 import type {
   AgentCommand,
+  AgentKey,
   ProcessSpawner,
   AskEnvelope,
   AskSpec,
@@ -41,7 +42,7 @@ export type StructuredContext = {
   createAsk(
     spec: AskSpec,
     sessionId: string,
-    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void }
+    options?: { nativeQuestion?: boolean; silent?: boolean; onAsk?: (askId: string) => void; from?: AgentKey }
   ): Promise<AskEnvelope>
   /** Cancels a pending ask the runner no longer needs, so its card becomes a dismissed record. */
   cancelAsk(askId: string): Promise<void>
@@ -54,6 +55,8 @@ export type StructuredContext = {
    * with a prompt cache, one call's cache activity. The plugin owns the stored summary; runners never write it.
    */
   reportUsage?(sessionId: string, report: UsageReport): void
+  /** The current `agent-summaries` setting: whether a subagent's status line is the agent's own AI-written summary or its latest tool call. Callers treat a missing method as 'ai'. */
+  agentSummaries?():  'ai' | 'latest-tool'
   /** The user's `claude` executable, found through their login shell. */
   resolveClaudePath(): Promise<string>
   /** The user's `codex` executable, found through their login shell. */
@@ -126,6 +129,11 @@ export interface StructuredRunner {
    */
   planFeedback?(sessionId: string, text: string): boolean
   interrupt(sessionId: string): Promise<void>
+  /**
+   * Stops that agent and every live descendant, journaling each as `state: 'stopped'`. Never ends the
+   * turn. A no-op for an unknown or finished agent. Absent when `capabilities.stopAgent` is not ok.
+   */
+  stopAgent?(sessionId: string, agent: AgentKey): Promise<void>
   stop(sessionId: string): Promise<void>
   /**
    * Creates a new provider conversation holding the source's history, without starting a turn and without

@@ -31,6 +31,7 @@ class FakeRunner implements StructuredRunner {
   stopped: string[] = []
   startError: Error | null = null
   sendError: Error | null = null
+  stopAgent?: (sessionId: string, agent: string) => Promise<void>
   constructor(readonly context: StructuredContext) {}
   async start(session: Session, prompt?: string, options?: StructuredStartOptions) {
     if (this.startError) throw this.startError
@@ -563,6 +564,116 @@ try {
     })
   })
 
+})
+
+const agentItem = (id: string, state: 'working' | 'needs-you' | 'done', extra: Record<string, unknown> = {}) =>
+  ({ kind: 'agent' as const, id, name: id, task: `task ${id}`, state, startedAt: 1, steps: 'full' as const, ...extra })
+
+describe('subagent support in the plugin', () => {
+  beforeEach(() => boot())
+
+  test('stopAgent calls the runner and returns an empty result', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const calls: [string, string][] = []
+    runner.stopAgent = async (sessionId, agent) => void calls.push([sessionId, agent])
+    expect(await call('quirky.structured/stopAgent', { session: session.id, agent: 'a1' })).toEqual({})
+    expect(calls).toEqual([[session.id, 'a1']])
+  })
+
+  test('stopAgent is refused when the runner cannot stop one agent or the params are wrong', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    expect(await failure(call('quirky.structured/stopAgent', { session: session.id, agent: 'a1' }))).toMatchObject({
+      code: RpcErrorCode.Conflict,
+      message: "This agent can't stop a single subagent."
+    })
+    runner.stopAgent = async () => {}
+    expect(await failure(call('quirky.structured/stopAgent', { session: session.id }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(await failure(call('quirky.structured/stopAgent', { session: session.id, agent: '' }))).toMatchObject({ code: RpcErrorCode.InvalidParams })
+    expect(await failure(call('quirky.structured/stopAgent', { session: 's_missing', agent: 'a1' }))).toBeDefined()
+  })
+
+  test('stopAgent is refused when the session is not running', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    runner.stopAgent = async () => {}
+    runner.context.setStatus(session.id, 'exited')
+    expect(await failure(call('quirky.structured/stopAgent', { session: session.id, agent: 'a1' }))).toMatchObject({
+      code: RpcErrorCode.Conflict
+    })
+  })
+
+  test('usage sums the latest tokens of every agent across the resume chain', async () => {
+    const first = await create('one')
+    await waitFor(() => runner.started.length === 1)
+    const second = await create('two')
+    world.sessions.get(second.id)!.resumedFrom = first.id
+    const journal = (sessionId: string, item: ReturnType<typeof agentItem>) =>
+      runner.context.appendMessage({ sessionId, role: 'tool', text: 'agent', item })
+    journal(first.id, agentItem('a', 'working', { tokens: 5 }))
+    journal(first.id, agentItem('a', 'done', { tokens: 20 }))
+    journal(first.id, agentItem('b', 'working'))
+    runner.context.appendMessage({ sessionId: second.id, role: 'tool', text: 'agent', item: agentItem('c', 'done', { tokens: 7 }) })
+    expect((await call('quirky.structured/usage', { session: first.id })).subagentTokens).toBe(20)
+    expect((await call('quirky.structured/usage', { session: second.id })).subagentTokens).toBe(27)
+  })
+
+  test('usage reports zero subagent tokens for a chat without agents', async () => {
+    const session = await create('go')
+    expect((await call('quirky.structured/usage', { session: session.id })).subagentTokens).toBe(0)
+  })
+
+  test('createAsk copies the asking agent onto the journaled ask item, only when given', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    void runner.context.createAsk({ questions: [{ id: 'ok', type: 'confirm', question: 'Run it?' }] }, session.id, { from: 'agent-7' }).catch(() => {})
+    void runner.context.createAsk({ questions: [{ id: 'ok', type: 'confirm', question: 'Run it?' }] }, session.id).catch(() => {})
+    await waitFor(() => structuredEvents().filter((e) => e.data.message.item?.kind === 'ask').length === 2)
+    const asks = structuredEvents().map((e) => e.data.message.item).filter((item) => item?.kind === 'ask')
+    expect(asks[0]).toMatchObject({ kind: 'ask', variant: 'approval', from: 'agent-7' })
+    expect(asks[1]).not.toHaveProperty('from')
+  })
+
+  test('agentSummaries follows the setting and defaults to ai', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    expect(runner.context.agentSummaries?.()).toBe('ai')
+    await call('setting.set', { id: 'setting:quirky.structured/agent-summaries', value: 'latest-tool' })
+    expect(runner.context.agentSummaries?.()).toBe('latest-tool')
+    expect(session.id).toBeDefined()
+  })
+})
+
+describe('cut-off recovery at activate', () => {
+  test('a live agent left by a previous run is journaled as stopped and cut off, once', async () => {
+    const home = shortHome()
+    await boot({ home })
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    runner.context.appendMessage({ sessionId: session.id, role: 'tool', text: 'a', item: agentItem('a', 'working', { tokens: 3 }) })
+    runner.context.appendMessage({ sessionId: session.id, role: 'tool', text: 'b', item: agentItem('b', 'needs-you', { agent: 'a' }) })
+    runner.context.appendMessage({ sessionId: session.id, role: 'tool', text: 'c', item: agentItem('c', 'done') })
+    for (const c of h.clients) c.close()
+    await h.daemon.stop()
+    h.pty.stop()
+
+    for (let boots = 0; boots < 2; boots++) {
+      const again = new FakeWorld()
+      again.addStructuredSession(session.id)
+      await boot({ home, world: again })
+      const messages = (await call('quirky.structured/messages', { session: session.id })) as StructuredMessage[]
+      const agents = messages.filter((m) => m.item?.kind === 'agent').map((m) => m.item as any)
+      expect(agents.filter((item) => item.state === 'stopped')).toEqual([
+        expect.objectContaining({ id: 'a', cutOff: true, tokens: 3, endedAt: expect.any(Number) }),
+        expect.objectContaining({ id: 'b', cutOff: true, agent: 'a', endedAt: expect.any(Number) })
+      ])
+      expect(agents.filter((item) => item.id === 'c')).toHaveLength(1)
+      for (const c of h.clients) c.close()
+      await h.daemon.stop()
+      h.pty.stop()
+    }
+  })
 })
 
 describe('a runner that fails to start', () => {
