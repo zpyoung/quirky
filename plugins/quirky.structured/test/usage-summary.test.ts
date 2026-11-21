@@ -257,7 +257,7 @@ describe('usage summary in the plugin', () => {
     chat = await bootChat()
     const s = await chat.create()
     const ctx = chat.runner.context
-    expect(await chat.call('quirky.structured/usage', { session: s.id })).toEqual({ own: null, conversation: null, turns: 0, cache: null })
+    expect(await chat.call('quirky.structured/usage', { session: s.id })).toEqual({ own: null, conversation: null, turns: 0, cache: null, subagentTokens: 0 })
     ctx.reportUsage!(s.id, { tokens: { input: 10, output: 5, cacheRead: 3, cacheWrite: 2 } })
     ctx.reportUsage!(s.id, { tokens: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 }, turnEnded: true })
     await waitFor(() => summaryEvents(chat!).length === 2)
@@ -268,7 +268,8 @@ describe('usage summary in the plugin', () => {
       own: { input: 11, output: 6, cacheRead: 4, cacheWrite: 3, total: 24 },
       conversation: { input: 11, output: 6, cacheRead: 4, cacheWrite: 3, total: 24 },
       turns: 1,
-      cache: null
+      cache: null,
+      subagentTokens: 0
     })
   })
 
@@ -384,7 +385,7 @@ describe('usage summary in the plugin', () => {
       report('s_c', 100)
       chat.world.sessions.delete(b.id)
       expect((await chat.call('quirky.structured/usage', { session: c.id })).conversation.input).toBe(100)
-      expect(await chat.call('quirky.structured/usage', { session: 's_a' })).toEqual({ own: null, conversation: null, turns: 0, cache: null })
+      expect(await chat.call('quirky.structured/usage', { session: 's_a' })).toEqual({ own: null, conversation: null, turns: 0, cache: null, subagentTokens: 0 })
     })
   })
 
