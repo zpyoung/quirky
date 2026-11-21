@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from 'react'
-import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
+import { RpcErrorCode, type AgentCapabilities, type AgentKey, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
 import { Button, ControlIcon, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
+import { AgentDock } from './AgentDock'
+import { isLive, listedAgents, runningOrder, deriveAgents } from './agents'
 import { ChatHeader } from './ChatHeader'
 import { chatFrame, useChatLayout } from './chatLayout'
 import { Composer } from './Composer'
 import { defaultVisualLevel, registerChatHandle, useVisualLabels } from './controls'
-import { newestUserAt } from './elapsed'
+import { newestUserAt, useClock } from './elapsed'
 import { Embedded } from './Embedded'
 import { currentMode, planVersions, previousMode } from './plan'
 import { PlanChip } from './PlanChip'
@@ -198,6 +200,13 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     [earlier, session, stored, showAll]
   )
   const history = useMemo(() => [...earlier.flatMap((chat) => chat.messages), ...stored], [earlier, stored])
+  const [agentFocus, setAgentFocus] = useState<{ selected: AgentKey | null; nonce: number }>({ selected: null, nonce: 0 })
+  const anyLive = useMemo(() => [...deriveAgents(history, 0).values()].some(isLive), [history])
+  const clock = useClock(anyLive)
+  const agentNow = anyLive ? clock : 0
+  const agents = useMemo(() => deriveAgents(history, agentNow), [history, agentNow])
+  const onOpenAgent = (id: AgentKey | null) =>
+    setAgentFocus((current) => ({ selected: id ?? runningOrder(agents, listedAgents(agents).map((agent) => agent.id))[0] ?? null, nonce: current.nonce + 1 }))
   const [otherViews, setOtherViews] = useState<Map<string, VisualRecord>>(() => new Map())
   const askedViews = useRef(new Set<string>())
   const turnsIndex = useMemo<ViewIndex>(() => {
@@ -249,6 +258,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     setExpanded(null)
     setFocusRequest(null)
     setVisualizing(null)
+    setAgentFocus({ selected: null, nonce: 0 })
     setOtherViews(new Map())
     askedViews.current = new Set()
   }, [session.id])
@@ -535,6 +545,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         messages={history}
         showAll={showAll}
         layout={chatLayout}
+        agents={agents}
         planChip={
           newest && (
             <PlanChip
@@ -574,6 +585,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
                   data={turn}
                   index={index}
                   visual={visual}
+                  agents={agents}
+                  onOpenAgent={onOpenAgent}
                   onOpenPlan={(version) => {
                     setViewed(version === newest?.version ? null : version)
                     setPanelOpen(true)
@@ -600,6 +613,9 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           bodyWidth={bodyWidth}
           unit={unit}
           focus={focusRequest}
+          agents={listedAgents(agents).length === 0 ? null : { views: agents, selected: agentFocus.selected, nonce: agentFocus.nonce }}
+          capabilities={capabilities}
+          now={agentNow}
         />
       </div>
       {expanded !== null && (
@@ -619,6 +635,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           />
         </section>
       )}
+      <AgentDock agents={agents} layout={chatLayout} onOpenAgent={onOpenAgent} />
       <Composer
         context={context}
         session={session}
