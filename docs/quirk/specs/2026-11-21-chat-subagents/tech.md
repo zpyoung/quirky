@@ -186,7 +186,8 @@ agent item: { kind: 'agent'; id: AgentKey; name: string; task: string; model?: s
   report?: string; error?: string; steps: 'full' | 'none'; nativeId?: string }
 ask item gains: from?: AgentKey               // the agent that asked; the ask still renders in the main turn
 AgentCapabilities gains: subagents: 'full' | 'states' | 'none'; stopAgent: Capability   // Capability = PR/chat.ts:65
-UsageResult gains: subagentTokens: number      // already included in conversation.total
+UsageResult gains: subagentTokens?: number     // already included in conversation.total; optional so existing fixtures compile, the UI reads a missing value as 0
+StructuredContext gains: agentSummaries?(): 'ai' | 'latest-tool'   // P/runner.ts; optional for the same reason, adapters treat a missing one as 'ai'
 ```
 
 - **Invariant:** an `agent` item's own `agent` tag is its parent's key, because the spawn happens in the parent's stream. Top-level agents carry no tag.
