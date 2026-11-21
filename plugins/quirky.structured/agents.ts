@@ -44,9 +44,11 @@ export class AgentRegistry {
 
   /**
    * Records a new agent as `working` and returns the entry that journals its spawn. Spawning an id
-   * already known replaces its record.
+   * already known replaces its record. A parent that is the agent itself, or whose ancestry contains
+   * it, would form a cycle, so it is treated as absent and the agent becomes top-level.
    */
-  spawn(init: AgentInit): ItemEntry {
+  spawn(rawInit: AgentInit): ItemEntry {
+    const init = this.wouldCycle(rawInit.id, rawInit.parent) ? { ...rawInit, parent: undefined } : rawInit
     const item: AgentItem = {
       kind: 'agent',
       id: init.id,
@@ -118,18 +120,33 @@ export class AgentRegistry {
     return [...this.agents.keys()].filter((id) => this.isLive(id))
   }
 
+  private wouldCycle(id: AgentKey, parent: AgentKey | undefined): boolean {
+    const seen = new Set<AgentKey>()
+    for (let cur = parent; cur !== undefined && !seen.has(cur); cur = this.parents.get(cur)) {
+      if (cur === id) return true
+      seen.add(cur)
+    }
+    return false
+  }
+
   /** The agent's parent, or undefined for a top-level or unknown agent. */
   parentOf(id: AgentKey): AgentKey | undefined {
     return this.parents.get(id)
   }
 
-  /** Every live agent below `id`, deepest first, so stopping them in order never orphans a running child. */
+  /**
+   * Every live agent below `id` at any depth, deepest first, so stopping them in order never orphans
+   * a running child. Ended agents are walked through but not returned, so a live agent beneath one is
+   * still found.
+   */
   descendants(id: AgentKey): AgentKey[] {
     const found: { id: AgentKey; depth: number }[] = []
+    const visited = new Set<AgentKey>([id])
     const walk = (parent: AgentKey, depth: number): void => {
       for (const [child, owner] of this.parents) {
-        if (owner !== parent || !this.isLive(child)) continue
-        found.push({ id: child, depth })
+        if (owner !== parent || visited.has(child)) continue
+        visited.add(child)
+        if (this.isLive(child)) found.push({ id: child, depth })
         walk(child, depth + 1)
       }
     }
