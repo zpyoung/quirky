@@ -6,6 +6,7 @@
 
 **Amendments:**
 - 2026-11-21, tech spec feasibility: AI-written current-action lines come from the agent itself, so they're available only where the agent offers one: Claude Code's SDK progress summary and omp's intent line. Codex and pi rows always show the latest tool call. Quirky adds no model call of its own. The user chose this over building a Quirky summarizer. It changes the data flow (step 3), SC-9, and the Decisions Locked line about summaries.
+- 2026-11-21, clarification: SC-3's table said "Done · 3" collapsed. Design section 3 and mock v2 collapse Done only once it holds more than 3, so SC-3 now matches them.
 
 ## Purpose
 
@@ -99,7 +100,7 @@ A **subagent** (just "agent" in this spec) is an agent the session's agent start
      | Turn | ✓ "Spawned 12 agents · 9 running · 2 need you · 1 quiet · 3 done" ▸ |
      | Asks | ✓ two cards: "audit ask asks", "audit accounts asks" |
      | Dock | ✓ "9 agents (+2) · 2 need you · 1 quiet" |
-     | Agents card | ✓ Running · 9, needs-you first, then quiet, then working; ✓ "Done · 3" collapsed |
+     | Agents card | ✓ Running · 9, needs-you first, then quiet, then working; ✓ "Done · 3" listed (Done collapses once it holds more than 3) |
 
 4. **SC-4 A nested agent asks**
    - **Given** "audit vault" has started two agents of its own, "trace callers" and "check tests"
