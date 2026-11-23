@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-**Status:** Approved 2026-11-23.
+**Status:** Approved 2026-11-23. Tech spec: tech.md (complexity gate: crosses quirky.view, @quirky/ui and quirky.session).
 
 **Amendments:** none yet.
 
