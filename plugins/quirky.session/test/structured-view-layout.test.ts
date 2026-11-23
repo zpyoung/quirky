@@ -265,11 +265,16 @@ describe('the plan in the visual panel', () => {
     }
   }, 60_000)
 
-  test.skipIf(!executable)('a wide chat docks the visual panel beside the transcript with the plan pinned first', async () => {
+  test.skipIf(!executable)('a wide chat docks the visual panel beside the transcript with the plan as the pinned first tab', async () => {
     const { context, page } = await openComposer({ centerWidth: 1300, messages: PLAN_MESSAGES })
     try {
       const panel = page.locator('aside[aria-label="Visual panel"]:not([data-collapsed])')
       await panel.waitFor()
+      const planTab = panel.getByRole('tab', { name: 'Plan v1' })
+      await planTab.waitFor()
+      expect(await planTab.getAttribute('aria-selected')).toBe('true')
+      expect(await panel.getByRole('tab').first().textContent()).toContain('Plan v1')
+      expect(await panel.getByRole('button', { name: 'Close Plan v1' }).count()).toBe(0)
       const plan = panel.locator('section[aria-label="Plan"]')
       await plan.getByText('Handle ExitPlanMode').waitFor()
       expect(await page.getByRole('dialog').count()).toBe(0)
