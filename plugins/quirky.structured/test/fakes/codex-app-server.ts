@@ -23,6 +23,8 @@ type FixtureTurnScript = {
   notifications?: FixtureNotification[]
   serverRequests?: FixtureServerRequest[]
   interrupt?: 'success' | 'error' | 'timeout'
+  /** Fails `turn/interrupt` for the scripted child threads only, so the parent's own interrupt still succeeds. */
+  childInterrupt?: 'error'
   hold?: boolean
 }
 /**
@@ -352,6 +354,10 @@ function receive(message) {
       }
       case 'turn/interrupt':
         if (turnScript?.interrupt === 'timeout') return
+        if (turnScript?.childInterrupt === 'error' && childThreads.some((child) => child.id === message.params.threadId)) {
+          send({ id: message.id, error: { code: -32001, message: 'scripted child interrupt failure' } })
+          return
+        }
         if (turnScript?.interrupt === 'error') {
           send({ id: message.id, error: { code: -32001, message: 'scripted interrupt failure' } })
           return
