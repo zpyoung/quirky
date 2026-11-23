@@ -73,9 +73,10 @@ function readableTitle(value: unknown): string {
 }
 
 /**
- * The lifecycle of views: open, update, patch, close, move, wait, action and render failures. Every
- * spec is checked before it is stored and every stored spec is a version; a refused one is announced
- * as `rejected`, is never a version, and marks the view it was meant for as refused.
+ * The lifecycle of views: open, update, patch, close, reopen, done, move, wait, action and render
+ * failures. An update or patch on a closed view reopens it and clears done. Every spec is checked
+ * before it is stored and every stored spec is a version; a refused one is announced as `rejected`,
+ * is never a version, and marks the view it was meant for as refused.
  */
 export class ViewService {
   private readonly waiters = new Map<string, Set<Waiter>>()
@@ -108,6 +109,7 @@ export class ViewService {
       createdAt: at,
       updatedAt: at,
       closed: false,
+      done: false,
       version: 1,
       latestVersion: 1,
       refused: null
@@ -117,9 +119,9 @@ export class ViewService {
     return { viewId: record.viewId }
   }
 
-  /** Makes the spec the view's next version; placement and its user override stay as they are. */
+  /** Makes the spec the view's next version, reopening the view; placement and its user override stay as they are. */
   update(sessionId: string, viewId: string, rawSpec: unknown): StoredViewRecord {
-    const existing = this.ownedOpen(sessionId, viewId)
+    const existing = this.owned(sessionId, viewId)
     const spec = this.checked(sessionId, rawSpec, 'update', existing)
     const record = this.views.appendVersion(viewId, spec, this.now())
     this.changed(record, 'update')
@@ -131,7 +133,7 @@ export class ViewService {
    * invalid result is refused like a refused update and leaves the stored spec alone.
    */
   patch(sessionId: string, viewId: string, rawOps: unknown): { viewId: string; version: number } {
-    const existing = this.ownedOpen(sessionId, viewId)
+    const existing = this.owned(sessionId, viewId)
     let ops = rawOps
     let source: string
     if (typeof rawOps === 'string') {
@@ -157,6 +159,24 @@ export class ViewService {
     const record = this.views.close(viewId)!
     this.finishWaiters(viewId, { status: 'closed' })
     this.changed(record, 'close')
+    return record
+  }
+
+  /** Brings a closed view back; an open view is returned as it is, with no event. */
+  reopen(viewId: string): StoredViewRecord {
+    const existing = this.get(viewId)
+    if (!existing.closed) return existing
+    const record = this.views.reopen(viewId)!
+    this.changed(record, 'reopen')
+    return record
+  }
+
+  /** Marks the view's work as over, or live again; setting the value it already has emits nothing. */
+  setDone(viewId: string, done: boolean): StoredViewRecord {
+    const existing = this.get(viewId)
+    if (existing.done === done) return existing
+    const record = this.views.setDone(viewId, done)!
+    this.changed(record, 'done')
     return record
   }
 
@@ -297,12 +317,6 @@ export class ViewService {
   private owned(sessionId: string, viewId: string): StoredViewRecord {
     const record = this.views.get(viewId)
     if (!record || record.sessionId !== sessionId) throw this.deps.notFound(`view ${viewId} not found`)
-    return record
-  }
-
-  private ownedOpen(sessionId: string, viewId: string): StoredViewRecord {
-    const record = this.owned(sessionId, viewId)
-    if (record.closed) throw this.deps.conflict(`view ${viewId} is closed; open a new one`)
     return record
   }
 

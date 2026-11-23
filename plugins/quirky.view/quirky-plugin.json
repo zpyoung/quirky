@@ -109,7 +109,63 @@
       },
       {
         "id": "close",
-        "description": "Closes the caller's view and releases its waits.",
+        "description": "Closes a view and releases its waits. The agent closes its own views; the window closes any view it can read.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "viewId"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "done",
+        "description": "Marks a view's work as over, or live again. The agent marks its own views; the window marks any view it can read. A new version clears it.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "viewId": {
+              "type": "string"
+            },
+            "done": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "viewId",
+            "done"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "reopen",
+        "description": "Brings a closed view back. Window only; an agent reopens a view by updating it.",
         "params": {
           "type": "object",
           "properties": {
@@ -200,6 +256,10 @@
               "title": {
                 "type": "string"
               },
+              "label": {
+                "type": "string",
+                "description": "The short tab name from the current spec, when it has one."
+              },
               "spec": {
                 "type": "object",
                 "additionalProperties": true,
@@ -227,6 +287,10 @@
               "closed": {
                 "type": "boolean"
               },
+              "done": {
+                "type": "boolean",
+                "description": "The visual's work is over; a new version clears it."
+              },
               "version": {
                 "type": "integer",
                 "description": "The version `spec` belongs to."
@@ -248,7 +312,8 @@
               "updates",
               "createdAt",
               "updatedAt",
-              "closed"
+              "closed",
+              "done"
             ]
           }
         }
@@ -284,6 +349,10 @@
             "title": {
               "type": "string"
             },
+            "label": {
+              "type": "string",
+              "description": "The short tab name from the current spec, when it has one."
+            },
             "spec": {
               "type": "object",
               "additionalProperties": true,
@@ -311,6 +380,10 @@
             "closed": {
               "type": "boolean"
             },
+            "done": {
+              "type": "boolean",
+              "description": "The visual's work is over; a new version clears it."
+            },
             "version": {
               "type": "integer",
               "description": "The version `spec` belongs to."
@@ -332,7 +405,8 @@
             "updates",
             "createdAt",
             "updatedAt",
-            "closed"
+            "closed",
+            "done"
           ]
         }
       },
@@ -370,6 +444,10 @@
             "title": {
               "type": "string"
             },
+            "label": {
+              "type": "string",
+              "description": "The short tab name from the current spec, when it has one."
+            },
             "spec": {
               "type": "object",
               "additionalProperties": true,
@@ -397,6 +475,10 @@
             "closed": {
               "type": "boolean"
             },
+            "done": {
+              "type": "boolean",
+              "description": "The visual's work is over; a new version clears it."
+            },
             "version": {
               "type": "integer",
               "description": "The version `spec` belongs to."
@@ -418,7 +500,8 @@
             "updates",
             "createdAt",
             "updatedAt",
-            "closed"
+            "closed",
+            "done"
           ]
         }
       },
@@ -508,7 +591,7 @@
     "event": [
       {
         "id": "changed",
-        "description": "A view was opened, updated, patched, closed or moved, or a refusal or render failure was recorded on it. `version` is its latest version and `placement` where it is after the change.",
+        "description": "A view was opened, updated, patched, closed, reopened, marked done or moved, or a refusal or render failure was recorded on it. `version` is its latest version and `placement` where it is after the change.",
         "data": {
           "type": "object",
           "properties": {
@@ -528,6 +611,8 @@
                 "update",
                 "patch",
                 "close",
+                "done",
+                "reopen",
                 "move",
                 "refused",
                 "render-failed"
@@ -684,6 +769,25 @@
         },
         "methods": [
           "quirky.view/close"
+        ]
+      },
+      {
+        "id": "view-done",
+        "words": "done",
+        "summary": "mark a view's work as over, or live again with --undo; updating the view also makes it live",
+        "flags": {
+          "id": {
+            "type": "string",
+            "description": "the view to mark",
+            "required": true
+          },
+          "undo": {
+            "type": "boolean",
+            "description": "clear the done mark instead of setting it"
+          }
+        },
+        "methods": [
+          "quirky.view/done"
         ]
       },
       {

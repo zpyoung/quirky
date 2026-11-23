@@ -12,6 +12,7 @@ const USAGE = `usage:
   quirky view patch --id <viewId> --ops <json|@file>             prints {"viewId": ..., "version": N}
   quirky view get --id <viewId> [--at-version N]                 prints {"viewId","title","version","latestVersion","spec"}
   quirky view close --id <viewId>
+  quirky view done --id <viewId> [--undo]                        marks the visual's work as over; updating it later makes it live again
   quirky view wait --id <viewId> [--timeout-ms N]                prints {"action": ...} or {"status":"timeout"}
   quirky view --help
 
@@ -141,6 +142,12 @@ export const commands: CliModule['commands'] = {
     requireSession(ctx)
     await call(ctx, 'quirky.view/close', { viewId: idFlag(args) })
     ctx.out.jsonLine({ viewId: idFlag(args), closed: true })
+  },
+
+  /** Marks a view's work as over, or live again with `--undo`; prints nothing on success. */
+  async 'view-done'(args, ctx) {
+    requireSession(ctx)
+    await call(ctx, 'quirky.view/done', { viewId: idFlag(args), done: args.flags.undo !== true })
   },
 
   async 'view-wait'(args, ctx) {

@@ -31,7 +31,11 @@ describe('visual guidance', () => {
       'lowercase letters, digits and dashes',
       '@view:<viewId>/v<version>/<element>',
       'quirky view get --id <viewId> --at-version <n>',
-      'quirky view --help'
+      'quirky view --help',
+      '`label`',
+      'tabs',
+      'quirky view done --id <id>',
+      'Updating it later makes it live again'
     ]) {
       expect(text).toContain(needle)
     }

@@ -127,6 +127,7 @@ describe('quirky view open', () => {
     ['view-patch', { id: 'view_x', ops: '[]' }],
     ['view-get', { id: 'view_x' }],
     ['view-close', { id: 'view_x' }],
+    ['view-done', { id: 'view_x' }],
     ['view-wait', { id: 'view_x' }]
   ] as const)(
     '%s exits 1 outside an agent session without calling the daemon',
@@ -336,10 +337,34 @@ describe('quirky view wait', () => {
   })
 })
 
+describe('quirky view done', () => {
+  test('marks the view done and prints nothing; --undo clears it', async () => {
+    const { h, cli } = setup()
+    await run(cli, 'view-open', { spec: JSON.stringify(bundleSize) })
+    const [{ viewId }] = cli.lines as [{ viewId: string }]
+    await run(cli, 'view-done', { id: viewId })
+    expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ done: true })
+    await run(cli, 'view-done', { id: viewId, undo: true })
+    expect(await h.call('get', { viewId }, windowCaller)).toMatchObject({ done: false })
+    expect(cli.lines).toEqual([{ viewId }])
+    expect(cli.calls.slice(1)).toEqual([
+      { method: 'quirky.view/done', params: { viewId, done: true } },
+      { method: 'quirky.view/done', params: { viewId, done: false } }
+    ])
+  })
+
+  test('an unknown view is a runtime error (exit 1)', async () => {
+    const { cli } = setup()
+    const error = await failure(run(cli, 'view-done', { id: 'view_missing' }))
+    expect(error.message).toContain('not found')
+    expect(error).not.toHaveProperty('exit', 2)
+  })
+})
+
 describe('quirky view --help', () => {
   test('the help text has the usage and the whole catalog with an example for every component', () => {
     const text = helpText()
-    for (const line of ['quirky view open --spec @file.json [--placement inline|pane]', 'quirky view update --id <viewId> --spec @file.json', 'quirky view patch --id <viewId> --ops <json|@file>', 'quirky view get --id <viewId> [--at-version N]', 'quirky view close --id <viewId>', 'quirky view wait --id <viewId> [--timeout-ms N]', 'quirky view --help']) {
+    for (const line of ['quirky view open --spec @file.json [--placement inline|pane]', 'quirky view update --id <viewId> --spec @file.json', 'quirky view patch --id <viewId> --ops <json|@file>', 'quirky view get --id <viewId> [--at-version N]', 'quirky view close --id <viewId>', 'quirky view done --id <viewId> [--undo]', 'quirky view wait --id <viewId> [--timeout-ms N]', 'quirky view --help']) {
       expect(text).toContain(line)
     }
     for (const type of CATALOG_TYPES) {
@@ -347,6 +372,13 @@ describe('quirky view --help', () => {
       expect(text).toContain(`example: ${JSON.stringify(COMPONENTS[type].example)}`)
     }
     expect(text.indexOf('usage:')).toBeLessThan(text.indexOf('Components'))
+  })
+
+  test('the usage puts done under close, and the spec paragraph documents the label', () => {
+    const text = helpText()
+    expect(text.indexOf('quirky view done')).toBeGreaterThan(text.indexOf('quirky view close'))
+    expect(text.indexOf('quirky view done')).toBeLessThan(text.indexOf('quirky view wait'))
+    expect(text).toContain('"label" is a short tab name for the view, up to 24 characters.')
   })
 
   test('the bare command prints it, with or without a session', async () => {
@@ -360,7 +392,7 @@ describe('quirky view --help', () => {
 describe('the manifest', () => {
   const declared = manifest.contributes['cli-command']
 
-  test('declares the seven commands the CLI module implements', () => {
+  test('declares the eight commands the CLI module implements', () => {
     expect(declared.map((command) => [command.id, command.words])).toEqual([
       ['view', ''],
       ['view-open', 'open'],
@@ -368,6 +400,7 @@ describe('the manifest', () => {
       ['view-patch', 'patch'],
       ['view-get', 'get'],
       ['view-close', 'close'],
+      ['view-done', 'done'],
       ['view-wait', 'wait']
     ])
     expect(Object.keys(commands).sort()).toEqual(declared.map((command) => command.id).sort())
@@ -380,6 +413,7 @@ describe('the manifest', () => {
     expect(flagsOf('view-patch')).toEqual(['id', 'ops'])
     expect(flagsOf('view-get')).toEqual(['id', 'at-version'])
     expect(flagsOf('view-close')).toEqual(['id'])
+    expect(flagsOf('view-done')).toEqual(['id', 'undo'])
     expect(flagsOf('view-wait')).toEqual(['id', 'timeout-ms'])
   })
 })
@@ -391,6 +425,12 @@ describe('the manifest and the module agree on the new methods', () => {
     for (const command of manifest.contributes['cli-command']) {
       for (const method of command.methods) expect(methods).toContain(method.slice('quirky.view/'.length))
     }
+  })
+
+  test('reopen is not offered to the CLI, because an agent reopens a view by updating it', () => {
+    const exposed = manifest.contributes['cli-command'].flatMap((command) => command.methods)
+    expect(exposed).not.toContain('quirky.view/reopen')
+    expect(manifest.contributes.method.map((method) => method.id)).toContain('reopen')
   })
 
   test('render-failed is not offered to the CLI, because only the window reports it', () => {

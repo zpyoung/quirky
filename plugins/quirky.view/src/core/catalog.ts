@@ -50,6 +50,7 @@ export const MAX_SPEC_BYTES = 256 * 1024
 export const MAX_TABLE_ROWS = 500
 export const MAX_CHART_POINTS = 500
 export const MAX_TITLE_LENGTH = 120
+export const MAX_LABEL_LENGTH = 24
 const MAX_TABLE_COLUMNS = 20
 const MAX_LIST_ITEMS = 200
 const MAX_COLUMNS = 4
@@ -1216,14 +1217,20 @@ export function validateViewSpec(raw: unknown): ViewSpecValidationResult {
       return { ok: false, errors: [{ path: '', message: `view spec is ${size} bytes; at most ${MAX_SPEC_BYTES} bytes allowed` }] }
     }
     const check: Check = { errors: [], fieldIds: new Set(), ids: new Set(), nodes: 0, nodeLimitHit: false }
-    checkKeys(raw, ['title', 'root'], '', check)
+    checkKeys(raw, ['title', 'label', 'root'], '', check)
     let title = ''
     if (typeof raw.title !== 'string' || raw.title.trim() === '') addError(check, 'title', 'title is required and must be a non-empty string')
     else if (raw.title.length > MAX_TITLE_LENGTH) addError(check, 'title', `title must be at most ${MAX_TITLE_LENGTH} characters`)
     else title = raw.title
+    let label: string | undefined
+    if (raw.label !== undefined) {
+      if (typeof raw.label !== 'string' || raw.label.trim() === '') addError(check, 'label', 'label must be a non-empty string')
+      else if (raw.label.length > MAX_LABEL_LENGTH) addError(check, 'label', `label must be at most ${MAX_LABEL_LENGTH} characters`)
+      else label = raw.label
+    }
     const root = raw.root === undefined ? (addError(check, 'root', 'root is required'), undefined) : readNode(raw.root, 'root', 1, check)
     if (check.errors.length > 0 || root === undefined) return { ok: false, errors: check.errors }
-    return { ok: true, spec: { title, root } }
+    return { ok: true, spec: label === undefined ? { title, root } : { title, label, root } }
   } catch (error) {
     return { ok: false, errors: [{ path: '', message: `view spec could not be checked: ${error instanceof Error ? error.message : String(error)}` }] }
   }
@@ -1238,7 +1245,8 @@ export function formatViewErrors(errors: readonly ViewValidationError[]): string
 export function catalogGuide(): string {
   const lines = [
     'View spec',
-    '  {"title": string, "root": node}; a node is {"type": <component>, "id"?: string, "props": {...}, "children": [node, ...]}.',
+    '  {"title": string, "label"?: string, "root": node}; a node is {"type": <component>, "id"?: string, "props": {...}, "children": [node, ...]}.',
+    `  "label" is a short tab name for the view, up to ${MAX_LABEL_LENGTH} characters.`,
     `  An id is ${ID_HINT}, and unique in the spec, timeline items, board cards and sketch shapes included. A user points at an element by its id, so keep ids the same when you update.`,
     '  Props are strings, except numbers in charts, plots, sketches and fields and booleans in fields and html. There are no style, class, event or URL props.',
     `  Limits: at most ${MAX_NODES} nodes, ${MAX_DEPTH} levels deep, ${MAX_SPEC_BYTES / 1024} KiB encoded, ${MAX_TABLE_ROWS} table rows, ${MAX_CHART_POINTS} chart points.`,

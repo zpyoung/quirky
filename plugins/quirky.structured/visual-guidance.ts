@@ -26,10 +26,12 @@ The user sets a visual level per chat. Each user message may start with a marker
 
 ## Working with visuals
 
+- Give every pane visual a \`label\` of a word or two ("SDD run"), because the chat shows visuals as tabs.
 - Update the visual you already drew instead of drawing a near-duplicate. A change is a new version of the same visual.
 - Use \`quirky view patch\` for a small edit. Send a whole new spec only when the structure changes.
 - Keep the prose short and point at the visual. Do not repeat in text what the visual shows.
 - If a version is refused or fails to render, Quirky tells you. Fix it and send a corrected version.
+- Run \`quirky view done --id <id>\` when a visual's work is over, such as a signed-off mock, a finished brainstorm or a superseded spec. Updating it later makes it live again.
 - Node ids are lowercase letters, digits and dashes.
 
 ## Pointing

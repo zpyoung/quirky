@@ -34,7 +34,7 @@ export type CatalogType = (typeof CATALOG_TYPES)[number]
 /** `id` is the stable key for pointing at a node. */
 export type ViewNode = { type: CatalogType; id?: string; props?: Record<string, unknown>; children?: ViewNode[] }
 
-export type ViewSpec = { title: string; root: ViewNode }
+export type ViewSpec = { title: string; label?: string; root: ViewNode }
 
 export type ViewPlacement = 'inline' | 'pane'
 
@@ -51,6 +51,8 @@ export type ViewRecord = {
   viewId: string
   sessionId: string
   title: string
+  /** The short tab name of the current spec, when it has one. */
+  label?: string
   spec: ViewSpec
   placement: ViewPlacement
   movedByUser: boolean
@@ -59,6 +61,8 @@ export type ViewRecord = {
   createdAt: string
   updatedAt: string
   closed: boolean
+  /** The mark that the visual's work is over; any new version clears it. The daemon always sets it; optional so older readers and fakes still type-check. */
+  done?: boolean
   /** The version `spec` belongs to. The daemon always sets it; optional so older readers and fakes still type-check. */
   version?: number
   latestVersion?: number
@@ -66,9 +70,9 @@ export type ViewRecord = {
 }
 
 /** A record as the daemon returns it, with every version field present. */
-export type StoredViewRecord = ViewRecord & { version: number; latestVersion: number; refused: Refused | null }
+export type StoredViewRecord = ViewRecord & { done: boolean; version: number; latestVersion: number; refused: Refused | null }
 
-export type ViewChangeKind = 'open' | 'update' | 'patch' | 'close' | 'move' | 'refused' | 'render-failed'
+export type ViewChangeKind = 'open' | 'update' | 'patch' | 'close' | 'done' | 'reopen' | 'move' | 'refused' | 'render-failed'
 
 /** The `quirky.view/changed` event; `version` and `placement` are the view's after the change. */
 export type ViewChangedEvent = { sessionId: string; viewId: string; version: number; kind: ViewChangeKind; placement: ViewPlacement }
