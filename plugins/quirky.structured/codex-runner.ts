@@ -536,17 +536,28 @@ class CodexRunner implements StructuredRunner {
 
   /**
    * Stops one sub-agent and every live agent below it, deepest first, and journals each as stopped.
-   * Never ends the parent turn; an unknown or finished agent is a no-op.
+   * Never ends the parent turn; an unknown or finished agent is a no-op. An agent whose interrupt
+   * fails stays live and its error is rethrown after the rest have been tried, so Stop can be retried.
    */
   async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.failed || !run.agents.isLive(agent)) return
-    for (const id of [...run.agents.descendants(agent), agent]) await this.stopChild(run, id)
+    let failure: unknown
+    for (const id of [...run.agents.descendants(agent), agent]) {
+      try {
+        await this.stopChild(run, id)
+      } catch (error) {
+        failure ??= error
+      }
+    }
+    if (failure !== undefined) throw failure
   }
 
   private async stopLiveAgents(run: Running): Promise<void> {
     for (const id of run.agents.live()) {
-      if (run.agents.isLive(id)) await this.stopAgent(run.sessionId, id)
+      if (!run.agents.isLive(id)) continue
+      // a child that will not interrupt must not keep the parent turn from stopping
+      await this.stopAgent(run.sessionId, id).catch(() => undefined)
     }
   }
 
@@ -557,8 +568,9 @@ class CodexRunner implements StructuredRunner {
     if (turnId !== null) {
       try {
         await run.connection.request('turn/interrupt', { threadId: id, turnId }, INTERRUPT_TIMEOUT_MS)
-      } catch {
-        // the agent is journaled stopped either way; the parent turn is not ours to end here
+      } catch (error) {
+        if (child && child.activeTurnId === null) child.activeTurnId = turnId
+        throw error
       }
     }
     this.endAgent(run, id, 'stopped')
@@ -1231,7 +1243,10 @@ class CodexRunner implements StructuredRunner {
       case 'turn/started': {
         const turn = params.turn
         const id = isPlainMap(turn) ? turn.id : undefined
-        if (typeof id === 'string' && id !== '') child.activeTurnId = id
+        if (typeof id === 'string' && id !== '') {
+          child.activeTurnId = id
+          this.reopenAgent(run, threadId)
+        }
         return
       }
       case 'turn/completed': {
@@ -1315,6 +1330,7 @@ class CodexRunner implements StructuredRunner {
     if (item.type === 'subAgentActivity') {
       const id = item.agentThreadId
       if (typeof id === 'string' && (item.kind === 'completed' || item.kind === 'interrupted')) this.applyStatus(run, id, item.kind)
+      else if (typeof id === 'string' && (item.kind === 'started' || item.kind === 'interacted')) this.reopenAgent(run, id)
       return true
     }
     return false
@@ -1337,7 +1353,18 @@ class CodexRunner implements StructuredRunner {
     if (entry) this.append(run, entry)
   }
 
+  /** Journals an ended, known child back to working when Codex gives its thread new work; a live or unknown agent is untouched. */
+  private reopenAgent(run: Running, id: string): void {
+    if (!run.children.get(id)?.known) return
+    const entry = run.agents.reopen(id)
+    if (entry) this.append(run, entry)
+  }
+
   private applyStatus(run: Running, id: string, status: string, message?: string): void {
+    if (status === 'running' || status === 'pendingInit') {
+      this.reopenAgent(run, id)
+      return
+    }
     const state = COLLAB_ENDINGS[status]
     if (state === undefined || !run.children.get(id)?.known) return
     this.endAgent(run, id, state, message === undefined ? {} : state === 'done' ? { report: message } : state === 'failed' ? { error: message } : {})
@@ -1392,14 +1419,19 @@ class CodexRunner implements StructuredRunner {
     const resumed = run.agents.setAsking(id, false)
     if (resumed) this.append(run, resumed)
     if (run.stopped || run.failed) return
+    const stale = !run.agents.isLive(id) || child.activeTurnId !== turnId
     try {
       if (plan !== null) {
-        if (child.activeTurnId !== turnId) {
+        if (stale) {
           run.connection.respondError(request.id, -32000, 'Native question owner changed while awaiting an answer')
           return
         }
         const answers = Object.fromEntries(Object.entries(nativeQuestionAnswers(plan, envelope)).map(([key, values]) => [key, { answers: values }]))
         run.connection.respond(request.id, { answers })
+        return
+      }
+      if (stale) {
+        run.connection.respond(request.id, { decision: 'decline' })
         return
       }
       const outcome = approvalOutcome(envelope, true)

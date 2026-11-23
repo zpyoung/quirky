@@ -98,6 +98,21 @@ export class AgentRegistry {
     return this.update(id, { ...rest, state, endedAt: endedAt ?? Date.now() })
   }
 
+  /**
+   * Puts an ended agent back to `working` because the native agent was given new work, clearing
+   * `endedAt`, `cutOff`, `report` and `error`, and returns the new snapshot. Null for an unknown or
+   * live id. `update` still ignores late events for an ended agent, so only a runner's explicit
+   * new-work signal should call this.
+   */
+  reopen(id: AgentKey): ItemEntry | null {
+    const current = this.agents.get(id)
+    if (!current || this.isLive(id)) return null
+    const { endedAt: _endedAt, cutOff: _cutOff, report: _report, error: _error, ...rest } = current
+    const item: AgentItem = { ...rest, state: 'working' }
+    this.agents.set(id, item)
+    return entryOf(item, this.parents.get(id))
+  }
+
   /** A copy of the agent's latest snapshot, or undefined for an unknown id. */
   get(id: AgentKey): AgentItem | undefined {
     const item = this.agents.get(id)
