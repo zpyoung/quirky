@@ -1642,10 +1642,10 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "{nothing ? (\n          <header style={header}>"
+        "quote": "{nothing && !reopenable ? (\n          <header style={header}>"
       },
-      "anchor": "nothing ?",
-      "reason": "Chooses the bare Visuals heading over the tab strip by whether the deck holds anything; layout only."
+      "anchor": "nothing && !reopenable ?",
+      "reason": "Chooses the bare Visuals heading over the tab strip by whether the deck holds anything to show or reopen; layout only."
     },
     {
       "site": {

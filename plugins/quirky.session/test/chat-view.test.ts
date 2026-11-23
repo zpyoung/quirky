@@ -2196,6 +2196,33 @@ describe('the visual panel', () => {
     expect(panelInputs()).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
   })
 
+  test('with only closed visuals the Closed menu stays and reopening one takes focus', async () => {
+    const records = [rec('v1', 'Costs', { closed: true })]
+    await mountPanel({ width: 1800, records, handlers: { 'quirky.view/reopen': () => ({ ok: true }) } })
+    expect(tabLabels()).toEqual([])
+    expect(host!.textContent).toContain('Pictures the agent draws')
+    await openMenu(/closed visuals/i)
+    expect(menuLabels()).toEqual(['Costs'])
+    await click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Costs'))
+    expect(fake.callsTo('quirky.view/reopen').map((call) => call.params)).toEqual([{ viewId: 'v1' }])
+    records[0] = rec('v1', 'Costs')
+    await changed('v1', 'reopen')
+    await settle()
+    expect(selected()).toEqual(['Costs'])
+    expect(panelInputs()).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+  })
+
+  test('marking the shown visual done keeps it shown when nothing was picked and there is no plan', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records })
+    expect(selected()).toEqual(['Costs'])
+    records[1] = rec('v2', 'Costs', { done: true })
+    await changed('v2', 'done')
+    await settle()
+    expect(selected()).toEqual(['Costs'])
+    expect(panelInputs()).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+  })
+
   test('the focused visual closing elsewhere moves focus to the tab on its left, else the first left', async () => {
     const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs'), rec('v3', 'Schema')]
     await mountPanel({ width: 1800, records })
