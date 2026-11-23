@@ -41,6 +41,11 @@ export const viewVersionsMigration: StoreMigration = `
     FROM views;
 `
 
+/** Whether the agent or the user has finished with a view; every new version clears it. */
+export const viewDoneMigration: StoreMigration = `
+  ALTER TABLE views ADD COLUMN done INTEGER NOT NULL DEFAULT 0;
+`
+
 type Row = {
   view_id: string
   session_id: string
@@ -51,22 +56,26 @@ type Row = {
   created_at: string
   updated_at: string
   closed: number
+  done: number
   version: number
   refused_json: string | null
 }
 
 function recordOf(row: Row): StoredViewRecord {
+  const spec = JSON.parse(row.spec_json) as ViewSpec
   return {
     viewId: row.view_id,
     sessionId: row.session_id,
     title: row.title,
-    spec: JSON.parse(row.spec_json) as ViewSpec,
+    ...(spec.label === undefined ? {} : { label: spec.label }),
+    spec,
     placement: row.placement === 'pane' ? 'pane' : 'inline',
     movedByUser: row.moved_by_user === 1,
     updates: row.version - 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     closed: row.closed === 1,
+    done: row.done === 1,
     version: row.version,
     latestVersion: row.version,
     refused: row.refused_json === null ? null : (JSON.parse(row.refused_json) as Refused)
@@ -112,7 +121,8 @@ export class ViewStore {
     const row = this.store.get<{ spec_json: string; created_at: number }>('SELECT spec_json, created_at FROM view_versions WHERE view_id = ? AND version = ?', viewId, version)
     if (!row) return null
     const spec = JSON.parse(row.spec_json) as ViewSpec
-    return { ...latest, spec, title: spec.title, version, updatedAt: new Date(row.created_at).toISOString() }
+    const { label: _current, ...rest } = latest
+    return { ...rest, ...(spec.label === undefined ? {} : { label: spec.label }), spec, title: spec.title, version, updatedAt: new Date(row.created_at).toISOString() }
   }
 
   /** Every view of the session in the order it was opened, closed ones included. */
@@ -120,13 +130,13 @@ export class ViewStore {
     return this.store.all<Row>('SELECT * FROM views WHERE session_id = ? ORDER BY created_at, rowid', sessionId).map(recordOf)
   }
 
-  /** Makes `spec` the next version, clears the refused state and returns the new record. */
+  /** Makes `spec` the next version, clears the refused, done and closed states and returns the new record. */
   appendVersion(viewId: string, spec: ViewSpec, at: Date): StoredViewRecord {
     const json = JSON.stringify(spec)
     return this.store.transaction(() => {
       const next = this.get(viewId)!.version + 1
       this.store.run(
-        'UPDATE views SET title = ?, spec_json = ?, version = ?, updates = ?, updated_at = ?, refused_json = NULL WHERE view_id = ?',
+        'UPDATE views SET title = ?, spec_json = ?, version = ?, updates = ?, updated_at = ?, refused_json = NULL, done = 0, closed = 0 WHERE view_id = ?',
         spec.title,
         json,
         next,
@@ -161,6 +171,16 @@ export class ViewStore {
 
   close(viewId: string): StoredViewRecord | null {
     this.store.run('UPDATE views SET closed = 1 WHERE view_id = ?', viewId)
+    return this.get(viewId)
+  }
+
+  reopen(viewId: string): StoredViewRecord | null {
+    this.store.run('UPDATE views SET closed = 0 WHERE view_id = ?', viewId)
+    return this.get(viewId)
+  }
+
+  setDone(viewId: string, done: boolean): StoredViewRecord | null {
+    this.store.run('UPDATE views SET done = ? WHERE view_id = ?', done ? 1 : 0, viewId)
     return this.get(viewId)
   }
 }

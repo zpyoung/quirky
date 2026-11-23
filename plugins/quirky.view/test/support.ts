@@ -52,10 +52,11 @@ export function sqliteStore(db: Database, migrations: StoreMigration[]): PluginS
     exec: (sql) => db.exec(sql),
     transaction: (work) => db.transaction(work)()
   }
-  migrations.slice(store.version).forEach((migration, index) => {
+  const applied = store.version
+  migrations.slice(applied).forEach((migration, index) => {
     if (typeof migration === 'string') db.exec(migration)
     else migration(store)
-    db.exec(`PRAGMA user_version = ${store.version + index + 1}`)
+    db.exec(`PRAGMA user_version = ${applied + index + 1}`)
   })
   return store
 }

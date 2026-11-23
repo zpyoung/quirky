@@ -1,5 +1,5 @@
 import type { PluginCaller, PluginContext, PluginErrorKind } from '@quirky/protocol'
-import { viewsMigration, viewVersionsMigration, ViewStore } from './src/core/store'
+import { viewDoneMigration, viewsMigration, viewVersionsMigration, ViewStore } from './src/core/store'
 import { MAX_WAIT_MS, ViewService } from './src/core/views'
 
 const NO_SESSION = 'quirky view works only inside a Quirky agent session'
@@ -35,7 +35,7 @@ let service: ViewService | undefined
 /** Provides the view methods and emits `changed` and `rejected` for the session journal and the window. */
 export function activate(context: PluginContext): void {
   const error = (kind: PluginErrorKind) => (message: string) => context.error(kind, message)
-  const views = new ViewService(new ViewStore(context.openStore([viewsMigration, viewVersionsMigration])), {
+  const views = new ViewService(new ViewStore(context.openStore([viewsMigration, viewVersionsMigration, viewDoneMigration])), {
     emit(event, data) {
       try {
         context.emit(event, data)
@@ -88,8 +88,29 @@ export function activate(context: PluginContext): void {
     return views.patch(sessionId, required(params, 'viewId'), params.ops)
   })
   context.provide('method:quirky.view/close', (params: Record<string, unknown>, caller: PluginCaller) => {
-    const sessionId = agentSession(caller)
-    views.close(sessionId, required(params, 'viewId'))
+    const viewId = required(params, 'viewId')
+    if (isWindow(caller)) {
+      const { sessionId } = views.get(viewId)
+      readable(caller, sessionId)
+      views.close(sessionId, viewId)
+    } else {
+      views.close(agentSession(caller), viewId)
+    }
+    return { ok: true }
+  })
+  context.provide('method:quirky.view/done', (params: Record<string, unknown>, caller: PluginCaller) => {
+    const viewId = required(params, 'viewId')
+    if (typeof params.done !== 'boolean') throw context.error('invalid-params', 'done must be a boolean')
+    if (isWindow(caller)) readable(caller, views.get(viewId).sessionId)
+    else if (views.get(viewId).sessionId !== agentSession(caller)) throw context.error('not-found', `view ${viewId} not found`)
+    views.setDone(viewId, params.done)
+    return { ok: true }
+  })
+  context.provide('method:quirky.view/reopen', (params: Record<string, unknown>, caller: PluginCaller) => {
+    windowOnly(caller, 'reopen')
+    const viewId = required(params, 'viewId')
+    readable(caller, views.get(viewId).sessionId)
+    views.reopen(viewId)
     return { ok: true }
   })
   context.provide('method:quirky.view/wait', async (params: Record<string, unknown>, caller: PluginCaller) => {

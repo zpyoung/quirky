@@ -156,6 +156,35 @@ describe('types and props', () => {
     expect(errorsOf(spec({ type: 'stack' }, 'x'.repeat(121)))[0].path).toBe('title')
   })
 
+  describe('the label', () => {
+    const root = { type: 'stack' as const }
+    const labelled = (label: unknown) => ({ title: 'A view', label, root }) as unknown as ViewSpec
+
+    test('is optional and kept in the checked spec', () => {
+      expect(validateViewSpec({ title: 'A view', root })).toEqual({ ok: true, spec: { title: 'A view', root } })
+      expect(validateViewSpec(labelled('SDD run'))).toEqual({ ok: true, spec: { title: 'A view', label: 'SDD run', root } })
+    })
+
+    test('may be exactly 24 characters, and no more', () => {
+      expect(validateViewSpec(labelled('x'.repeat(24))).ok).toBe(true)
+      expect(errorsOf(labelled('x'.repeat(25)))).toEqual([{ path: 'label', message: 'label must be at most 24 characters' }])
+    })
+
+    test('must be a non-empty string', () => {
+      for (const bad of ['', '   ', 3, null, ['a']]) {
+        expect(errorsOf(labelled(bad))).toEqual([{ path: 'label', message: 'label must be a non-empty string' }])
+      }
+    })
+
+    test('does not open the envelope to other keys', () => {
+      expect(errorsOf({ title: 'A view', label: 'ok', root, extra: 1 })[0].message).toContain('allowed: title, label, root')
+    })
+
+    test('is documented in the guide', () => {
+      expect(catalogGuide()).toContain('"label"')
+    })
+  })
+
   test('non-object input and cyclic input are refused, never thrown', () => {
     expect(errorsOf(null)).toEqual([{ path: '', message: 'view spec must be an object' }])
     expect(errorsOf([])).toEqual([{ path: '', message: 'view spec must be an object' }])
