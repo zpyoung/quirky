@@ -114,6 +114,8 @@ type Running = {
   turnStartedAt: number | null
   calls: CallTracker
   stream: ProseStream
+  /** The parent's own stream keys, so its message ending never clears a child's partial text. */
+  parentStreamKeys: Set<string>
   agents: AgentRegistry
   /** Each subagent's own open tool calls, so the parent turn ending never settles them. */
   agentCalls: Map<AgentKey, CallTracker>
@@ -421,7 +423,7 @@ class PiRunner implements StructuredRunner {
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended || !run.ready) return
-    await this.stopAgents(run, run.agents.live())
+    await this.stopAgents(run, run.agents.live()).catch(() => undefined)
     if (!run.working) return
     this.closeTurn(run, 'stopped')
     run.idleStatus = 'done'
@@ -475,6 +477,7 @@ class PiRunner implements StructuredRunner {
       turnStartedAt: null,
       calls: new CallTracker(),
       stream: new ProseStream(),
+      parentStreamKeys: new Set(),
       agents: new AgentRegistry(),
       agentCalls: new Map(),
       taskOwners: new Map(),
@@ -551,6 +554,7 @@ class PiRunner implements StructuredRunner {
     run.working = false
     run.turnStartedAt = null
     run.stream.reset()
+    run.parentStreamKeys.clear()
     if (state === 'done') this.context.reportUsage?.(run.sessionId, { turnEnded: true })
   }
 
@@ -668,7 +672,9 @@ class PiRunner implements StructuredRunner {
       case 'message_update': {
         const delta = record(frame.assistantMessageEvent)
         if (delta?.type !== 'text_delta' || typeof delta.delta !== 'string') return
-        const item = run.stream.push(text(frame.messageId) || 'assistant', delta.delta, Date.now())
+        const key = text(frame.messageId) || 'assistant'
+        run.parentStreamKeys.add(key)
+        const item = run.stream.push(key, delta.delta, Date.now())
         if (item && item.kind === 'prose') {
           this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: item.text, data: { streaming: true }, item })
         }
@@ -684,7 +690,8 @@ class PiRunner implements StructuredRunner {
             tokens: { input: count(spent.input), output: count(spent.output), cacheRead: count(spent.cacheRead), cacheWrite: count(spent.cacheWrite) }
           })
         }
-        run.stream.reset()
+        for (const key of run.parentStreamKeys) run.stream.reset(key)
+        run.parentStreamKeys.clear()
         const content = Array.isArray(message.content) ? message.content : []
         const body = content
           .map((part) => (record(part)?.type === 'text' ? text(record(part)?.text) : ''))
@@ -815,6 +822,7 @@ class PiRunner implements StructuredRunner {
   /**
    * Stops the given agents and every live descendant, deepest first, and journals each as stopped.
    * omp is asked to cancel each one; pi has no way to, so its agents are only journaled as stopped.
+   * An agent whose cancel fails stays live; the first such failure is rethrown after the rest are tried.
    */
   private async stopAgents(run: Running, agents: AgentKey[]): Promise<void> {
     const order = new Set<AgentKey>()
@@ -822,17 +830,27 @@ class PiRunner implements StructuredRunner {
       for (const child of run.agents.descendants(agent)) order.add(child)
     }
     for (const agent of agents) order.add(agent)
+    let failure: unknown
     for (const agent of order) {
       if (!run.agents.isLive(agent)) continue
       if (this.variant === 'omp' && !run.denyAll) {
         const subagentId = run.agents.get(agent)?.nativeId ?? agent
-        await run.rpc.request('cancel_subagent', { subagentId }, ABORT_TIMEOUT_MS).catch(() => undefined)
+        try {
+          await run.rpc.request('cancel_subagent', { subagentId }, ABORT_TIMEOUT_MS)
+        } catch (error) {
+          failure ??= error
+          continue
+        }
       }
       this.endAgent(run, agent, 'stopped')
     }
+    if (failure !== undefined) throw failure
   }
 
-  /** Stops one subagent and its live descendants without ending the turn. Only omp can cancel a single agent. */
+  /**
+   * Stops one subagent and its live descendants without ending the turn. Only omp can cancel a single agent.
+   * Rejects when omp could not cancel one, leaving it live so Stop can be tried again.
+   */
   async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
     const run = this.running.get(sessionId)
     if (this.variant !== 'omp' || !run || run.stopped || run.ended || !run.ready) return

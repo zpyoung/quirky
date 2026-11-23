@@ -942,6 +942,17 @@ describe('omp subagents', () => {
     expect(streamed.map((item) => [item.agent, item.text])).toEqual([['a1', 'one more'], ['a2', 'two more']])
   })
 
+  test('a parent message ending does not clear a child stream in progress', async () => {
+    const transport = await begin()
+    transport.emit({ type: 'agent_start' }, lifecycle('a1', 'started'))
+    const child = (d: string) => inner('a1', { type: 'message_update', messageId: 'm1', assistantMessageEvent: { type: 'text_delta', delta: d } })
+    transport.emit(child('one '), { type: 'message_update', messageId: 'p1', assistantMessageEvent: { type: 'text_delta', delta: 'parent' } })
+    await Bun.sleep(300)
+    transport.emit({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: 'parent' }] } }, child('more'))
+    const streamed = setup.ofKind('prose').filter((item) => item.streaming && item.agent === 'a1')
+    expect(streamed.map((item) => item.text)).toEqual(['one more'])
+  })
+
   test('a nested task call inside a subagent makes a nested agent, and an unknown parent goes to unattributed', async () => {
     const transport = await begin()
     transport.emit(
@@ -981,6 +992,26 @@ describe('omp subagents', () => {
     expect(setup.ofKind('turn-end')).toEqual([])
     await setup.runner.stopAgent?.(setup.session.id, 'a1')
     expect(transport.commands('cancel_subagent')).toHaveLength(2)
+  })
+
+  test('stopAgent rejects and keeps the agent live when omp cannot cancel it, and a retry can succeed', async () => {
+    const transport = await begin()
+    transport.emit(lifecycle('a1', 'started'))
+    transport.replies.set('cancel_subagent', () => ({ success: false, error: 'busy' }))
+    await expect(setup.runner.stopAgent!(setup.session.id, 'a1')).rejects.toThrow()
+    expect(lastOf('a1')?.state).toBe('working')
+    transport.replies.set('cancel_subagent', () => ({ success: true }))
+    await setup.runner.stopAgent!(setup.session.id, 'a1')
+    expect(lastOf('a1')?.state).toBe('stopped')
+  })
+
+  test('interrupt still aborts the parent when cancelling an agent fails', async () => {
+    const transport = await begin()
+    transport.emit({ type: 'agent_start' }, lifecycle('a1', 'started', { detached: true }))
+    transport.replies.set('cancel_subagent', () => ({ success: false, error: 'busy' }))
+    await setup.runner.interrupt(setup.session.id)
+    expect(transport.commands('abort')).toHaveLength(1)
+    expect(lastOf('a1')?.state).toBe('working')
   })
 
   test('interrupt cancels every live agent before aborting', async () => {
