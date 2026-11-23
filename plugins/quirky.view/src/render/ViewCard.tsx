@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
-import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
+import { Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, Menu, NoticeLine, StatusDot, TagButton, type MenuEntry } from '@quirky/ui'
 import { RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import type { ViewMountInput, ViewNode, ViewPlacement, ViewRecord, ViewSurface } from '../core/contract'
 import { errorText } from './errors'
@@ -23,27 +23,6 @@ export function eventData(event: QuirkyEvent, type: string): Record<string, unkn
   if (event.type !== type || !('data' in event)) return undefined
   const data = event.data as unknown
   return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : undefined
-}
-
-/** The agent that runs `sessionId`, for the "by <agent>" tag; undefined until it is known or when the session is gone. */
-export function useAgent(context: UiPluginContext, sessionId: string | undefined): string | undefined {
-  const [agent, setAgent] = useState<{ sessionId: string; agent: string } | undefined>()
-  useEffect(() => {
-    if (sessionId === undefined) return
-    let alive = true
-    void (async () => {
-      try {
-        const session = (await context.call('quirky.session/get', { session: sessionId })) as { agent?: unknown } | null
-        if (alive && typeof session?.agent === 'string') setAgent({ sessionId, agent: session.agent })
-      } catch (error) {
-        context.log(`could not read session ${sessionId}: ${errorText(error)}`)
-      }
-    })()
-    return () => {
-      alive = false
-    }
-  }, [context, sessionId])
-  return agent !== undefined && agent.sessionId === sessionId ? agent.agent : undefined
 }
 
 /** "updated N times · HH:MM" for an updated view; the time is local. */
@@ -108,6 +87,23 @@ const RECORD: CSSProperties = { ...MUTED, margin: 0, padding: 'var(--ui-space-6)
 
 const HEADER: CSSProperties = { ...ROW, justifyContent: 'space-between' }
 
+const SANDBOX_LABEL = 'Sandboxed, no network'
+
+const INLINE_BODY_CAP = 'calc(var(--quirky-transcript-height, 100vh) * 0.6)'
+
+const CAP: CSSProperties = { position: 'relative', minWidth: 0 }
+
+const CAP_FADE: CSSProperties = {
+  position: 'absolute',
+  insetInline: 0,
+  bottom: 0,
+  height: 'var(--ui-row-double)',
+  background: 'linear-gradient(to bottom, var(--ui-transparent), var(--ui-surface))',
+  pointerEvents: 'none'
+}
+
+const SHOW_MORE: CSSProperties = { width: '100%' }
+
 const REFUSED_BOX: CSSProperties = { ...COLUMN, gap: 'var(--ui-space-6)', padding: 'var(--ui-space-8)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-control)' }
 
 const SOURCE: CSSProperties = { ...MONO, margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
@@ -126,7 +122,6 @@ type Props = {
   instance: ViewUiInstance
   record: ViewRecord
   link: string | null
-  agent?: string
   /** Draws the card's own border; the pane already has a frame. */
   framed?: boolean
   /** True inside the Views pane, where a pane view shows its content. */
@@ -135,7 +130,6 @@ type Props = {
   /** The agent is still building this visual in the current turn. */
   drawing?: boolean
   focused?: boolean
-  /** The spec of the version before this one, when this one is the newest; its differences are outlined. */
   /** False once the person stepped to a version, which the chat UI keeps when it expands the card. */
   following?: boolean
   /** Shows the version stepper; the stepping itself is the mount's `showVersion` handler. */
@@ -145,11 +139,12 @@ type Props = {
 }
 
 /**
- * One view: its title, the "by <agent>" tag, the content, and the controls around it. Buttons and
+ * One view: its title, the content, and the controls around it. On the panel surface the header is
+ * one slim row with no title, and on the inline surface a tall body is capped with Show more. Buttons and
  * fields send actions to the agent, and a markdown link asks before it opens. A click on a
  * pointable part of the content asks the chat to attach a reference to it.
  */
-export function ViewCard({ context, instance, record, link, agent, framed = true, inPane = false, surface = 'inline', drawing = false, focused = false, following = true, stepper = false, renderFailed: reportRenderFailed }: Props) {
+export function ViewCard({ context, instance, record, link, framed = true, inPane = false, surface = 'inline', drawing = false, focused = false, following = true, stepper = false, renderFailed: reportRenderFailed }: Props) {
   const { viewId } = record
   const { shown, latest } = versionsOf(record)
   const refused = record.refused ?? null
@@ -159,6 +154,10 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
   const body = useRef<HTMLDivElement>(null)
   const popOutAvailable = usePopOutAvailable(context)
   const thumbnail = surface === 'thumbnail'
+  const capped = surface === 'inline'
+  const [capEl, setCapEl] = useState<HTMLDivElement | null>(null)
+  const [tall, setTall] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const clickedRegion = useRef<Element | null>(null)
   usePointStyles(body, selected, clickedRegion)
 
@@ -166,6 +165,16 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
     setSelected(null)
   }, [viewId, shown])
 
+  useLayoutEffect(() => {
+    if (!capped || capEl === null || showAll) return
+    const measure = () => setTall(capEl.scrollHeight > capEl.clientHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(capEl)
+    for (const child of Array.from(capEl.children)) observer.observe(child)
+    return () => observer.disconnect()
+  }, [capped, capEl, showAll])
 
   const control = (args: { action: string; [key: string]: unknown }): void => {
     const request = { instance: instance.id, viewId, ...args }
@@ -208,8 +217,8 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
   }, [context, viewId, record.title])
 
   useEffect(() => {
-    instance.setHandlers({ point, expand, popOut, toggleRefused: () => setReasonOpen((open) => !open), showPreview: async (node) => claimPreview(node), reloadPreview: async (node) => void (await reloadPreview(node)) })
-    return () => instance.clearHandlers('point', 'expand', 'popOut', 'toggleRefused', 'showPreview', 'reloadPreview')
+    instance.setHandlers({ point, expand, popOut, toggleRefused: () => setReasonOpen((open) => !open), toggleCap: () => setShowAll((open) => !open), showPreview: async (node) => claimPreview(node), reloadPreview: async (node) => void (await reloadPreview(node)) })
+    return () => instance.clearHandlers('point', 'expand', 'popOut', 'toggleRefused', 'toggleCap', 'showPreview', 'reloadPreview')
   }, [instance, point, expand, popOut])
 
   const runtime = useMemo<ViewRuntime>(() => {
@@ -251,6 +260,22 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
       context.toast('Could not move the view', errorText(error))
     } finally {
       setMoving(false)
+    }
+  }
+
+  const setDone = async () => {
+    try {
+      await context.call('quirky.view/done', { viewId, done: record.done !== true })
+    } catch (error) {
+      context.toast(record.done === true ? 'Could not mark the visual live' : 'Could not mark the visual done', errorText(error))
+    }
+  }
+
+  const close = async () => {
+    try {
+      await context.call('quirky.view/close', { viewId })
+    } catch (error) {
+      context.toast('Could not close the visual', errorText(error))
     }
   }
 
@@ -305,18 +330,52 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
   )
   if (thumbnail) return <article data-view-card={viewId} data-view-surface={surface} aria-label={record.title} inert style={COLUMN}>{content}</article>
 
+  const sandboxed = hasInteractiveHtml(record.spec.root)
+  const menuSurface = surface === 'inline' || surface === 'panel'
+  const slim = surface === 'panel'
+  const menuItems: MenuEntry[] = [
+    ...(menuSurface ? [{ id: 'expand', label: 'Expand', onAction: () => control({ action: 'expand' }) }] : []),
+    ...(menuSurface && popOutAvailable ? [{ id: 'pop-out', label: 'Pop out', onAction: () => control({ action: 'pop-out' }) }] : []),
+    ...(menuSurface ? [{ id: 'move', label: target === 'pane' ? 'Move to pane' : 'Move inline', disabled: moving, onAction: () => void move() }] : []),
+    { id: 'done', label: record.done === true ? 'Mark live' : 'Mark done', onAction: () => void setDone() },
+    { id: 'close', label: 'Close', destructive: true, onAction: () => void close() }
+  ]
+  const versions = stepper && latest > 1 ? (
+    <span role="group" aria-label="Versions" data-view-stepper style={ROW}>
+      <IconButton label="Older version" disabled={shown <= 1} onClick={() => control({ action: 'show-version', version: shown - 1 })}>
+        <ControlIcon name="caret-left" />
+      </IconButton>
+      <span data-view-version style={MUTED}>{`v${shown} of ${latest}`}</span>
+      <IconButton label="Newer version" disabled={shown >= latest} onClick={() => control({ action: 'show-version', version: shown + 1 })}>
+        <ControlIcon name="caret-right" />
+      </IconButton>
+    </span>
+  ) : null
+  const bodyNode = capped ? (
+    <>
+      <div ref={setCapEl} data-view-cap style={{ ...CAP, ...(showAll ? {} : { maxHeight: INLINE_BODY_CAP, overflow: 'hidden' }) }}>
+        {content}
+        {when(tall && !showAll, () => <div data-view-fade aria-hidden="true" style={CAP_FADE} />)}
+      </div>
+      {when(tall || showAll, () => <Button style={SHOW_MORE} aria-expanded={showAll} onClick={() => control({ action: 'toggle-cap' })}>{showAll ? 'Show less' : 'Show more'}</Button>)}
+    </>
+  ) : content
+
   const updated = surface === 'inline' ? updatedLabel(record) : undefined
   const unseen = refused === null ? shown + 1 : refused.version ?? latest + 1
   const focusRing: CSSProperties = focused ? { outlineWidth: 'var(--ui-focus-width)', outlineStyle: 'solid', outlineColor: 'var(--ui-accent)' } : {}
   const pending: CSSProperties = drawing ? { borderStyle: 'dashed' } : {}
-  const cardStyle: CSSProperties = framed || surface !== 'inline' ? { ...FRAME, ...pending, ...focusRing } : COLUMN
+  const cardStyle: CSSProperties = framed ? { ...FRAME, ...pending, ...focusRing } : COLUMN
+  const sandboxMark = sandboxed ? (
+    <span data-view-sandbox role="img" aria-label={SANDBOX_LABEL} title={SANDBOX_LABEL} style={ROW}>
+      <ControlIcon name="globe" />
+    </span>
+  ) : null
   return (
     <article data-view-card={viewId} data-view-surface={surface} aria-label={record.title} style={{ ...cardStyle, ...(surface === 'expanded' || surface === 'window' ? { flex: 1, minHeight: 0 } : {}) }}>
       <header style={HEADER}>
         <div style={ROW}>
-          <h3 style={TITLE}>{record.title}</h3>
-          {when(agent !== undefined, () => <Badge>by {agent}</Badge>)}
-          {when(hasInteractiveHtml(record.spec.root), () => <Badge tone="accent">sandboxed · no network</Badge>)}
+          {slim ? versions : <h3 style={TITLE}>{record.title}</h3>}
           {when(drawing, () => <span data-view-drawing style={ROW}><StatusDot status="working" />drawing {record.title}</span>)}
           {when(refused !== null, () => (
             <TagButton aria-expanded={reasonOpen} onClick={() => control({ action: 'toggle-refused' })}>
@@ -325,31 +384,15 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
           ))}
         </div>
         <div style={ROW}>
-          {when(stepper, () => (
-            <span role="group" aria-label="Versions" data-view-stepper style={ROW}>
-              <IconButton label="Older version" disabled={shown <= 1} onClick={() => control({ action: 'show-version', version: shown - 1 })}>
-                <ControlIcon name="caret-left" />
-              </IconButton>
-              <span data-view-version style={MUTED}>{`v${shown} of ${latest}`}</span>
-              <IconButton label="Newer version" disabled={shown >= latest} onClick={() => control({ action: 'show-version', version: shown + 1 })}>
-                <ControlIcon name="caret-right" />
-              </IconButton>
-            </span>
-          ))}
-          {when(surface === 'inline' || surface === 'panel', () => (
-            <IconButton label="Expand" onClick={() => control({ action: 'expand' })}>
-              <ControlIcon name="arrows-out" />
-            </IconButton>
-          ))}
-          {when(surface !== 'window' && popOutAvailable, () => (
+          {slim ? null : versions}
+          {sandboxMark}
+          {when(surface === 'expanded' && popOutAvailable, () => (
             <IconButton label="Pop out" onClick={() => control({ action: 'pop-out' })}>
               <ControlIcon name="export" />
             </IconButton>
           ))}
           {when(updated !== undefined, () => <span data-view-updated style={MUTED}>{updated}</span>)}
-          {when(surface === 'inline' || surface === 'panel', () => (
-            <Button disabled={moving} onClick={() => void move()}>{target === 'pane' ? 'Move to pane' : 'Move inline'}</Button>
-          ))}
+          {when(menuSurface, () => <Menu label="Visual actions" trigger={<ControlIcon name="dots-three" />} items={menuItems} align="end" />)}
         </div>
       </header>
       {when(refused !== null && reasonOpen, () => (
@@ -359,7 +402,7 @@ export function ViewCard({ context, instance, record, link, agent, framed = true
           <span style={MUTED}>{`showing v${shown}, the last version that rendered`}</span>
         </div>
       ))}
-      {content}
+      {bodyNode}
       <Dialog
         open={link !== null}
         title="Open this link?"
@@ -521,7 +564,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
     }
   }, [context, instance, viewId, requested, surface, load, showVersion])
 
-  const agent = useAgent(context, record?.sessionId)
   const retry = () => {
     void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action: 'refresh' }, { activateOwner: false }).catch(() => {})
   }
@@ -537,7 +579,6 @@ export function ViewCardView({ context, instance, viewId, version: requested, su
           instance={instance}
           record={record}
           link={link}
-          agent={agent}
           surface={surface}
           drawing={drawing}
           focused={focused}

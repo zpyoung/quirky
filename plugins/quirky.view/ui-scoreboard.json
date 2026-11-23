@@ -41,7 +41,7 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/Pane.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, IconButton, ControlIcon, Tabs, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, INITIAL_DECK_FOCUS, NoticeLine, ToolPanelFrame, VisualDeckTabs, deckFocusReducer, orderDeckEntries, type DeckClosedEntry, type DeckEntry, type DeckEvent, type DeckFocus } from '@quirky/ui'"
         }
       }
     },
@@ -61,7 +61,7 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/Pane.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, IconButton, ControlIcon, Tabs, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, INITIAL_DECK_FOCUS, NoticeLine, ToolPanelFrame, VisualDeckTabs, deckFocusReducer, orderDeckEntries, type DeckClosedEntry, type DeckEntry, type DeckEvent, type DeckFocus } from '@quirky/ui'"
         }
       }
     },
@@ -81,7 +81,39 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/Pane.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, IconButton, ControlIcon, Tabs, ToolPanelFrame } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, INITIAL_DECK_FOCUS, NoticeLine, ToolPanelFrame, VisualDeckTabs, deckFocusReducer, orderDeckEntries, type DeckClosedEntry, type DeckEntry, type DeckEvent, type DeckFocus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.view/pane",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.view/src/Pane.tsx",
+        "quote": "        context.toast('Could not close the visual', errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.view/src/Pane.tsx",
+          "quote": "        context.toast('Could not close the visual', errorText(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.view/pane",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.view/src/Pane.tsx",
+        "quote": "      context.toast('Could not reopen the visual', errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.view/src/Pane.tsx",
+          "quote": "      context.toast('Could not reopen the visual', errorText(error))"
         }
       }
     },
@@ -101,7 +133,7 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, Menu, NoticeLine, StatusDot, TagButton, type MenuEntry } from '@quirky/ui'"
         }
       }
     },
@@ -121,7 +153,7 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, Menu, NoticeLine, StatusDot, TagButton, type MenuEntry } from '@quirky/ui'"
         }
       }
     },
@@ -141,7 +173,7 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, Menu, NoticeLine, StatusDot, TagButton, type MenuEntry } from '@quirky/ui'"
         }
       }
     },
@@ -345,7 +377,39 @@
         },
         "import": {
           "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, NoticeLine, StatusDot, TagButton } from '@quirky/ui'"
+          "quote": "import { Button, ControlIcon, Dialog, EmptyState, IconButton, InlineError, Menu, NoticeLine, StatusDot, TagButton, type MenuEntry } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.view/render",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "      context.toast(record.done === true ? 'Could not mark the visual live' : 'Could not mark the visual done', errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "      context.toast(record.done === true ? 'Could not mark the visual live' : 'Could not mark the visual done', errorText(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.view/render",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "      context.toast('Could not close the visual', errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "      context.toast('Could not close the visual', errorText(error))"
         }
       }
     }
@@ -354,23 +418,16 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/Pane.tsx",
-        "quote": "      tabs={active && <Tabs label=\"Views\" items={open.map((record) => ({ id: record.viewId, label: record.title }))} value={active.viewId} onChange={(viewId) => runControl('select-tab', viewId)} />}"
+        "quote": "      tabs={(deck.entries.length > 0 || deck.closed.length > 0) && ("
       },
-      "reason": "Tabs, tab actions, and selected-card rendering are layout gated by an active pane record; the empty state is classified separately."
+      "reason": "The tab row shows only when the pane has open or closed views; the empty state is classified separately."
     },
     {
       "site": {
         "file": "plugins/quirky.view/src/Pane.tsx",
-        "quote": "      actions={active && ("
+        "quote": "      {shown && <ViewCard key={shown.viewId} context={context} instance={instance} record={shown} link={link} framed={false} inPane surface=\"panel\" stepper />}"
       },
-      "reason": "Tabs, tab actions, and selected-card rendering are layout gated by an active pane record; the empty state is classified separately."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/Pane.tsx",
-        "quote": "      {active && <ViewCard key={active.viewId} context={context} instance={instance} record={active} link={link} agent={agent} framed={false} inPane />}"
-      },
-      "reason": "Tabs, tab actions, and selected-card rendering are layout gated by an active pane record; the empty state is classified separately."
+      "reason": "The selected card renders only when the pane has a record to show; the empty state is classified separately."
     },
     {
       "site": {
@@ -534,13 +591,6 @@
         "quote": "        <NoticeLine actions={[{ label: 'Move inline', disabled: moving, onAction: () => void move() }]}>"
       },
       "reason": "Closed-record and placement notices announce domain/layout status, not the view read phase."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-        "quote": "          <Button disabled={moving} onClick={() => void move()}>{target === 'pane' ? 'Move to pane' : 'Move inline'}</Button>"
-      },
-      "reason": "The move button label follows target placement, not a read state."
     },
     {
       "site": {
@@ -753,13 +803,62 @@
         "quote": "      {record && ("
       },
       "reason": "The card is optional content after phase handling; loading, missing, and failed reads are classified separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "  const versions = stepper && latest > 1 ? ("
+      },
+      "reason": "Shows the stepper only when there is more than one version; a header control, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "  const bodyNode = capped ? ("
+      },
+      "reason": "Caps the body of an inline card only; layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "      {when(tall || showAll, () => <Button style={SHOW_MORE} aria-expanded={showAll} onClick={() => control({ action: 'toggle-cap' })}>{showAll ? 'Show less' : 'Show more'}</Button>)}"
+      },
+      "reason": "The button label follows whether the cap is lifted, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "  const sandboxMark = sandboxed ? ("
+      },
+      "reason": "Shows the sandbox mark only for content with an interactive frame; a header badge, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "          {slim ? versions : <h3 style={TITLE}>{record.title}</h3>}"
+      },
+      "reason": "The panel surface puts the stepper where the title would be; header layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "          {slim ? null : versions}"
+      },
+      "reason": "The panel surface moved the stepper to the left of its header; header layout, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/layout.tsx",
+        "quote": "      {more && <div data-view-scroll-fade aria-hidden=\"true\" style={SCROLL_FADE} />}"
+      },
+      "reason": "Shows the scroll fade only while there is more to scroll to; decoration on content, not a read state."
     }
   ],
   "actions": [
     {
       "site": {
         "file": "plugins/quirky.view/src/Pane.tsx",
-        "quote": "      tabs={active && <Tabs label=\"Views\" items={open.map((record) => ({ id: record.viewId, label: record.title }))} value={active.viewId} onChange={(viewId) => runControl('select-tab', viewId)} />}"
+        "quote": "          onPick={(viewId) => runControl('select-tab', viewId)}"
       },
       "route": {
         "target": "command:quirky.view/control",
@@ -778,7 +877,7 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/Pane.tsx",
-        "quote": "        <IconButton label={`Close ${active.title}`} onClick={() => runControl('dismiss-tab', active.viewId)}>"
+        "quote": "          onClose={(viewId) => runControl('dismiss-tab', viewId)}"
       },
       "route": {
         "target": "command:quirky.view/control",
@@ -790,6 +889,25 @@
           {
             "file": "plugins/quirky.view/src/Pane.tsx",
             "quote": "runControl = (action: 'select-tab' | 'dismiss-tab', viewId: string): void => {\n    void context.executeCommand(CONTROL_COMMAND_ID, { instance: instance.id, action, viewId }, { activateOwner: false }).catch((error: unknown) => {\n      context.log(`could not ${action === 'select-tab' ? 'select' : 'dismiss'} view tab: ${errorText(error)}`)\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/Pane.tsx",
+        "quote": "          onReopen={(viewId) => void reopenView(viewId)}"
+      },
+      "route": {
+        "target": "quirky.view/reopen",
+        "invoke": {
+          "file": "plugins/quirky.view/src/Pane.tsx",
+          "quote": "context.call('quirky.view/reopen', { viewId })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.view/src/Pane.tsx",
+            "quote": "reopenView = async (viewId: string): Promise<void> => {\n    try {\n      await context.call('quirky.view/reopen', { viewId })\n      send({ type: 'picked', id: viewId })\n      await load()\n    } catch (error) {\n      context.toast('Could not reopen the visual', errorText(error))\n    }\n  }"
           }
         ]
       }
@@ -835,7 +953,7 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-        "quote": "          <Button disabled={moving} onClick={() => void move()}>{target === 'pane' ? 'Move to pane' : 'Move inline'}</Button>"
+        "quote": "    ...(menuSurface ? [{ id: 'move', label: target === 'pane' ? 'Move to pane' : 'Move inline', disabled: moving, onAction: () => void move() }] : []),"
       },
       "route": {
         "target": "command:quirky.view/move",
@@ -1238,7 +1356,7 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-        "quote": "              <IconButton label=\"Older version\" disabled={shown <= 1} onClick={() => control({ action: 'show-version', version: shown - 1 })}>"
+        "quote": "      <IconButton label=\"Older version\" disabled={shown <= 1} onClick={() => control({ action: 'show-version', version: shown - 1 })}>"
       },
       "route": {
         "target": "command:quirky.view/control",
@@ -1257,7 +1375,7 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-        "quote": "              <IconButton label=\"Newer version\" disabled={shown >= latest} onClick={() => control({ action: 'show-version', version: shown + 1 })}>"
+        "quote": "      <IconButton label=\"Newer version\" disabled={shown >= latest} onClick={() => control({ action: 'show-version', version: shown + 1 })}>"
       },
       "route": {
         "target": "command:quirky.view/control",
@@ -1276,7 +1394,83 @@
     {
       "site": {
         "file": "plugins/quirky.view/src/render/ViewCard.tsx",
-        "quote": "            <IconButton label=\"Expand\" onClick={() => control({ action: 'expand' })}>"
+        "quote": "    ...(menuSurface ? [{ id: 'expand', label: 'Expand', onAction: () => control({ action: 'expand' }) }] : []),"
+      },
+      "route": {
+        "target": "command:quirky.view/control",
+        "invoke": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "context.executeCommand(CONTROL_COMMAND_ID, request, { activateOwner: false })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+            "quote": "control = (args: { action: string; [key: string]: unknown }): void => {\n    const request = { instance: instance.id, viewId, ...args }\n    const sent = surface === 'window' ? instance.run(request) : context.executeCommand(CONTROL_COMMAND_ID, request, { activateOwner: false })\n    void sent.catch((error: unknown) => {\n      context.toast('Could not run the view action', errorText(error))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "    ...(menuSurface && popOutAvailable ? [{ id: 'pop-out', label: 'Pop out', onAction: () => control({ action: 'pop-out' }) }] : []),"
+      },
+      "route": {
+        "target": "command:quirky.view/control",
+        "invoke": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "context.executeCommand(CONTROL_COMMAND_ID, request, { activateOwner: false })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+            "quote": "control = (args: { action: string; [key: string]: unknown }): void => {\n    const request = { instance: instance.id, viewId, ...args }\n    const sent = surface === 'window' ? instance.run(request) : context.executeCommand(CONTROL_COMMAND_ID, request, { activateOwner: false })\n    void sent.catch((error: unknown) => {\n      context.toast('Could not run the view action', errorText(error))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "    { id: 'done', label: record.done === true ? 'Mark live' : 'Mark done', onAction: () => void setDone() },"
+      },
+      "route": {
+        "target": "quirky.view/done",
+        "invoke": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "context.call('quirky.view/done', { viewId, done: record.done !== true })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+            "quote": "setDone = async () => {\n    try {\n      await context.call('quirky.view/done', { viewId, done: record.done !== true })\n    } catch (error) {\n      context.toast(record.done === true ? 'Could not mark the visual live' : 'Could not mark the visual done', errorText(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "    { id: 'close', label: 'Close', destructive: true, onAction: () => void close() }"
+      },
+      "route": {
+        "target": "quirky.view/close",
+        "invoke": {
+          "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+          "quote": "context.call('quirky.view/close', { viewId })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+            "quote": "close = async () => {\n    try {\n      await context.call('quirky.view/close', { viewId })\n    } catch (error) {\n      context.toast('Could not close the visual', errorText(error))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/ViewCard.tsx",
+        "quote": "      {when(tall || showAll, () => <Button style={SHOW_MORE} aria-expanded={showAll} onClick={() => control({ action: 'toggle-cap' })}>{showAll ? 'Show less' : 'Show more'}</Button>)}"
       },
       "route": {
         "target": "command:quirky.view/control",
@@ -1310,6 +1504,14 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.view/src/render/layout.tsx",
+        "quote": "      <div ref={scroller} data-view-node={node} onScroll={measure} style={{ ...style, overflowX: 'auto', minWidth: 0 }}>"
+      },
+      "transient": "draft",
+      "reason": "Measures only whether the row can scroll further, to show the edge fade; nothing is read or written."
     }
   ]
 }

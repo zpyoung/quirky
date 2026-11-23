@@ -44,7 +44,7 @@ const CELL: CSSProperties = {
   textAlign: 'left',
   padding: 'var(--ui-space-4) var(--ui-space-8)',
   borderBottom: 'var(--ui-border-width) solid var(--ui-border)',
-  overflowWrap: 'anywhere'
+  minWidth: 'calc(var(--ui-length-unit) * 96)'
 }
 
 export function DataTable({ props }: { props: Props }) {
