@@ -30,6 +30,12 @@ function deckOf(records: readonly ViewRecord[]): Deck {
   return { open: entries.map((entry) => byId.get(entry.id) as ViewRecord), entries, closed }
 }
 
+/** The listed `current` record carrying the pinned version's content, the way the daemon reports a version: its spec, title, label and time, everything else as it is now. */
+function withHistoricalContent(current: ViewRecord, shown: ViewRecord): ViewRecord {
+  const { label: _current, ...rest } = current
+  return { ...rest, ...(shown.label === undefined ? {} : { label: shown.label }), spec: shown.spec, title: shown.title, version: shown.version, updatedAt: shown.updatedAt, latestVersion: versionsOf(current).latest }
+}
+
 const DRAWN_KINDS: readonly unknown[] = ['open', 'update', 'patch']
 
 /** The Views pane of one session: the session's pane views on the shared visual deck, one at a time. */
@@ -83,7 +89,7 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
         } catch (error) {
           context.toast(`Could not load version ${version}`, errorText(error))
           const shownBefore = pinnedRef.current[viewId]
-          if (shownBefore) next.push([viewId, { ...shownBefore, latestVersion: versionsOf(current).latest }])
+          if (shownBefore) next.push([viewId, withHistoricalContent(current, shownBefore)])
         }
       }
       return Object.fromEntries(next)
