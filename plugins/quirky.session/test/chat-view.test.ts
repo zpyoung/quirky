@@ -2608,6 +2608,22 @@ describe('agent grouping', () => {
     expect(markers(turn!)).toEqual(['spawn:a'])
   })
 
+  test('a spawn refused after a working snapshot draws only its spawn marker', () => {
+    const [turn] = groupTurns([user(1, 'go'), agentMsg(2, 'a'), agentMsg(3, 'a', { state: 'failed', refused: 'Concurrent subagent limit reached' })])
+    expect(markers(turn!)).toEqual(['spawn:a'])
+  })
+
+  test('a tagged user item stays in its owner\'s transcript and never opens a main turn', () => {
+    const items = [user(1, 'go'), agentMsg(2, 'a'), taggedMsg(3, 'a', { kind: 'user', text: 'agent prompt' }), taggedMsg(4, 'a', { kind: 'prose', text: 'agent words' })]
+    const main = groupTurns(items)
+    expect(main).toHaveLength(1)
+    expect(main[0]!.user).toMatchObject({ text: 'go' })
+    const own = groupTurns(items, { owner: 'a' })
+    expect(own.map((turn) => turn.user?.text)).toEqual(['agent prompt'])
+    expect(groupTurns(items, { owner: 'b' })).toEqual([])
+    expect(groupTurns([user(1, 'go'), prose(2, 'main words')], { owner: 'a' })).toEqual([])
+  })
+
   test('an ask stays in the main turn whoever asked, and never shows in the asker\'s transcript', () => {
     const items = [user(1, 'go'), agentMsg(2, 'a'), msg(3, { kind: 'ask', askId: 'k', variant: 'approval', from: 'a' }, { at: Date.now() })]
     expect(kinds(groupTurns(items)[0]!)).toEqual(['agent-marker', 'ask'])
@@ -2807,6 +2823,24 @@ describe('agents in the chat', () => {
       expect(byLabel('a transcript')!.textContent).toContain('Tracing where tokens refresh')
       await click(rowOf('b').querySelector('button'))
       expect(byLabel('b transcript')!.textContent).toContain('All clear.')
+    })
+
+    test('a finished agent keeps its report below interim prose, unless the prose already is the report', async () => {
+      await mountChat({
+        messages: [
+          user(1, 'go'),
+          agentMsg(2, 'a', { state: 'done', report: 'Final answer.' }),
+          taggedMsg(3, 'a', { kind: 'prose', text: 'Looking around.' }),
+          agentMsg(4, 'b', { state: 'done', report: 'Same text.' }),
+          taggedMsg(5, 'b', { kind: 'prose', text: 'Same text.\n' })
+        ],
+        capabilities: SUB
+      })
+      await click(rowOf('a').querySelector('button'))
+      expect(byLabel('a transcript')!.textContent).toContain('Looking around.')
+      expect(byLabel('a transcript')!.textContent).toContain('Final answer.')
+      await click(rowOf('b').querySelector('button'))
+      expect(byLabel('b transcript')!.textContent!.match(/Same text\./g)).toHaveLength(1)
     })
 
     test('an agent that reports no steps gets the note', async () => {

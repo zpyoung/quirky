@@ -75,7 +75,7 @@ const isAgentInjected = (message: StructuredMessage): boolean =>
  * `messages` (in journal order) as turns. A `user` item starts a turn, and a message before the
  * first one goes in a turn with no user message, except a `turn-end` or a `plan` that nothing else
  * shows up beside, such as what a resumed chat journals before its first message; a `user` item the
- * agent injected itself is dropped. Of the items sharing a `callId` only the last counts, shown
+ * agent injected itself is dropped, and so is one tagged for another agent than `owner`. Of the items sharing a `callId` only the last counts, shown
  * where the first appeared, and the same holds for the `plan` items of one version across turns.
  * `mode` items only feed the composer and never render, and neither do `visual-level` items. A turn
  * shows each view once, at the newest version the turn made. Messages with no `item` stay as
@@ -130,7 +130,7 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
       continue
     }
     if (item.kind === 'user') {
-      if (isAgentInjected(message)) continue
+      if (item.agent !== owner || isAgentInjected(message)) continue
       open(message, { seq: message.seq, text: item.text, images: item.images ?? [] })
       continue
     }
@@ -163,6 +163,7 @@ function groupOne(messages: StructuredMessage[], showAll: boolean, plans: Map<nu
         spawned.set(item.id, known)
         draft.entries.push({ kind: 'marker', seq: message.seq, agent: item.id, phase: 'spawn' })
       }
+      if (item.refused !== undefined) known.returned = true
       if (!known.returned && (item.state === 'done' || item.state === 'failed' || item.state === 'stopped')) {
         known.returned = true
         known.draft.entries.push({ kind: 'marker', seq: message.seq, agent: item.id, phase: 'return' })
