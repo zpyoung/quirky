@@ -1,0 +1,146 @@
+/* Underline tab row for the visual deck; the +N menu reuses the shared Menu. */
+.ui-visual-deck {
+  align-items: stretch;
+  border-bottom: var(--ui-border-width) solid var(--ui-border);
+  display: flex;
+  min-width: 0;
+  position: relative;
+}
+
+.ui-visual-deck__tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ui-visual-deck__item {
+  display: flex;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.ui-visual-deck__tab {
+  align-items: center;
+  appearance: none;
+  background: var(--ui-transparent);
+  border: 0;
+  border-radius: 0;
+  color: var(--ui-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--ui-font-body);
+  gap: var(--ui-space-6);
+  line-height: 1.3;
+  max-width: calc(var(--ui-length-unit) * 180);
+  padding: var(--ui-space-6) var(--ui-space-8);
+  white-space: nowrap;
+}
+
+.ui-visual-deck__tab--closable {
+  padding-inline-end: var(--ui-space-24);
+}
+
+.ui-visual-deck__tab:hover {
+  color: var(--ui-text);
+}
+
+.ui-visual-deck__tab[aria-selected="true"] {
+  box-shadow: inset 0 calc(var(--ui-border-width) * -2) 0 var(--ui-accent);
+  color: var(--ui-text);
+}
+
+.ui-visual-deck__tab:focus-visible,
+.ui-visual-deck__close:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: calc(-1 * var(--ui-focus-width));
+}
+
+.ui-visual-deck__tab--done {
+  opacity: 0.6;
+}
+
+.ui-visual-deck__tab--done[aria-selected="true"] {
+  opacity: 1;
+}
+
+.ui-visual-deck__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-visual-deck__done {
+  font-size: var(--ui-font-label);
+  font-style: italic;
+}
+
+.ui-visual-deck__dot {
+  background: var(--ui-accent);
+  border-radius: 50%;
+  flex: none;
+  height: var(--ui-space-6);
+  width: var(--ui-space-6);
+}
+
+.ui-visual-deck__close {
+  align-items: center;
+  appearance: none;
+  background: var(--ui-transparent);
+  border: 0;
+  border-radius: var(--ui-radius-mark);
+  color: var(--ui-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  height: var(--ui-space-16);
+  inset-block-start: 50%;
+  inset-inline-end: var(--ui-space-4);
+  justify-content: center;
+  line-height: 1;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  transform: translateY(-50%);
+  width: var(--ui-space-16);
+}
+
+.ui-visual-deck__item:hover .ui-visual-deck__close,
+.ui-visual-deck__item:focus-within .ui-visual-deck__close,
+.ui-visual-deck__tab[aria-selected="true"] + .ui-visual-deck__close {
+  opacity: 1;
+}
+
+.ui-visual-deck__close:hover {
+  background: var(--ui-selected);
+  color: var(--ui-text);
+}
+
+.ui-visual-deck__more {
+  align-items: center;
+  display: flex;
+  flex: none;
+}
+
+.ui-visual-deck__more .ui-menu__trigger {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  color: var(--ui-muted);
+  padding: var(--ui-space-4) var(--ui-space-8);
+}
+
+.ui-visual-deck__more .ui-menu__trigger:hover {
+  color: var(--ui-text);
+}
+
+.ui-visual-deck__measure {
+  display: flex;
+  height: 0;
+  inset-inline-start: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  visibility: hidden;
+  width: max-content;
+}
