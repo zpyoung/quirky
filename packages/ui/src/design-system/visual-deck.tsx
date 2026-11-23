@@ -80,8 +80,9 @@ export function VisualDeckTabs({ label, entries, closed, focusedId, dots, onPick
     if (!measure || measure.available <= 0) return everything
     const widths = ordered.map((entry) => measure.widths[entry.id] ?? 0)
     if (widths.every((width) => width <= 0)) return everything
+    if (closed.length > 0) return fitDeckTabs(ordered, widths, measure.available - measure.more, 0, focusedId)
     return fitDeckTabs(ordered, widths, measure.available, measure.more, focusedId)
-  }, [ordered, measure, focusedId])
+  }, [ordered, measure, focusedId, closed.length])
 
   const byId = new Map(ordered.map((entry) => [entry.id, entry]))
   const visible = fit.visible.map((id) => byId.get(id)).filter((entry): entry is DeckEntry => entry !== undefined)

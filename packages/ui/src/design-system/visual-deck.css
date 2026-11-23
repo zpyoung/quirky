@@ -61,10 +61,6 @@
   opacity: 0.6;
 }
 
-.ui-visual-deck__tab--done[aria-selected="true"] {
-  opacity: 1;
-}
-
 .ui-visual-deck__label {
   min-width: 0;
   overflow: hidden;

@@ -273,6 +273,15 @@ describe('VisualDeckTabs', () => {
     expect(tabs()[1].classList.contains('ui-visual-deck__tab--done')).toBe(false)
   })
 
+  test('keeps a selected done tab dimmed', async () => {
+    await render(<VisualDeckTabs {...props({ focusedId: 'mock' }).props} />)
+    const selected = tabs()[3]
+    expect(selected.getAttribute('aria-selected')).toBe('true')
+    expect(selected.classList.contains('ui-visual-deck__tab--done')).toBe(true)
+    const css = await Bun.file(new URL('./visual-deck.css', import.meta.url)).text()
+    expect(css).not.toMatch(/tab--done\[aria-selected/)
+  })
+
   test('clicking a tab picks it', async () => {
     const { props: p, calls } = props()
     await render(<VisualDeckTabs {...p} />)
@@ -362,6 +371,24 @@ describe('VisualDeckTabs', () => {
         await render(<VisualDeckTabs {...props({ entries: wide, focusedId: 'd' }).props} />)
         expect(tabs().map((tab) => tab.getAttribute('data-deck-id'))).toEqual(['plan', 'a', 'd'])
         expect(overflowTrigger()?.textContent).toContain('+2')
+      })
+    })
+
+    test('reserves the closed-menu button so the last tab is never clipped', async () => {
+      const three = [entry('a', 1), entry('b', 2), entry('c', 3)]
+      await withLayout({ a: 10, b: 10, c: 10 }, 30, 10, async () => {
+        await render(<VisualDeckTabs {...props({ entries: three, focusedId: 'c', closed }).props} />)
+        expect(tabs().map((tab) => tab.getAttribute('data-deck-id'))).toEqual(['a', 'c'])
+        expect(overflowTrigger()?.textContent).toContain('+1')
+      })
+    })
+
+    test('shows every tab beside the closed-menu button when both fit', async () => {
+      const three = [entry('a', 1), entry('b', 2), entry('c', 3)]
+      await withLayout({ a: 10, b: 10, c: 10 }, 40, 10, async () => {
+        await render(<VisualDeckTabs {...props({ entries: three, focusedId: 'c', closed }).props} />)
+        expect(tabs().map((tab) => tab.getAttribute('data-deck-id'))).toEqual(['a', 'b', 'c'])
+        expect(overflowTrigger()?.textContent).toContain('▾')
       })
     })
 
