@@ -825,6 +825,69 @@ describe('the views pane', () => {
     expect(text(element)).toContain('v2 of 2')
   })
 
+  test('a failed read of a pinned older version keeps the pin and the displayed version, and says so', async () => {
+    const records = [paneView('view_1', 'Bundle size', { version: 2, latestVersion: 2, updates: 1 })]
+    let failReads = false
+    const fake = start(records, {
+      'quirky.view/get': (params) => {
+        if (params.version === 1 && failReads) throw new Error('read denied')
+        const found = records[0]!
+        return params.version === 1 ? { ...found, spec: markdownSpec('Bundle size first draft'), version: 1, latestVersion: 2 } : found
+      }
+    })
+    const { element, click } = await mountPane(fake)
+    await click(buttonByLabel(element, 'Older version')!)
+    expect(text(element)).toContain('v1 of 2')
+
+    failReads = true
+    await fake.emit(changed('view_1', 'patch'))
+    await settle()
+    expect(fake.toasts).toEqual([{ title: 'Could not load version 1', body: 'read denied' }])
+    expect(text(element)).toContain('v1 of 2')
+    expect(text(element)).toContain('Bundle size first draft')
+
+    failReads = false
+    await fake.emit(changed('view_1', 'patch'))
+    await settle()
+    expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
+    expect(text(element)).toContain('v1 of 2')
+  })
+
+  test('a failed first step to an older version tells the person and still retries that version on the next load', async () => {
+    const records = [paneView('view_1', 'Bundle size', { version: 2, latestVersion: 2, updates: 1 })]
+    let failReads = true
+    const fake = start(records, {
+      'quirky.view/get': (params) => {
+        if (params.version === 1 && failReads) throw new Error('read denied')
+        const found = records[0]!
+        return params.version === 1 ? { ...found, spec: markdownSpec('Bundle size first draft'), version: 1, latestVersion: 2 } : found
+      }
+    })
+    const { element, click } = await mountPane(fake)
+    await click(buttonByLabel(element, 'Older version')!)
+    expect(fake.toasts).toEqual([{ title: 'Could not load version 1', body: 'read denied' }])
+
+    failReads = false
+    await fake.emit(changed('view_1', 'patch'))
+    await settle()
+    expect(text(element)).toContain('v1 of 2')
+    expect(text(element)).toContain('Bundle size first draft')
+  })
+
+  test('with only closed views the Closed menu is still there and reopens through the daemon', async () => {
+    const fake = start([paneView('view_1', 'Gone', { closed: true, updatedAt: '2026-11-16T12:00:00.000Z' })])
+    const { element, click } = await mountPane(fake)
+    expect(element.querySelectorAll('[role="tab"]')).toHaveLength(0)
+    expect(text(element)).toContain('No views in the pane.')
+
+    await click(element.querySelector('button[aria-label="Closed visuals"]')!)
+    expect(element.querySelector('.ui-menu__note')!.textContent).toBe('Closed')
+    await click([...element.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'Gone')!)
+
+    expect(fake.callsTo('quirky.view/reopen').map((call) => call.params)).toEqual([{ viewId: 'view_1' }])
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Gone'])
+  })
+
   test('a drawn event for a view that is not in the pane does not take focus', async () => {
     const records = [paneView('view_1', 'Bundle size'), record(markdownSpec('inline body'), { viewId: 'view_9', title: 'Inline one' })]
     const fake = start(records)

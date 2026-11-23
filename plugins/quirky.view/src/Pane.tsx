@@ -40,6 +40,7 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
   const focusRef = useRef<DeckFocus>(INITIAL_DECK_FOCUS)
   const pins = useRef(new Map<string, number>())
   const [pinned, setPinned] = useState<Record<string, ViewRecord>>({})
+  const pinnedRef = useRef<Record<string, ViewRecord>>({})
   const alive = useRef(true)
   const requestId = useRef(0)
   const [loaded, setLoaded] = useState(false)
@@ -79,8 +80,10 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
           const got = (await context.call('quirky.view/get', { viewId, version })) as ViewRecord | null | undefined
           if (got) next.push([viewId, { ...got, version, latestVersion: versionsOf(current).latest }])
           else pins.current.delete(viewId)
-        } catch {
-          pins.current.delete(viewId)
+        } catch (error) {
+          context.toast(`Could not load version ${version}`, errorText(error))
+          const shownBefore = pinnedRef.current[viewId]
+          if (shownBefore) next.push([viewId, { ...shownBefore, latestVersion: versionsOf(current).latest }])
         }
       }
       return Object.fromEntries(next)
@@ -104,6 +107,7 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
       phase.current = 'ready'
       recordsRef.current = next
       setRecords(next)
+      pinnedRef.current = pinnedNext
       setPinned(pinnedNext)
       setLoaded(true)
       setFailure(null)
@@ -167,6 +171,7 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
     phase.current = 'loading'
     setRecords([])
     setFocus(INITIAL_DECK_FOCUS)
+    pinnedRef.current = {}
     setPinned({})
     setLoaded(false)
     setFailure(null)

@@ -90,6 +90,22 @@
       "state": "error",
       "site": {
         "file": "plugins/quirky.view/src/Pane.tsx",
+        "quote": "          context.toast(`Could not load version ${version}`, errorText(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.view/src/Pane.tsx",
+          "quote": "          context.toast(`Could not load version ${version}`, errorText(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.view/pane",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.view/src/Pane.tsx",
         "quote": "        context.toast('Could not close the visual', errorText(error))"
       },
       "anchor": "context.toast(",
