@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { asItems, asNumber, asString, oneOf, type Props } from './props'
 import { clampLabel, keyPart, pointKey } from './point'
 import { COLUMN, MONO, MUTED, PANEL, ROW, TONE_COLOR, type Tone } from './styles'
+import { MIN_TRACK, ScrollX } from './layout'
 import { when } from './when'
 
 const TONES = ['neutral', 'good', 'warn', 'bad'] as const
@@ -76,7 +77,7 @@ export function Board({ props }: { props: Props }) {
     }))
   }))
   return (
-    <div data-view-node="board" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(0, 1fr))`, gap: 'var(--ui-space-8)', alignItems: 'start' }}>
+    <ScrollX node="board" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(${MIN_TRACK}, 1fr))`, gap: 'var(--ui-space-8)', alignItems: 'start' }}>
       {columns.map((column, index) => (
         <section key={index} aria-label={column.title} style={{ ...COLUMN, gap: 'var(--ui-space-6)', background: 'var(--ui-rail)', borderRadius: 'var(--ui-radius-control)', padding: 'var(--ui-space-6)' }}>
           <h4 style={{ ...MUTED, margin: 0, fontWeight: 600 }}>{column.title}</h4>
@@ -85,7 +86,7 @@ export function Board({ props }: { props: Props }) {
               key={card.key}
               data-point-key={card.key}
               data-point-label={clampLabel(card.title)}
-              style={{ ...PANEL, borderInlineStart: `var(--ui-focus-width) solid ${card.tone === 'neutral' ? 'var(--ui-border)' : toneColor(card.tone)}`, overflowWrap: 'anywhere' }}
+              style={{ ...PANEL, borderInlineStart: `var(--ui-focus-width) solid ${card.tone === 'neutral' ? 'var(--ui-border)' : toneColor(card.tone)}` }}
             >
               <div>{card.title}</div>
               {when(card.detail !== '', () => <div style={MUTED}>{card.detail}</div>)}
@@ -93,7 +94,7 @@ export function Board({ props }: { props: Props }) {
           ))}
         </section>
       ))}
-    </div>
+    </ScrollX>
   )
 }
 

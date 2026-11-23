@@ -13,7 +13,7 @@ export type ViewUiState = {
   viewId?: string
   activeViewId: string | null
   phase: 'loading' | 'ready' | 'failed' | 'missing'
-  tabs: { viewId: string; title: string }[]
+  tabs: { viewId: string; title: string; label: string; done: boolean }[]
   pendingLink: string | null
 }
 
@@ -24,7 +24,7 @@ export type ViewControl =
   | { instance: string; action: 'link-preview'; viewId: string; href: string }
   | { instance: string; action: 'link-cancel' | 'link-confirm'; viewId: string }
   | { instance: string; action: 'show-version'; viewId: string; version: number }
-  | { instance: string; action: 'expand' | 'pop-out' | 'toggle-refused'; viewId: string }
+  | { instance: string; action: 'expand' | 'pop-out' | 'toggle-refused' | 'toggle-cap'; viewId: string }
   | { instance: string; action: 'point'; viewId: string; element: string; label: string }
   | { instance: string; action: 'show-preview' | 'reload-preview'; viewId: string; node: string }
 
@@ -38,6 +38,7 @@ type ViewHandlers = {
   expand?: () => void | Promise<void>
   popOut?: () => void | Promise<void>
   toggleRefused?: () => void
+  toggleCap?: () => void
   point?: (element: string, label: string) => void | Promise<void>
   showPreview?: (node: string) => void | Promise<void>
   reloadPreview?: (node: string) => void | Promise<void>
@@ -142,7 +143,7 @@ function controlArgs(value: unknown): ViewControl {
     exactKeys(args, ['instance', 'action', 'viewId'], 'view control arguments')
     return { instance, action, viewId }
   }
-  if (action === 'expand' || action === 'pop-out' || action === 'toggle-refused') {
+  if (action === 'expand' || action === 'pop-out' || action === 'toggle-refused' || action === 'toggle-cap') {
     exactKeys(args, ['instance', 'action', 'viewId'], 'view control arguments')
     return { instance, action, viewId }
   }
@@ -197,6 +198,8 @@ function cardCommand(handlers: ViewHandlers, command: ViewControl): (() => void 
       return need(handlers.popOut)
     case 'toggle-refused':
       return need(handlers.toggleRefused)
+    case 'toggle-cap':
+      return need(handlers.toggleCap)
     case 'point': {
       const handler = need(handlers.point)
       return () => handler(command.element, command.label)

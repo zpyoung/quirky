@@ -79,11 +79,19 @@ function start(records: ReturnType<typeof record>[], extra: Record<string, (para
     'quirky.session/get': () => ({ id: 's1', agent: 'omp' }),
     'quirky.view/action': () => ({ delivered: 'message' }),
     'quirky.view/move': () => ({}),
+    'quirky.view/close': ({ viewId }) => void setRecord(records, viewId as string, { closed: true, updatedAt: '2026-11-16T12:00:00.000Z' }),
+    'quirky.view/reopen': ({ viewId }) => void setRecord(records, viewId as string, { closed: false, updatedAt: '2026-11-16T13:00:00.000Z' }),
+    'quirky.view/done': ({ viewId, done }) => void setRecord(records, viewId as string, { done: done === true }),
     'quirky.terminal/openExternal': () => ({ ok: true }),
     ...extra
   })
   activate(fake.context)
   return fake
+}
+
+function setRecord(records: ReturnType<typeof record>[], viewId: string, change: Partial<ViewRecord>): void {
+  const index = records.findIndex((candidate) => candidate.viewId === viewId)
+  if (index >= 0) records[index] = { ...records[index]!, ...change }
 }
 
 async function mountCard(fake: FakeContext, viewId = 'view_1', report?: (state: unknown) => void) {
@@ -92,7 +100,7 @@ async function mountCard(fake: FakeContext, viewId = 'view_1', report?: (state: 
   return view
 }
 
-type InstanceState = { instance: string; surface: string; viewId?: string; session?: string; activeViewId: string | null; phase: string; tabs: { viewId: string; title: string }[]; pendingLink: string | null }
+type InstanceState = { instance: string; surface: string; viewId?: string; session?: string; activeViewId: string | null; phase: string; tabs: { viewId: string; title: string; label: string; done: boolean }[]; pendingLink: string | null }
 
 async function instances(fake: FakeContext): Promise<InstanceState[]> {
   const result = await fake.runCommand(CONTROL, { action: 'state' }) as { instances: InstanceState[] }
@@ -109,6 +117,15 @@ const text = (root: Element) => root.textContent ?? ''
 const buttonLabelled = (root: Element, label: string) =>
   [...root.querySelectorAll('button')].find((button) => button.textContent?.trim() === label) as HTMLButtonElement
 const routedArgs = (fake: FakeContext, id: string) => fake.routedTo(id).map((call) => call.args)
+const actionsButton = (root: Element) => root.querySelector<HTMLButtonElement>('button[aria-label="Visual actions"]')
+const menuItems = (root: Element) => [...root.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)
+/** Opens the card's ⋯ menu and clicks the item named `label`. */
+async function chooseAction(view: { element: Element; click(target: Element): Promise<unknown> }, label: string): Promise<void> {
+  if (view.element.querySelector('[role="menu"]') === null) await view.click(actionsButton(view.element)!)
+  const item = [...view.element.querySelectorAll('[role="menuitem"]')].find((candidate) => candidate.textContent === label)
+  if (!item) throw new Error(`no menu item ${label}`)
+  await view.click(item)
+}
 
 describe('the view card', () => {
   test('renders the bundle-size fixture: stats, chart, table and buttons', async () => {
@@ -116,7 +133,7 @@ describe('the view card', () => {
     const { element } = await mountCard(fake)
 
     expect(text(element)).toContain('Bundle size by route')
-    expect(text(element)).toContain('by omp')
+    expect(text(element)).not.toContain('by omp')
     expect(text(element)).toContain('Total (gzip)')
     expect(text(element)).toContain('412 KB')
     expect(text(element)).toContain('+38 KB')
@@ -133,7 +150,7 @@ describe('the view card', () => {
 
     expect(buttonLabelled(element, 'Lazy-load zxcvbn')).toBeTruthy()
     expect(buttonLabelled(element, 'Replace date-fns-tz')).toBeTruthy()
-    expect(buttonLabelled(element, 'Move to pane')).toBeTruthy()
+    expect(actionsButton(element)).not.toBeNull()
   })
 
   test.each(CATALOG_TYPES.map((type) => [type]))('renders a %s', async (type) => {
@@ -547,7 +564,7 @@ describe('the views pane', () => {
     const paneStates = state.filter((view) => view.surface === PANE)
     expect(paneStates).toHaveLength(2)
     for (const view of paneStates) {
-      expect(view.tabs).toEqual([{ viewId: 'view_1', title: 'Bundle size' }, { viewId: 'view_2', title: 'Module map' }])
+      expect(view.tabs).toEqual([{ viewId: 'view_1', title: 'Bundle size', label: 'Bundle size', done: false }, { viewId: 'view_2', title: 'Module map', label: 'Module map', done: false }])
     }
     expect(fake.reports).toEqual(reports)
     const reportedInstance = fake.reports
@@ -564,9 +581,12 @@ describe('the views pane', () => {
     expect(text(secondPane.element)).toContain('Bundle size body')
 
     await fake.runCommand(CONTROL, { instance: firstState.instance, action: 'dismiss-tab', viewId: 'view_2' })
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'view_2' }])
     expect([...firstPane.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size'])
     expect([...secondPane.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size', 'Module map'])
-    expect(fake.callsTo('quirky.view/close')).toHaveLength(0)
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_2', version: 1, kind: 'close', placement: 'pane' } })
+    await settle()
+    expect([...secondPane.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size'])
 
     await firstPane.unmount()
     mounted.splice(mounted.indexOf(firstPane), 1)
@@ -584,9 +604,10 @@ describe('the views pane', () => {
   test('Move inline in the pane moves that view and the pane follows the change', async () => {
     const records = [paneView('view_1', 'Bundle size')]
     const fake = start(records)
-    const { element, click } = await mountPane(fake)
+    const view = await mountPane(fake)
+    const { element } = view
 
-    await click(buttonLabelled(element, 'Move inline'))
+    await chooseAction(view, 'Move inline')
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
     expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
 
@@ -609,29 +630,218 @@ describe('the views pane', () => {
     expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size', 'Module map'])
   })
 
-  test('Close hides the active view from the pane until it changes again', async () => {
+  test('the tab label is the short label when the spec has one, else the title; done tabs go last and are marked', async () => {
+    const labelled: ViewSpec = { ...markdownSpec('mock body'), label: 'UX mock' }
+    const fake = start([
+      paneView('view_1', 'Brainstorm: native chat subagents', { done: true }),
+      paneView('view_2', 'A long title without a label'),
+      paneView('view_3', 'UX mock: the whole flow', { spec: labelled })
+    ])
+    const { element } = await mountPane(fake)
+
+    const tabs = [...element.querySelectorAll('[role="tab"]')]
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['A long title without a label', 'UX mock', 'Brainstorm: native chat subagents done'])
+    expect(tabs[1]!.getAttribute('title')).toBe('UX mock: the whole flow')
+    expect(tabs[2]!.className).toContain('--done')
+    expect((await instances(fake)).find((state) => state.surface === PANE)!.tabs.map((tab) => [tab.viewId, tab.label, tab.done])).toEqual([
+      ['view_2', 'A long title without a label', false],
+      ['view_3', 'UX mock', false],
+      ['view_1', 'Brainstorm: native chat subagents', true]
+    ])
+  })
+
+  test('the focused view draws on the panel surface with its own header', async () => {
+    const fake = start([paneView('view_1', 'Bundle size')])
+    const { element } = await mountPane(fake)
+    const card = element.querySelector('[data-view-card="view_1"]')!
+    expect(card.getAttribute('data-view-surface')).toBe('panel')
+    expect(card.querySelector('h3')).toBeNull()
+    expect(actionsButton(card)).not.toBeNull()
+    expect(element.querySelector('button[aria-label="Close Bundle size"]')!.closest('[role="tablist"]')).not.toBeNull()
+  })
+
+  test('x on a tab closes the view through the daemon and the tab moves to Closed, with focus on the tab to its left', async () => {
+    const records = [paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map'), paneView('view_3', 'Third')]
+    const fake = start(records)
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelectorAll('[role="tab"]')[1]!)
+    expect(text(element)).toContain('Module map body')
+
+    await click(element.querySelector('button[aria-label="Close Module map"]')!)
+
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'view_2' }])
+    const instance = await instanceFor(fake, PANE)
+    expect(routedArgs(fake, CONTROL)).toContainEqual({ instance, action: 'dismiss-tab', viewId: 'view_2' })
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size', 'Third'])
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Bundle size')
+    expect(text(element)).toContain('Bundle size body')
+  })
+
+  test('closing the first tab focuses the first remaining one', async () => {
+    const fake = start([paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')])
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelector('button[aria-label="Close Bundle size"]')!)
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Module map')
+    expect(text(element)).toContain('Module map body')
+  })
+
+  test('a view the agent closes leaves the tab row, and the Closed section reopens it through the daemon and focuses it', async () => {
     const records = [paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')]
     const fake = start(records)
     const { element, click } = await mountPane(fake)
 
-    await click(element.querySelector('button[aria-label="Close Bundle size"]')!)
-    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map'])
-    const instance = await instanceFor(fake, PANE)
-    expect(routedArgs(fake, CONTROL)).toEqual([{ instance, action: 'dismiss-tab', viewId: 'view_1' }])
-
-    records[0] = { ...records[0], updates: 1, updatedAt: '2026-11-16T11:00:00.000Z' }
-    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    records[1] = { ...records[1]!, closed: true, updatedAt: '2026-11-16T12:00:00.000Z' }
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_2', version: 1, kind: 'close', placement: 'pane' } })
     await settle()
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size'])
+
+    await click(element.querySelector('button[aria-label="Closed visuals"]')!)
+    expect(element.querySelector('.ui-menu__note')!.textContent).toBe('Closed')
+    await click([...element.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'Module map')!)
+
+    expect(fake.callsTo('quirky.view/reopen').map((call) => call.params)).toEqual([{ viewId: 'view_2' }])
     expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size', 'Module map'])
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Module map')
+    expect(text(element)).toContain('Module map body')
+  })
+
+  test('a failed reopen tells the person', async () => {
+    const fake = start([paneView('view_1', 'Gone', { closed: true })], { 'quirky.view/reopen': () => { throw new Error('reopen denied') } })
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelector('button[aria-label="Closed visuals"]')!)
+    await click([...element.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === 'Gone')!)
+    expect(fake.toasts).toEqual([{ title: 'Could not reopen the visual', body: 'reopen denied' }])
+  })
+
+  test('a failed close tells the person', async () => {
+    const fake = start([paneView('view_1', 'Notes')], { 'quirky.view/close': () => { throw new Error('close denied') } })
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelector('button[aria-label="Close Notes"]')!)
+    await settle()
+    expect(fake.toasts).toEqual([{ title: 'Could not close the visual', body: 'close denied' }])
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Notes'])
+  })
+
+  const changed = (viewId: string, kind: string, placement = 'pane') => ({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId, version: 1, kind, placement } })
+
+  test('following, a view the agent draws or updates takes focus', async () => {
+    const records = [paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')]
+    const fake = start(records)
+    const { element } = await mountPane(fake)
+    expect(text(element)).toContain('Bundle size body')
+
+    records.push(paneView('view_3', 'Token use'))
+    await fake.emit(changed('view_3', 'open'))
+    await settle()
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Token use')
+    expect(text(element)).toContain('Token use body')
+
+    await fake.emit(changed('view_1', 'update'))
+    await settle()
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Bundle size')
+  })
+
+  test('after a pick, a view drawn or updated gets a dot and focus stays put; picking it clears the dot', async () => {
+    const records = [paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')]
+    const fake = start(records)
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelectorAll('[role="tab"]')[1]!)
+
+    records.push(paneView('view_3', 'Token use'))
+    await fake.emit(changed('view_3', 'open'))
+    await fake.emit(changed('view_1', 'patch'))
+    await settle()
+
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Module map')
+    expect(text(element)).toContain('Module map body')
+    const dotted = [...element.querySelectorAll('[role="tab"]')].filter((tab) => tab.querySelector('.ui-visual-deck__dot') !== null).map((tab) => tab.textContent)
+    expect(dotted).toEqual(['Bundle size', 'Token use'])
+
+    await click(element.querySelectorAll('[role="tab"]')[0]!)
+    expect([...element.querySelectorAll('[role="tab"]')].filter((tab) => tab.querySelector('.ui-visual-deck__dot') !== null).map((tab) => tab.textContent)).toEqual(['Token use'])
+  })
+
+  test('done and reopen changes reload the tabs without moving focus or adding a dot', async () => {
+    const records = [paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')]
+    const fake = start(records)
+    const { element, click } = await mountPane(fake)
+    await click(element.querySelectorAll('[role="tab"]')[1]!)
+
+    records[0] = { ...records[0]!, done: true }
+    await fake.emit(changed('view_1', 'done'))
+    await settle()
+
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map', 'Bundle size done'])
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Module map')
+    expect(element.querySelector('.ui-visual-deck__dot')).toBeNull()
+  })
+
+  test('Mark done in the focused card calls done, and the tab moves last and shows done', async () => {
+    const fake = start([paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')])
+    const view = await mountPane(fake)
+    await chooseAction(view, 'Mark done')
+    expect(fake.callsTo('quirky.view/done').map((call) => call.params)).toEqual([{ viewId: 'view_1', done: true }])
+    await fake.emit(changed('view_1', 'done'))
+    await settle()
+    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map', 'Bundle size done'])
+    await chooseAction(view, 'Mark live')
+    expect(fake.callsTo('quirky.view/done').at(-1)!.params).toEqual({ viewId: 'view_1', done: false })
+  })
+
+  test('Close in the focused card closes the view and the pane focuses the next tab', async () => {
+    const fake = start([paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')])
+    const view = await mountPane(fake)
+    await chooseAction(view, 'Close')
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'view_1' }])
+    await fake.emit(changed('view_1', 'close'))
+    await settle()
+    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map'])
+    expect(text(view.element)).toContain('Module map body')
+  })
+
+  test('stepping the version of the focused card shows that version and steers the pane', async () => {
+    const records = [paneView('view_1', 'Bundle size', { version: 2, latestVersion: 2, updates: 1 }), paneView('view_2', 'Module map')]
+    const fake = start(records, {
+      'quirky.view/get': (params) => {
+        const found = records.find((candidate) => candidate.viewId === params.viewId)!
+        return params.version === 1 ? { ...found, spec: markdownSpec('Bundle size first draft'), version: 1, latestVersion: 2 } : found
+      }
+    })
+    const { element, click } = await mountPane(fake)
+    expect(text(element)).toContain('v2 of 2')
+
+    await click(buttonByLabel(element, 'Older version')!)
+    expect(text(element)).toContain('v1 of 2')
+    expect(text(element)).toContain('Bundle size first draft')
+    expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
+
+    records.push(paneView('view_3', 'Token use'))
+    await fake.emit(changed('view_3', 'open'))
+    await settle()
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Bundle size')
+    expect(element.querySelector('.ui-visual-deck__dot')).not.toBeNull()
+
+    await click(buttonByLabel(element, 'Newer version')!)
+    expect(text(element)).toContain('v2 of 2')
+  })
+
+  test('a drawn event for a view that is not in the pane does not take focus', async () => {
+    const records = [paneView('view_1', 'Bundle size'), record(markdownSpec('inline body'), { viewId: 'view_9', title: 'Inline one' })]
+    const fake = start(records)
+    const { element } = await mountPane(fake)
+    await fake.emit(changed('view_9', 'update', 'inline'))
+    await settle()
+    expect(element.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Bundle size')
+    expect(text(element)).toContain('Bundle size body')
   })
 })
 
 describe('moving a view', () => {
   test('Move to pane on an inline card calls move with the pane placement', async () => {
     const fake = start([record(bundleSize as ViewSpec)])
-    const { element, click } = await mountCard(fake)
+    const view = await mountCard(fake)
 
-    await click(buttonLabelled(element, 'Move to pane'))
+    await chooseAction(view, 'Move to pane')
 
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
     expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
@@ -643,9 +853,10 @@ describe('moving a view', () => {
       'quirky.view/move': (params) => (records[0] = { ...records[0]!, placement: params.placement as 'inline' | 'pane', movedByUser: true })
     })
     const moved = (placement: string) => fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1', version: 1, kind: 'move', placement } })
-    const { element, click } = await mountCard(fake)
+    const view = await mountCard(fake)
+    const { element, click } = view
 
-    await click(buttonLabelled(element, 'Move to pane'))
+    await chooseAction(view, 'Move to pane')
     await moved('pane')
     expect(text(element)).toContain('Notes is in the Views pane')
     expect(text(element)).not.toContain('MOVABLE CONTENT')
@@ -653,7 +864,7 @@ describe('moving a view', () => {
     await click(buttonLabelled(element, 'Move inline'))
     await moved('inline')
     expect(text(element)).toContain('MOVABLE CONTENT')
-    expect(buttonLabelled(element, 'Move to pane')).toBeDefined()
+    expect(actionsButton(element)).not.toBeNull()
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([
       { viewId: 'view_1', placement: 'pane' },
       { viewId: 'view_1', placement: 'inline' }
@@ -752,7 +963,8 @@ describe('scriptable view commands', () => {
         throw new Error('open denied')
       }
     })
-    const { element, click } = await mountCard(fake)
+    const view = await mountCard(fake)
+    const { element, click } = view
 
     await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: 'go', source: 'button' })).rejects.toThrow('agent-busy')
     await expect(fake.runCommand(MOVE, { viewId: 'view_1', placement: 'pane' })).rejects.toThrow('move denied')
@@ -760,7 +972,7 @@ describe('scriptable view commands', () => {
 
     await click(buttonLabelled(element, 'Run'))
     expect(fake.toasts).toEqual([{ title: 'Could not send the action', body: 'agent-busy' }])
-    await click(buttonLabelled(element, 'Move to pane'))
+    await chooseAction(view, 'Move to pane')
     expect(fake.toasts[1]).toEqual({ title: 'Could not move the view', body: 'move denied' })
     await click(element.querySelector('a')!)
     await click(buttonLabelled(document.querySelector('[role="dialog"]')!, 'Open link'))
@@ -866,7 +1078,7 @@ describe('visible view read states', () => {
     expect(text(element)).toContain('recovered body')
   })
 
-  test('a failed refresh retains the last good card and an optional agent lookup failure only removes its badge', async () => {
+  test('a failed refresh retains the last good card', async () => {
     let reads = 0
     const lastGood = record(markdownSpec('last good content'), { title: 'Last good' })
     const fake = start([], {
@@ -874,13 +1086,11 @@ describe('visible view read states', () => {
         reads += 1
         if (reads === 1) return lastGood
         throw new Error('offline')
-      },
-      'quirky.session/get': () => { throw new Error('agent lookup offline') }
+      }
     })
     const { element } = await mountCard(fake)
 
     expect(text(element)).toContain('last good content')
-    expect(text(element)).not.toContain('by omp')
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
     await settle()
 
@@ -910,7 +1120,7 @@ describe('visible view read states', () => {
     }
   })
 
-  test('closing the final pane tab shows the pane empty state, makes no close RPC, and a later update restores it', async () => {
+  test('closing the final pane tab shows the pane empty state, and the view stays reopenable until an update makes it live', async () => {
     const records = [paneRecord('view_1', 'Notes')]
     const fake = start(records)
     const { element, click } = await mountPane(fake)
@@ -919,10 +1129,11 @@ describe('visible view read states', () => {
     expectPaneFrame(element)
     expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('No views in the pane.')
     expect([...element.querySelectorAll('[role="tab"]')]).toHaveLength(0)
-    expect(fake.callsTo('quirky.view/close')).toHaveLength(0)
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'view_1' }])
+    expect(element.querySelector('button[aria-label="Closed visuals"]')).not.toBeNull()
 
-    records[0] = { ...records[0]!, updatedAt: '2026-11-16T11:00:00.000Z' }
-    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    records[0] = { ...records[0]!, closed: false, updatedAt: '2026-11-16T11:00:00.000Z' }
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1', version: 2, kind: 'update', placement: 'pane' } })
     await settle()
     expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Notes'])
   })
@@ -1140,7 +1351,7 @@ describe('visible view read states', () => {
     expect(fake.callsTo('quirky.view/get')).toHaveLength(reads)
   })
 
-  test('changing the pane target resets tabs, selection, and dismissals and invalidates its old list read', async () => {
+  test('changing the pane target resets tabs and selection and invalidates its old list read', async () => {
     const obsolete = Promise.withResolvers<ReturnType<typeof record>[]>()
     const next = Promise.withResolvers<ReturnType<typeof record>[]>()
     let firstSessionReads = 0
@@ -1154,17 +1365,19 @@ describe('visible view read states', () => {
         }
         return next.promise
       },
-      'quirky.session/get': () => ({ id: 's1', agent: 'omp' })
+      'quirky.view/close': () => {
+        oldRecords[0] = { ...oldRecords[0]!, closed: true }
+        return { ok: true }
+      }
     })
     const controller = createViewUiController(fake.context)
     const oldInstance = controller.mount({ surface: PANE, session: 's1' })
     const view = await mountDirect(createElement(ViewsPane, { context: fake.context, instance: oldInstance, session: 's1' }))
 
-    await view.click(view.element.querySelector('button[aria-label="Close Notes"]')!)
-    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map'])
-    await view.click(view.element.querySelector('[role="tab"]')!)
+    await view.click(view.element.querySelectorAll('[role="tab"]')[1]!)
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_2' } })
     await settle()
+    expect(text(view.element)).toContain('Module map body')
 
     const nextInstance = controller.mount({ surface: PANE, session: 's2' })
     await view.render(createElement(ViewsPane, { context: fake.context, instance: nextInstance, session: 's2' }))
@@ -1813,10 +2026,10 @@ describe('the sandboxed html frame', () => {
     expect(text(element)).not.toContain('sandboxed · no network')
   })
 
-  test('an interactive html node carries the sandboxed, no network tag', async () => {
+  test('an interactive html node carries the sandboxed, no network icon', async () => {
     const fake = start([record(proto(true))])
     const { element } = await mountSurface(fake)
-    expect(text(element)).toContain('sandboxed · no network')
+    expect(element.querySelector('[data-view-sandbox]')!.getAttribute('aria-label')).toBe('Sandboxed, no network')
   })
 
   test('a point message from the frame itself points, and one from anywhere else is ignored', async () => {
@@ -1946,15 +2159,90 @@ describe('the sandboxed html frame', () => {
 describe('card chrome by surface', () => {
   const onlyTable: ViewSpec = { title: 'Table', root: { type: 'table', props: { columns: ['A'], rows: [['one']] } } }
 
-  test('an inline card shows the title, who drew it, the stepper, expand, pop out and move', async () => {
+  test('an inline card shows the title and the stepper, with expand, pop out, move, done and close in the actions menu', async () => {
     const { fake } = startVersions(authFlow)
-    const { element } = await mountSurface(fake, { surface: 'inline' })
+    const view = await mountSurface(fake, { surface: 'inline' })
+    const { element } = view
     expect(element.querySelector('h3')!.textContent).toBe('Auth flow')
-    expect(text(element)).toContain('by omp')
+    expect(text(element)).not.toContain('by omp')
     expect(text(element)).toContain('v2 of 2')
-    expect(buttonByLabel(element, 'Expand')).not.toBeNull()
-    expect(buttonByLabel(element, 'Pop out')).not.toBeNull()
-    expect(buttonLabelled(element, 'Move to pane')).toBeTruthy()
+    expect(buttonByLabel(element, 'Expand')).toBeNull()
+    expect(buttonLabelled(element, 'Move to pane')).toBeUndefined()
+    await view.click(actionsButton(element)!)
+    expect(menuItems(element)).toEqual(['Expand', 'Pop out', 'Move to pane', 'Mark done', 'Close'])
+  })
+
+  test('a panel card has a slim row with the stepper on the left and no title or author', async () => {
+    const { fake } = startVersions(authFlow)
+    const { element } = await mountSurface(fake, { surface: 'panel' })
+    expect(element.querySelector('h3')).toBeNull()
+    expect(text(element)).not.toContain('by omp')
+    const header = element.querySelector('header')!
+    const row = [...header.children]
+    expect(row[0]!.querySelector('[data-view-stepper]')).not.toBeNull()
+    expect(row[1]!.querySelector('button[aria-label="Visual actions"]')).not.toBeNull()
+    expect(fake.callsTo('quirky.session/get')).toHaveLength(0)
+  })
+
+  test('the stepper shows only when the view has more than one version', async () => {
+    const one = await mountSurface(startVersions([authFlowV1 as ViewSpec]).fake)
+    expect(one.element.querySelector('[data-view-stepper]')).toBeNull()
+    expect(text(one.element)).not.toContain('v1 of 1')
+    const two = await mountSurface(startVersions(authFlow).fake)
+    expect(two.element.querySelector('[data-view-stepper]')).not.toBeNull()
+  })
+
+  test('the sandbox notice is a labelled icon with a tooltip, only for interactive html', async () => {
+    const interactive = await mountSurface(start([record({ title: 'Settings', root: { type: 'html', props: { html: '<p>hi</p>', interactive: true } } })]))
+    const shield = interactive.element.querySelector('[data-view-sandbox]')!
+    expect(shield.getAttribute('aria-label')).toBe('Sandboxed, no network')
+    expect(shield.getAttribute('title')).toBe('Sandboxed, no network')
+    expect(shield.querySelector('svg')).not.toBeNull()
+    const plain = await mountSurface(start([record(markdownSpec('x'))]))
+    expect(plain.element.querySelector('[data-view-sandbox]')).toBeNull()
+  })
+
+  test('the actions menu of a pane visual offers Move inline, and Pop out only when the window can open windows', async () => {
+    const { fake } = startVersions(authFlow, { 'desktop.capabilities': () => ({ auxiliaryWindows: false }) })
+    const view = await mountSurface(fake)
+    await view.click(actionsButton(view.element)!)
+    expect(menuItems(view.element)).toEqual(['Expand', 'Move to pane', 'Mark done', 'Close'])
+    const inPane = await mountSurface(start([record(markdownSpec('x'), { placement: 'pane' })]))
+    await inPane.click(actionsButton(inPane.element)!)
+    expect(menuItems(inPane.element)).toEqual(['Expand', 'Move inline', 'Mark done', 'Close'])
+  })
+
+  test('Mark done calls done, a done visual offers Mark live, and Close calls close', async () => {
+    const { fake } = startVersions(authFlow, { 'quirky.view/done': () => ({ ok: true }), 'quirky.view/close': () => ({ ok: true }) })
+    const view = await mountSurface(fake)
+    await chooseAction(view, 'Mark done')
+    expect(fake.callsTo('quirky.view/done').map((call) => call.params)).toEqual([{ viewId: 'view_1', done: true }])
+    await chooseAction(view, 'Close')
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'view_1' }])
+
+    const done = await mountSurface(start([record(markdownSpec('x'), { done: true })], { 'quirky.view/done': () => ({ ok: true }) }))
+    await done.click(actionsButton(done.element)!)
+    expect(menuItems(done.element)).toContain('Mark live')
+    expect(menuItems(done.element)).not.toContain('Mark done')
+    await chooseAction(done, 'Mark live')
+  })
+
+  test('a failed Mark done or Close tells the person', async () => {
+    const { fake } = startVersions(authFlow, { 'quirky.view/done': () => { throw new Error('no done') }, 'quirky.view/close': () => { throw new Error('no close') } })
+    const view = await mountSurface(fake)
+    await chooseAction(view, 'Mark done')
+    await chooseAction(view, 'Close')
+    expect(fake.toasts).toEqual([
+      { title: 'Could not mark the visual done', body: 'no done' },
+      { title: 'Could not close the visual', body: 'no close' }
+    ])
+  })
+
+  test('Move to pane in the menu calls move', async () => {
+    const { fake } = startVersions(authFlow)
+    const view = await mountSurface(fake, { surface: 'inline' })
+    await chooseAction(view, 'Move to pane')
+    expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
   })
 
   test('a thumbnail draws an inert copy with no chrome and nothing to point at', async () => {
@@ -1970,15 +2258,19 @@ describe('card chrome by surface', () => {
     expect(pointCalls(fake)).toEqual([])
   })
 
-  test('the expanded surface offers pop out but not expand, and a pop-out window offers neither', async () => {
+  test('the expanded surface keeps its pop out button, and a pop-out window has no actions at all, with no author badge on either', async () => {
     const { fake } = startVersions(authFlow)
     const expanded = await mountSurface(fake, { surface: 'expanded' })
     expect(buttonByLabel(expanded.element, 'Expand')).toBeNull()
     expect(buttonByLabel(expanded.element, 'Pop out')).not.toBeNull()
+    expect(actionsButton(expanded.element)).toBeNull()
+    expect(text(expanded.element)).not.toContain('by omp')
+    expect(expanded.element.querySelector('h3')!.textContent).toBe('Auth flow')
     const windowed = await mountSurface(fake, { surface: 'window' })
     expect(buttonByLabel(windowed.element, 'Expand')).toBeNull()
     expect(buttonByLabel(windowed.element, 'Pop out')).toBeNull()
-    expect(buttonLabelled(windowed.element, 'Move to pane')).toBeUndefined()
+    expect(actionsButton(windowed.element)).toBeNull()
+    expect(text(windowed.element)).not.toContain('by omp')
   })
 
   test('a pop-out window steps through versions itself, because commands run in its owner', async () => {
@@ -1991,18 +2283,20 @@ describe('card chrome by surface', () => {
 
   test('pop out is hidden when the window cannot open auxiliary windows or does not say', async () => {
     const { fake } = startVersions(authFlow, { 'desktop.capabilities': () => ({ auxiliaryWindows: false }) })
-    const { element } = await mountSurface(fake)
-    expect(buttonByLabel(element, 'Pop out')).toBeNull()
-    expect(buttonByLabel(element, 'Expand')).not.toBeNull()
+    const view = await mountSurface(fake)
+    await view.click(actionsButton(view.element)!)
+    expect(menuItems(view.element)).not.toContain('Pop out')
+    expect(menuItems(view.element)).toContain('Expand')
 
     const bare = await mountSurface(start([record(bundleSize as ViewSpec)]))
-    expect(buttonByLabel(bare.element, 'Pop out')).toBeNull()
+    await bare.click(actionsButton(bare.element)!)
+    expect(menuItems(bare.element)).not.toContain('Pop out')
   })
 
   test('pop out opens the render view in a window that follows the newest version', async () => {
     const { fake } = startVersions(authFlow, { 'desktop.window.open': () => ({ windowId: 'w1' }) })
-    const { element, press } = await mountSurface(fake)
-    await press(buttonByLabel(element, 'Pop out')!)
+    const view = await mountSurface(fake)
+    await chooseAction(view, 'Pop out')
     expect(fake.callsTo('desktop.window.open').map((call) => call.params)).toEqual([
       { view: 'view:quirky.view/render', input: { viewId: 'view_1', surface: 'window' }, title: 'Auth flow' }
     ])
@@ -2011,10 +2305,11 @@ describe('card chrome by surface', () => {
   test('expand asks the chat to expand the visual, following the newest version unless the person stepped back', async () => {
     const { fake } = startVersions(authFlow)
     fake.commands[EXPAND] = () => {}
-    const { element, press } = await mountSurface(fake)
-    await press(buttonByLabel(element, 'Expand')!)
+    const view = await mountSurface(fake)
+    const { element, press } = view
+    await chooseAction(view, 'Expand')
     await press(buttonByLabel(element, 'Older version')!)
-    await press(buttonByLabel(element, 'Expand')!)
+    await chooseAction(view, 'Expand')
     expect(routedArgs(fake, EXPAND)).toEqual([{ session: 's1', viewId: 'view_1' }, { session: 's1', viewId: 'view_1', version: 1 }])
   })
 
@@ -2043,6 +2338,166 @@ describe('card chrome by surface', () => {
     expect(parseRenderInput({ viewId: 'v', version: 0, surface: 'sideways', drawing: 'yes', extra: 1 })).toEqual({ viewId: 'v' })
     expect(parseRenderInput({ viewId: '' })).toBeNull()
     expect(parseRenderInput(null)).toBeNull()
+  })
+})
+
+describe('the inline height cap', () => {
+  const CAP = 'calc(var(--quirky-transcript-height, 100vh) * 0.6)'
+  const restores: (() => void)[] = []
+
+  /** happy-dom lays nothing out, so the cap element reports these heights, which the test can change. */
+  function heights(scroll: number, client: number): { scroll: number; client: number } {
+    const size = { scroll, client }
+    const define = (name: string, read: () => number) => {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)
+      Object.defineProperty(HTMLElement.prototype, name, { configurable: true, get(this: HTMLElement) { return this.hasAttribute('data-view-cap') ? read() : 0 } })
+      restores.push(() => (original ? Object.defineProperty(HTMLElement.prototype, name, original) : void delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]))
+    }
+    define('scrollHeight', () => size.scroll)
+    define('clientHeight', () => size.client)
+    return size
+  }
+
+  afterEach(() => {
+    for (const restore of restores.splice(0).reverse()) restore()
+  })
+
+  const capOf = (root: Element) => root.querySelector<HTMLElement>('[data-view-cap]')!
+  const showButton = (root: Element) => [...root.querySelectorAll('button')].find((button) => /^Show (more|less)$/.test(button.textContent ?? ''))
+
+  test('a tall inline card is capped to 60% of the transcript with a fade and Show more, which opens it and becomes Show less', async () => {
+    heights(900, 400)
+    const view = await mountSurface(start([record(markdownSpec('tall'))]), { surface: 'inline' })
+    const { element } = view
+    expect(capOf(element).style.maxHeight).toBe(CAP)
+    expect(capOf(element).style.overflow).toBe('hidden')
+    expect(element.querySelector('[data-view-fade]')).not.toBeNull()
+    expect(showButton(element)!.textContent).toBe('Show more')
+
+    await view.click(showButton(element)!)
+    expect(capOf(element).style.maxHeight).toBe('')
+    expect(element.querySelector('[data-view-fade]')).toBeNull()
+    expect(showButton(element)!.textContent).toBe('Show less')
+
+    await view.click(showButton(element)!)
+    expect(capOf(element).style.maxHeight).toBe(CAP)
+    expect(showButton(element)!.textContent).toBe('Show more')
+  })
+
+  test('a short inline card shows no fade and no button', async () => {
+    heights(300, 300)
+    const { element } = await mountSurface(start([record(markdownSpec('short'))]), { surface: 'inline' })
+    expect(element.querySelector('[data-view-fade]')).toBeNull()
+    expect(showButton(element)).toBeUndefined()
+  })
+
+  test('the card is measured again when its content changes size', async () => {
+    const original = globalThis.ResizeObserver
+    const observers: (() => void)[] = []
+    globalThis.ResizeObserver = class {
+      constructor(callback: () => void) { observers.push(callback) }
+      observe() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver
+    try {
+      const size = heights(300, 400)
+      const { element } = await mountSurface(start([record(markdownSpec('grows'))]), { surface: 'inline' })
+      expect(showButton(element)).toBeUndefined()
+      size.scroll = 1000
+      await act(async () => void observers.forEach((callback) => callback()))
+      expect(showButton(element)!.textContent).toBe('Show more')
+      size.scroll = 200
+      await act(async () => void observers.forEach((callback) => callback()))
+      expect(showButton(element)).toBeUndefined()
+    } finally {
+      globalThis.ResizeObserver = original
+    }
+  })
+
+  test('only the inline surface is capped', async () => {
+    heights(900, 400)
+    for (const surface of ['panel', 'expanded', 'window']) {
+      const { element } = await mountSurface(start([record(markdownSpec('tall'))]), { surface })
+      expect(element.querySelector('[data-view-cap]'), surface).toBeNull()
+      expect(showButton(element), surface).toBeUndefined()
+    }
+  })
+
+  test('the expanded state is local to the mounted card and resets on remount', async () => {
+    heights(900, 400)
+    const fake = start([record(markdownSpec('tall'))])
+    const first = await mountSurface(fake, { surface: 'inline' })
+    await first.click(showButton(first.element)!)
+    expect(showButton(first.element)!.textContent).toBe('Show less')
+    const second = await mountSurface(fake, { surface: 'inline' })
+    expect(showButton(second.element)!.textContent).toBe('Show more')
+  })
+
+  test('the control command lifts and restores the cap like the button', async () => {
+    heights(900, 400)
+    const fake = start([record(markdownSpec('tall'))])
+    const { element } = await mountSurface(fake, { surface: 'inline' })
+    const instance = await instanceFor(fake, RENDER)
+    await fake.runCommand(CONTROL, { instance, action: 'toggle-cap', viewId: 'view_1' })
+    expect(showButton(element)!.textContent).toBe('Show less')
+    await fake.runCommand(CONTROL, { instance, action: 'toggle-cap', viewId: 'view_1' })
+    expect(showButton(element)!.textContent).toBe('Show more')
+  })
+})
+
+describe('wide content', () => {
+  const MIN = 'minmax(calc(var(--ui-length-unit) * 160), 1fr)'
+  const board = (columns: number): ViewSpec => ({
+    title: 'Board',
+    root: { type: 'board', props: { columns: Array.from({ length: columns }, (_, index) => ({ title: `Column ${index}`, cards: [{ title: 'A card with words that should stay whole' }] })) } }
+  })
+
+  test('board columns keep a minimum width and the board scrolls sideways', async () => {
+    const { element } = await mountSurface(start([record(board(4))]))
+    const root = element.querySelector<HTMLElement>('[data-view-node="board"]')!
+    expect(root.style.gridTemplateColumns).toBe(`repeat(4, ${MIN})`)
+    expect(root.style.overflowX).toBe('auto')
+    const card = element.querySelector<HTMLElement>('[data-point-key]')!
+    expect(card.style.overflowWrap).toBe('')
+  })
+
+  test('columns keep the same minimum width and scroll sideways', async () => {
+    const spec: ViewSpec = { title: 'Cols', root: { type: 'columns', props: { count: 3 }, children: [1, 2, 3].map((n) => ({ type: 'markdown' as const, props: { text: `col ${n}` } })) } }
+    const { element } = await mountSurface(start([record(spec)]))
+    const root = element.querySelector<HTMLElement>('[data-view-node="columns"]')!
+    expect(root.style.gridTemplateColumns).toBe(`repeat(3, ${MIN})`)
+    expect(root.style.overflowX).toBe('auto')
+  })
+
+  test('table cells keep a minimum width, inside a wrapper that scrolls', async () => {
+    const { element } = await mountSurface(start([record({ title: 'T', root: { type: 'table', props: { columns: ['A', 'B'], rows: [['one', 'two']] } } })]))
+    expect(element.querySelector<HTMLElement>('[data-view-node="table"]')!.style.overflowX).toBe('auto')
+    for (const cell of element.querySelectorAll<HTMLElement>('th, td')) {
+      expect(cell.style.minWidth).toBe('calc(var(--ui-length-unit) * 96)')
+      expect(cell.style.overflowWrap).toBe('')
+    }
+  })
+
+  test('a fade shows on the right edge while the board can still scroll right', async () => {
+    const original = { scrollWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth'), clientWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth') }
+    let scrollLeft = 0
+    const mark = (this_: HTMLElement) => this_.getAttribute('data-view-node') === 'board'
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get(this: HTMLElement) { return mark(this) ? 1000 : 0 } })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get(this: HTMLElement) { return mark(this) ? 400 : 0 } })
+    Object.defineProperty(HTMLElement.prototype, 'scrollLeft', { configurable: true, get(this: HTMLElement) { return mark(this) ? scrollLeft : 0 }, set() {} })
+    try {
+      const { element } = await mountSurface(start([record(board(4))]))
+      expect(element.querySelector('[data-view-scroll-fade]')).not.toBeNull()
+      scrollLeft = 600
+      await act(async () => void element.querySelector('[data-view-node="board"]')!.dispatchEvent(new Event('scroll', { bubbles: true })))
+      expect(element.querySelector('[data-view-scroll-fade]')).toBeNull()
+    } finally {
+      for (const [name, saved] of Object.entries(original)) {
+        if (saved) Object.defineProperty(HTMLElement.prototype, name, saved)
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]
+      }
+      delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollLeft
+    }
   })
 })
 
@@ -2139,13 +2594,15 @@ describe('the control command for card actions', () => {
     expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
   })
 
-  test('a pane has no stepper, and a card command it cannot run is refused', async () => {
+  test('a pane steps through versions with the stepper and the control command, and only for its active card', async () => {
     const fake = start([record(bundleSize as ViewSpec, { placement: 'pane', updates: 1, latestVersion: 2, version: 2 })])
     const view = await mountView(fake, PANE, { session: 's1' })
     mounted.push(view)
-    expect(view.element.querySelector('[data-view-stepper]')).toBeNull()
+    expect(view.element.querySelector('[data-view-stepper]')).not.toBeNull()
     const instance = await instanceFor(fake, PANE)
-    await expect(fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1', version: 1 })).rejects.toThrow('View action is not available for this mount.')
+    await fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_1', version: 1 })
+    expect(fake.callsTo('quirky.view/get').at(-1)!.params).toEqual({ viewId: 'view_1', version: 1 })
+    await expect(fake.runCommand(CONTROL, { instance, action: 'show-version', viewId: 'view_2', version: 1 })).rejects.toThrow('View is not the active card.')
   })
 })
 
