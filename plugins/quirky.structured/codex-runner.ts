@@ -1,4 +1,5 @@
-import type { AgentCommand, AskEnvelope, Session, SessionProviderSession } from '@quirky/protocol'
+import type { AgentCommand, AgentKey, AskEnvelope, AskSpec, Session, SessionProviderSession } from '@quirky/protocol'
+import { AgentRegistry, UNATTRIBUTED } from './agents'
 import { CodexConnection, type CodexRpcId, type CodexRpcMessage } from './codex-connection'
 import {
   CallTracker,
@@ -212,8 +213,67 @@ export function codexSkills(response: unknown): Map<string, { command: AgentComm
   return skills
 }
 
+/** The per-thread bookkeeping for items and streams; a `Running` is the main thread's, each child owns its own. */
+type Scope = {
+  assistantDeltas: Map<string, string>
+  emittedAssistantIds: Set<string>
+  emittedToolIds: Set<string>
+  toolOutput: Map<string, string>
+  calls: CallTracker
+  stream: ProseStream
+}
+
+/** A sub-agent thread; `agent` is the key its entries are tagged with, `unattributed` until its `thread/started` is seen. */
+type Child = Scope & {
+  agent: AgentKey
+  known: boolean
+  activeTurnId: string | null
+  baseline: TokenCounts
+  reportedTotal: TokenCounts | null
+}
+
+const ZERO_COUNTS: TokenCounts = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 }
+
+function oneLineTask(prompt: string): string {
+  return prompt.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_LIMIT)
+}
+
+function newScope(): Scope {
+  return {
+    assistantDeltas: new Map(),
+    emittedAssistantIds: new Set(),
+    emittedToolIds: new Set(),
+    toolOutput: new Map(),
+    calls: new CallTracker(),
+    stream: new ProseStream()
+  }
+}
+
+const CHILD_METHODS = new Set([
+  'turn/started',
+  'turn/completed',
+  'thread/tokenUsage/updated',
+  'item/agentMessage/delta',
+  'item/commandExecution/outputDelta',
+  'item/started',
+  'item/completed',
+  'turn/plan/updated'
+])
+
+const COLLAB_ENDINGS: Record<string, 'done' | 'failed' | 'stopped'> = {
+  completed: 'done',
+  errored: 'failed',
+  interrupted: 'stopped',
+  shutdown: 'stopped'
+}
+
 type Running = {
   sessionId: string
+  agents: AgentRegistry
+  /** Every non-main thread seen, by thread id. */
+  children: Map<string, Child>
+  /** What a spawning `collabAgentToolCall` said about a child, kept until the child's `thread/started` arrives. */
+  spawnInfo: Map<string, { prompt?: string; model?: string }>
   toolPolicy: ToolPolicy
   turnUsage: TurnUsage | null
   refusedTurnId: string | null
@@ -448,7 +508,9 @@ class CodexRunner implements StructuredRunner {
 
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
-    if (!run || run.stopped || run.failed || !run.ready || run.turnStartedAt === null) return
+    if (!run || run.stopped || run.failed || !run.ready) return
+    await this.stopLiveAgents(run)
+    if (run.stopped || run.failed || run.turnStartedAt === null) return
     const turnId = run.activeTurnId
     run.activeTurnId = null
     run.pendingCompletion = null
@@ -470,6 +532,54 @@ class CodexRunner implements StructuredRunner {
     }
     if (run.stopped || run.failed) return
     this.context.setStatus(sessionId, 'done')
+  }
+
+  /**
+   * Stops one sub-agent and every live agent below it, deepest first, and journals each as stopped.
+   * Never ends the parent turn; an unknown or finished agent is a no-op.
+   */
+  async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.failed || !run.agents.isLive(agent)) return
+    for (const id of [...run.agents.descendants(agent), agent]) await this.stopChild(run, id)
+  }
+
+  private async stopLiveAgents(run: Running): Promise<void> {
+    for (const id of run.agents.live()) {
+      if (run.agents.isLive(id)) await this.stopAgent(run.sessionId, id)
+    }
+  }
+
+  private async stopChild(run: Running, id: AgentKey): Promise<void> {
+    const child = run.children.get(id)
+    const turnId = child?.activeTurnId ?? null
+    if (child) child.activeTurnId = null
+    if (turnId !== null) {
+      try {
+        await run.connection.request('turn/interrupt', { threadId: id, turnId }, INTERRUPT_TIMEOUT_MS)
+      } catch {
+        // the agent is journaled stopped either way; the parent turn is not ours to end here
+      }
+    }
+    this.endAgent(run, id, 'stopped')
+  }
+
+  /** Closes the agent's open calls, then ends it in `state`; both are tagged as the agent's own. */
+  private endAgent(run: Running, id: AgentKey, state: 'done' | 'failed' | 'stopped', extra: { report?: string; error?: string } = {}): void {
+    if (!run.agents.isLive(id)) return
+    const child = run.children.get(id)
+    if (child) for (const entry of closingEntries(child.calls, state)) this.append(run, entry, id)
+    const entry = run.agents.end(id, state, extra)
+    if (entry) this.append(run, entry)
+  }
+
+  /** Journals every agent still live when a run ends under it as stopped and cut off. */
+  private cutOffAgents(run: Running): void {
+    for (const id of run.agents.live()) {
+      const child = run.children.get(id)
+      if (child) for (const entry of closingEntries(child.calls, 'stopped')) this.append(run, entry, id)
+    }
+    for (const entry of run.agents.cutOff()) this.append(run, entry)
   }
 
   async stop(sessionId: string): Promise<void> {
@@ -503,6 +613,7 @@ class CodexRunner implements StructuredRunner {
 
   private async stopRun(run: Running): Promise<void> {
     this.closeTurn(run, 'stopped')
+    this.cutOffAgents(run)
     if (run.activeTurnId !== null && !run.pendingCompletion) {
       try {
         await run.connection.request(
@@ -557,6 +668,9 @@ class CodexRunner implements StructuredRunner {
     )
     run = {
       sessionId: session.id,
+      agents: new AgentRegistry(),
+      children: new Map(),
+      spawnInfo: new Map(),
       toolPolicy,
       turnUsage: null,
       refusedTurnId: null,
@@ -765,9 +879,15 @@ class CodexRunner implements StructuredRunner {
         }
       }
     }
-    if (foreignThread) return
+    if (foreignThread) {
+      if (run.toolPolicy !== 'deny-all' && CHILD_METHODS.has(method)) this.handleChildNotification(run, method, params, params.threadId as string)
+      return
+    }
 
     switch (method) {
+      case 'thread/started':
+        if (run.toolPolicy !== 'deny-all') this.onThreadStarted(run, params.thread)
+        return
       case 'skills/changed':
         void this.loadSkills(run)
         return
@@ -836,27 +956,11 @@ class CodexRunner implements StructuredRunner {
         return
       }
       case 'item/agentMessage/delta': {
-        const itemId = params.itemId
-        const delta = params.delta
-        if (typeof itemId !== 'string' || typeof delta !== 'string') return
-        run.assistantDeltas.set(itemId, (run.assistantDeltas.get(itemId) ?? '') + delta)
-        const partial = run.stream.push(itemId, delta, Date.now())
-        if (partial && partial.kind === 'prose') {
-          this.context.appendMessage({
-            sessionId: run.sessionId,
-            role: 'system',
-            text: partial.text,
-            data: { itemId, streaming: true },
-            item: partial
-          })
-        }
+        this.agentMessageDelta(run, run, params)
         return
       }
       case 'item/commandExecution/outputDelta': {
-        const itemId = params.itemId
-        const delta = params.delta
-        if (typeof itemId !== 'string' || typeof delta !== 'string') return
-        run.toolOutput.set(itemId, (run.toolOutput.get(itemId) ?? '') + delta)
+        this.commandOutputDelta(run, params)
         return
       }
       case 'item/started': {
@@ -869,6 +973,7 @@ class CodexRunner implements StructuredRunner {
             return
           }
         }
+        if (this.agentItem(run, item as Record<string, unknown>)) return
         this.journalStarted(run, item as Record<string, unknown>)
         return
       }
@@ -885,6 +990,7 @@ class CodexRunner implements StructuredRunner {
           this.refuseToolItem(run, params, item)
         }
         if (run.toolPolicy === 'deny-all' && typeof type !== 'string') return
+        if (this.agentItem(run, item)) return
         this.journalItem(run, item)
         return
       }
@@ -980,8 +1086,9 @@ class CodexRunner implements StructuredRunner {
     }
   }
 
-  private append(run: Running, entry: ItemEntry): void {
-    this.context.appendMessage({ sessionId: run.sessionId, role: entry.role, text: entry.text, data: entry.data, item: entry.item })
+  private append(run: Running, entry: ItemEntry, agent?: AgentKey): void {
+    const { role, text, data, item } = run.agents.tag(entry, agent)
+    this.context.appendMessage({ sessionId: run.sessionId, role, text, data, item })
   }
 
   /** Closes calls still running and ends the turn when one is open; a turn that is not open is left alone. */
@@ -998,8 +1105,8 @@ class CodexRunner implements StructuredRunner {
     run.stream.reset()
   }
 
-  private journalStarted(run: Running, item: Record<string, unknown>): void {
-    for (const entry of codexEntries(item, 'started', run.calls)) this.append(run, entry)
+  private journalStarted(run: Running, item: Record<string, unknown>, scope: Scope = run, agent?: AgentKey): void {
+    for (const entry of codexEntries(item, 'started', scope.calls)) this.append(run, entry, agent)
   }
 
   /**
@@ -1027,30 +1134,279 @@ class CodexRunner implements StructuredRunner {
     this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: TOOLS_DISABLED, data, item: statusItem(TOOLS_DISABLED) })
     this.failRun(run, new Error('Codex started a second agent in a session without tools'))
   }
-  private journalItem(run: Running, item: Record<string, unknown>): void {
+  private journalItem(run: Running, item: Record<string, unknown>, scope: Scope = run, agent?: AgentKey): void {
     const type = item.type
     const id = typeof item.id === 'string' ? item.id : undefined
     if (type === 'agentMessage') {
-      if (id && run.emittedAssistantIds.has(id)) return
-      const text = typeof item.text === 'string' ? item.text : (id ? run.assistantDeltas.get(id) : undefined) ?? ''
-      if (text.length > 0) {
-        this.context.appendMessage({ sessionId: run.sessionId, role: 'assistant', text, data: item, item: { kind: 'prose', text } })
-      }
+      if (id && scope.emittedAssistantIds.has(id)) return
+      const text = typeof item.text === 'string' ? item.text : (id ? scope.assistantDeltas.get(id) : undefined) ?? ''
+      if (text.length > 0) this.append(run, { role: 'assistant', text, data: item, item: { kind: 'prose', text } }, agent)
       if (id) {
-        run.emittedAssistantIds.add(id)
-        run.stream.reset(id)
+        scope.emittedAssistantIds.add(id)
+        scope.stream.reset(id)
       }
       return
     }
     if (type === 'commandExecution' || type === 'fileChange') {
-      if (id && run.emittedToolIds.has(id)) return
-      const output = id ? run.toolOutput.get(id) : undefined
-      for (const entry of codexEntries(item, 'completed', run.calls, output)) this.append(run, entry)
-      if (id) run.emittedToolIds.add(id)
+      if (id && scope.emittedToolIds.has(id)) return
+      const output = id ? scope.toolOutput.get(id) : undefined
+      for (const entry of codexEntries(item, 'completed', scope.calls, output)) this.append(run, entry, agent)
+      if (id) scope.emittedToolIds.add(id)
       return
     }
     if (type === 'reasoning') return
-    for (const entry of codexEntries(item, 'completed', run.calls)) this.append(run, entry)
+    for (const entry of codexEntries(item, 'completed', scope.calls)) this.append(run, entry, agent)
+  }
+
+  private agentMessageDelta(run: Running, scope: Scope, params: Record<string, unknown>, agent?: AgentKey): void {
+    const itemId = params.itemId
+    const delta = params.delta
+    if (typeof itemId !== 'string' || typeof delta !== 'string') return
+    scope.assistantDeltas.set(itemId, (scope.assistantDeltas.get(itemId) ?? '') + delta)
+    const partial = scope.stream.push(itemId, delta, Date.now())
+    if (partial && partial.kind === 'prose') {
+      this.append(run, { role: 'system', text: partial.text, data: { itemId, streaming: true }, item: partial }, agent)
+    }
+  }
+
+  private commandOutputDelta(scope: Scope, params: Record<string, unknown>): void {
+    const itemId = params.itemId
+    const delta = params.delta
+    if (typeof itemId !== 'string' || typeof delta !== 'string') return
+    scope.toolOutput.set(itemId, (scope.toolOutput.get(itemId) ?? '') + delta)
+  }
+
+  /** Spawns the agent for a `thread/started` that names a parent thread; any other thread start is not ours to journal. */
+  private onThreadStarted(run: Running, thread: unknown): void {
+    if (!isPlainMap(thread)) return
+    const id = thread.id
+    const parentId = thread.parentThreadId
+    if (typeof id !== 'string' || id === '' || id === run.threadId || typeof parentId !== 'string' || parentId === '') return
+    const existing = run.children.get(id)
+    if (existing?.known) return
+    let parent: AgentKey | undefined
+    if (parentId !== run.threadId) {
+      const resolved = run.agents.resolve(parentId)
+      for (const entry of resolved.entries) this.append(run, entry)
+      parent = resolved.agent
+    }
+    const nickname = typeof thread.agentNickname === 'string' && thread.agentNickname !== '' ? thread.agentNickname : undefined
+    const role = typeof thread.agentRole === 'string' && thread.agentRole !== '' ? thread.agentRole : undefined
+    const info = run.spawnInfo.get(id)
+    run.spawnInfo.delete(id)
+    const child = existing ?? { ...newScope(), agent: id, known: true, activeTurnId: null, baseline: ZERO_COUNTS, reportedTotal: null }
+    child.agent = id
+    child.known = true
+    run.children.set(id, child)
+    this.append(
+      run,
+      run.agents.spawn({
+        id,
+        ...(parent === undefined ? {} : { parent }),
+        name: nickname ?? role ?? 'agent',
+        task: info?.prompt === undefined ? '' : oneLineTask(info.prompt),
+        ...(info?.prompt === undefined ? {} : { prompt: info.prompt }),
+        ...(info?.model === undefined ? {} : { model: info.model }),
+        steps: 'full',
+        nativeId: id
+      })
+    )
+  }
+
+  /** The record for a non-main thread; a thread whose `thread/started` was never seen is attributed to `unattributed`. */
+  private childFor(run: Running, threadId: string): Child {
+    const existing = run.children.get(threadId)
+    if (existing) return existing
+    const resolved = run.agents.resolve(threadId)
+    for (const entry of resolved.entries) this.append(run, entry)
+    const child: Child = { ...newScope(), agent: resolved.agent ?? UNATTRIBUTED, known: false, activeTurnId: null, baseline: ZERO_COUNTS, reportedTotal: null }
+    run.children.set(threadId, child)
+    return child
+  }
+
+  private handleChildNotification(run: Running, method: string, params: Record<string, unknown>, threadId: string): void {
+    const child = this.childFor(run, threadId)
+    const agent = child.agent
+    switch (method) {
+      case 'turn/started': {
+        const turn = params.turn
+        const id = isPlainMap(turn) ? turn.id : undefined
+        if (typeof id === 'string' && id !== '') child.activeTurnId = id
+        return
+      }
+      case 'turn/completed': {
+        const turn = params.turn
+        const id = isPlainMap(turn) ? turn.id : undefined
+        if (id === child.activeTurnId) child.activeTurnId = null
+        return
+      }
+      case 'thread/tokenUsage/updated':
+        this.childUsage(run, child, params.tokenUsage)
+        return
+      case 'item/agentMessage/delta':
+        this.agentMessageDelta(run, child, params, agent)
+        return
+      case 'item/commandExecution/outputDelta':
+        this.commandOutputDelta(child, params)
+        return
+      case 'item/started': {
+        const item = params.item
+        if (!isPlainMap(item) || this.agentItem(run, item) || item.type === 'userMessage') return
+        this.journalStarted(run, item, child, agent)
+        return
+      }
+      case 'item/completed': {
+        const item = params.item
+        if (!isPlainMap(item) || this.agentItem(run, item) || item.type === 'userMessage') return
+        this.journalItem(run, item, child, agent)
+        return
+      }
+      case 'turn/plan/updated': {
+        const turnId = typeof params.turnId === 'string' ? params.turnId : (child.activeTurnId ?? 'turn')
+        this.append(run, codexPlanEntry(`plan-${turnId}`, params.plan), agent)
+        return
+      }
+    }
+  }
+
+  /**
+   * Adds a child's token spend to its agent and to the session, in the same four buckets as the parent.
+   * The child keeps its own baseline, so the parent's turn usage is never touched.
+   */
+  private childUsage(run: Running, child: Child, rawUsage: unknown): void {
+    if (!isPlainMap(rawUsage)) return
+    const total = tokenCounts(rawUsage.total)
+    const last = tokenCounts(rawUsage.last)
+    const spent = last ?? (total ? tokenUsageDelta(total, child.reportedTotal ?? child.baseline) : null)
+    if (total) child.reportedTotal = total
+    if (!spent) return
+    const cached = spent.cachedInputTokens ?? 0
+    const tokens = {
+      input: Math.max(0, (spent.inputTokens ?? 0) - cached),
+      output: (spent.outputTokens ?? 0) + (spent.reasoningOutputTokens ?? 0),
+      cacheRead: cached,
+      cacheWrite: 0
+    }
+    this.context.reportUsage?.(run.sessionId, { tokens })
+    const before = run.agents.get(child.agent)?.tokens ?? 0
+    const entry = run.agents.update(child.agent, { tokens: before + tokens.input + tokens.output + tokens.cacheRead })
+    if (entry) this.append(run, entry)
+  }
+
+  /**
+   * Applies a `collabAgentToolCall` or `subAgentActivity` item to the agents it names. These items
+   * never become status lines. Returns whether the item was one of them.
+   */
+  private agentItem(run: Running, item: Record<string, unknown>): boolean {
+    if (item.type === 'collabAgentToolCall') {
+      const states = isPlainMap(item.agentsStates) ? item.agentsStates : {}
+      const receivers = Array.isArray(item.receiverThreadIds) ? item.receiverThreadIds.filter((id): id is string => typeof id === 'string') : []
+      const prompt = item.tool === 'spawnAgent' && typeof item.prompt === 'string' && item.prompt !== '' ? item.prompt : undefined
+      const model = item.tool === 'spawnAgent' && typeof item.model === 'string' && item.model !== '' ? item.model : undefined
+      for (const id of new Set([...receivers, ...Object.keys(states)])) {
+        if (prompt !== undefined || model !== undefined) this.noteSpawn(run, id, prompt, model)
+        const state = states[id]
+        const status = isPlainMap(state) ? state.status : undefined
+        const message = isPlainMap(state) && typeof state.message === 'string' && state.message !== '' ? state.message : undefined
+        if (typeof status === 'string') this.applyStatus(run, id, status, message)
+      }
+      return true
+    }
+    if (item.type === 'subAgentActivity') {
+      const id = item.agentThreadId
+      if (typeof id === 'string' && (item.kind === 'completed' || item.kind === 'interrupted')) this.applyStatus(run, id, item.kind)
+      return true
+    }
+    return false
+  }
+
+  private noteSpawn(run: Running, id: string, prompt: string | undefined, model: string | undefined): void {
+    const agent = run.agents.get(id)
+    if (!agent || !run.children.get(id)?.known) {
+      run.spawnInfo.set(id, { ...run.spawnInfo.get(id), ...(prompt === undefined ? {} : { prompt }), ...(model === undefined ? {} : { model }) })
+      return
+    }
+    const patch: { prompt?: string; task?: string; model?: string } = {}
+    if (prompt !== undefined && agent.prompt !== prompt) {
+      patch.prompt = prompt
+      if (agent.task === '') patch.task = oneLineTask(prompt)
+    }
+    if (model !== undefined && agent.model !== model) patch.model = model
+    if (Object.keys(patch).length === 0) return
+    const entry = run.agents.update(id, patch)
+    if (entry) this.append(run, entry)
+  }
+
+  private applyStatus(run: Running, id: string, status: string, message?: string): void {
+    const state = COLLAB_ENDINGS[status]
+    if (state === undefined || !run.children.get(id)?.known) return
+    this.endAgent(run, id, state, message === undefined ? {} : state === 'done' ? { report: message } : state === 'failed' ? { error: message } : {})
+  }
+
+  /** The key of the known, live child whose active turn the request names, or undefined for the main thread and anything else. */
+  private activeChild(run: Running, params: unknown): AgentKey | undefined {
+    if (!isPlainMap(params) || typeof params.threadId !== 'string' || typeof params.turnId !== 'string') return undefined
+    const child = run.children.get(params.threadId)
+    if (!child?.known || !run.agents.isLive(params.threadId) || child.activeTurnId !== params.turnId) return undefined
+    return params.threadId
+  }
+
+  /** Puts a child's approval or native question to the user, labeled with the agent and flipping it to needs-you while pending. */
+  private async handleChildRequest(run: Running, request: { id: CodexRpcId; method: string; params: unknown }, id: AgentKey): Promise<void> {
+    const params = request.params as Record<string, unknown>
+    const child = run.children.get(id)!
+    const turnId = child.activeTurnId
+    const native = request.method === 'item/tool/requestUserInput'
+    let spec: AskSpec
+    let plan: NativeQuestionPlan | null = null
+    if (native) {
+      try {
+        plan = nativeQuestionPlan(params, 'codex')
+      } catch (error) {
+        run.connection.respondError(request.id, -32602, error instanceof Error ? error.message : String(error))
+        return
+      }
+      spec = plan.spec
+    } else {
+      const command = typeof params.command === 'string' ? params.command : ''
+      const reason = typeof params.reason === 'string' ? params.reason : ''
+      const summary = command.replace(/\s+/g, ' ').trim().slice(0, SUMMARY_LIMIT)
+      const question =
+        request.method === 'item/commandExecution/requestApproval'
+          ? `Allow Codex to run ${summary || 'this command'}? ${reason}`.trim()
+          : `Allow Codex to apply the proposed file changes? ${reason}`.trim()
+      spec = approvalSpec(question)
+    }
+    const labels = run.agents.askOptions(id)
+    const asking = run.agents.setAsking(id, true)
+    if (asking) this.append(run, asking)
+    let envelope: AskEnvelope | null = null
+    try {
+      envelope = await this.context.createAsk({ ...spec, title: labels.title }, run.sessionId, {
+        from: labels.from,
+        ...(native ? { nativeQuestion: true } : {})
+      })
+    } catch {
+      envelope = null
+    }
+    const resumed = run.agents.setAsking(id, false)
+    if (resumed) this.append(run, resumed)
+    if (run.stopped || run.failed) return
+    try {
+      if (plan !== null) {
+        if (child.activeTurnId !== turnId) {
+          run.connection.respondError(request.id, -32000, 'Native question owner changed while awaiting an answer')
+          return
+        }
+        const answers = Object.fromEntries(Object.entries(nativeQuestionAnswers(plan, envelope)).map(([key, values]) => [key, { answers: values }]))
+        run.connection.respond(request.id, { answers })
+        return
+      }
+      const outcome = approvalOutcome(envelope, true)
+      run.connection.respond(request.id, { decision: outcome.decision === 'allow' ? 'accept' : outcome.decision === 'always' ? 'acceptForSession' : 'decline' })
+    } catch (error) {
+      this.failRun(run, error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   private async handleNativeQuestion(run: Running, request: { id: CodexRpcId; method: string; params: unknown }): Promise<void> {
@@ -1125,6 +1481,10 @@ class CodexRunner implements StructuredRunner {
           return
       }
     }
+    const childKey = this.activeChild(run, request.params)
+    if (childKey !== undefined && (request.method === 'item/tool/requestUserInput' || request.method === 'item/commandExecution/requestApproval' || request.method === 'item/fileChange/requestApproval')) {
+      return this.handleChildRequest(run, request, childKey)
+    }
     if (request.method === 'item/tool/requestUserInput') return this.handleNativeQuestion(run, request)
     if (request.method !== 'item/commandExecution/requestApproval' && request.method !== 'item/fileChange/requestApproval') {
       run.connection.respondError(request.id, -32601, `Method not found: ${request.method}`)
@@ -1190,6 +1550,7 @@ class CodexRunner implements StructuredRunner {
       return
     }
     this.closeTurn(run, 'failed')
+    this.cutOffAgents(run)
     this.context.appendMessage({
       sessionId: run.sessionId,
       role: 'system',

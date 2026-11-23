@@ -670,7 +670,7 @@ describe('Codex runner', () => {
     })
   })
 
-  test('without a policy, tool output deltas are journaled and foreign-thread notifications are dropped', async () => {
+  test('without a policy, tool output deltas are journaled and foreign-thread notifications go to Unattributed', async () => {
     configureFixture({
       turnScript: {
         notifications: [
@@ -696,10 +696,15 @@ describe('Codex runner', () => {
     await runner.start(session, 'scripted turn')
     await until(() => rec.statuses.includes('done'))
     expect(fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(false)
-    expect(rec.messages.filter((message) => message.role === 'tool' && !isClosure(message.data)).map((message) => message.text)).toEqual([
+    const tools = rec.messages.filter((message) => message.role === 'tool' && !isClosure(message.data))
+    expect(tools.filter((message) => message.item?.kind === 'agent').map((message) => message.item)).toContainEqual(
+      expect.objectContaining({ kind: 'agent', id: 'unattributed', name: 'Unattributed' })
+    )
+    expect(tools.filter((message) => !message.item?.agent && message.item?.kind !== 'agent').map((message) => message.text)).toEqual([
       'cat file.txt',
       'cat file.txt\nfile.txt'
     ])
+    expect(tools.filter((message) => message.item?.agent === 'unattributed').map((message) => message.text)).toEqual(['Codex command'])
     expect(rec.messages.some((message) => message.role === 'system' && message.text === DENY)).toBe(false)
   })
 
