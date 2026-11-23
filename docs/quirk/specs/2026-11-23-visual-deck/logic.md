@@ -4,7 +4,9 @@
 
 **Status:** Approved 2026-11-23. Tech spec: tech.md (complexity gate: crosses quirky.view, @quirky/ui and quirky.session).
 
-**Amendments:** none yet.
+**Amendments:**
+
+- 2026-11-23: SC-11's example listed the wrong hidden tabs. The Then is unchanged; the example now follows it.
 
 This spec replaces SC-14 ("The panel adapts to its width") of [the chat visual panel spec](../2026-11-19-chat-visual-panel/logic.md). The rest of that spec still holds.
 
@@ -120,7 +122,7 @@ The deck reads the session's visuals, works out the order (plan, live by creatio
     - **When** the tab row is drawn
     - **Then** four tabs are shown in order and the rest go into a +N menu. Done visuals sort last, so they move into the menu first. The focused tab is always visible: if it would overflow, it takes the last visible slot.
     - **Data before:** **Visuals**: Plan; Brainstorm (done); UX mock (done); Skill audit; Logic spec; SDD run (focused); Token use
-    - **Data after:** **Tab row**: ✓ Plan, Logic spec, SDD run, Token use; **+3 menu**: Skill audit, Brainstorm (done), UX mock (done)
+    - **Data after:** **Tab row**: ✓ Plan, Skill audit, Logic spec, SDD run; **+3 menu**: Token use, Brainstorm (done), UX mock (done)
 
 12. **SC-12 The +N menu lists closed visuals**
     - **Given** two closed visuals, Auth flake causes and Research findings

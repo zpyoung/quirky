@@ -25,7 +25,7 @@ Files: `plugins/quirky.view/src/core/contract.ts`, `catalog.ts`, `store.ts`, `vi
   - Anything else is refused with `label must be at most 24 characters` (or `label must be a non-empty string`), the same way the title check refuses (`catalog.ts:1221-1223`).
 - **`ViewRecord`** gains two fields:
   - `label?: string`, taken from the current spec.
-  - `done: boolean`, persisted in a new `done INTEGER NOT NULL DEFAULT 0` column on `views`, added through a migration like `viewVersionsMigration`.
+  - `done?: boolean` on `ViewRecord` (required on `StoredViewRecord`, which is what `list` returns; readers default a missing value to false), persisted in a new `done INTEGER NOT NULL DEFAULT 0` column on `views`, added through a migration like `viewVersionsMigration`.
   - `getVersion` reports the current `done`, the same way it reports the current `closed`.
 - **`ViewChangeKind`** adds `'done' | 'reopen'`. The `quirky.view/changed` payload shape is unchanged (`{sessionId, viewId, version, kind, placement}`). Update the schema enums in `quirky-plugin.json` (event at `:510-552`). Also update the `list` record schema (`:175-255`) to add `label` (optional) and `done` (required).
 - **Clearing done.** Every new version clears it: `update` and `patch` set `done = 0`, and the single choke point is `ViewStore.appendVersion` (`store.ts:124`). The emitted kind stays `update` / `patch`.
@@ -99,7 +99,7 @@ export function deckFocusReducer(state: DeckFocus, event: DeckEvent): DeckFocus
 
 The reducer has these postconditions, which mirror logic SC-6 to SC-10 and SC-13:
 
-- `drawn`: following → focus it and clear its dot. Steered → add a dot and leave focus alone.
+- `drawn`: following → focus it and clear its dot. Steered → add a dot and leave focus alone, except on the focused entry, which is already on screen and gets no dot.
 - `picked`, `stepped` → mode `steered`. `picked` focuses the entry and clears its dot.
 - `asked` → focus it and clear its dot. The mode is unchanged.
 - `sent` → mode `following`. Focus is unchanged.
