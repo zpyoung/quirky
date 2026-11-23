@@ -1148,6 +1148,27 @@ describe('Codex sub-agents', () => {
     expect(latestAgent('child-1')?.state).toBe('working')
   })
 
+  test('overlapping stops of one child share a single interrupt, and a failure keeps the child live for a retry', async () => {
+    await runWith({
+      turnScript: { hold: true, childInterrupt: 'error-once' },
+      childThreads: [{ id: 'child-1', turnId: 't-1' }],
+      replyDelayMs: { 'turn/interrupt': 300 }
+    })
+    await until(() => latestAgent('child-1') !== undefined)
+
+    const first = setup.runner.stopAgent!(setup.session.id, 'child-1').then(() => 'stopped', () => 'rejected')
+    await Bun.sleep(50)
+    const second = setup.runner.stopAgent!(setup.session.id, 'child-1').then(() => 'stopped', () => 'rejected')
+
+    expect(await Promise.all([first, second])).toEqual(['rejected', 'rejected'])
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('working')
+
+    await setup.runner.stopAgent!(setup.session.id, 'child-1')
+    expect(interrupts()).toEqual([{ threadId: 'child-1', turnId: 't-1' }, { threadId: 'child-1', turnId: 't-1' }])
+    expect(latestAgent('child-1')?.state).toBe('stopped')
+  })
+
   test('a failing child interrupt does not stop the parent interrupt', async () => {
     await runWith({ turnScript: { hold: true, childInterrupt: 'error' }, childThreads: [{ id: 'child-1', turnId: 't-1' }] })
     await until(() => latestAgent('child-1') !== undefined)
