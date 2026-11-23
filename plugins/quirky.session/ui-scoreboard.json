@@ -625,6 +625,38 @@
     },
     {
       "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "context.toast('Could not close the visual', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context.toast('Could not close the visual', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "context.toast('Could not reopen the visual', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context.toast('Could not reopen the visual', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
       "state": "empty",
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
@@ -639,7 +671,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-          "quote": "import { Badge, ControlIcon, EmptyState, IconButton } from '@quirky/ui'"
+          "quote": "import { Badge, ControlIcon, EmptyState, IconButton, INITIAL_DECK_FOCUS, VisualDeckTabs, deckFocusReducer, orderDeckEntries, type DeckClosedEntry, type DeckEntry, type DeckEvent } from '@quirky/ui'"
         }
       }
     },
@@ -1610,42 +1642,26 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "const planCard = plan && ("
+        "quote": "{nothing ? (\n          <header style={header}>"
       },
-      "anchor": "plan &&",
-      "reason": "Builds the plan card only while a plan is open; the plan card owns its own states."
+      "anchor": "nothing ?",
+      "reason": "Chooses the bare Visuals heading over the tab strip by whether the deck holds anything; layout only."
     },
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "{planCard && <div style={planCell}>"
+        "quote": "focusedKey === PLAN && plan ? ("
       },
-      "anchor": "planCard &&",
-      "reason": "Puts the plan card first in the grid when one is open; layout only."
+      "anchor": "focusedKey === PLAN && plan ?",
+      "reason": "Shows the plan card only while the Plan tab is focused and a plan is open; the plan card owns its own states."
     },
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "{plan && ("
+        "quote": "focusedView ? (\n            <section aria-label={focusedView.title}"
       },
-      "anchor": "plan &&",
-      "reason": "Puts a plan tile first in the filmstrip when a plan is open; layout only."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": ") : wide ? ("
-      },
-      "anchor": "wide ?",
-      "reason": "Chooses the grid or the filmstrip by the panel width; layout only."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "{focusedKey === PLAN ? planCard : focusedView ? visualCard(focusedView) : null}"
-      },
-      "anchor": "focusedKey === PLAN ?",
-      "reason": "Shows the focused card under the filmstrip; layout only."
+      "anchor": "focusedView ?",
+      "reason": "Shows the focused visual's card only while a visual tab is focused; the card owns its own states."
     },
     {
       "site": {
@@ -2475,7 +2491,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      onSent?.()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
@@ -2703,7 +2719,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      onSent?.()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
@@ -3518,20 +3534,51 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "onClick={() => onFocusCard(PLAN)}"
+        "quote": "dots={deck.dots}\n            onPick={"
       },
-      "anchor": "onClick",
+      "anchor": "onPick",
       "notAction": "forwarded",
-      "reason": "Forwards the click to onFocusCard, which only shows the plan card as the focused card."
+      "reason": "Forwards the pick to onPickTab, which only focuses that card."
     },
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
-        "quote": "onClick={() => onFocusCard(view.viewId)}"
+        "quote": "onPick={onPickTab}\n            onClose={"
       },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the click to onFocusCard, which only shows that visual as the focused card."
+      "anchor": "onClose",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context\n      .call('quirky.view/close', { viewId: id })"
+        },
+        "target": "quirky.view/close",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const onCloseTab = (id: string) => {\n    context\n      .call('quirky.view/close', { viewId: id })\n      .then(() => dispatch({ type: 'removed', id, next: focusAfterRemoval(orderedIds, id, orderedIds.filter((other) => other !== id)) }))\n      .catch((error) => context.toast('Could not close the visual', messageOf(error)))\n  }\n"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+        "quote": "onClose={onCloseTab}\n            onReopen={"
+      },
+      "anchor": "onReopen",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+          "quote": "context\n      .call('quirky.view/reopen', { viewId: id })"
+        },
+        "target": "quirky.view/reopen",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/VisualPanel.tsx",
+            "quote": "const onReopenTab = (id: string) => {\n    context\n      .call('quirky.view/reopen', { viewId: id })\n      .then(() => dispatch({ type: 'picked', id }))\n      .catch((error) => context.toast('Could not reopen the visual', messageOf(error)))\n  }\n"
+          }
+        ]
+      }
     },
     {
       "site": {
@@ -3660,6 +3707,15 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
+        "quote": "onSent={() => setSentNonce((nonce) => nonce + 1)}"
+      },
+      "anchor": "onSent",
+      "transient": "draft",
+      "reason": "Counts a sent message for the visual panel to notice; only local view state changes."
     },
     {
       "site": {
