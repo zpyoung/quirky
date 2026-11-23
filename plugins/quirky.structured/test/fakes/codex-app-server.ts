@@ -23,8 +23,11 @@ type FixtureTurnScript = {
   notifications?: FixtureNotification[]
   serverRequests?: FixtureServerRequest[]
   interrupt?: 'success' | 'error' | 'timeout'
-  /** Fails `turn/interrupt` for the scripted child threads only, so the parent's own interrupt still succeeds. */
-  childInterrupt?: 'error'
+  /**
+   * Fails `turn/interrupt` for the scripted child threads only, so the parent's own interrupt still succeeds.
+   * `error-once` fails just the first child interrupt.
+   */
+  childInterrupt?: 'error' | 'error-once'
   hold?: boolean
 }
 /**
@@ -106,6 +109,7 @@ const configRead = JSON.parse(${JSON.stringify(JSON.stringify(options?.configRea
 const turnScript = ${JSON.stringify(options?.turnScript ?? null)}
 const childThreads = ${JSON.stringify(options?.childThreads ?? [])}
 const threadNotifications = ${JSON.stringify(options?.threadNotifications ?? [])}
+let childInterruptFailed = false
 const replyDelayMs = ${JSON.stringify(options?.replyDelayMs ?? {})}
 let input = ''
 let nextTurn = 1
@@ -354,6 +358,11 @@ function receive(message) {
       }
       case 'turn/interrupt':
         if (turnScript?.interrupt === 'timeout') return
+        if (turnScript?.childInterrupt === 'error-once' && !childInterruptFailed && childThreads.some((child) => child.id === message.params.threadId)) {
+          childInterruptFailed = true
+          send({ id: message.id, error: { code: -32001, message: 'scripted child interrupt failure' } })
+          return
+        }
         if (turnScript?.childInterrupt === 'error' && childThreads.some((child) => child.id === message.params.threadId)) {
           send({ id: message.id, error: { code: -32001, message: 'scripted child interrupt failure' } })
           return

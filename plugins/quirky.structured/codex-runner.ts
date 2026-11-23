@@ -315,6 +315,8 @@ type Running = {
   stopped: boolean
   /** The turn an interrupt ended; its `interrupted` completion is expected and not a failure. */
   interruptedTurnId: string | null
+  /** Cancellations in flight per child, so overlapping Stops share one interrupt and its outcome. */
+  childStops: Map<AgentKey, Promise<void>>
 }
 
 type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running }
@@ -561,7 +563,17 @@ class CodexRunner implements StructuredRunner {
     }
   }
 
-  private async stopChild(run: Running, id: AgentKey): Promise<void> {
+  private stopChild(run: Running, id: AgentKey): Promise<void> {
+    const inFlight = run.childStops.get(id)
+    if (inFlight) return inFlight
+    const stopping = this.cancelChild(run, id).finally(() => {
+      if (run.childStops.get(id) === stopping) run.childStops.delete(id)
+    })
+    run.childStops.set(id, stopping)
+    return stopping
+  }
+
+  private async cancelChild(run: Running, id: AgentKey): Promise<void> {
     const child = run.children.get(id)
     const turnId = child?.activeTurnId ?? null
     if (child) child.activeTurnId = null
@@ -711,6 +723,7 @@ class CodexRunner implements StructuredRunner {
       toolOutput: new Map(),
       calls: new CallTracker(),
       stream: new ProseStream(),
+      childStops: new Map(),
       turnStartedAt: null,
       deniedReasons: [],
       startupFailure: null,
