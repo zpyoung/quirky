@@ -1239,7 +1239,7 @@ export function catalogGuide(): string {
   const lines = [
     'View spec',
     '  {"title": string, "root": node}; a node is {"type": <component>, "id"?: string, "props": {...}, "children": [node, ...]}.',
-    `  An id is ${ID_HINT}, and unique in the spec, timeline items, board cards and sketch shapes included. A user points at an element by its id and a new version highlights what changed by it, so keep ids the same when you update.`,
+    `  An id is ${ID_HINT}, and unique in the spec, timeline items, board cards and sketch shapes included. A user points at an element by its id, so keep ids the same when you update.`,
     '  Props are strings, except numbers in charts, plots, sketches and fields and booleans in fields and html. There are no style, class, event or URL props.',
     `  Limits: at most ${MAX_NODES} nodes, ${MAX_DEPTH} levels deep, ${MAX_SPEC_BYTES / 1024} KiB encoded, ${MAX_TABLE_ROWS} table rows, ${MAX_CHART_POINTS} chart points.`,
     '  An invalid spec is refused whole: nothing renders and the errors print as `path: message; ...` with exit code 2.',

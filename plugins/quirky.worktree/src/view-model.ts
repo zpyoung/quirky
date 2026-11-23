@@ -89,7 +89,6 @@ function markOfDisplay(value: AgentDisplayState | DisplayStatus): ActivityMarkSt
   switch (value) {
     case 'working':
     case 'monitoring':
-    case 'running':
       return 'running'
     case 'waiting':
     case 'permission':
@@ -104,8 +103,9 @@ function markOfDisplay(value: AgentDisplayState | DisplayStatus): ActivityMarkSt
 
 /**
  * The agent-activity mark a worktree's row shows. A pending ask wins, then a removal in flight,
- * then sleep, then the most urgent session. `pendingAsks` is the worktree's own count or a count
- * per worktree id; null means unknown. `sessions` null means the session plugin is off.
+ * then sleep, then the most urgent session. A session that is only alive, with no agent activity,
+ * reads as idle; one still starting reads as running. `pendingAsks` is the worktree's own count or
+ * a count per worktree id; null means unknown. `sessions` null means the session plugin is off.
  */
 export function activityMark(
   worktree: WorktreeControl,
@@ -120,8 +120,13 @@ export function activityMark(
   if (sessions === null) return 'running'
   const glyph = worktreeGlyph(sessions, worktree.id, now)
   if (glyph === null) return 'idle'
+  if (glyph.kind === 'coarse' && glyph.status === 'running') return hasStartingSession(sessions, worktree.id) ? 'running' : 'idle'
   return markOfDisplay(glyph.kind === 'agent' ? glyph.display : glyph.status)
 }
+
+// displayStatus folds 'starting' into 'running', so the glyph alone can't tell a launch from a live shell
+const hasStartingSession = (sessions: Session[], worktreeId: string) =>
+  sessions.some((session) => session.worktreeId === worktreeId && session.status === 'starting')
 
 /** Whether a worktree belongs in the Needs you view, its tab count and the rail badge. */
 export function needsYou(worktree: WorktreeControl, mark: ActivityMarkState, checks: ChecksState | null): boolean {

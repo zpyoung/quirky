@@ -1,8 +1,8 @@
 import { useState, type CSSProperties } from 'react'
 import type { AgentCapabilities, ChatItem, Session, UiPluginContext } from '@quirky/protocol'
 import { Button } from '@quirky/ui'
-import { WORKTREE_VIEW_ID } from '../model'
 import { Card, grow, mono, muted } from './cards/Card'
+import { resumeInPlace } from './resumeInPlace'
 
 type ErrorItem = Extract<ChatItem, { kind: 'error' }>
 
@@ -51,8 +51,7 @@ export function ErrorRow({
   const restart = async () => {
     setBusy(true)
     try {
-      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session
-      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })
+      await resumeInPlace(context, session)
     } catch (error) {
       context.toast('Could not restart', messageOf(error))
     } finally {

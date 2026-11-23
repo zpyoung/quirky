@@ -13,7 +13,8 @@ const LONG_PASTE_NOTE = 'Pasted text'
 export const EMPTY_DRAFT: Draft = { text: '', images: [], pastes: [], picks: NO_PICKS }
 
 const keyOf = (draft: Draft) => JSON.stringify(draft)
-const isEmpty = (draft: Draft) => keyOf(draft) === keyOf(EMPTY_DRAFT)
+/** Whether `draft` holds nothing worth saving. */
+export const isEmptyDraft = (draft: Draft) => keyOf(draft) === keyOf(EMPTY_DRAFT)
 
 /** A stored draft, with picks saved before Plan became a mode (a `plan` flag) folded into `mode`. */
 const asDraft = (value: unknown): Draft | null => {
@@ -54,8 +55,6 @@ export async function base64Of(file: Blob): Promise<string> {
 export type DraftSync = {
   /** Deletes the stored draft after a successful send. */
   cleared(): void
-  /** Stores `draft` for another session, as when a resume carries the draft over. */
-  carryTo(session: string, draft: Draft): void
 }
 
 /**
@@ -81,7 +80,7 @@ export function useDraftSync(context: UiPluginContext, session: string, draft: D
     if (inFlight.current && !leaving) return
     const mine = generation.current
     inFlight.current = true
-    const call = isEmpty(next)
+    const call = isEmptyDraft(next)
       ? context.call('quirky.session/clearDraft', { session: target })
       : context.call('quirky.session/saveDraft', { session: target, draft: next })
     // a failed call leaves the draft dirty so the next save retries it
@@ -142,9 +141,6 @@ export function useDraftSync(context: UiPluginContext, session: string, draft: D
       edited.current = true
       saved.current = keyOf({ ...EMPTY_DRAFT, picks: latest.current.picks })
       context.call('quirky.session/clearDraft', { session }).catch(() => {})
-    },
-    carryTo(target, next) {
-      if (!isEmpty(next)) context.call('quirky.session/saveDraft', { session: target, draft: next }).catch(() => {})
     }
   }
 }

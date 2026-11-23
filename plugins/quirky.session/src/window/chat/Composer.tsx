@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import type { AgentCapabilities, PermissionModeName, QueuedMessage, Session, StructuredMessage, UiPluginContext, VisualLevel } from '@quirky/protocol'
-import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'
+import { Button, ControlIcon, IconButton, InlineError, ScopeChip } from '@quirky/ui'
 import { WORKTREE_VIEW_ID } from '../model'
 import type { QuirkyCommandName } from './commands'
-import { basename, base64Of, composeMessage, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
+import { basename, base64Of, composeMessage, isEmptyDraft, pasteLabel, relativeTo, useDraftSync, type Attachment, type PasteChip } from './composerDraft'
 import { absolutePathsOf, AgentChip, defaultVisualLevel, NO_PICKS, reasonOf, registerChatHandle, useAgentOptions, useTurnSettings, useVisualLabels, VisualDial, type Picks } from './controls'
 import { createChat } from './createChat'
 import { chatFrame, DEFAULT_CHAT_LAYOUT, type ChatLayout } from './chatLayout'
-import { useElapsed, useTurnStart } from './elapsed'
 import { ComposerEditor } from './editor/ComposerEditor'
 import { parsePills } from './editor/pills'
 import { rememberVisualLabel, type VisualLabel, type VisualRef } from './editor/types'
@@ -15,6 +14,7 @@ import { ImageChip } from './ImageChip'
 import type { ComposerEditorHandle, NavKey, Trigger } from './editor/types'
 import { useFileSearch } from './Mentions'
 import { QueuedList, useQueue, type SteeredMessage } from './QueuedList'
+import { resumeInPlace } from './resumeInPlace'
 import { ModeBadges, SettingsChip, type SettingsSection } from './SettingsChip'
 import { fileSuggestions, slashSuggestions, SuggestionList, useAgentCommands, type Suggestion } from './SuggestionList'
 
@@ -39,9 +39,11 @@ const TOGGLE_CLEARANCE = '2.5rem'
 const stack = { display: 'flex', flexDirection: 'column', minWidth: 0 } satisfies CSSProperties
 const chips = { display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-4)' } satisfies CSSProperties
 const editorBox = { minWidth: 0, flex: '0 0 auto', padding: 'var(--ui-space-2) var(--ui-space-4)' } satisfies CSSProperties
-const toolbar = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-6)', minWidth: 0 } satisfies CSSProperties
+// the chips wrap inside their own group so the send and stop buttons never leave the first row
+const toolbar = { display: 'flex', alignItems: 'flex-start', flexWrap: 'nowrap', gap: 'var(--ui-space-6)', minWidth: 0 } satisfies CSSProperties
+const toolbarChips = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--ui-space-6)', flex: '1 1 auto', minWidth: 0 } satisfies CSSProperties
 const grow = { flex: '1 1 auto' } satisfies CSSProperties
-const running = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-6)', color: 'var(--ui-muted)', whiteSpace: 'nowrap' } satisfies CSSProperties
+const toolbarActions = { display: 'flex', alignItems: 'center', gap: 'var(--ui-space-6)', flex: '0 0 auto' } satisfies CSSProperties
 const round = { borderRadius: '50%', flex: '0 0 auto' } satisfies CSSProperties
 const errorBox = { paddingTop: 'var(--ui-space-6)' } satisfies CSSProperties
 const endedCard = {
@@ -104,7 +106,6 @@ export function Composer({
   session,
   capabilities,
   working,
-  workStartedAt,
   reportedMode,
   autoAvailable,
   previousMode,
@@ -117,8 +118,6 @@ export function Composer({
   session: Session
   capabilities: AgentCapabilities | null
   working: boolean
-  /** When the turn now running began; the header times it from the same moment. Defaults to when `working` turned true. */
-  workStartedAt?: number | null
   reportedMode?: PermissionModeName
   autoAvailable?: boolean
   previousMode?: PermissionModeName
@@ -156,7 +155,6 @@ export function Composer({
   const commands = useAgentCommands(context, session.id)
   const filePicker = useFilePicker(context)
   const search = useFileSearch(context, session.worktreeId, trigger?.kind === '@' ? trigger.query : null)
-  const elapsed = useElapsed(useTurnStart(working, workStartedAt))
   const ended = session.status === 'exited'
   const agentLabel = capitalized(session.agent)
   const sendKey = (() => {
@@ -350,9 +348,8 @@ export function Composer({
 
   const resume = async () => {
     try {
-      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session
-      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks: draftPicks })
-      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })
+      const carried = { text, images: images.map((image) => image.path), pastes, picks: draftPicks }
+      await resumeInPlace(context, session, isEmptyDraft(carried) ? undefined : carried)
     } catch (error) {
       fail(`Could not resume: ${messageOf(error)}`)
     }
@@ -618,31 +615,28 @@ export function Composer({
               accessibleName="Message"
             />
           </div>
-          <div style={toolbar}>
-            <AgentChip session={session} />
-            <SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />
-            <ModeBadges settings={settings} picks={picks} onPicks={(next) => void pick(next)} />
-            <VisualDial level={level} onPick={(next) => void pick({ ...picks, visualLevel: next })} />
-            <IconButton label="Attach images" style={round} disabled={attachReason !== undefined} title={attachReason ?? 'Attach images'} onClick={onAttach}>
-              <ControlIcon name="plus" />
-            </IconButton>
-            <span style={grow} />
-            {working && (
-              <span style={running} role="timer" aria-label="Elapsed time">
-                <StatusDot status="working" />
-                Working {elapsed}
-              </span>
-            )}
-            {working && (
-              <IconButton label="Stop" variant="destructive" style={round} title="Stop (Esc)" onClick={() => void stop()}>
-                <ControlIcon name="stop" />
+          <div style={toolbar} data-composer-toolbar="">
+            <div style={toolbarChips}>
+              <AgentChip session={session} />
+              <SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />
+              <ModeBadges settings={settings} picks={picks} onPicks={(next) => void pick(next)} />
+              <VisualDial level={level} onPick={(next) => void pick({ ...picks, visualLevel: next })} />
+              <IconButton label="Attach images" style={round} disabled={attachReason !== undefined} title={attachReason ?? 'Attach images'} onClick={onAttach}>
+                <ControlIcon name="plus" />
               </IconButton>
-            )}
-            {(!working || canSend) && (
-              <IconButton label="Send" variant="primary" style={round} disabled={!canSend} title={working ? 'Queue (Enter)' : 'Send (Enter)'} onClick={() => void submit('send')}>
-                <ControlIcon name="arrow-up" />
-              </IconButton>
-            )}
+            </div>
+            <div style={toolbarActions} data-composer-actions="">
+              {working && (
+                <IconButton label="Stop" variant="destructive" style={round} title="Stop (Esc)" onClick={() => void stop()}>
+                  <ControlIcon name="stop" />
+                </IconButton>
+              )}
+              {(!working || canSend) && (
+                <IconButton label="Send" variant="primary" style={round} disabled={!canSend} title={working ? 'Queue (Enter)' : 'Send (Enter)'} onClick={() => void submit('send')}>
+                  <ControlIcon name="arrow-up" />
+                </IconButton>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -4,12 +4,19 @@ import type { AgentKind, PluginContext, Session } from '@quirky/protocol'
 
 declare global {
   var __FAKE_SESSION_CREATES__: Record<string, unknown>[] | undefined
+  var __FAKE_SESSION_DRAFTS__: Map<string, unknown> | undefined
 }
 
 /** The params of every `create` the fake received, oldest first; the daemon runs in the test process, so the global is shared. */
 export function sessionCreates(): Record<string, unknown>[] {
   globalThis.__FAKE_SESSION_CREATES__ ??= []
   return globalThis.__FAKE_SESSION_CREATES__
+}
+
+/** Drafts saved through `saveDraft`, by session; shared with the test process like `sessionCreates`. */
+export function sessionDrafts(): Map<string, unknown> {
+  globalThis.__FAKE_SESSION_DRAFTS__ ??= new Map()
+  return globalThis.__FAKE_SESSION_DRAFTS__
 }
 
 /** The file a test writes sessions to before the daemon starts; the fake keeps its sessions there across restarts. */
@@ -22,7 +29,8 @@ export function sessionsFile(dataDir: string): string {
  * are kept in a JSON file, terminals are spawned on the PTY host, and `create` accepts `cwd`,
  * `agent`, `prompt`, `title`, `model`, `options`, `extraArgs` and the synthetic `floating` worktree.
  * Every change announces `changed` or `removed`. A PTY exit ends the record, restorable when the
- * host stopped; `restore` starts a shell in such a record.
+ * host stopped; `restore` starts a shell in such a record. `resume` starts a new record of the same
+ * kind with `resumedFrom`, `setStatus` lets a test end a structured record, and `saveDraft` records drafts.
  */
 export function activate(context: PluginContext): void {
   const file = sessionsFile(context.dataDir)
@@ -110,6 +118,28 @@ export function activate(context: PluginContext): void {
     save()
     announce(session)
     return session
+  })
+  context.provide('method:quirky.session/resume', async (params: Record<string, unknown>) => {
+    const old = find(params.session as string)
+    const session = { ...(await record({ worktree: `id:${old.worktreeId}`, agent: old.agent }, old.kind, old.title)), resumedFrom: old.id }
+    if (old.kind === 'terminal') {
+      await context.pty.spawn(session.id, { argv: ['/bin/zsh', '-l'], cwd: session.cwd, env: {}, cols: 80, rows: 24 })
+    }
+    sessions.push(session)
+    save()
+    announce(session)
+    return session
+  })
+  context.provide('method:quirky.session/setStatus', (params: Record<string, unknown>) => {
+    const session = find(params.session as string)
+    session.status = params.status as Session['status']
+    save()
+    announce(session)
+    return session
+  })
+  context.provide('method:quirky.session/saveDraft', (params: Record<string, unknown>) => {
+    sessionDrafts().set(params.session as string, params.draft)
+    return { ok: true }
   })
   context.pty.onExit((sessionId, exitCode, exit) => {
     const session = sessions.find((s) => s.id === sessionId)

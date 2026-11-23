@@ -47,7 +47,7 @@ Mobile has no access: no `quirky.view` method is in the mobile authorization lis
 
 `src/core/catalog.ts` is the one place that defines the components, their props and the limits (500 nodes, 12 levels, 256 KiB, 500 table rows, 500 chart points). The guide text and the checks both read it, and every component's example is tested to be valid. Props are strings, with finite numbers in charts and fields and booleans in fields. There are no style, class, event or URL props. Markdown links must be absolute `http(s)` URLs; images are refused. Math in a `markdown` node (`$x^2$`, `$$x^2$$`) is typeset by the renderer; it has no kind of its own.
 
-Every node may carry an `id` (lowercase letters, digits and dashes, at most 40 characters), as may timeline items, board cards and sketch shapes. Ids are unique in a spec and are what pointing and the change highlight key on.
+Every node may carry an `id` (lowercase letters, digits and dashes, at most 40 characters), as may timeline items, board cards and sketch shapes. Ids are unique in a spec and are what pointing keys on.
 
 The visual kinds and the checks the daemon runs on them, each refused on the same call with `path: message`:
 

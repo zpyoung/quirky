@@ -138,16 +138,44 @@ export function useBodyMetrics(ref: RefObject<HTMLElement | null>): { width: num
 
 const clampRatio = (ratio: number) => Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
 
+const dividerZone = { position: 'relative', display: 'flex', flex: '0 0 auto', alignSelf: 'stretch' } satisfies CSSProperties
+// the slot stays focusable while hidden, so tabbing to it shows it; pointer events stay off so the hidden button never eats a drag
+const collapseSlot = (shown: boolean): CSSProperties => ({
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  zIndex: 1,
+  borderRadius: 'var(--ui-radius-control)',
+  background: 'var(--ui-surface)',
+  opacity: shown ? 1 : 0,
+  pointerEvents: shown ? 'auto' : 'none',
+  transition: 'opacity 120ms ease-out'
+})
 const divider = {
+  display: 'flex',
+  justifyContent: 'center',
   flex: '0 0 auto',
   alignSelf: 'stretch',
-  width: 'var(--ui-space-4)',
+  width: 'var(--ui-space-12)',
   cursor: 'col-resize',
   touchAction: 'none',
-  background: 'var(--ui-transparent)',
-  borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
+  outline: 'none',
+  background: 'var(--ui-transparent)'
 } satisfies CSSProperties
-const dividerActive = { ...divider, borderInlineStart: 'var(--ui-border-width) solid var(--ui-accent)' } satisfies CSSProperties
+/** Whether `element` got focus from the keyboard; the lit line stands in for the outline, so a click must not leave it lit. */
+const focusVisible = (element: HTMLElement): boolean => {
+  try {
+    return element.matches(':focus-visible')
+  } catch {
+    return true
+  }
+}
+const dividerLine = (lit: boolean): CSSProperties => ({
+  width: lit ? 'var(--ui-space-2)' : 'var(--ui-border-width)',
+  background: lit ? 'var(--ui-accent)' : 'var(--ui-border)',
+  pointerEvents: 'none'
+})
 const rail = {
   display: 'flex',
   flex: '0 0 auto',
@@ -178,7 +206,7 @@ const heading = { margin: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-l
 const scroller = { flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', padding: 'var(--ui-space-8)' } satisfies CSSProperties
 const grid = {
   display: 'grid',
-  gridTemplateColumns: `repeat(auto-fill, minmax(calc(${CARD_MIN_UNITS} * var(--ui-length-unit)), 1fr))`,
+  gridTemplateColumns: `repeat(auto-fit, minmax(calc(${CARD_MIN_UNITS} * var(--ui-length-unit)), 1fr))`,
   gap: 'var(--ui-space-8)',
   alignItems: 'start'
 } satisfies CSSProperties
@@ -230,7 +258,8 @@ function cardInput(viewId: string, surface: 'panel' | 'thumbnail', options: { ve
  * agent placed in the pane. A panel wide enough for two cards lays them out in a grid; a narrower one
  * shows the focused card with a filmstrip above it. The newest visual drawn takes focus, a card is
  * `drawing` while the session works on it, and the panel starts collapsed in a narrow chat. Collapsed it
- * is a rail counting what was drawn since. Dragging the divider sets the width, which is remembered
+ * is a rail counting what was drawn since. A visual the user moves into the panel opens the panel and
+ * takes focus. Dragging the divider sets the width, which is remembered
  * across chats through `quirky.session/setUiPref`. `focus` asks the panel to show one visual at one
  * version, as when a message chip is clicked. Once the chat has an agent, `agents` adds the Agents card
  * after the plan, and a new `agents.nonce` opens the panel on it with `agents.selected` chosen.
@@ -272,6 +301,11 @@ export function VisualPanel({
 }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO)
   const [dragging, setDragging] = useState(false)
+  const [dividerHover, setDividerHover] = useState(false)
+  const [dividerFocus, setDividerFocus] = useState(false)
+  const [collapseFocus, setCollapseFocus] = useState(false)
+  const dividerLit = dragging || dividerHover || dividerFocus
+  const collapseShown = !dragging && (dividerHover || dividerFocus || collapseFocus)
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [pinned, setPinned] = useState<Record<string, number>>({})
@@ -327,12 +361,18 @@ export function VisualPanel({
     () =>
       context.subscribe((event) => {
         if (event.type !== 'quirky.view/changed') return
-        const data = event.data as { sessionId?: string; viewId?: unknown; kind?: unknown } | undefined
+        const data = event.data as { sessionId?: string; viewId?: unknown; kind?: unknown; placement?: unknown } | undefined
         if (data?.sessionId !== undefined && data.sessionId !== session.id) return
         if (typeof data?.viewId !== 'string') return
         const kind = typeof data.kind === 'string' ? data.kind : 'update'
-        if (!DRAWING_KINDS.has(kind)) return
         const viewId = data.viewId
+        if (kind === 'move') {
+          if (data.placement !== 'pane') return
+          setUserCollapsed(false)
+          setFocusedId(viewId)
+          return
+        }
+        if (!DRAWING_KINDS.has(kind)) return
         setFocusedId(viewId)
         setPinned((current) => {
           if (!(viewId in current)) return current
@@ -469,24 +509,33 @@ export function VisualPanel({
 
   return (
     <>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize visual panel"
-        aria-valuemin={Math.round(MIN_RATIO * 100)}
-        aria-valuemax={Math.round(MAX_RATIO * 100)}
-        aria-valuenow={Math.round(ratio * 100)}
-        tabIndex={0}
-        style={dragging ? dividerActive : divider}
-        onPointerDown={onStartDrag}
-        onKeyDown={onDividerKey}
-      />
+      <div style={dividerZone} onPointerEnter={() => setDividerHover(true)} onPointerLeave={() => setDividerHover(false)}>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize visual panel"
+          aria-valuemin={Math.round(MIN_RATIO * 100)}
+          aria-valuemax={Math.round(MAX_RATIO * 100)}
+          aria-valuenow={Math.round(ratio * 100)}
+          tabIndex={0}
+          data-lit={dividerLit ? 'true' : undefined}
+          style={divider}
+          onPointerDown={onStartDrag}
+          onFocus={(event) => setDividerFocus(focusVisible(event.currentTarget))}
+          onBlur={() => setDividerFocus(false)}
+          onKeyDown={onDividerKey}
+        >
+          <span style={dividerLine(dividerLit)} />
+        </div>
+        <div style={collapseSlot(collapseShown)} data-shown={collapseShown ? 'true' : undefined}>
+          <IconButton label="Collapse visual panel" onClick={onCollapsePanel} onFocus={() => setCollapseFocus(true)} onBlur={() => setCollapseFocus(false)}>
+            <ControlIcon name="caret-right" />
+          </IconButton>
+        </div>
+      </div>
       <aside style={panel(ratio)} aria-label="Visual panel">
         <header style={header}>
           <h3 style={heading}>Visuals</h3>
-          <IconButton label="Collapse visual panel" onClick={onCollapsePanel}>
-            <ControlIcon name="caret-right" />
-          </IconButton>
         </header>
         <div ref={body} style={scroller}>
           {nothing ? (

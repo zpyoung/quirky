@@ -1193,14 +1193,24 @@ describe('the error row', () => {
     expect(buttonNamed('Open in terminal')).toBeDefined()
   })
 
-  test('Restart resumes the session and opens the new one', async () => {
+  test('Restart resumes the session in its own tab and opens nothing new', async () => {
     await mountChat({
       messages: errorMessages(true),
-      handlers: { 'quirky.structured/resume': () => session({ id: 'resumed', kind: 'structured', agent: 'claude' }) }
+      handlers: { 'quirky.terminal/resumeSession': () => ({ session: session({ id: 'resumed', kind: 'structured', agent: 'claude' }), pane: 'pane-1', workspace: {} }) }
     })
     await click(buttonNamed('Restart'))
     await settle()
-    expect(fake.callsTo('quirky.structured/resume')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.callsTo('quirky.terminal/resumeSession')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.opened).toEqual([])
+  })
+
+  test('Restart of a chat no tab shows opens the resumed session', async () => {
+    await mountChat({
+      messages: errorMessages(true),
+      handlers: { 'quirky.terminal/resumeSession': () => ({ session: session({ id: 'resumed', kind: 'structured', agent: 'claude' }), pane: null, workspace: null }) }
+    })
+    await click(buttonNamed('Restart'))
+    await settle()
     expect(fake.opened[0]).toEqual({ id: 'view:quirky.session/worktree', input: { worktree: 'wt-main', session: 'resumed' } })
   })
 
@@ -1211,7 +1221,7 @@ describe('the error row', () => {
     expect(restart.getAttribute('title')).toBe('pi cannot resume a conversation')
     expect(text()).toContain('pi cannot resume a conversation')
     await click(restart)
-    expect(fake.callsTo('quirky.structured/resume')).toEqual([])
+    expect(fake.callsTo('quirky.terminal/resumeSession')).toEqual([])
   })
 
   test('Restart falls back to a general reason while capabilities are unknown', async () => {
@@ -1220,7 +1230,7 @@ describe('the error row', () => {
   })
 
   test('a failed restart shows a toast', async () => {
-    await mountChat({ messages: errorMessages(true), handlers: { 'quirky.structured/resume': () => { throw new Error('lease held') } } })
+    await mountChat({ messages: errorMessages(true), handlers: { 'quirky.terminal/resumeSession': () => { throw new Error('lease held') } } })
     await click(buttonNamed('Restart'))
     await settle()
     expect(fake.toasts[0]).toEqual({ title: 'Could not restart', body: 'lease held' })
@@ -2018,6 +2028,12 @@ describe('the visual panel', () => {
     expect(panelCards().map((card) => card.getAttribute('data-focused'))).toEqual([null, 'true'])
   })
 
+  test('a lone visual in the grid fills the panel instead of leaving empty columns beside it', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow')] })
+    // happy-dom has no layout, so the track rule is the observable: auto-fill keeps empty tracks, auto-fit drops them
+    expect(panelCards()[0]!.parentElement!.style.gridTemplateColumns).toMatch(/^repeat\(auto-fit,/)
+  })
+
   test('a narrower panel shows a filmstrip with the plan first and one focused card', async () => {
     await mountPanel({ width: 1000, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
     const tabs = [...host!.querySelectorAll<HTMLElement>('[role="tab"]')]
@@ -2077,6 +2093,37 @@ describe('the visual panel', () => {
     expect(rail()!.textContent).not.toContain('new')
   })
 
+  test('a visual moved into the panel opens a collapsed panel and takes focus', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs', { placement: 'inline' })]
+    await mountPanel({ width: 700, records })
+    expect(rail()).not.toBeNull()
+    records[1] = rec('v2', 'Costs')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v2', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(rail()).toBeNull()
+    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+  })
+
+  test('the moved visual takes focus in an open panel even when it is not the newest', async () => {
+    const records = [rec('v1', 'Auth flow', { placement: 'inline' }), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records })
+    records[0] = rec('v1', 'Auth flow')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(panelCards().map((card) => [card.getAttribute('aria-label'), card.getAttribute('data-focused')])).toEqual([['Auth flow', 'true'], ['Costs', null]])
+  })
+
+  test('moving a visual out of the panel, or a move in another chat, leaves a collapsed panel alone', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records })
+    await click(byLabel('Collapse visual panel'))
+    records[1] = rec('v2', 'Costs', { placement: 'inline' })
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v2', version: 1, kind: 'move', placement: 'inline' } })
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'other', viewId: 'v9', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(rail()).not.toBeNull()
+  })
+
   test('the width ratio loads from the saved preference', async () => {
     await mountPanel({ width: 1800, handlers: { 'quirky.session/uiPref': () => ({ value: 0.6 }) } })
     expect(fake.callsTo('quirky.session/uiPref')[0]!.params).toEqual({ key: 'chat.visual-panel.width-ratio' })
@@ -2103,6 +2150,42 @@ describe('the visual panel', () => {
     expect(fake.callsTo('quirky.session/setUiPref').map((call) => call.params)).toEqual([{ key: 'chat.visual-panel.width-ratio', value: 0.3 }])
     await act(async () => void document.dispatchEvent(new MouseEvent('pointermove', { clientX: 100 })))
     expect(separator()!.getAttribute('aria-valuenow')).toBe('30')
+  })
+
+  test('the divider has a 12px grab area and lights up on hover and while dragging', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    expect(separator()!.style.width).toBe('var(--ui-space-12)')
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+    // react derives pointerenter/leave from pointerover/out, so those are what the test dispatches
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })))
+    expect(separator()!.getAttribute('data-lit')).toBe('true')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })))
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    expect(separator()!.getAttribute('data-lit')).toBe('true')
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    expect(separator()!.hasAttribute('data-lit')).toBe(false)
+  })
+
+  test('the collapse button sits on the divider and shows only while the divider is hovered or focused', async () => {
+    await mountPanel({ width: 1000, handlers: { 'quirky.session/setUiPref': () => ({}) } })
+    const button = byLabel('Collapse visual panel')!
+    const slot = button.parentElement!
+    expect(visualPanel()!.contains(button)).toBe(false)
+    expect(slot.parentElement!.contains(separator())).toBe(true)
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    expect(slot.style.pointerEvents).toBe('none')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })))
+    expect(slot.getAttribute('data-shown')).toBe('true')
+    expect(slot.style.pointerEvents).toBe('auto')
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 550 })))
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    await act(async () => void document.dispatchEvent(new MouseEvent('pointerup')))
+    await act(async () => void separator()!.dispatchEvent(new MouseEvent('pointerout', { bubbles: true })))
+    expect(slot.hasAttribute('data-shown')).toBe(false)
+    // a keyboard user tabbing onto the hidden button must see it
+    await act(async () => void button.focus())
+    expect(slot.getAttribute('data-shown')).toBe('true')
   })
 
   test('a drag cannot take the panel under 20% or over 80% of the chat', async () => {

@@ -127,11 +127,26 @@ describe('activityMark', () => {
     expect(activityMark(wt('a', { removing: true }), [], 0, NOW)).toBe('running')
   })
 
-  test('working and queued session states are running', () => {
+  test('working, starting and monitoring sessions are running', () => {
     expect(activityMark(idle, [session('a', { status: 'working' })], 0, NOW)).toBe('running')
-    expect(activityMark(idle, [session('a', { status: 'running' })], 0, NOW)).toBe('running')
     expect(activityMark(idle, [session('a', { status: 'starting' })], 0, NOW)).toBe('running')
     expect(activityMark(idle, [session('a', { agentStatus: summary('monitoring') })], 0, NOW)).toBe('running')
+  })
+
+  test('a session that is only alive, with no agent activity, is idle', () => {
+    expect(activityMark(idle, [session('a', { status: 'running' })], 0, NOW)).toBe('idle')
+    // an open shell tab beside an agent that never reported status
+    const silent = [
+      session('a', { id: 's1', agent: 'shell', status: 'running', agentStatus: null }),
+      session('a', { id: 's2', agent: 'claude', status: 'running', agentStatus: null })
+    ]
+    expect(activityMark(idle, silent, 0, NOW)).toBe('idle')
+  })
+
+  test('a starting session spins even beside a merely alive one', () => {
+    const sessions = [session('a', { id: 's1', status: 'running' }), session('a', { id: 's2', status: 'starting' })]
+    expect(activityMark(idle, sessions, 0, NOW)).toBe('running')
+    expect(activityMark(idle, [...sessions].reverse(), 0, NOW)).toBe('running')
   })
 
   test('a session that is waiting, or an agent asking permission or blocked, is waiting', () => {

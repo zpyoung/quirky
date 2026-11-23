@@ -25,15 +25,6 @@ export function useClock(active: boolean): number {
   return active ? now : Date.now()
 }
 
-/**
- * Time since `startedAt` (epoch ms) as "12s" or "1m 05s", ticking once a second; "0s" while `startedAt`
- * is null. The header and the composer pass the same start, so they always agree.
- */
-export function useElapsed(startedAt: number | null): string {
-  const now = useClock(startedAt !== null)
-  return startedAt === null ? '0s' : formatElapsed(now - startedAt)
-}
-
 /** When the newest user message was sent, or null when `messages` holds none; the start of the turn now running. */
 export function newestUserAt(messages: readonly StructuredMessage[]): number | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {

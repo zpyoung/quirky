@@ -60,7 +60,9 @@ async function withToast<T>(context: UiPluginContext, title: string, run: () => 
 }
 
 async function resume(context: UiPluginContext, session: string, fork: boolean): Promise<Session> {
-  const result = await context.call('quirky.session/resume', { session, ...(fork ? { fork: true } : {}) }) as Session
+  const result = fork
+    ? await context.call('quirky.session/resume', { session, fork: true }) as Session
+    : (await context.call('quirky.terminal/resumeSession', { session }) as { session: Session }).session
   await context.executeCommand('command:quirky.terminal/open-session', { session: result.id, workspace: result.worktreeId })
   return result
 }

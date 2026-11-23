@@ -291,7 +291,7 @@ export class ViewService {
   }
 
   private changed(record: StoredViewRecord, kind: ViewChangeKind): void {
-    this.deps.emit('changed', { sessionId: record.sessionId, viewId: record.viewId, version: record.version, kind })
+    this.deps.emit('changed', { sessionId: record.sessionId, viewId: record.viewId, version: record.version, kind, placement: record.placement })
   }
 
   private owned(sessionId: string, viewId: string): StoredViewRecord {
