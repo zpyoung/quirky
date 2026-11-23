@@ -853,6 +853,30 @@ describe('the views pane', () => {
     expect(text(element)).toContain('v1 of 2')
   })
 
+  test('a failed read of a pinned version still takes done from the list, so the menu offers Mark live', async () => {
+    const records = [paneView('view_1', 'Bundle size', { version: 2, latestVersion: 2, updates: 1 })]
+    let failReads = false
+    const fake = start(records, {
+      'quirky.view/get': (params) => {
+        if (params.version === 1 && failReads) throw new Error('read denied')
+        const found = records[0]!
+        return params.version === 1 ? { ...found, spec: markdownSpec('Bundle size first draft'), version: 1, latestVersion: 2 } : found
+      }
+    })
+    const view = await mountPane(fake)
+    await view.click(buttonByLabel(view.element, 'Older version')!)
+
+    failReads = true
+    records[0] = { ...records[0]!, done: true }
+    await fake.emit(changed('view_1', 'done'))
+    await settle()
+    expect(text(view.element)).toContain('Bundle size first draft')
+    expect(text(view.element)).toContain('v1 of 2')
+
+    await chooseAction(view, 'Mark live')
+    expect(fake.callsTo('quirky.view/done').at(-1)!.params).toEqual({ viewId: 'view_1', done: false })
+  })
+
   test('a failed first step to an older version tells the person and still retries that version on the next load', async () => {
     const records = [paneView('view_1', 'Bundle size', { version: 2, latestVersion: 2, updates: 1 })]
     let failReads = true
