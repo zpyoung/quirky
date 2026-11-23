@@ -417,6 +417,10 @@ export function VisualPanel({
   }, [sentNonce])
 
   useEffect(() => {
+    if (deck.focusedId === null && focusedKey !== null) dispatch({ type: 'asked', id: focusedKey })
+  }, [deck.focusedId, focusedKey])
+
+  useEffect(() => {
     const before = previousOrder.current
     previousOrder.current = orderedIds
     const id = deck.focusedId
@@ -483,6 +487,7 @@ export function VisualPanel({
 
   const focusedView = focusedKey === null || focusedKey === PLAN ? undefined : visible.find((view) => view.viewId === focusedKey)
   const nothing = entries.length === 0
+  const reopenable = closedEntries.length > 0
 
   return (
     <>
@@ -511,7 +516,7 @@ export function VisualPanel({
         </div>
       </div>
       <aside style={panel(ratio)} aria-label="Visual panel">
-        {nothing ? (
+        {nothing && !reopenable ? (
           <header style={header}>
             <h3 style={heading}>Visuals</h3>
           </header>
