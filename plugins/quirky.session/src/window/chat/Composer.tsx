@@ -112,7 +112,8 @@ export function Composer({
   reportedLevel,
   layout = DEFAULT_CHAT_LAYOUT,
   endInset = 0,
-  onPick
+  onPick,
+  onSent
 }: {
   context: UiPluginContext
   session: Session
@@ -126,6 +127,8 @@ export function Composer({
   /** Pixels at the end edge taken by whatever sits beside the transcript, so the card lines up with its column. */
   endInset?: number
   onPick?: (picks: Picks) => void
+  /** Called after a message the user wrote has been accepted by `quirky.structured/send`. */
+  onSent?: () => void
 }) {
   const [text, setText] = useState('')
   const [images, setImages] = useState<Attachment[]>([])
@@ -299,6 +302,7 @@ export function Composer({
         when: working ? 'idle' : 'now'
       })) as { queuedId?: string } | undefined
       draft.cleared()
+      onSent?.()
       if (kind === 'steer' && working && result?.queuedId) {
         const id = result.queuedId
         if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])

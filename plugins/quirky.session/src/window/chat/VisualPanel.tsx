@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import type { Session, UiPluginContext, VisualLevel } from '@quirky/protocol'
-import { Badge, ControlIcon, EmptyState, IconButton } from '@quirky/ui'
+import { Badge, ControlIcon, EmptyState, IconButton, INITIAL_DECK_FOCUS, VisualDeckTabs, deckFocusReducer, orderDeckEntries, type DeckClosedEntry, type DeckEntry, type DeckEvent } from '@quirky/ui'
 import { visualLevelLabel } from './controls'
 import { Embedded } from './Embedded'
 import { PlanPanel } from './PlanPanel'
@@ -13,8 +13,14 @@ export type VisualRecord = {
   title: string
   placement: 'inline' | 'pane'
   closed: boolean
+  /** The short tab label the agent gave, when it gave one. */
+  label?: string
+  /** Whether the agent or the user marked the view done; false from a daemon that does not say. */
+  done: boolean
   version?: number
   latestVersion?: number
+  /** When the view last changed, in milliseconds; orders the closed views. */
+  updatedAt?: number
 }
 
 /** The session's views once read: `loading` before the first answer, `unavailable` when quirky.view cannot be asked. */
@@ -38,26 +44,33 @@ const PANEL_MIN_UNITS = 280
 const TRANSCRIPT_MIN_UNITS = 420
 /** Below this body width the panel starts collapsed. */
 const COLLAPSE_BELOW_UNITS = 720
-const CARD_MIN_UNITS = 300
-const GAP_UNITS = 12
 
 const DRAWING_KINDS = new Set(['open', 'update', 'patch'])
 
 const PLAN = 'plan'
 
+const readLabel = (record: { label?: unknown; spec?: { label?: unknown } | null }): string | undefined => {
+  const label = typeof record.label === 'string' ? record.label : record.spec?.label
+  return typeof label === 'string' && label !== '' ? label : undefined
+}
+
 const readRecords = (loaded: unknown): VisualRecord[] =>
-  (Array.isArray(loaded) ? (loaded as Partial<VisualRecord>[]) : []).flatMap((record) =>
-    typeof record.viewId === 'string'
-      ? [{
-          viewId: record.viewId,
-          title: typeof record.title === 'string' ? record.title : 'Visual',
-          placement: record.placement === 'inline' ? ('inline' as const) : ('pane' as const),
-          closed: record.closed === true,
-          ...(typeof record.version === 'number' ? { version: record.version } : {}),
-          ...(typeof record.latestVersion === 'number' ? { latestVersion: record.latestVersion } : {})
-        }]
-      : []
-  )
+  (Array.isArray(loaded) ? (loaded as (Partial<VisualRecord> & { spec?: { label?: unknown } | null; updatedAt?: unknown })[]) : []).flatMap((record) => {
+    if (typeof record.viewId !== 'string') return []
+    const label = readLabel(record)
+    const updated = typeof record.updatedAt === 'string' ? Date.parse(record.updatedAt) : record.updatedAt
+    return [{
+      viewId: record.viewId,
+      title: typeof record.title === 'string' ? record.title : 'Visual',
+      placement: record.placement === 'inline' ? ('inline' as const) : ('pane' as const),
+      closed: record.closed === true,
+      done: record.done === true,
+      ...(label === undefined ? {} : { label }),
+      ...(typeof record.version === 'number' ? { version: record.version } : {}),
+      ...(typeof record.latestVersion === 'number' ? { latestVersion: record.latestVersion } : {}),
+      ...(typeof updated === 'number' && Number.isFinite(updated) ? { updatedAt: updated } : {})
+    }]
+  })
 
 /**
  * The session's views, read again whenever one of them changes. `onChange` hears each change event of
@@ -198,45 +211,18 @@ const header = {
 } satisfies CSSProperties
 const heading = { margin: 0, color: 'var(--ui-text)', fontSize: 'var(--ui-font-label)', fontWeight: 700 } satisfies CSSProperties
 const scroller = { flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', padding: 'var(--ui-space-8)' } satisfies CSSProperties
-const grid = {
-  display: 'grid',
-  gridTemplateColumns: `repeat(auto-fit, minmax(calc(${CARD_MIN_UNITS} * var(--ui-length-unit)), 1fr))`,
-  gap: 'var(--ui-space-8)',
-  alignItems: 'start'
-} satisfies CSSProperties
-const planCell = { gridColumn: '1 / -1', minWidth: 0 } satisfies CSSProperties
-const stack = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', minWidth: 0 } satisfies CSSProperties
-const strip = { display: 'flex', gap: 'var(--ui-space-6)', overflowX: 'auto', paddingBlockEnd: 'var(--ui-space-6)' } satisfies CSSProperties
-const tile = (focused: boolean): CSSProperties => ({
-  display: 'flex',
-  flex: '0 0 calc(120 * var(--ui-length-unit))',
-  flexDirection: 'column',
-  gap: 'var(--ui-space-2)',
-  minWidth: 0,
-  padding: 'var(--ui-space-4)',
-  color: 'var(--ui-text)',
-  background: 'var(--ui-surface)',
-  border: `var(--ui-border-width) solid ${focused ? 'var(--ui-accent)' : 'var(--ui-border)'}`,
-  borderRadius: 'var(--ui-radius-window)',
-  font: 'inherit',
-  fontSize: 'var(--ui-font-label)',
-  textAlign: 'start',
-  cursor: 'pointer'
-})
-const tileName = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } satisfies CSSProperties
-const tilePreview = { maxHeight: 'calc(72 * var(--ui-length-unit))', overflow: 'hidden', pointerEvents: 'none' } satisfies CSSProperties
-const card = (focused: boolean): CSSProperties => ({
+const card = {
   minWidth: 0,
   overflow: 'hidden',
   background: 'var(--ui-surface)',
-  border: `var(--ui-border-width) solid ${focused ? 'var(--ui-accent)' : 'var(--ui-border)'}`,
+  border: 'var(--ui-border-width) solid var(--ui-border)',
   borderRadius: 'var(--ui-radius-window)'
-})
+} satisfies CSSProperties
 const empty = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--ui-space-8)', padding: 'var(--ui-space-16)' } satisfies CSSProperties
 const level = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 
 /** The input that mounts a view's card in the panel: `surface` and, only when set, the version it is pinned to and its flags. */
-function cardInput(viewId: string, surface: 'panel' | 'thumbnail', options: { version?: number; drawing?: boolean; focused?: boolean } = {}) {
+function cardInput(viewId: string, surface: 'panel', options: { version?: number; drawing?: boolean; focused?: boolean } = {}) {
   return {
     viewId,
     ...(options.version === undefined ? {} : { version: options.version }),
@@ -246,15 +232,23 @@ function cardInput(viewId: string, surface: 'panel' | 'thumbnail', options: { ve
   }
 }
 
+/** Where focus goes when `gone` leaves the deck: the nearest tab to its left that remains, else the first that remains. */
+const focusAfterRemoval = (before: readonly string[], gone: string, remaining: readonly string[]): string | null =>
+  before.slice(0, Math.max(0, before.indexOf(gone))).reverse().find((id) => remaining.includes(id)) ?? remaining[0] ?? null
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
 /**
- * The docked panel beside a chat's transcript: the plan first when one is open, then the visuals the
- * agent placed in the pane. A panel wide enough for two cards lays them out in a grid; a narrower one
- * shows the focused card with a filmstrip above it. The newest visual drawn takes focus, a card is
- * `drawing` while the session works on it, and the panel starts collapsed in a narrow chat. Collapsed it
- * is a rail counting what was drawn since. A visual the user moves into the panel opens the panel and
- * takes focus. Dragging the divider sets the width, which is remembered
- * across chats through `quirky.session/setUiPref`. `focus` asks the panel to show one visual at one
- * version, as when a message chip is clicked.
+ * The docked panel beside a chat's transcript: one visual at a time under a tab row, with the plan as
+ * the pinned first tab when one is open and the visuals the agent placed in the pane after it. The tab
+ * row follows the agent's newest visual until the user picks a tab, then marks what changed with dots
+ * until the next message sent resumes following. Closed visuals can be reopened from the row's menu.
+ * A card is `drawing` while the session works on it, and the panel starts collapsed in a narrow chat.
+ * Collapsed it is a rail counting what was drawn since. A visual the user moves into the panel, a new
+ * plan version and a message chip's `focus` always take focus and open the panel. Dragging the divider
+ * sets the width, which is remembered across chats through `quirky.session/setUiPref`. `focus` asks the
+ * panel to show one visual at one version, as when a message chip is clicked, and `sentNonce` changes
+ * each time the user sends a message.
  */
 export function VisualPanel({
   context,
@@ -267,7 +261,8 @@ export function VisualPanel({
   bodyRef,
   bodyWidth,
   unit,
-  focus
+  focus,
+  sentNonce
 }: {
   context: UiPluginContext
   session: Session
@@ -282,6 +277,7 @@ export function VisualPanel({
   /** One length unit in pixels. */
   unit: number
   focus: { viewId: string; version: number | null; nonce: number } | null
+  sentNonce: number
 }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO)
   const [dragging, setDragging] = useState(false)
@@ -291,7 +287,7 @@ export function VisualPanel({
   const dividerLit = dragging || dividerHover || dividerFocus
   const collapseShown = !dragging && (dividerHover || dividerFocus || collapseFocus)
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null)
-  const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [deck, setDeck] = useState(INITIAL_DECK_FOCUS)
   const [pinned, setPinned] = useState<Record<string, number>>({})
   const [drawing, setDrawing] = useState<ReadonlySet<string>>(new Set())
   const [fresh, setFresh] = useState(0)
@@ -299,15 +295,37 @@ export function VisualPanel({
   const dragged = useRef(false)
   const workingRef = useRef(working)
   workingRef.current = working
-  const body = useRef<HTMLDivElement>(null)
+  const dispatch = (event: DeckEvent) => setDeck((current) => deckFocusReducer(current, event))
 
   const narrow = bodyWidth > 0 && bodyWidth < COLLAPSE_BELOW_UNITS * unit
   const collapsed = userCollapsed ?? narrow
   const collapsedRef = useRef(collapsed)
   collapsedRef.current = collapsed
   const visible = useMemo(() => views.filter((view) => view.placement === 'pane' && !view.closed), [views])
-  const panelWidth = bodyWidth > 0 ? Math.max(PANEL_MIN_UNITS * unit, Math.min(ratio * bodyWidth, bodyWidth - TRANSCRIPT_MIN_UNITS * unit)) : 0
-  const wide = panelWidth >= (2 * CARD_MIN_UNITS + GAP_UNITS) * unit
+  const planVersion = plan?.version.version ?? null
+
+  const entries = useMemo<DeckEntry[]>(() => {
+    const visuals = views.flatMap((view, created) =>
+      view.placement === 'pane' && !view.closed
+        ? [{ id: view.viewId, label: view.label ?? view.title, title: view.title, created, done: view.done }]
+        : []
+    )
+    return planVersion === null ? visuals : [{ id: PLAN, label: `Plan v${planVersion}`, title: `Plan v${planVersion}`, created: -1, pinned: true }, ...visuals]
+  }, [views, planVersion])
+  const closedEntries = useMemo<DeckClosedEntry[]>(
+    () =>
+      views.flatMap((view, index) =>
+        view.placement === 'pane' && view.closed ? [{ id: view.viewId, label: view.label ?? view.title, title: view.title, closedOrder: view.updatedAt ?? index }] : []
+      ),
+    [views]
+  )
+  const orderedIds = useMemo(() => orderDeckEntries(entries).map((entry) => entry.id), [entries])
+  const previousOrder = useRef<string[]>([])
+
+  const newestLive = visible.findLast((view) => !view.done) ?? undefined
+  const focusedKey =
+    deck.focusedId !== null && entries.some((entry) => entry.id === deck.focusedId) ? deck.focusedId
+    : (newestLive?.viewId ?? (planVersion !== null ? PLAN : (visible.at(-1)?.viewId ?? null)))
 
   const setWidth = (next: number) => {
     ratioRef.current = next
@@ -319,7 +337,7 @@ export function VisualPanel({
 
   useEffect(() => {
     setUserCollapsed(null)
-    setFocusedId(null)
+    setDeck(INITIAL_DECK_FOCUS)
     setPinned({})
     setDrawing(new Set())
     setFresh(0)
@@ -351,11 +369,11 @@ export function VisualPanel({
         if (kind === 'move') {
           if (data.placement !== 'pane') return
           setUserCollapsed(false)
-          setFocusedId(viewId)
+          setDeck((current) => deckFocusReducer(current, { type: 'asked', id: viewId }))
           return
         }
         if (!DRAWING_KINDS.has(kind)) return
-        setFocusedId(viewId)
+        if (data.placement !== 'inline') setDeck((current) => deckFocusReducer(current, { type: 'drawn', id: viewId }))
         setPinned((current) => {
           if (!(viewId in current)) return current
           const { [viewId]: _dropped, ...rest } = current
@@ -375,33 +393,36 @@ export function VisualPanel({
     if (!collapsed) setFresh(0)
   }, [collapsed])
 
-  const planVersion = plan?.version.version ?? null
   useEffect(() => {
     if (planVersion === null) return
     setUserCollapsed(false)
-    setFocusedId(PLAN)
+    dispatch({ type: 'asked', id: PLAN })
   }, [planVersion])
 
   useEffect(() => {
     if (focus === null) return
     setUserCollapsed(false)
-    setFocusedId(focus.viewId)
+    dispatch({ type: 'asked', id: focus.viewId })
     setPinned((current) => {
       const { [focus.viewId]: _dropped, ...rest } = current
       return focus.version === null ? rest : { ...rest, [focus.viewId]: focus.version }
     })
   }, [focus?.nonce])
 
-  const focusedKey =
-    focusedId === PLAN && plan !== null ? PLAN
-    : focusedId !== null && visible.some((view) => view.viewId === focusedId) ? focusedId
-    : (visible.at(-1)?.viewId ?? (plan !== null ? PLAN : null))
+  const heardNonce = useRef(sentNonce)
+  useEffect(() => {
+    if (heardNonce.current === sentNonce) return
+    heardNonce.current = sentNonce
+    dispatch({ type: 'sent' })
+  }, [sentNonce])
 
   useEffect(() => {
-    if (!wide || focusedKey === null) return
-    const target = [...(body.current?.querySelectorAll<HTMLElement>('[data-focused="true"]') ?? [])][0]
-    if (typeof target?.scrollIntoView === 'function') target.scrollIntoView({ block: 'nearest' })
-  }, [wide, focusedKey, collapsed])
+    const before = previousOrder.current
+    previousOrder.current = orderedIds
+    const id = deck.focusedId
+    if (id === null || !before.includes(id) || orderedIds.includes(id)) return
+    dispatch({ type: 'removed', id, next: focusAfterRemoval(before, id, orderedIds) })
+  }, [orderedIds])
 
   const onStartDrag = (event: ReactPointerEvent<HTMLElement>) => {
     const host = bodyRef.current
@@ -435,7 +456,19 @@ export function VisualPanel({
 
   const onShowPanel = () => setUserCollapsed(false)
   const onCollapsePanel = () => setUserCollapsed(true)
-  const onFocusCard = (key: string) => setFocusedId(key)
+  const onPickTab = (id: string) => dispatch({ type: 'picked', id })
+  const onCloseTab = (id: string) => {
+    context
+      .call('quirky.view/close', { viewId: id })
+      .then(() => dispatch({ type: 'removed', id, next: focusAfterRemoval(orderedIds, id, orderedIds.filter((other) => other !== id)) }))
+      .catch((error) => context.toast('Could not close the visual', messageOf(error)))
+  }
+  const onReopenTab = (id: string) => {
+    context
+      .call('quirky.view/reopen', { viewId: id })
+      .then(() => dispatch({ type: 'picked', id }))
+      .catch((error) => context.toast('Could not reopen the visual', messageOf(error)))
+  }
 
   if (collapsed) {
     return (
@@ -448,28 +481,8 @@ export function VisualPanel({
     )
   }
 
-  const recordOf = (viewId: string) => visible.find((view) => view.viewId === viewId)
-  const planCard = plan && (
-    <section aria-label="Plan" data-focused={focusedKey === PLAN || undefined}>
-      <PlanPanel context={context} session={session} version={plan.version} isNewest={plan.isNewest} onClose={onClosePlan} />
-    </section>
-  )
-  const visualCard = (view: VisualRecord) => {
-    const focused = focusedKey === view.viewId
-    return (
-      <section key={view.viewId} aria-label={view.title} data-visual={view.viewId} data-focused={focused || undefined} style={card(focused)}>
-        <Embedded
-          context={context}
-          viewId={VIEW_RENDER_VIEW}
-          input={cardInput(view.viewId, 'panel', { version: pinned[view.viewId], drawing: drawing.has(view.viewId), focused })}
-          fallback="Visuals are turned off."
-        />
-      </section>
-    )
-  }
-
-  const nothing = plan === null && visible.length === 0
-  const focusedView = focusedKey === null || focusedKey === PLAN ? undefined : recordOf(focusedKey)
+  const focusedView = focusedKey === null || focusedKey === PLAN ? undefined : visible.find((view) => view.viewId === focusedKey)
+  const nothing = entries.length === 0
 
   return (
     <>
@@ -498,40 +511,42 @@ export function VisualPanel({
         </div>
       </div>
       <aside style={panel(ratio)} aria-label="Visual panel">
-        <header style={header}>
-          <h3 style={heading}>Visuals</h3>
-        </header>
-        <div ref={body} style={scroller}>
+        {nothing ? (
+          <header style={header}>
+            <h3 style={heading}>Visuals</h3>
+          </header>
+        ) : (
+          <VisualDeckTabs
+            label="Visuals"
+            entries={entries}
+            closed={closedEntries}
+            focusedId={focusedKey}
+            dots={deck.dots}
+            onPick={onPickTab}
+            onClose={onCloseTab}
+            onReopen={onReopenTab}
+          />
+        )}
+        <div style={scroller}>
           {nothing ? (
             <div style={empty}>
               <EmptyState message="Pictures the agent draws to explain its work, and the plan, show up here." />
               <span style={level}>{`Visual level: ${visualLevelLabel(visualLevel)}`}</span>
             </div>
-          ) : wide ? (
-            <div style={grid}>
-              {planCard && <div style={planCell}>{planCard}</div>}
-              {visible.map(visualCard)}
-            </div>
-          ) : (
-            <div style={stack}>
-              <div style={strip} role="tablist" aria-label="Visuals">
-                {plan && (
-                  <button type="button" role="tab" aria-selected={focusedKey === PLAN} style={tile(focusedKey === PLAN)} onClick={() => onFocusCard(PLAN)}>
-                    <span style={tileName}>{`Plan v${plan.version.version}`}</span>
-                  </button>
-                )}
-                {visible.map((view) => (
-                  <button key={view.viewId} type="button" role="tab" aria-selected={focusedKey === view.viewId} aria-label={view.title} style={tile(focusedKey === view.viewId)} onClick={() => onFocusCard(view.viewId)}>
-                    <span style={tilePreview}>
-                      <Embedded context={context} viewId={VIEW_RENDER_VIEW} input={cardInput(view.viewId, 'thumbnail')} fallback="" />
-                    </span>
-                    <span style={tileName}>{view.title}</span>
-                  </button>
-                ))}
-              </div>
-              {focusedKey === PLAN ? planCard : focusedView ? visualCard(focusedView) : null}
-            </div>
-          )}
+          ) : focusedKey === PLAN && plan ? (
+            <section aria-label="Plan" data-focused="true">
+              <PlanPanel context={context} session={session} version={plan.version} isNewest={plan.isNewest} onClose={onClosePlan} />
+            </section>
+          ) : focusedView ? (
+            <section aria-label={focusedView.title} data-visual={focusedView.viewId} data-focused="true" style={card}>
+              <Embedded
+                context={context}
+                viewId={VIEW_RENDER_VIEW}
+                input={cardInput(focusedView.viewId, 'panel', { version: pinned[focusedView.viewId], drawing: drawing.has(focusedView.viewId), focused: true })}
+                fallback="Visuals are turned off."
+              />
+            </section>
+          ) : null}
         </div>
       </aside>
     </>

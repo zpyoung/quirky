@@ -1943,7 +1943,7 @@ describe('the agent picker', () => {
   })
 })
 
-type ViewRecordFixture = { viewId: string; title: string; placement: 'inline' | 'pane'; closed: boolean; version: number; latestVersion: number }
+type ViewRecordFixture = { viewId: string; title: string; placement: 'inline' | 'pane'; closed: boolean; version: number; latestVersion: number; label?: string; done?: boolean }
 const rec = (viewId: string, title: string, over: Partial<ViewRecordFixture> = {}): ViewRecordFixture => ({
   viewId,
   title,
@@ -2012,55 +2012,218 @@ describe('the visual panel', () => {
     expect(host!.querySelector('aside[aria-label="Views"]')).toBeNull()
   })
 
-  test('wide enough for two cards it shows a grid with the plan first and the newest visual focused', async () => {
+  const tabs = () => [...visualPanel()!.querySelectorAll<HTMLElement>('[role="tab"]')]
+  const tabLabels = () => tabs().map((tab) => tab.querySelector('.ui-visual-deck__label')?.textContent)
+  const tabOf = (label: string) => tabs().find((tab) => tab.querySelector('.ui-visual-deck__label')?.textContent === label)!
+  const selected = () => tabs().filter((tab) => tab.getAttribute('aria-selected') === 'true').map((tab) => tab.querySelector('.ui-visual-deck__label')?.textContent)
+  const panelInputs = () => inputs().filter((input) => input.surface === 'panel')
+  const dotted = () => tabs().filter((tab) => tab.querySelector('[aria-label="New activity"]')).map((tab) => tab.querySelector('.ui-visual-deck__label')?.textContent)
+  const closeOf = (label: string) => host!.querySelector<HTMLElement>(`button[aria-label="Close ${label}"]`)
+  const typeAndSend = async (text: string) => {
+    await act(async () => CMView.findFromDOM(host!)!.dispatch({ changes: { from: 0, insert: text } }))
+    await click(host!.querySelector('button[aria-label="Send"]'))
+    await settle()
+  }
+  const sendHandlers = { 'quirky.structured/send': () => ({ ok: true }) }
+  const openMenu = (label: RegExp) => click([...host!.querySelectorAll<HTMLElement>('.ui-visual-deck__more button')].find((button) => label.test(button.getAttribute('aria-label') ?? '')))
+  const menuLabels = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map((item) => item.textContent?.trim())
+
+  test.each([1800, 1000])('at %ipx one visual fills the panel under a tab row, and only that visual is mounted', async (width) => {
+    await mountPanel({ width, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')] })
+    expect(tabLabels()).toEqual(['Auth flow', 'Costs'])
+    expect(selected()).toEqual(['Costs'])
+    expect(panelCards().map((card) => card.getAttribute('aria-label'))).toEqual(['Costs'])
+    expect(visualPanel()!.querySelector('h3')).toBeNull()
+    expect(inputs()).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+  })
+
+  test('the plan is the first tab, pinned with no close button, and the focused one when it arrives', async () => {
     await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
-    const found = panelCards()
-    expect(found.map((card) => card.getAttribute('aria-label'))).toEqual(['Auth flow', 'Costs'])
-    expect(panel()!.compareDocumentPosition(found[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(host!.querySelector('[role="tablist"]')).toBeNull()
-    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel' }, { viewId: 'v2', surface: 'panel' }])
-    expect(panel()!.getAttribute('data-focused')).toBe('true')
-  })
-
-  test('with no plan the newest visual of the grid is the focused one', async () => {
-    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')] })
-    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel' }, { viewId: 'v2', surface: 'panel', focused: true }])
-    expect(panelCards().map((card) => card.getAttribute('data-focused'))).toEqual([null, 'true'])
-  })
-
-  test('a lone visual in the grid fills the panel instead of leaving empty columns beside it', async () => {
-    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow')] })
-    // happy-dom has no layout, so the track rule is the observable: auto-fill keeps empty tracks, auto-fit drops them
-    expect(panelCards()[0]!.parentElement!.style.gridTemplateColumns).toMatch(/^repeat\(auto-fit,/)
-  })
-
-  test('a narrower panel shows a filmstrip with the plan first and one focused card', async () => {
-    await mountPanel({ width: 1000, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
-    const tabs = [...host!.querySelectorAll<HTMLElement>('[role="tab"]')]
-    expect(tabs.map((tab) => tab.getAttribute('aria-label') ?? tab.textContent)).toEqual(['Plan v1', 'Auth flow', 'Costs'])
-    expect(tabs[0]!.getAttribute('aria-selected')).toBe('true')
+    expect(tabLabels()).toEqual(['Plan v1', 'Auth flow', 'Costs'])
+    expect(selected()).toEqual(['Plan v1'])
     expect(panel()).not.toBeNull()
-    expect(panelCards()).toEqual([])
-    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'thumbnail' }, { viewId: 'v2', surface: 'thumbnail' }])
+    expect(closeOf('Plan v1')).toBeNull()
+    expect(closeOf('Costs')).not.toBeNull()
+    expect(cards()).toEqual([])
   })
 
-  test('in the filmstrip a tile focuses its visual, and the newest visual drawn takes focus', async () => {
+  test('tabs run live oldest first and then done, and a tab reads its short label with the title on hover', async () => {
+    await mountPanel({
+      width: 1800,
+      records: [rec('v1', 'Brainstorm', { done: true }), rec('v2', 'UX mock'), rec('v3', 'SDD run: subagents in native chat', { label: 'SDD run' })]
+    })
+    expect(tabLabels()).toEqual(['UX mock', 'SDD run', 'Brainstorm'])
+    expect(tabOf('SDD run').getAttribute('title')).toBe('SDD run: subagents in native chat')
+    expect(tabOf('Brainstorm').textContent).toContain('done')
+  })
+
+  test('a label on the record\'s spec is used when the record carries none of its own', async () => {
+    await mountPanel({ width: 1800, records: [{ ...rec('v1', 'A long title that tabs cut'), spec: { label: 'Short' } } as ViewRecordFixture] })
+    expect(tabLabels()).toEqual(['Short'])
+  })
+
+  test('tabs that do not fit go into a +N menu, and the focused one stays visible', async () => {
+    const proto = HTMLElement.prototype
+    const original = proto.getBoundingClientRect
+    proto.getBoundingClientRect = function (this: HTMLElement) {
+      const width = this.hasAttribute('data-deck-measure') ? (this.getAttribute('data-deck-measure') === '__more' ? 30 : 100) : this.classList.contains('ui-visual-deck') ? 250 : 0
+      return { width, height: 20, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 20, toJSON: () => ({}) } as DOMRect
+    }
+    try {
+      await mountPanel({ width: 1800, records: [rec('v1', 'One'), rec('v2', 'Two'), rec('v3', 'Three'), rec('v4', 'Four')] })
+      expect(tabLabels()).toEqual(['One', 'Four'])
+      expect(selected()).toEqual(['Four'])
+      expect(host!.querySelector('.ui-visual-deck__more')!.textContent).toBe('+2')
+    } finally {
+      proto.getBoundingClientRect = original
+    }
+  })
+
+  test('a visual drawn while following takes focus', async () => {
     const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
     await mountPanel({ width: 1000, records })
-    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
-    await click([...host!.querySelectorAll('[role="tab"]')].find((tab) => tab.getAttribute('aria-label') === 'Auth flow'))
-    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
     records.push(rec('v3', 'Schema'))
     await changed('v3', 'open')
     await settle()
-    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v3', surface: 'panel', focused: true }])
+    expect(selected()).toEqual(['Schema'])
     await changed('v1', 'update')
-    expect(inputs().filter((input) => input.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+    expect(selected()).toEqual(['Auth flow'])
+    expect(panelInputs()).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+  })
+
+  test('steered: after a tab pick a drawn or updated visual gets a dot and focus stays', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1000, records })
+    await click(tabOf('Auth flow'))
+    await changed('v2', 'update')
+    records.push(rec('v3', 'Schema'))
+    await changed('v3', 'open')
+    await settle()
+    expect(selected()).toEqual(['Auth flow'])
+    expect(dotted()).toEqual(['Costs', 'Schema'])
+    await click(tabOf('Costs'))
+    expect(dotted()).toEqual(['Schema'])
+  })
+
+  test('sending a message resumes following', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1000, records, messages: [user(1, 'go')], handlers: sendHandlers })
+    await click(tabOf('Auth flow'))
+    await changed('v2', 'update')
+    expect(selected()).toEqual(['Auth flow'])
+    await typeAndSend('next')
+    expect(selected()).toEqual(['Auth flow'])
+    await changed('v2', 'update')
+    expect(selected()).toEqual(['Costs'])
+  })
+
+  test('a failed send does not resume following', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1000, records, messages: [user(1, 'go')], handlers: { 'quirky.structured/send': () => { throw new Error('down') } } })
+    await click(tabOf('Auth flow'))
+    await typeAndSend('next')
+    await changed('v2', 'update')
+    expect(selected()).toEqual(['Auth flow'])
+  })
+
+  test('a move into the pane takes focus even while steered', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs'), rec('v3', 'Schema', { placement: 'inline' })]
+    await mountPanel({ width: 1800, records })
+    await click(tabOf('Auth flow'))
+    records[2] = rec('v3', 'Schema')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v3', version: 1, kind: 'move', placement: 'pane' } })
+    await settle()
+    expect(selected()).toEqual(['Schema'])
+  })
+
+  test('a new plan version takes focus even while steered', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], messages: [user(1, 'go'), waiting(2, 1)] })
+    await click(tabOf('Costs'))
+    expect(selected()).toEqual(['Costs'])
+    await push(waiting(3, 2))
+    await settle()
+    expect(tabLabels()[0]).toBe('Plan v2')
+    expect(selected()).toEqual(['Plan v2'])
+  })
+
+  test('the x on a tab closes the visual through the daemon, moves focus left and lists it under Closed', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs'), rec('v3', 'Schema')]
+    await mountPanel({
+      width: 1800,
+      records,
+      handlers: { 'quirky.view/close': () => ({ ok: true }) }
+    })
+    await click(tabOf('Costs'))
+    await click(closeOf('Costs'))
+    expect(fake.callsTo('quirky.view/close').map((call) => call.params)).toEqual([{ viewId: 'v2' }])
+    expect(selected()).toEqual(['Auth flow'])
+    records[1] = rec('v2', 'Costs', { closed: true })
+    await changed('v2', 'close')
+    await settle()
+    expect(tabLabels()).toEqual(['Auth flow', 'Schema'])
+    expect(selected()).toEqual(['Auth flow'])
+    await openMenu(/closed visuals/i)
+    expect(menuLabels()).toEqual(['Costs'])
+  })
+
+  test('closing a tab that is not focused leaves focus where it was', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, records, handlers: { 'quirky.view/close': () => ({ ok: true }) } })
+    await click(closeOf('Auth flow'))
+    expect(selected()).toEqual(['Costs'])
+  })
+
+  test('a failed close keeps the tab focused and toasts', async () => {
+    await mountPanel({ width: 1800, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')], handlers: { 'quirky.view/close': () => { throw new Error('busy') } } })
+    await click(closeOf('Costs'))
+    await settle()
+    expect(selected()).toEqual(['Costs'])
+    expect(fake.toasts[0]).toEqual({ title: 'Could not close the visual', body: 'busy' })
+  })
+
+  test('reopening from the Closed section calls the daemon and focuses the visual', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs', { closed: true })]
+    await mountPanel({ width: 1800, records, handlers: { 'quirky.view/reopen': () => ({ ok: true }) } })
+    expect(tabLabels()).toEqual(['Auth flow'])
+    await openMenu(/closed visuals/i)
+    await click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent?.trim() === 'Costs'))
+    expect(fake.callsTo('quirky.view/reopen').map((call) => call.params)).toEqual([{ viewId: 'v2' }])
+    records[1] = rec('v2', 'Costs')
+    await changed('v2', 'reopen')
+    await settle()
+    expect(tabLabels()).toEqual(['Auth flow', 'Costs'])
+    expect(selected()).toEqual(['Costs'])
+    expect(panelInputs()).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+  })
+
+  test('the focused visual closing elsewhere moves focus to the tab on its left, else the first left', async () => {
+    const records = [rec('v1', 'Auth flow'), rec('v2', 'Costs'), rec('v3', 'Schema')]
+    await mountPanel({ width: 1800, records })
+    await click(tabOf('Costs'))
+    records[1] = rec('v2', 'Costs', { closed: true })
+    await changed('v2', 'close')
+    await settle()
+    expect(selected()).toEqual(['Auth flow'])
+    records[0] = rec('v1', 'Auth flow', { closed: true })
+    await changed('v1', 'close')
+    await settle()
+    expect(selected()).toEqual(['Schema'])
+    expect(panelInputs()).toEqual([{ viewId: 'v3', surface: 'panel', focused: true }])
+  })
+
+  test('a visual that is drawn but not listed yet keeps its focus when the list arrives', async () => {
+    const records = [rec('v1', 'Auth flow')]
+    await mountPanel({ width: 1800, records })
+    await changed('v2', 'open')
+    records.push(rec('v2', 'Costs'))
+    await changed('v2', 'update')
+    await settle()
+    expect(selected()).toEqual(['Costs'])
   })
 
   test('only open views placed in the pane are listed', async () => {
     await mountPanel({ width: 1800, records: [rec('v1', 'Pane'), rec('v2', 'Inline', { placement: 'inline' }), rec('v3', 'Gone', { closed: true })] })
-    expect(panelCards().map((card) => card.getAttribute('aria-label'))).toEqual(['Pane'])
+    expect(tabLabels()).toEqual(['Pane'])
   })
 
   test('a chat narrower than 720 units starts with a rail, and the rail reopens the panel', async () => {
@@ -2110,7 +2273,8 @@ describe('the visual panel', () => {
     records[0] = rec('v1', 'Auth flow')
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'chat', viewId: 'v1', version: 1, kind: 'move', placement: 'pane' } })
     await settle()
-    expect(panelCards().map((card) => [card.getAttribute('aria-label'), card.getAttribute('data-focused')])).toEqual([['Auth flow', 'true'], ['Costs', null]])
+    expect(selected()).toEqual(['Auth flow'])
+    expect(panelCards().map((card) => card.getAttribute('aria-label'))).toEqual(['Auth flow'])
   })
 
   test('moving a visual out of the panel, or a move in another chat, leaves a collapsed panel alone', async () => {
@@ -2122,6 +2286,23 @@ describe('the visual panel', () => {
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 'other', viewId: 'v9', version: 1, kind: 'move', placement: 'pane' } })
     await settle()
     expect(rail()).not.toBeNull()
+  })
+
+  test('the transcript carries its height as --quirky-transcript-height, and follows a resize', async () => {
+    await mountPanel({ width: 1800 })
+    const log = host!.querySelector<HTMLElement>('[role="log"]')!
+    const heightOf = (height: number) => {
+      log.getBoundingClientRect = () => ({ width: 800, height, x: 0, y: 0, top: 0, left: 0, right: 800, bottom: height, toJSON: () => ({}) }) as DOMRect
+    }
+    heightOf(640)
+    await act(async () => void observers.forEach((callback) => callback()))
+    expect(log.style.getPropertyValue('--quirky-transcript-height')).toBe('640px')
+    heightOf(0)
+    await act(async () => void observers.forEach((callback) => callback()))
+    expect(log.style.getPropertyValue('--quirky-transcript-height')).toBe('640px')
+    heightOf(420)
+    await act(async () => void observers.forEach((callback) => callback()))
+    expect(log.style.getPropertyValue('--quirky-transcript-height')).toBe('420px')
   })
 
   test('the width ratio loads from the saved preference', async () => {
@@ -2220,10 +2401,10 @@ describe('the visual panel', () => {
     const chat = await mountPanel({ width: 1800, session: { status: 'working' }, records: [rec('v1', 'Auth flow'), rec('v2', 'Costs')] })
     expect(inputs().some((input) => 'drawing' in (input as object))).toBe(false)
     await changed('v1', 'update')
-    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', drawing: true, focused: true }, { viewId: 'v2', surface: 'panel' }])
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', drawing: true, focused: true }])
     await rerender(chat, { status: 'done' })
     await settle()
-    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }, { viewId: 'v2', surface: 'panel' }])
+    expect(inputs()).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
   })
 
   test('a change while no turn is working draws nothing', async () => {
@@ -2277,6 +2458,17 @@ describe('visual chips in the transcript', () => {
     await click(chipsIn()[1])
     await settle()
     expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', surface: 'panel', focused: true }])
+  })
+
+  test('a chip takes focus from a steered deck and keeps the version pin', async () => {
+    const records = [rec('v1', 'Auth flow', { version: 2, latestVersion: 2 }), rec('v2', 'Costs')]
+    await mountPanel({ width: 1800, messages: [user(1, 'draw'), viewMsg(2, 'v1', 1)], records })
+    const tab = (label: string) => [...host!.querySelectorAll<HTMLElement>('[role="tab"]')].find((entry) => entry.textContent?.includes(label))
+    await click(tab('Costs'))
+    expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v2', surface: 'panel', focused: true }])
+    await click(chipsIn()[0])
+    await settle()
+    expect(input().filter((entry) => entry.surface === 'panel')).toEqual([{ viewId: 'v1', version: 1, surface: 'panel', focused: true }])
   })
 
   test('a chip opens a collapsed panel on its visual', async () => {

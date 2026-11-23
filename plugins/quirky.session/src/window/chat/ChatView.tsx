@@ -181,6 +181,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const capabilities = useCapabilities(context, session.agent)
   const [expanded, setExpanded] = useState<{ viewId: string; version?: number; foreign?: true } | null>(null)
   const [focusRequest, setFocusRequest] = useState<{ viewId: string; version: number | null; nonce: number } | null>(null)
+  const [sentNonce, setSentNonce] = useState(0)
   const [visualizing, setVisualizing] = useState<number | null>(null)
   const sawWorking = useRef(false)
   const viewIndex = useViews(context, session.id, (change) => {
@@ -269,6 +270,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
             title: record.title,
             placement: record.placement === 'inline' ? 'inline' : 'pane',
             closed: record.closed === true,
+            done: record.done === true,
             ...(typeof record.latestVersion === 'number' ? { latestVersion: record.latestVersion } : {})
           }
           setOtherViews((current) => new Map(current).set(viewId, found))
@@ -504,6 +506,21 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     return () => observer.disconnect()
   }, [phase.status === 'off'])
 
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const measure = () => {
+      const height = scroller.getBoundingClientRect().height
+      // a hidden transcript reports 0, and its last height is still the right one when it returns
+      if (height > 0) scroller.style.setProperty('--quirky-transcript-height', `${height}px`)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [phase.status === 'off'])
+
   function onScrolled(element: HTMLElement): void {
     // only a scroll upward leaves the end, so a smooth scroll back down is not mistaken for a reader leaving it
     following.current = atBottom(element) || (following.current && element.scrollTop >= lastTop.current)
@@ -599,6 +616,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           bodyWidth={bodyWidth}
           unit={unit}
           focus={focusRequest}
+          sentNonce={sentNonce}
         />
       </div>
       {expanded !== null && (
@@ -628,6 +646,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
         previousMode={modeBeforePlan}
         reportedLevel={journaledLevel ?? undefined}
         layout={chatLayout}
+        onSent={() => setSentNonce((nonce) => nonce + 1)}
         endInset={expanded === null && bodyWidth > 0 && transcriptWidth > 0 ? bodyWidth - transcriptWidth : 0}
       />
     </div>
