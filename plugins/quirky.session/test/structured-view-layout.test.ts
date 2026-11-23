@@ -258,7 +258,8 @@ describe('the plan in the visual panel', () => {
       const box = (await panel.boundingBox())!
       expect(box.x + box.width).toBeLessThanOrEqual(VIEWPORT.width)
       expect(box.height).toBeGreaterThan(0)
-      await panel.getByRole('button', { name: 'Collapse visual panel' }).click()
+      await page.getByRole('separator', { name: 'Resize visual panel' }).hover()
+      await page.getByRole('button', { name: 'Collapse visual panel' }).click()
       await page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]').waitFor()
     } finally {
       await context.close()
@@ -282,7 +283,8 @@ describe('the plan in the visual panel', () => {
       const logBox = (await page.getByRole('log').boundingBox())!
       expect(logBox.x + logBox.width).toBeLessThanOrEqual(panelBox.x + 1)
       expect(panelBox.width).toBeGreaterThan(280)
-      await panel.getByRole('button', { name: 'Collapse visual panel' }).click()
+      await page.getByRole('separator', { name: 'Resize visual panel' }).hover()
+      await page.getByRole('button', { name: 'Collapse visual panel' }).click()
       await page.locator('aside[aria-label="Visual panel"][data-collapsed="true"]').waitFor()
     } finally {
       await context.close()
