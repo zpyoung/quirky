@@ -7,6 +7,17 @@ export { InlineError } from './inline-error'
 export { ScopeChip } from './scope-chip'
 export { ContextMenu, ContextMenuList, CONTEXT_MENU_SEPARATOR } from './context-menu'
 export type { ContextMenuItem, ContextMenuListProps, ContextMenuProps } from './context-menu-contracts'
+export { VisualDeckTabs, type VisualDeckTabsProps } from './visual-deck'
+export {
+  INITIAL_DECK_FOCUS,
+  deckFocusReducer,
+  fitDeckTabs,
+  orderDeckEntries,
+  type DeckClosedEntry,
+  type DeckEntry,
+  type DeckEvent,
+  type DeckFocus,
+} from './visual-deck-model'
 export { Toast, Dialog } from './overlays'
 export { Popover } from './floating'
 export { PopupMenu } from './popup-menu'
