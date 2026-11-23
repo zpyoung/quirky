@@ -2,7 +2,7 @@
 
 ## Status & amendments
 
-**Status:** Draft, awaiting review.
+**Status:** Approved 2026-11-23.
 
 **Amendments:** none yet.
 
@@ -177,7 +177,7 @@ The deck reads the session's visuals, works out the order (plan, live by creatio
 20. **SC-20 Short label and done in a visual's spec**
     - **Given** an agent drawing a pane visual
     - **When** it runs `quirky view open` or `update` with a short label, or marks a visual done
-    - **Then** the deck uses the label for the tab and the +N menu, and shows the visual as done. `quirky view --help` and the Quirky visual instructions describe both, ask for a label on every pane visual, and say to mark a visual done when its work is over (a signed-off mock, a finished brainstorm, a superseded spec). A label longer than about 24 characters is refused, with an error that says so. [ASK: Should an over-long label be refused, or accepted and cut on display? This spec assumes refused, matching how the spec checks other fields.]
+    - **Then** the deck uses the label for the tab and the +N menu, and shows the visual as done. `quirky view --help` and the Quirky visual instructions describe both, ask for a label on every pane visual, and say to mark a visual done when its work is over (a signed-off mock, a finished brainstorm, a superseded spec). A label longer than about 24 characters is refused, with an error that says so.
 
 21. **SC-21 Closed visuals stay reachable**
     - **Given** an agent closes a visual with `quirky view close`
