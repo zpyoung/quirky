@@ -1741,6 +1741,28 @@ describe('subagents', () => {
     expect(query.stoppedTasks).toHaveLength(3)
   })
 
+  test('stopAgent keeps an agent live and rejects when the SDK cannot stop it, so Stop can be retried', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1'), spawn('a2', 'a1'), started('t2', 'a2'))
+    query.failingTasks.add('t2')
+    await expect(runner.stopAgent!('s_1', 'a1')).rejects.toThrow('could not stop t2')
+    expect(agentItems('a2').at(-1).state).toBe('working')
+    expect(agentItems('a1').at(-1).state).toBe('stopped')
+    query.failingTasks.clear()
+    await runner.stopAgent!('s_1', 'a2')
+    expect(agentItems('a2').at(-1).state).toBe('stopped')
+  })
+
+  test('interrupt still ends the turn when stopping an agent fails', async () => {
+    const query = await begin()
+    await emit(query, spawn('a1'), started('t1', 'a1', { is_backgrounded: true }))
+    query.failingTasks.add('t1')
+    await runner.interrupt('s_1')
+    expect(agentItems('a1').at(-1).state).toBe('working')
+    expect(items().some((item) => item.kind === 'turn-end' && item.state === 'stopped')).toBe(true)
+    expect(query.interrupted).toBe(1)
+  })
+
   test('interrupt stops every live agent, background ones included, before ending the turn', async () => {
     const query = await begin()
     await emit(query, spawn('a1'), started('t1', 'a1', { is_backgrounded: true }), spawn('b1'), started('tb', 'b1'))

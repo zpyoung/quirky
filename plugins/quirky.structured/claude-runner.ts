@@ -599,7 +599,7 @@ class ClaudeRunner implements StructuredRunner {
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) return
-    for (const agent of run.agents.registry.live()) await this.stopAgent(sessionId, agent)
+    for (const agent of run.agents.registry.live()) await this.stopAgent(sessionId, agent).catch(() => undefined)
     if (run.turnStartedAt === null) return
     run.planCancels++
     this.settlePlan(run, { kind: 'stopped' })
@@ -620,19 +620,29 @@ class ClaudeRunner implements StructuredRunner {
 
   /**
    * Stops one subagent and every live descendant, deepest first, journaling each as stopped. Never ends
-   * the turn; an unknown or finished agent is left alone.
+   * the turn; an unknown or finished agent is left alone. An agent whose `stopTask` fails stays live and the
+   * failure is rethrown after the rest are tried, so Stop can be tried again.
    */
   async stopAgent(sessionId: string, agent: AgentKey): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) return
     const { registry } = run.agents
     if (!registry.isLive(agent)) return
+    let failure: unknown
     for (const id of [...registry.descendants(agent), agent]) {
       const nativeId = registry.get(id)?.nativeId
-      if (nativeId !== undefined) await run.query.stopTask(nativeId).catch(() => {})
+      if (nativeId !== undefined) {
+        try {
+          await run.query.stopTask(nativeId)
+        } catch (error) {
+          failure ??= error
+          continue
+        }
+      }
       const entry = registry.end(id, 'stopped')
       if (entry) this.append(sessionId, entry)
     }
+    if (failure !== undefined) throw failure
   }
 
   /** Journals every agent still live when its run ends as stopped and cut off. */

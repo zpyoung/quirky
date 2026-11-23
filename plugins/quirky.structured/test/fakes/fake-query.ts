@@ -10,6 +10,8 @@ export class FakeQuery implements ClaudeQuery {
   closed = 0
   /** The task ids `stopTask` was asked to stop, in call order. */
   stoppedTasks: string[] = []
+  /** Task ids `stopTask` rejects for, like a CLI that could not cancel them. */
+  failingTasks = new Set<string>()
   permissionModes: string[] = []
   models: (string | undefined)[] = []
   flagSettings: Record<string, unknown>[] = []
@@ -49,6 +51,7 @@ export class FakeQuery implements ClaudeQuery {
 
   async stopTask(taskId: string) {
     this.stoppedTasks.push(taskId)
+    if (this.failingTasks.has(taskId)) throw new Error(`could not stop ${taskId}`)
   }
 
   async interrupt() {
