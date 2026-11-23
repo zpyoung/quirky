@@ -1938,9 +1938,9 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/AgentsCard.tsx",
-        "quote": "!hasProse && agent.report !== undefined && !live &&"
+        "quote": "!reportShown && agent.report !== undefined && !live &&"
       },
-      "anchor": "!hasProse && agent.report !== undefined && !live &&",
+      "anchor": "!reportShown && agent.report !== undefined && !live &&",
       "reason": "Chooses what to draw from the agent's journaled state; that is transcript content, not a read of this view."
     },
     {

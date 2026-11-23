@@ -248,7 +248,8 @@ function Transcript({
   const onOpenBlockAgent = (id: AgentKey | null) => onSelect(id ?? agent.id)
   const live = isLive(agent)
   const parent = agent.parent === undefined ? undefined : agents.get(agent.parent)
-  const hasProse = blocks.some((block) => block.kind === 'prose')
+  const lastProse = blocks.findLast((block) => block.kind === 'prose')
+  const reportShown = lastProse?.kind === 'prose' && lastProse.text.trim() === agent.report?.trim()
   const facts = [agent.model, elapsedOf(agent, now), agent.tokens === undefined ? undefined : `${compactTokens(agent.tokens)} tokens`].filter((part): part is string => part !== undefined)
   return (
     <section style={transcript} aria-label={`${agent.name} transcript`}>
@@ -275,7 +276,7 @@ function Transcript({
       {blocks.map((block) => (
         <BlockView key={blockKey(block)} context={context} session={session} capabilities={capabilities} block={block} agents={agents} onOpenAgent={onOpenBlockAgent} />
       ))}
-      {!hasProse && agent.report !== undefined && !live && <Prose context={context} session={session} text={agent.report} streaming={false} />}
+      {!reportShown && agent.report !== undefined && !live && <Prose context={context} session={session} text={agent.report} streaming={false} />}
       {agent.state === 'failed' && agent.error !== undefined && <div style={red}>{agent.error}</div>}
       {agent.state === 'stopped' && <div style={muted}>{agent.cutOff ? 'Stopped · cut off when Quirky quit' : 'Stopped by you'}</div>}
       {live && (
