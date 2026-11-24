@@ -46,9 +46,6 @@ name: Daily macOS Dev Build
 # drafts, so it holds its number and the next run does not reuse it.
 
 on:
-  schedule:
-    # Once a day, late morning Pacific. Single cron — no DST twin, no clock gate.
-    - cron: '15 18 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -110,7 +107,7 @@ jobs:
       version: ${{ steps.daily.outputs.version }}
       head_sha: ${{ steps.freshness.outputs.head_sha }}
       published: ${{ steps.publish_live.outcome == 'success' && 'true' || 'false' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     # Why 150: it must exceed the worst case the retry budgets below can produce
     # (install 3x10 + publish 2x45 = 120, plus ~25 for checkout/build/verify), or
     # the job is killed mid-retry and no cleanup step runs at all. A typical run

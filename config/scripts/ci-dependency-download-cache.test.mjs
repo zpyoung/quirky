@@ -314,7 +314,7 @@ describe('CI dependency download caches', () => {
       'cancel-in-progress': "${{ github.event_name == 'pull_request' }}"
     })
     expect(shared.jobs['warm-platforms'].uses).toBe(platforms.jobs['warm-platforms'].uses)
-    expect(shared.on.schedule).toEqual([{ cron: '41 */6 * * *' }])
+    expect(shared.on.schedule).toBeUndefined()
     expect(shared.on).toHaveProperty('workflow_dispatch')
     for (const producer of [shared, platforms]) {
       expect(producer.on.push.branches).toEqual(['main'])

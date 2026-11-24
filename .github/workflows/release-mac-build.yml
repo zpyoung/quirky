@@ -46,14 +46,12 @@ jobs:
 
   build-mac:
     needs: qualification-template
-    if: ${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'zpyoung/orca' }}
-    # Fork: GitHub-hosted macOS runner (no Blacksmith on this fork). Signs +
-    # notarizes with the fork's own Apple Developer ID secrets.
+    if: ${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'zpyoung/quirky' }}
+    # GitHub-hosted macOS runner. Signs + notarizes with Apple Developer ID secrets.
     runs-on: macos-15
-    # Fork: one ~40min notarization (new Developer ID team; Apple is far slower
-    # for it than for upstream's established team, which finishes the whole job
-    # in ~9min on Blacksmith). Builds are arm64-only precisely so this is one
-    # submission, not two — dual-arch ran ~80min and fit no workable timeout.
+    # One ~40min notarization on a new Developer ID team. Builds are arm64-only
+    # precisely so this is one submission, not two: dual-arch ran ~80min and fit
+    # no workable timeout.
     # Sized so a full retry fits (70 + 0.5 + 70).
     timeout-minutes: 150
     # actions: read fetches the release-cut run's artifacts.

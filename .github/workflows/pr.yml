@@ -264,28 +264,6 @@ jobs:
           config/scripts/vitest-node-runtime-boundary.test.ts
           config/scripts/vitest-sqlite-runtime-boundary.test.ts
 
-  fork_ownership_guard:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
-    name: fork ownership guard
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          # Why blob:none: full history is needed for the merge-base diff, but historical
-          # file contents are not. Blobs are ~89% of this repo's pack, and Git fetches the
-          # few this job actually reads on demand.
-          fetch-depth: 0
-          filter: blob:none
-          persist-credentials: false
-
-      - name: Enforce fork ownership manifest
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node .github/scripts/check-fork-ownership.mjs "$BASE_SHA" "$HEAD_SHA"
-
   # Preflight saves the Node cache and publishes the plan before tests fan out.
   test:
     needs: [code_paths, preflight]
@@ -374,7 +352,6 @@ jobs:
     needs:
       - code_paths
       - preflight
-      - fork_ownership_guard
       - test
       - cross-version-wire
     # Evaluating job results only needs the lightweight container runner.
@@ -390,19 +367,12 @@ jobs:
           STATIC_ANALYSIS_SHOULD_RUN: ${{ needs.code_paths.outputs.static_analysis }}
           TYPECHECK_SHOULD_RUN: ${{ needs.code_paths.outputs.typecheck }}
           PREFLIGHT_SHOULD_RUN: ${{ needs.code_paths.outputs.static_analysis == 'true' || needs.code_paths.outputs.typecheck == 'true' }}
-          FORK_OWNERSHIP_GUARD: ${{ needs.fork_ownership_guard.result }}
           TEST: ${{ needs.test.result }}
           TEST_SHOULD_RUN: ${{ needs.code_paths.outputs.test }}
           CROSS_VERSION_WIRE: ${{ needs.cross-version-wire.result }}
           CROSS_VERSION_WIRE_SHOULD_RUN: ${{ needs.code_paths.outputs.cross-version-wire }}
         run: |
           if [ "$CODE_PATHS" != "success" ]; then
-            exit 1
-          fi
-          # Why here too: the ownership guard is ungated, so a docs-only PR still
-          # runs it, and a docs-only path that never reads its result would let an
-          # undeclared manifest change through the one check that exists to catch it.
-          if [ "$FORK_OWNERSHIP_GUARD" != "success" ]; then
             exit 1
           fi
           case "$STATIC_ANALYSIS_SHOULD_RUN:$TYPECHECK_SHOULD_RUN" in

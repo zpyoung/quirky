@@ -65,7 +65,7 @@ jobs:
     # Actions enabled, the scheduled cut would run against the fork's main and
     # diverge it (version line) every slot, conflicting every PR back upstream.
     # Gate to the canonical repo so the workflow no-ops on forks.
-    if: github.repository == 'zpyoung/orca'
+    if: github.repository == 'zpyoung/quirky'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2250,8 +2250,8 @@ jobs:
       (needs.orcad-template.result == 'success' ||
         (needs.orcad-template.result == 'skipped' && needs.cut.outputs.ships_orcad_template == 'false'))
     # Why: SignPath requires every job in this signing workflow to be
-    # GitHub-hosted. The actual mac build runs in release-mac-build.yml so
-    # Blacksmith stays outside Windows artifact provenance.
+    # GitHub-hosted. The actual mac build runs in release-mac-build.yml, which
+    # stays outside Windows artifact provenance.
     runs-on: ubuntu-latest
     permissions:
       actions: write

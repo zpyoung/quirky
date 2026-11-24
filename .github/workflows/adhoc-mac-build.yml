@@ -90,7 +90,7 @@ jobs:
   # The mac job still vets this commit's reachability before anything is signed.
   resolve-ref:
     if: github.repository == 'stablyai/orca'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -132,7 +132,7 @@ jobs:
   # Resolve shared build identity while detecting whether this ref ships a template.
   orcad-template-support:
     needs: resolve-ref
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -233,7 +233,7 @@ jobs:
     with:
       ref: ${{ needs.resolve-ref.outputs.sha }}
       dev_build: true
-      runner: blacksmith-8vcpu-ubuntu-2404
+      runner: ubuntu-latest
 
   prepare-adhoc-mac-release:
     needs: [resolve-ref, orcad-template-support, release-javascript]
@@ -242,7 +242,7 @@ jobs:
       needs.orcad-template-support.result == 'success' &&
       needs.release-javascript.result == 'success'
     environment: adhoc-mac-build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -326,7 +326,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
-    runs-on: blacksmith-12vcpu-macos-15
+    runs-on: macos-15
     # Why 150: it must exceed the worst case the retry budgets below can produce
     # (install 3x10 + publish 2x45 = 120, plus ~25 for checkout/build/verify), or
     # the job is killed mid-retry and no cleanup step runs at all.
@@ -611,7 +611,7 @@ jobs:
     needs: [resolve-ref, orcad-template-support, prepare-adhoc-mac-release, build-adhoc-mac-arch]
     if: always() && needs.prepare-adhoc-mac-release.result == 'success'
     environment: adhoc-mac-build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: read

@@ -23,7 +23,7 @@ defaults:
 jobs:
   gate:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion != 'success')) }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       recover: ${{ steps.trigger.outputs.recover }}
@@ -61,7 +61,7 @@ jobs:
   recover:
     needs: gate
     if: ${{ needs.gate.outputs.recover == 'true' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: staging
     concurrency:

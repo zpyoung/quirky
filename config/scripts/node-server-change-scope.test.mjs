@@ -551,7 +551,7 @@ it('keeps every platform job and runs them when detection is skipped or fails', 
   expect(workflow.on).toHaveProperty('workflow_dispatch')
   expect(workflow.on).toHaveProperty('workflow_call')
   expect(workflow.on).not.toHaveProperty('push')
-  expect(workflow.on.schedule).toHaveLength(1)
+  expect(workflow.on.schedule).toBeUndefined()
   expect(workflow.jobs.changes.if).toBe(
     "github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.draft != true)"
   )

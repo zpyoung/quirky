@@ -323,7 +323,7 @@ jobs:
   recover:
     if: ${{ always() && github.ref == 'refs/heads/main' && inputs.mode == 'prove' }}
     needs: prove
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: staging
     env:

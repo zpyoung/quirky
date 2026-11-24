@@ -12,11 +12,7 @@ const SCAN_ROOTS = ['config', '.github', 'tests']
 const SOURCE_ROOTS = 'main|renderer|shared|cli|preload|packages|types|wsl-guest'
 const RESOLVED_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '/index.ts']
 // Generated timings; a stale row only skews shard balance and is rewritten by its generator.
-// The fork manifest names upstream files the fork deletes on purpose.
-const EXCLUDED_FILES = new Set([
-  'config/scripts/ci-shard-timings.json',
-  'config/fork-ownership.json'
-])
+const EXCLUDED_FILES = new Set(['config/scripts/ci-shard-timings.json'])
 const GATE_MANIFEST = 'config/reliability-gates.jsonc'
 // Command strings in manifests and scripts name paths unquoted; in code only quoted literals count.
 const UNQUOTED_ALLOWED = /\.(?:jsonc?|ya?ml|sh|ps1)$/

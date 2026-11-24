@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 // token swap plus the service-account impersonation leg, in an action that must stay
 // zero-dependency and is duplicated by hand into a second repo. gcloud already handles every ADC
 // flavour and refreshes on its own. The metadata server is not an option: it does not exist on
-// GitHub or Blacksmith runners.
+// GitHub-hosted runners.
 //
 // Consequence, documented in the README: the lease step MUST come after setup-gcloud.
 

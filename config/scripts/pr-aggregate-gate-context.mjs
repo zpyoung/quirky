@@ -2,14 +2,24 @@ import { readFileSync } from 'node:fs'
 import { Evaluator, Lexer, Parser, data } from '@actions/expressions'
 import { parse } from 'yaml'
 import { PR_CHECK_JOBS } from './pr-code-change-scope.mjs'
-import {
-  aggregateJobWithoutForkGuard,
-  checkJobsForWorkflow,
-  forkGuardNeeds
-} from './fork-ownership-guard/aggregate-gate-jobs.mjs'
+
+const selectorVariable = (job) => `${job.replaceAll('-', '_').toUpperCase()}_SHOULD_RUN`
+
+/**
+ * The classifier's jobs that this workflow reports through code_paths, plus any other needed job
+ * that carries a selector (preflight's is derived from static_analysis and typecheck).
+ */
+function checkJobsForWorkflow(classifiedJobs, workflow, shell) {
+  const outputs = workflow.jobs.code_paths.outputs
+  const selected = classifiedJobs.filter((job) => job in outputs)
+  const unlisted = workflow.jobs.verify.needs.filter(
+    (job) => job !== 'preflight' && !selected.includes(job) && selectorVariable(job) in shell.env
+  )
+  return [...selected, ...unlisted]
+}
 
 export const aggregateWorkflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
-export const aggregateJob = aggregateJobWithoutForkGuard(aggregateWorkflow.jobs.verify)
+export const aggregateJob = aggregateWorkflow.jobs.verify
 export const aggregateShell = aggregateJob.steps.find(
   (step) => step.name === 'Require successful checks'
 )
@@ -58,7 +68,6 @@ export function aggregateNeeds(selected = 'true', overrides = {}) {
   }
   const needs = {
     code_paths: { result: 'success', outputs },
-    ...forkGuardNeeds(),
     ...Object.fromEntries(
       aggregateRequiredJobs.map((job) => [
         job,

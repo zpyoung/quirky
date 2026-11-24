@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { runInNewContext } from 'node:vm'
 import { expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import { compileAggregateExpression } from './pr-aggregate-gate-context.mjs'
@@ -306,7 +305,7 @@ it('limits the extra job guard to glibc 2.17 and preserves unconditional callers
   }
   expect(workflow.on).toHaveProperty('workflow_dispatch')
   expect(workflow.on).toHaveProperty('workflow_call')
-  expect(workflow.on.schedule).toHaveLength(1)
+  expect(workflow.on.schedule).toBeUndefined()
 })
 
 it('builds server glibc slots on glibc 2.28 and the compat slot on glibc 2.17 (design D6)', () => {
@@ -336,9 +335,7 @@ it('builds server glibc slots on glibc 2.28 and the compat slot on glibc 2.17 (d
   expect(compat.if).toContain(
     "github.event_name != 'pull_request' || inputs.build_template || inputs.ref != ''"
   )
-  expect(runInNewContext(compat['runs-on'].slice(3, -2), { inputs: { fast_runners: false } })).toBe(
-    'ubuntu-22.04'
-  )
+  expect(compat['runs-on']).toBe('ubuntu-22.04')
   const run = compat.steps.map((step) => step.run ?? '').join('\n')
   expect(run).toMatch(/quay\.io\/pypa\/manylinux2014_x86_64@sha256:[0-9a-f]{64} /)
   expect(run).toContain('--slot=linux-x64-glibc217 --print-runtime')

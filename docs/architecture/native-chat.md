@@ -846,9 +846,3 @@ Cited by file and symbol; grep the symbol rather than trusting a line number.
 ## 17. Related docs
 
 - [`docs/STYLEGUIDE.md`](../STYLEGUIDE.md) — design tokens the UI must use.
-- [`docs/fork-upstreaming.md`](../fork-upstreaming.md) — the Tier-4 ledger; holds
-  the transcript-retention, file-drop routing, and paste-bridge entries that touch
-  this surface.
-- [`config/fork-ownership.json`](../../config/fork-ownership.json) — which of the
-  files above the fork owns, and how. This doc is itself declared there, under the
-  `native-chat-relay` feature.

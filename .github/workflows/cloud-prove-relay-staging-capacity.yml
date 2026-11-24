@@ -61,7 +61,7 @@ defaults:
 jobs:
   capacity:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && inputs.mode != 'refresh-asia-c4-image' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     environment: staging
     env:
       GCP_PROJECT_ID: onorca-cloud-staging
@@ -600,7 +600,7 @@ jobs:
 
   refresh-asia-c4-image:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && github.ref == 'refs/heads/main' && inputs.mode == 'refresh-asia-c4-image' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: staging
     env:

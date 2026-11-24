@@ -84,7 +84,7 @@ defaults:
 jobs:
   gate:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && (github.ref == 'refs/heads/main') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     # Headroom for the full-history checkout the canary provenance check needs.
     timeout-minutes: 15
     environment: production
@@ -355,7 +355,7 @@ jobs:
   seal_canary:
     if: ${{ inputs.mode == 'canary-apply' }}
     needs: [gate, cell_1]
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -411,7 +411,7 @@ jobs:
       - cell_9
       - cell_10
       - seal_canary
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: production
     steps:

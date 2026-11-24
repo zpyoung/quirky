@@ -60,9 +60,6 @@ on:
         type: choice
         default: '["1/2","2/2"]'
         options: ['["1/2","2/2"]', '["1/1"]']
-  schedule:
-    # One complete daily reference run; targeted PR coverage remains unchanged.
-    - cron: '0 17 * * *'
 
 jobs:
   build:

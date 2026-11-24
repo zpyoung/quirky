@@ -1,9 +1,6 @@
 name: Power Relay Staging
 
 on:
-  schedule:
-    # A zero-activity guard makes this a no-op when an internal test is still running.
-    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -43,7 +40,7 @@ defaults:
 jobs:
   power:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     environment: staging
     env:
       POWER_MODE: ${{ github.event_name == 'schedule' && 'sleep' || inputs.mode }}

@@ -112,8 +112,7 @@ jobs:
     # that can write to the dev-channel repos, and it should be reachable from
     # exactly the same place those secrets already live.
     environment: adhoc-mac-build
-    # The fast image has VS Build Tools 2022; signed release provenance stays separate.
-    runs-on: ${{ inputs.fast_release && 'blacksmith-8vcpu-windows-2025' || 'windows-2022' }}
+    runs-on: windows-2022
     permissions:
       contents: read
       actions: read

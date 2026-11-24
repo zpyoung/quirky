@@ -35,6 +35,13 @@ describe('explicit PR aggregate result', () => {
     expect(checked).toEqual(aggregateRequiredJobs)
   })
 
+  it('gates only on jobs that report through the classifier', () => {
+    const forkJobs = Object.keys(aggregateWorkflow.jobs).filter((job) => /fork/i.test(job))
+    expect(forkJobs).toEqual([])
+    expect(aggregateJob.needs.filter((job) => /fork/i.test(job))).toEqual([])
+    expect(Object.keys(aggregateShell.env).filter((name) => /^FORK/.test(name))).toEqual([])
+  })
+
   it('runs for code, docs, reused and mixed plans after every dependency outcome', () => {
     for (const selected of ['true', 'false']) {
       const plan = aggregateNeeds(selected)

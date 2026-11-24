@@ -40,7 +40,7 @@ defaults:
 jobs:
   monitor:
     if: ${{ github.ref == 'refs/heads/main' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     timeout-minutes: 100
     environment: production
     env:

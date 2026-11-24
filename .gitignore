@@ -119,8 +119,10 @@ docs/**
 !docs/readme/**
 !docs/bug-reproductions/
 !docs/bug-reproductions/**
+!docs/quirk/
+!docs/quirk/specs/
+!docs/quirk/specs/**
 !docs/STYLEGUIDE.md
-!docs/fork-upstreaming.md
 !docs/reference/
 !docs/reference/cross-platform-support.md
 !docs/reference/git-workflow.md
@@ -154,7 +156,6 @@ playwright-report/
 /.claude/skills/*
 # Fork-owned, versioned with the repo (not an installation).
 !/.claude/skills/release/
-!/.claude/skills/sync-upstream/
 /.agents/skills/
 /skills-lock.json
 # Machine-local agent settings; carries this checkout's remote test-host address.
@@ -198,3 +199,6 @@ ci-shards/
 /.build/release-javascript-measurements/
 
 .local/static-analysis-research/
+
+# Local research notes (separate git repo)
+/research/

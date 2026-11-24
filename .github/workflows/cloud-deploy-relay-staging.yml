@@ -68,7 +68,7 @@ defaults:
 jobs:
   deploy:
     if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     environment: staging
     env:
       GCP_PROJECT_ID: onorca-cloud-staging

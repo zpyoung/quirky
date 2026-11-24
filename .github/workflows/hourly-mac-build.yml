@@ -36,9 +36,6 @@ name: Hourly macOS Dev Build
 # number and the next run does not reuse it.
 
 on:
-  schedule:
-    # Top of every hour. Skipped automatically when main has not moved.
-    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -138,7 +135,7 @@ jobs:
       version: ${{ steps.hourly.outputs.version }}
       head_sha: ${{ needs.preflight.outputs.head_sha }}
       published: ${{ steps.publish_live.outcome == 'success' && 'true' || 'false' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-15
     # Why 150: it must exceed the worst case the retry budgets below can produce
     # (install 3x10 + publish 2x45 = 120, plus ~25 for checkout/build/verify), or
     # the job is killed mid-retry and no cleanup step runs at all. A typical run

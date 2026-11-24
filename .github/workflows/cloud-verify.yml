@@ -28,7 +28,6 @@ defaults:
     working-directory: cloud
 
 jobs:
-  # Public-repository hosted runners preserve Blacksmith allowance for macOS.
   security:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     name: Secret scan

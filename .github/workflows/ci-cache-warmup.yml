@@ -1,9 +1,6 @@
 name: Warm shared CI caches
 
 on:
-  # Cache-input pushes seed immediately; this schedule repairs eviction and image changes.
-  schedule:
-    - cron: '41 */6 * * *'
   workflow_dispatch:
   push:
     branches: [main]

@@ -122,7 +122,7 @@ jobs:
     if: >-
       ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' &&
       github.ref == 'refs/heads/main' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     environment: production
     env:
       GCP_PROJECT_ID: onorca-cloud

@@ -1,7 +1,7 @@
 # Useful Commands
 
 - **Typecheck**: `pnpm tc` (or `tc:node` / `tc:cli` / `tc:web`)
-- **Test**: see [Running Tests: Remote Sandbox Only](#running-tests-remote-sandbox-only) — `pnpm test` is blocked on this machine
+- **Test**: see [Running Tests](#running-tests) — run one file at a time; the full suite runs on GitHub Actions
 - **Lint**: `oxlint`, or `pnpm run check:code-quality:changed` for changed files (full `pnpm lint` is slow); format with `pnpm format`
 - **Design system**: `pnpm run lint:design-system` for the full renderer report (not a gate); the changed-lines gate above is what CI enforces
 
@@ -41,9 +41,9 @@ Avoid type assertions except `as const`. Unavoidable casts need a line-specific 
 
 Every change must consider these areas:
 
-## Cross-Platform Support
+## macOS Only
 
-Support macOS, Linux, and Windows. Guard platform-specific behavior at runtime; use platform-aware shortcuts, paths, and existing process wrappers. Before changing platform-specific code, processes, shells, shortcuts, paths, or native modules, read [`docs/reference/cross-platform-support.md`](./docs/reference/cross-platform-support.md).
+Quirky supports macOS only. Don't add Windows or Linux code paths, and don't add platform branches for them. Guard macOS-specific behavior in the code that owns it, and use the existing process wrappers.
 
 ## Remote Use Case
 
@@ -65,30 +65,15 @@ If changing code around `git`, `gh`, source-control, or review behavior read [`d
 
 Avoid adding low-value tests. These might be fine for development but offer low value when checked in. [Anti-patterns](./docs/reference/test-antipatterns.md)
 
-## Running Tests: Remote Sandbox Only
+## Running Tests
 
-Vitest never runs on this machine. Every test run goes to the remote Docker host through
-[`config/docker/test-sandbox`](./config/docker/test-sandbox/README.md), which feeds each shard a
-throwaway container over stdin — shards cannot see each other's temp files, git config, or build
-output, and the laptop stays free.
+Run one test file locally, after `pnpm run build:packages`:
 
 ```sh
-pnpm test:sandbox --shards=16 --jobs=8            # full unit suite
-pnpm test:sandbox --shards=16 --only=3            # one shard
-pnpm test:sandbox --shards=16 --only=3 -- <args>  # extra vitest args
+ORCA_ALLOW_LOCAL_TESTS=1 pnpm exec vitest run --config config/vitest.config.ts <file>
 ```
 
-The host comes from `ORCA_SANDBOX_DOCKER_HOST` in `.claude/settings.local.json`, so no
-`--docker-host` flag is needed. That file is machine-local and untracked — a fresh checkout has to
-set it before the runner works.
-
-A `PreToolUse` hook (`.claude/hooks/require-sandboxed-tests.mjs`, wired in `.claude/settings.json`)
-rejects `pnpm test`, bare `vitest`, and their wrapped forms so the rule holds without relying on
-anyone remembering it. The blocked script names are read from `package.json`, so a renamed vitest
-script stays covered. Setting `ORCA_ALLOW_LOCAL_TESTS=1` in the environment disables the guard; an
-inline `VAR=1 pnpm test` prefix does not, because it never reaches the hook process.
-
-The `shell` and `e2e` lanes have not been run anywhere yet — treat a green run there as unproven.
+Never run the full suite on the Mac. It runs on GitHub Actions: a draft PR runs the tests your change selects, and a PR marked ready runs everything. Read the result with `gh pr checks <number> --watch`. Run `unset GITHUB_TOKEN` before pushing, because the shell's token can't push.
 
 ## Typechecking: Scope It to What You Changed
 
@@ -145,67 +130,3 @@ TEST_BACKLOG.md, proposals.md and docs/adr/ are legacy — read them for history
 them. BUGS.md and DEFERRED.md were migrated; TEST_BACKLOG.md was not, so its entries live only in
 markdown until someone files them. The `quirk:typed-artifacts` skill and the `/quirk:artifacts:*`
 commands still write markdown; do not use them.
-
-# Fork Feature Structure
-
-This fork tracks upstream stable tags, and every sync resolves file ownership from
-[`config/fork-ownership.json`](./config/fork-ownership.json) rather than from commit authorship. Work
-that is not declared there is reset to the upstream tag at the next sync and silently reverted, so
-declaring a change is part of writing it.
-
-Every fork-authored change lands in exactly one of four tiers.
-
-**Tier 1 — Isolated.** The default. Fork logic goes in a `fork-<feature>/` directory beside the
-upstream code it extends, in every layer it touches (`src/shared/`, `src/main/`, `src/relay/`,
-`src/renderer/`). The directory name is unique to the feature, so a single `**/fork-<feature>/**`
-glob owns the whole vertical. Fork tests live in the fork directory beside the code they exercise,
-and fork-only shared types are declared there too — never added to an upstream shared module.
-
-**Tier 2 — Forked copy.** Only where the change is structurally interleaved and no seam is reachable.
-Copy the upstream module into the fork directory, record the upstream path and source commit SHA in
-a header line, and point consumers at it with an `import-swap` seam. Upstream's later changes must be
-replayed by hand every sync, so choose this only when the alternative is a permanently fork-owned
-upstream file.
-
-**Tier 3 — Declared exception.** Files that _are_ the fork: release workflows, packaging config,
-telemetry disablement, fork identity. Declare in `exceptions` with `status: "permanent"` and a reason
-stating why upstream's version must not win.
-
-**Tier 4 — Upstreaming.** Fixes to upstream behavior and cosmetic tweaks, where isolating is the
-wrong shape. These stay in-place, declared in `exceptions` with `status: "pending-upstream"` and a
-`ledger` pointer, and written up in [`docs/fork-upstreaming.md`](./docs/fork-upstreaming.md). The
-manifest entry and the ledger entry are created and removed together.
-
-## Seams
-
-An upstream file may carry fork lines only as a seam — a line or two, never a block. Three kinds are
-permitted: `registration` (one line wiring fork code into an upstream entry point), `import-swap` (a
-consumer's import repointed at a forked copy), and `passthrough` (an upstream component forwarding a
-value it does not interpret). Anything larger means forking and owning the module instead.
-
-Declare the seam in `seams` with its lines verbatim, and record the file's total fork divergence in
-`residuals` as `{added, removed}`. Whole-line presence checks cannot see a deletion or an undeclared
-edit; the residual budget is what keeps a seam file's full footprint reviewable. Re-baseline a
-residual only after re-reading the seam.
-
-## Precedence
-
-A per-file declaration always beats a glob:
-
-1. `exceptions` — fork wins outright
-2. `seams` — real three-way merge, never reset to the tag
-3. `features` glob — real three-way merge, fork wins conflicts
-4. otherwise — reset to the upstream tag
-
-A path in both `seams` and `exceptions` is a manifest error, not a precedence question.
-
-## CI enforcement
-
-The `fork ownership guard` job in [`.github/workflows/pr.yml`](./.github/workflows/pr.yml) runs on
-every PR and fails on a fork-added file matching no manifest entry (coverage), a glob matching zero
-files or a declared path that no longer exists (stale entry), a feature glob capturing a file that
-also exists upstream (silent capture), a declared seam line missing verbatim (seam integrity), and a
-seam file whose measured diff no longer matches its recorded budget (residual budget).
-
-Fork edits to an upstream-owned file are not blocked by the guard — but an undeclared edit is
-reverted at the next sync, so declare it.

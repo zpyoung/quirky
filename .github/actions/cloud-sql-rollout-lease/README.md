@@ -131,7 +131,7 @@ the lease. The lock census contract test records it in the not-a-candidate map w
 file. Every consuming workflow already runs `setup-gcloud`, gcloud already handles every ADC flavour
 including the service-account impersonation leg, and this action must stay zero-dependency because
 it is duplicated by hand into the public repo. The GCE metadata server that
-`apps/relay-fence-broker/src/google-metadata.ts` uses does **not** exist on GitHub or Blacksmith
+`apps/relay-fence-broker/src/google-metadata.ts` uses does **not** exist on GitHub-hosted
 runners; only the compare-and-swap algorithm is shared with the fence broker.
 
 ## Duplication

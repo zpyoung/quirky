@@ -2,8 +2,6 @@ name: README Downloads Badge
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 */6 * * *'
   release:
     types:
       - published
@@ -20,7 +18,7 @@ concurrency:
 jobs:
   update:
     # Why: this workflow commits to main, so forks should not create divergent badge commits.
-    if: github.repository == 'zpyoung/orca'
+    if: github.repository == 'zpyoung/quirky'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
